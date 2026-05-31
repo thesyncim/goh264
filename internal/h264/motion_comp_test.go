@@ -154,7 +154,28 @@ func TestH264HLMotionFrameSubPartitionsCopyFullMB(t *testing.T) {
 	requireH264BlockEqual(t, dst.Cr, ref.Cr, dst.ChromaStride, cOff, cOff, 8, 16)
 }
 
-func TestH264HLMotionFrameReturnsUnsupportedForEdgeEmulation(t *testing.T) {
+func TestH264HLMotionFrameEdgeEmulationClipsTopLeft(t *testing.T) {
+	dst := makeH264MotionCompPicture(1, 5)
+	ref := makeH264MotionCompPicture(1, 15)
+	refs := [2][]*h264PicturePlanes{{ref}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+	cache.MV[0][h264Scan8[0]] = [2]int16{1, 0}
+
+	if err := h264HLMotionFrameWithScratch(dst, refs, &cache, MBType16x16|MBTypeP0L0, [4]uint32{}, 0, 1, 1, makeH264MotionCompScratch(dst)); err != nil {
+		t.Fatal(err)
+	}
+	yOff := 16 * dst.LumaStride
+	if dst.Y[yOff] != 66 {
+		t.Fatalf("edge-emulated luma sample = %d, want 66", dst.Y[yOff])
+	}
+	cOff := 8 * dst.ChromaStride
+	if dst.Cb[cOff] != 86 || dst.Cr[cOff] != 128 {
+		t.Fatalf("edge-emulated chroma samples = %d/%d, want 86/128", dst.Cb[cOff], dst.Cr[cOff])
+	}
+}
+
+func TestH264HLMotionFrameEdgeEmulationRequiresScratch(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 5)
 	ref := makeH264MotionCompPicture(1, 15)
 	refs := [2][]*h264PicturePlanes{{ref}}
@@ -163,8 +184,8 @@ func TestH264HLMotionFrameReturnsUnsupportedForEdgeEmulation(t *testing.T) {
 	cache.MV[0][h264Scan8[0]] = [2]int16{1, 0}
 
 	err := h264HLMotionFrame(dst, refs, &cache, MBType16x16|MBTypeP0L0, [4]uint32{}, 0, 1, 1)
-	if !errors.Is(err, ErrUnsupported) {
-		t.Fatalf("edge-emulation error = %v, want ErrUnsupported", err)
+	if !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("missing edge scratch error = %v, want ErrInvalidData", err)
 	}
 }
 
@@ -194,7 +215,8 @@ func makeH264MotionCompPicture(chromaFormatIDC int, seed int) *h264PicturePlanes
 
 func makeH264MotionCompScratch(p *h264PicturePlanes) *h264MotionCompScratch {
 	s := &h264MotionCompScratch{
-		Y: make([]uint8, p.LumaStride*16),
+		Y:    make([]uint8, p.LumaStride*16),
+		Edge: make([]uint8, h264MotionCompScratchEdgeSize(p)),
 	}
 	if p.ChromaFormatIDC != 0 {
 		_, chromaHeight := h264ChromaFrameSize(1, 1, p.ChromaFormatIDC)
@@ -202,6 +224,20 @@ func makeH264MotionCompScratch(p *h264PicturePlanes) *h264MotionCompScratch {
 		s.Cr = make([]uint8, p.ChromaStride*chromaHeight)
 	}
 	return s
+}
+
+func h264MotionCompScratchEdgeSize(p *h264PicturePlanes) int {
+	luma := p.LumaStride * (16 + 5)
+	chroma := 0
+	if p.ChromaFormatIDC == 1 || p.ChromaFormatIDC == 2 {
+		chroma = p.ChromaStride * (8*p.ChromaFormatIDC + 1)
+	} else if p.ChromaFormatIDC == 3 {
+		chroma = p.ChromaStride * (16 + 5)
+	}
+	if chroma > luma {
+		return chroma
+	}
+	return luma
 }
 
 func h264MotionCompTestPWT(chromaFormatIDC int) PredWeightTable {

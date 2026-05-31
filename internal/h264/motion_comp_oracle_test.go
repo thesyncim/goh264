@@ -31,6 +31,8 @@ const motionCompOracleC = `
 #define av_always_inline inline
 #define av_flatten
 #define FFABS(a) ((a) >= 0 ? (a) : -(a))
+#define FFMIN(a,b) ((a) > (b) ? (b) : (a))
+#define FFMAX(a,b) ((a) > (b) ? (a) : (b))
 static inline int av_clip(int v, int amin, int amax)
 {
     if (v < amin)
@@ -42,6 +44,10 @@ static inline int av_clip(int v, int amin, int amax)
 
 #define BIT_DEPTH 8
 #include "h264dsp_template.c"
+#undef BIT_DEPTH
+
+#define BIT_DEPTH 8
+#include "videodsp_template.c"
 #undef BIT_DEPTH
 
 #define MB_TYPE_16x16      (1U << 3)
@@ -270,7 +276,33 @@ static void mc_dir_part(Pic *dst, Pic *ref, MotionCtx *ctx,
     int luma_xy = (mx & 3) + ((my & 3) << 2);
     int offset = (mx >> 2) + (my >> 2) * LUMA_STRIDE;
     uint8_t *src_y = ref->y + offset;
+    uint8_t edge_emu_buffer[LUMA_STRIDE * (16 + 5)];
     qpel_fn qpel = qpel_func(qpel_size, luma_xy, avg);
+    int extra_width = 0;
+    int extra_height = 0;
+    int emu = 0;
+    int full_mx = mx >> 2;
+    int full_my = my >> 2;
+    int pic_width = 16 * MB_WIDTH;
+    int pic_height = 16 * MB_HEIGHT;
+
+    if (mx & 7)
+        extra_width -= 3;
+    if (my & 7)
+        extra_height -= 3;
+
+    if (full_mx < 0 - extra_width ||
+        full_my < 0 - extra_height ||
+        full_mx + 16 > pic_width + extra_width ||
+        full_my + 16 > pic_height + extra_height) {
+        ff_emulated_edge_mc_8(edge_emu_buffer,
+                                src_y - 2 - 2 * LUMA_STRIDE,
+                                LUMA_STRIDE, LUMA_STRIDE,
+                                16 + 5, 16 + 5, full_mx - 2,
+                                full_my - 2, pic_width, pic_height);
+        src_y = edge_emu_buffer + 2 + 2 * LUMA_STRIDE;
+        emu = 1;
+    }
 
     qpel(dest_y, src_y, LUMA_STRIDE);
     if (!square)
@@ -279,9 +311,25 @@ static void mc_dir_part(Pic *dst, Pic *ref, MotionCtx *ctx,
     if (dst->chroma_idc == 3) {
         uint8_t *src_cb = ref->cb + offset;
         uint8_t *src_cr = ref->cr + offset;
+        if (emu) {
+            ff_emulated_edge_mc_8(edge_emu_buffer,
+                                    src_cb - 2 - 2 * LUMA_STRIDE,
+                                    LUMA_STRIDE, LUMA_STRIDE,
+                                    16 + 5, 16 + 5, full_mx - 2,
+                                    full_my - 2, pic_width, pic_height);
+            src_cb = edge_emu_buffer + 2 + 2 * LUMA_STRIDE;
+        }
         qpel(dest_cb, src_cb, LUMA_STRIDE);
         if (!square)
             qpel(dest_cb + delta, src_cb + delta, LUMA_STRIDE);
+        if (emu) {
+            ff_emulated_edge_mc_8(edge_emu_buffer,
+                                    src_cr - 2 - 2 * LUMA_STRIDE,
+                                    LUMA_STRIDE, LUMA_STRIDE,
+                                    16 + 5, 16 + 5, full_mx - 2,
+                                    full_my - 2, pic_width, pic_height);
+            src_cr = edge_emu_buffer + 2 + 2 * LUMA_STRIDE;
+        }
         qpel(dest_cr, src_cr, LUMA_STRIDE);
         if (!square)
             qpel(dest_cr + delta, src_cr + delta, LUMA_STRIDE);
@@ -295,7 +343,23 @@ static void mc_dir_part(Pic *dst, Pic *ref, MotionCtx *ctx,
     int chroma_h = height >> (dst->chroma_idc == 1);
     int chroma_y = ((unsigned)my << (dst->chroma_idc == 2)) & 7;
 
+    if (emu) {
+        ff_emulated_edge_mc_8(edge_emu_buffer, src_cb,
+                                dst->chroma_stride, dst->chroma_stride,
+                                9, 8 * dst->chroma_idc + 1, mx >> 3,
+                                my >> ysh, pic_width >> 1,
+                                pic_height >> (dst->chroma_idc == 1));
+        src_cb = edge_emu_buffer;
+    }
     chroma(dest_cb, src_cb, dst->chroma_stride, chroma_h, mx & 7, chroma_y);
+    if (emu) {
+        ff_emulated_edge_mc_8(edge_emu_buffer, src_cr,
+                                dst->chroma_stride, dst->chroma_stride,
+                                9, 8 * dst->chroma_idc + 1, mx >> 3,
+                                my >> ysh, pic_width >> 1,
+                                pic_height >> (dst->chroma_idc == 1));
+        src_cr = edge_emu_buffer;
+    }
     chroma(dest_cr, src_cr, dst->chroma_stride, chroma_h, mx & 7, chroma_y);
 }
 
@@ -642,6 +706,21 @@ static void run_weighted_implicit_b16x8_422(void)
     print_mb("weighted_implicit_b16x8_422", &dst, 1, 1);
 }
 
+static void run_edge_p16x16_420(void)
+{
+    Pic dst, ref0;
+    Pic *refs[2][2] = {{0}};
+    MotionCtx ctx;
+    uint32_t sub[4] = {0};
+    init_pic(&dst, 1, 43);
+    init_pic(&ref0, 1, 131);
+    refs[0][0] = &ref0;
+    init_motion(&ctx);
+    set_ref_mv(&ctx, 0, 0, 0, 1, 0);
+    hl_motion(&dst, refs, &ctx, MB_TYPE_16x16 | MB_TYPE_P0L0, sub, 3, 1);
+    print_mb("edge_p16x16_420", &dst, 3, 1);
+}
+
 int main(void)
 {
     run_p16x16_420();
@@ -650,6 +729,7 @@ int main(void)
     run_sub8x8_420();
     run_weighted_p16x16_420();
     run_weighted_implicit_b16x8_422();
+    run_edge_p16x16_420();
     return 0;
 }
 `
@@ -697,6 +777,10 @@ func TestH264MotionCompUpstreamOracle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	videoDSPTemplate, err := os.ReadFile(filepath.Join(upstreamDir, "videodsp_template.c"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	dir := t.TempDir()
 	writeOracleFile(t, filepath.Join(dir, "oracle.c"), motionCompOracleC)
@@ -708,6 +792,7 @@ func TestH264MotionCompUpstreamOracle(t *testing.T) {
 	writeOracleFile(t, filepath.Join(dir, "bit_depth_template.c"), string(bitDepthTemplate))
 	writeOracleFile(t, filepath.Join(dir, "h264chroma_template.c"), string(chromaTemplate))
 	writeOracleFile(t, filepath.Join(dir, "h264dsp_template.c"), string(dspTemplate))
+	writeOracleFile(t, filepath.Join(dir, "videodsp_template.c"), string(videoDSPTemplate))
 	writeOracleFile(t, filepath.Join(dir, "mathops.h"), "")
 	if err := os.Mkdir(filepath.Join(dir, "libavutil"), 0o755); err != nil {
 		t.Fatal(err)
@@ -741,6 +826,7 @@ func h264MotionCompOracleWant(t *testing.T) string {
 	appendH264MotionCompOracleSub8x8(t, &b)
 	appendH264MotionCompOracleWeightedP16x16(t, &b)
 	appendH264MotionCompOracleWeightedImplicitB16x8(t, &b)
+	appendH264MotionCompOracleEdgeP16x16(t, &b)
 	return b.String()
 }
 
@@ -856,6 +942,19 @@ func appendH264MotionCompOracleWeightedImplicitB16x8(t *testing.T, b *strings.Bu
 		t.Fatal(err)
 	}
 	printH264MotionCompMB(b, "weighted_implicit_b16x8_422", dst, 1, 1)
+}
+
+func appendH264MotionCompOracleEdgeP16x16(t *testing.T, b *strings.Builder) {
+	dst := makeH264MotionCompPicture(1, 43)
+	ref0 := makeH264MotionCompPicture(1, 131)
+	refs := [2][]*h264PicturePlanes{{ref0}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+	cache.MV[0][h264Scan8[0]] = [2]int16{1, 0}
+	if err := h264HLMotionFrameWithScratch(dst, refs, &cache, MBType16x16|MBTypeP0L0, [4]uint32{}, 3, 1, 1, makeH264MotionCompScratch(dst)); err != nil {
+		t.Fatal(err)
+	}
+	printH264MotionCompMB(b, "edge_p16x16_420", dst, 3, 1)
 }
 
 func printH264MotionCompMB(b *strings.Builder, label string, p *h264PicturePlanes, mbX int, mbY int) {
