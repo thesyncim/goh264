@@ -2,10 +2,7 @@
 
 package h264
 
-import (
-	"errors"
-	"testing"
-)
+import "testing"
 
 func TestH264HLDecodeFrameMacroblockIntra16x16Reconstructs420(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
@@ -71,18 +68,69 @@ func TestH264HLDecodeFrameMacroblockInterP16x16MotionThenResidual(t *testing.T) 
 	}
 }
 
-func TestH264HLDecodeFrameMacroblockRejectsUnsupportedIntra4x4(t *testing.T) {
+func TestH264HLDecodeFrameMacroblockIntra4x4Reconstructs420(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
-	residual := h264ReconstructResidual420()
-	err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInput{
-		MBType:   MBTypeIntra4x4,
-		MBX:      1,
-		MBY:      1,
-		PPS:      cavlcFlatQMulPPS(),
-		Residual: &residual,
-	})
-	if !errors.Is(err, ErrUnsupported) {
-		t.Fatalf("err = %v, want ErrUnsupported", err)
+	residual := h264ReconstructResidualIntra4x4()
+	predCache := h264ReconstructIntra4x4PredCache()
+	mbX, mbY := 1, 1
+	yOff := mbY*16*dst.LumaStride + mbX*16
+	before := dst.Y[yOff]
+
+	if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInput{
+		MBType:            MBTypeIntra4x4,
+		MBX:               mbX,
+		MBY:               mbY,
+		CBP:               0x31,
+		QScale:            20,
+		ChromaQP:          [2]uint8{20, 21},
+		ChromaPredMode:    int32(intraPred8x8DC),
+		Intra4x4PredCache: &predCache,
+		TopLeftAvailable:  0xffff,
+		TopRightAvailable: 0xffff,
+		PPS:               cavlcFlatQMulPPS(),
+		Residual:          &residual,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if dst.Y[yOff] == before {
+		t.Fatalf("intra4x4 luma top-left was not reconstructed, still %d", before)
+	}
+	if residual.MB[0] != 0 || residual.MB[5*16] != 0 || residual.MB[16*16] != 0 {
+		t.Fatalf("intra4x4 residual blocks were not cleared after reconstruction: %d/%d/%d", residual.MB[0], residual.MB[5*16], residual.MB[16*16])
+	}
+}
+
+func TestH264HLDecodeFrameMacroblockIntra8x8Reconstructs422(t *testing.T) {
+	dst := makeH264MotionCompPicture(2, 31)
+	residual := h264ReconstructResidualIntra8x8()
+	predCache := h264ReconstructIntra8x8PredCache()
+	mbX, mbY := 1, 1
+	yOff := mbY*16*dst.LumaStride + mbX*16
+	before := dst.Y[yOff]
+
+	if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInput{
+		MBType:            MBTypeIntra4x4 | MBType8x8DCT,
+		MBX:               mbX,
+		MBY:               mbY,
+		CBP:               0x33,
+		QScale:            22,
+		ChromaQP:          [2]uint8{22, 23},
+		ChromaPredMode:    int32(intraPred8x8Plane),
+		Intra4x4PredCache: &predCache,
+		TopLeftAvailable:  0xffff,
+		TopRightAvailable: 0xffff,
+		PPS:               cavlcFlatQMulPPS(),
+		Residual:          &residual,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if dst.Y[yOff] == before {
+		t.Fatalf("intra8x8 luma top-left was not reconstructed, still %d", before)
+	}
+	if residual.MB[0] != 0 || residual.MB[4*16] != 0 || residual.MB[16*16] != 0 {
+		t.Fatalf("intra8x8 residual blocks were not cleared after reconstruction: %d/%d/%d", residual.MB[0], residual.MB[4*16], residual.MB[16*16])
 	}
 }
 
@@ -146,4 +194,69 @@ func h264ReconstructResidualInter420() cavlcResidualContext {
 	c.MB[16*16+32] = -2
 	c.MB[16*16+48] = 4
 	return c
+}
+
+func h264ReconstructResidualIntra4x4() cavlcResidualContext {
+	c := h264ReconstructResidual420()
+	c.NonZeroCountCache[h264Scan8[lumaDCBlockIndex]] = 0
+	for i := range c.MBLumaDC[0] {
+		c.MBLumaDC[0][i] = 0
+	}
+	c.NonZeroCountCache[h264Scan8[0]] = 2
+	c.MB[0] = 9
+	c.MB[1] = -3
+	c.NonZeroCountCache[h264Scan8[5]] = 1
+	c.MB[5*16] = 11
+	c.NonZeroCountCache[h264Scan8[10]] = 2
+	c.MB[10*16] = -8
+	c.MB[10*16+3] = 5
+	c.NonZeroCountCache[h264Scan8[15]] = 1
+	c.MB[15*16] = 6
+	return c
+}
+
+func h264ReconstructResidualIntra8x8() cavlcResidualContext {
+	c := h264ReconstructResidual422()
+	c.NonZeroCountCache[h264Scan8[lumaDCBlockIndex]] = 0
+	for i := range c.MBLumaDC[0] {
+		c.MBLumaDC[0][i] = 0
+	}
+	for _, i := range []int{0, 4, 8, 12} {
+		c.NonZeroCountCache[h264Scan8[i]] = 1
+		c.MB[i*16] = int32(8 + i)
+		c.MB[i*16+7] = int32(i - 5)
+	}
+	c.NonZeroCountCache[h264Scan8[4]] = 2
+	c.MB[4*16+1] = -4
+	c.NonZeroCountCache[h264Scan8[8]] = 2
+	c.MB[8*16+9] = 3
+	return c
+}
+
+func h264ReconstructIntra4x4PredCache() [h264IntraPredModeCacheSize]int8 {
+	var cache [h264IntraPredModeCacheSize]int8
+	modes := [16]int8{
+		intraPredVertical, intraPredHorizontal, intraPredDC, intraPredDiagDownLeft,
+		intraPredDiagDownRight, intraPredVertRight, intraPredHorDown, intraPredVertLeft,
+		intraPredHorUp, intraPredLeftDC, intraPredTopDC, intraPredDC128,
+		intraPredVertical, intraPredHorizontal, intraPredDC, intraPredDiagDownLeft,
+	}
+	for i, mode := range modes {
+		cache[h264Scan8[i]] = mode
+	}
+	return cache
+}
+
+func h264ReconstructIntra8x8PredCache() [h264IntraPredModeCacheSize]int8 {
+	var cache [h264IntraPredModeCacheSize]int8
+	modes := map[int]int8{
+		0:  intraPredVertical,
+		4:  intraPredDiagDownLeft,
+		8:  intraPredVertRight,
+		12: intraPredHorDown,
+	}
+	for i, mode := range modes {
+		cache[h264Scan8[i]] = mode
+	}
+	return cache
 }
