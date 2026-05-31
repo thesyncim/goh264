@@ -72,12 +72,52 @@ func (d *Decoder) DecodeAnnexBFrames(data []byte) ([]*Frame, error) {
 	return out, nil
 }
 
+func (d *Decoder) DecodeAVC(data []byte, nalLengthSize int) (*Frame, error) {
+	frames, err := d.DecodeAVCFrames(data, nalLengthSize)
+	if err != nil {
+		return nil, err
+	}
+	if len(frames) != 1 {
+		return nil, ErrUnsupported
+	}
+	return frames[0], nil
+}
+
+func (d *Decoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*Frame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	frames, err := h264.DecodeAVCSimpleFrames(data, nalLengthSize)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Frame, len(frames))
+	for i, frame := range frames {
+		out[i] = frameFromH264(frame)
+	}
+	return out, nil
+}
+
 func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
 	nals, err := h264.SplitAnnexB(data)
 	if err != nil {
 		return StreamInfo{}, err
 	}
+	return d.parseHeaders(nals)
+}
 
+func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, error) {
+	nals, err := h264.SplitAVCC(data, nalLengthSize)
+	if err != nil {
+		return StreamInfo{}, err
+	}
+	return d.parseHeaders(nals)
+}
+
+func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
+	if d == nil {
+		return StreamInfo{}, ErrInvalidData
+	}
 	var info StreamInfo
 	haveSPS := false
 	for _, nal := range nals {

@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/thesyncim/goh264/internal/h264"
 )
 
 const black16AnnexBHex = `
@@ -194,6 +196,26 @@ func TestParseHeadersAnnexBWeightedP(t *testing.T) {
 	}
 }
 
+func TestParseHeadersAVCBlack16(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	annexInfo, err := NewDecoder().ParseHeadersAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dec := NewDecoder()
+	info, err := dec.ParseHeadersAVC(annexBToAVC(t, data, 4), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info != annexInfo {
+		t.Fatalf("info = %+v, want %+v", info, annexInfo)
+	}
+	if dec.pps[0] == nil || len(dec.slices) != 1 {
+		t.Fatalf("retained parser state: pps=%v slices=%d", dec.pps[0] != nil, len(dec.slices))
+	}
+}
+
 func TestDecodeAnnexBBlack16Frame(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	frame, err := NewDecoder().DecodeAnnexB(data)
@@ -209,6 +231,21 @@ func TestDecodeAnnexBBlack16Frame(t *testing.T) {
 	}
 	if len(raw) != 384 {
 		t.Fatalf("raw frame size = %d, want 384", len(raw))
+	}
+	if got := md5.Sum(raw); got != [16]byte{0x8a, 0xae, 0xfe, 0x0a, 0xdc, 0xea, 0x09, 0x4c, 0xfb, 0x51, 0x61, 0xa0, 0x60, 0xba, 0xb4, 0xe2} {
+		t.Fatalf("frame md5 = %x, want 8aaefe0adcea094cfb5161a060bab4e2", got)
+	}
+}
+
+func TestDecodeAVCBlack16Frame(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	frame, err := NewDecoder().DecodeAVC(annexBToAVC(t, data, 4), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := frame.AppendRawYUV(nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if got := md5.Sum(raw); got != [16]byte{0x8a, 0xae, 0xfe, 0x0a, 0xdc, 0xea, 0x09, 0x4c, 0xfb, 0x51, 0x61, 0xa0, 0x60, 0xba, 0xb4, 0xe2} {
 		t.Fatalf("frame md5 = %x, want 8aaefe0adcea094cfb5161a060bab4e2", got)
@@ -307,6 +344,57 @@ func TestDecodeAnnexBTestsrc16Ref2Frames(t *testing.T) {
 		if got := md5.Sum(raw); got != want[i] {
 			t.Fatalf("frame[%d] md5 = %x, want %x", i, got, want[i])
 		}
+	}
+}
+
+func TestDecodeAVCTestsrc16Ref2Frames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16Ref2AnnexBHex)
+	want := [][16]byte{
+		{0x54, 0xb0, 0x49, 0xd0, 0x5d, 0x99, 0xdc, 0x31, 0xd2, 0x70, 0x40, 0x2e, 0x79, 0x8d, 0x4a, 0xf4},
+		{0x68, 0x1e, 0x6d, 0x4e, 0xf3, 0x05, 0x8d, 0x38, 0x80, 0x34, 0x6e, 0x80, 0x39, 0xe9, 0x5b, 0x94},
+		{0xef, 0x38, 0xcc, 0x80, 0xfb, 0x47, 0xf6, 0x0e, 0x38, 0xab, 0xc2, 0x50, 0x2a, 0xf7, 0xe5, 0xf9},
+		{0x0c, 0xee, 0x44, 0xff, 0x1f, 0x82, 0x79, 0xa9, 0x7b, 0xc3, 0xe5, 0x6e, 0x4f, 0x58, 0xf8, 0x02},
+	}
+
+	for _, nalLengthSize := range []int{2, 3, 4} {
+		frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
+		if err != nil {
+			t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+		}
+		if len(frames) != 4 {
+			t.Fatalf("nalLengthSize=%d: frames = %d, want 4", nalLengthSize, len(frames))
+		}
+		for i, frame := range frames {
+			raw, err := frame.AppendRawYUV(nil)
+			if err != nil {
+				t.Fatalf("nalLengthSize=%d frame[%d] raw yuv: %v", nalLengthSize, i, err)
+			}
+			if got := md5.Sum(raw); got != want[i] {
+				t.Fatalf("nalLengthSize=%d frame[%d] md5 = %x, want %x", nalLengthSize, i, got, want[i])
+			}
+		}
+
+		if _, err := NewDecoder().DecodeAVC(annexBToAVC(t, data, nalLengthSize), nalLengthSize); err != ErrUnsupported {
+			t.Fatalf("nalLengthSize=%d: single-frame DecodeAVC err = %v, want ErrUnsupported", nalLengthSize, err)
+		}
+	}
+}
+
+func TestDecodeAVCRejectsInvalidLengthPrefix(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		data          []byte
+		nalLengthSize int
+	}{
+		{name: "zero length", data: []byte{0, 0, 0, 0}, nalLengthSize: 4},
+		{name: "oversized", data: []byte{0, 0, 0, 2, 0x67}, nalLengthSize: 4},
+		{name: "bad length size", data: []byte{1, 0x67}, nalLengthSize: 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := NewDecoder().DecodeAVCFrames(tt.data, tt.nalLengthSize); err == nil {
+				t.Fatal("expected invalid data")
+			}
+		})
 	}
 }
 
@@ -581,6 +669,31 @@ func decodeHexFixture(t *testing.T, s string) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+func annexBToAVC(t *testing.T, data []byte, nalLengthSize int) []byte {
+	t.Helper()
+	if nalLengthSize < 1 || nalLengthSize > 4 {
+		t.Fatalf("invalid nalLengthSize %d", nalLengthSize)
+	}
+
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	maxSize := uint64(1)<<(uint(nalLengthSize)*8) - 1
+	var out []byte
+	for _, nal := range nals {
+		size := len(nal.Raw)
+		if uint64(size) > maxSize {
+			t.Fatalf("NAL size %d exceeds %d-byte length field", size, nalLengthSize)
+		}
+		for shift := (nalLengthSize - 1) * 8; shift >= 0; shift -= 8 {
+			out = append(out, byte(size>>shift))
+		}
+		out = append(out, nal.Raw...)
+	}
+	return out
 }
 
 func writeTempH264(t *testing.T, data []byte) string {

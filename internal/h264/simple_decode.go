@@ -40,7 +40,18 @@ func DecodeAnnexBSimpleFrames(data []byte) ([]*DecodedFrame, error) {
 	if err != nil {
 		return nil, err
 	}
+	return DecodeSimpleNALUnits(nals)
+}
 
+func DecodeAVCSimpleFrames(data []byte, nalLengthSize int) ([]*DecodedFrame, error) {
+	nals, err := SplitAVCC(data, nalLengthSize)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeSimpleNALUnits(nals)
+}
+
+func DecodeSimpleNALUnits(nals []NALUnit) ([]*DecodedFrame, error) {
 	var spsList [maxSPSCount]*SPS
 	var ppsList [maxPPSCount]*PPS
 	var frame *DecodedFrame

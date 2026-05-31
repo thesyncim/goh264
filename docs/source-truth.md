@@ -50,11 +50,17 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - dimensions: `16x16`
 - frame payload size: `384` bytes (`yuv420p`)
 
+The AVC/NALFF packet-input tests mechanically convert those Annex B fixtures to
+big-endian length-prefixed NAL units while preserving each raw NAL payload. The
+default Go tests compare the same rawvideo MD5s through explicit `nal_length_size`
+values 2, 3, and 4; avcC extradata parsing remains outside this safe point.
+
 ## Decoder Boundary
 
 Included:
 
 - H.264 Annex B byte-stream parsing
+- H.264 AVC/NALFF length-prefixed packet parsing when the caller supplies `nal_length_size`
 - H.264 NAL headers and RBSP handling
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 

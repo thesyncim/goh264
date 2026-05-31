@@ -86,6 +86,40 @@ func SplitAnnexB(data []byte) ([]NALUnit, error) {
 	return out, nil
 }
 
+func SplitAVCC(data []byte, nalLengthSize int) ([]NALUnit, error) {
+	if nalLengthSize < 1 || nalLengthSize > 4 {
+		return nil, ErrInvalidData
+	}
+
+	var out []NALUnit
+	for pos := 0; pos < len(data); {
+		if pos >= len(data)-nalLengthSize {
+			return nil, ErrInvalidData
+		}
+
+		nalSize := 0
+		for i := 0; i < nalLengthSize; i++ {
+			nalSize = (nalSize << 8) | int(data[pos])
+			pos++
+		}
+		if nalSize <= 0 || nalSize > len(data)-pos {
+			return nil, ErrInvalidData
+		}
+
+		nal, err := parseNAL(data[pos : pos+nalSize])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, nal)
+		pos += nalSize
+	}
+
+	if len(out) == 0 {
+		return nil, ErrInvalidData
+	}
+	return out, nil
+}
+
 func parseNAL(raw []byte) (NALUnit, error) {
 	if len(raw) == 0 {
 		return NALUnit{}, ErrInvalidData
