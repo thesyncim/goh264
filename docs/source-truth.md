@@ -54,7 +54,10 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 The AVC/NALFF packet-input tests mechanically convert those Annex B fixtures to
 big-endian length-prefixed NAL units while preserving each raw NAL payload. The
 default Go tests compare the same rawvideo MD5s through explicit `nal_length_size`
-values 2, 3, and 4; avcC extradata parsing remains outside this safe point.
+values 2, 3, and 4. The configured AVC tests additionally build FFmpeg-style
+`avcC` extradata from SPS/PPS NAL units, remove those parameter sets from the
+packet payload, and prove the separated-config CAVLC ref-list and CABAC IDR/P
+packets against the same frame MD5s.
 
 Reference-picture unit coverage now includes FFmpeg's progressive frame-picture
 long-term P-list behavior: default long refs after short refs, ref-list

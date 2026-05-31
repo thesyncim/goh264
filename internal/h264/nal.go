@@ -50,6 +50,13 @@ type NALUnit struct {
 	RBSP   []byte
 }
 
+type AVCDecoderConfigurationRecord struct {
+	NALLengthSize int
+	FirstSPSID    uint32
+	SPS           [maxSPSCount]*SPS
+	PPS           [maxPPSCount]*PPS
+}
+
 func SplitAnnexB(data []byte) ([]NALUnit, error) {
 	var out []NALUnit
 
@@ -84,6 +91,94 @@ func SplitAnnexB(data []byte) ([]NALUnit, error) {
 		return nil, ErrInvalidData
 	}
 	return out, nil
+}
+
+func DecodeAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfigurationRecord, error) {
+	var cfg AVCDecoderConfigurationRecord
+	if len(data) < 7 || data[0] != 1 {
+		return cfg, ErrInvalidData
+	}
+
+	cfg.NALLengthSize = int(data[4]&0x03) + 1
+	pos := 6
+	spsCount := int(data[5] & 0x1f)
+	haveSPS := false
+	for i := 0; i < spsCount; i++ {
+		raw, err := readAVCConfigNAL(data, &pos)
+		if err != nil {
+			return cfg, err
+		}
+		nal, err := parseAVCConfigNAL(raw, NALSPS)
+		if err != nil {
+			return cfg, err
+		}
+		sps, err := DecodeSPS(nal.RBSP)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.SPS[sps.SPSID] = sps
+		if !haveSPS {
+			cfg.FirstSPSID = sps.SPSID
+			haveSPS = true
+		}
+	}
+
+	if pos >= len(data) {
+		return cfg, ErrInvalidData
+	}
+	ppsCount := int(data[pos])
+	pos++
+	havePPS := false
+	for i := 0; i < ppsCount; i++ {
+		raw, err := readAVCConfigNAL(data, &pos)
+		if err != nil {
+			return cfg, err
+		}
+		nal, err := parseAVCConfigNAL(raw, NALPPS)
+		if err != nil {
+			return cfg, err
+		}
+		pps, err := DecodePPS(nal.RBSP, &cfg.SPS)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.PPS[pps.PPSID] = pps
+		havePPS = true
+	}
+	if !haveSPS || !havePPS {
+		return cfg, ErrInvalidData
+	}
+	return cfg, nil
+}
+
+func readAVCConfigNAL(data []byte, pos *int) ([]byte, error) {
+	if pos == nil || *pos < 0 || *pos+2 > len(data) {
+		return nil, ErrInvalidData
+	}
+	nalSize := int(data[*pos])<<8 | int(data[*pos+1])
+	*pos += 2
+	if nalSize <= 0 || nalSize > len(data)-*pos {
+		return nil, ErrInvalidData
+	}
+	raw := data[*pos : *pos+nalSize]
+	*pos += nalSize
+	return raw, nil
+}
+
+func parseAVCConfigNAL(raw []byte, wantType NALUnitType) (NALUnit, error) {
+	if len(raw) == 0 || raw[0]&0x80 != 0 || NALUnitType(raw[0]&0x1f) != wantType {
+		return NALUnit{}, ErrInvalidData
+	}
+	nal, err := parseNAL(raw)
+	if err == nil {
+		return nal, nil
+	}
+	return NALUnit{
+		RefIDC: (raw[0] >> 5) & 3,
+		Type:   wantType,
+		Raw:    raw,
+		RBSP:   raw[1:],
+	}, nil
 }
 
 func SplitAVCC(data []byte, nalLengthSize int) ([]NALUnit, error) {

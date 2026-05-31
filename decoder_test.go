@@ -531,6 +531,78 @@ func TestDecodeAVCTestsrc16CABACFrames(t *testing.T) {
 	}
 }
 
+func TestParseAVCDecoderConfigurationRecordCABAC(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CABACAnnexBHex)
+	config, packet := annexBToAVCConfigAndPacket(t, data, 3)
+
+	dec := NewDecoder()
+	cfg, err := dec.ParseAVCDecoderConfigurationRecord(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.NALLengthSize != 3 {
+		t.Fatalf("nal length size = %d, want 3", cfg.NALLengthSize)
+	}
+	if cfg.StreamInfo.Profile != "Main" || cfg.StreamInfo.ProfileIDC != 77 || cfg.StreamInfo.LevelIDC != 10 {
+		t.Fatalf("stream info = %+v", cfg.StreamInfo)
+	}
+	if dec.sps[0] == nil || dec.pps[0] == nil || dec.pps[0].CABAC != 1 {
+		t.Fatalf("configured state: sps=%v pps=%+v", dec.sps[0] != nil, dec.pps[0])
+	}
+	frames, err := dec.DecodeConfiguredAVCFrames(packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{
+		"57948a884e4468c79f3291b2693263de",
+		"4fb1e27b7087e9f1aa485402993ca525",
+		"a7e3e74bb19403d111dd2ffdb4455102",
+		"1202e58b9b15f56a341fea8787bcc769",
+	})
+}
+
+func TestDecodeConfiguredAVCFramesRequiresConfiguration(t *testing.T) {
+	if _, err := NewDecoder().DecodeConfiguredAVCFrames([]byte{0, 0, 1, 0x65}); err != ErrInvalidData {
+		t.Fatalf("err = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestDecodeAVCWithConfigurationRecordRef2Frames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16Ref2AnnexBHex)
+	want := []string{
+		"54b049d05d99dc31d270402e798d4af4",
+		"681e6d4ef3058d3880346e8039e95b94",
+		"ef38cc80fb47f60e38abc2502af7e5f9",
+		"0cee44ff1f8279a97bc3e56e4f58f802",
+	}
+	for _, nalLengthSize := range []int{2, 3, 4} {
+		config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
+		frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+		if err != nil {
+			t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+		}
+		assertFrameMD5Strings(t, frames, want)
+	}
+}
+
+func TestDecodeAVCWithConfigurationRecordCABACFrames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CABACAnnexBHex)
+	want := []string{
+		"57948a884e4468c79f3291b2693263de",
+		"4fb1e27b7087e9f1aa485402993ca525",
+		"a7e3e74bb19403d111dd2ffdb4455102",
+		"1202e58b9b15f56a341fea8787bcc769",
+	}
+	for _, nalLengthSize := range []int{2, 3, 4} {
+		config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
+		frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+		if err != nil {
+			t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+		}
+		assertFrameMD5Strings(t, frames, want)
+	}
+}
+
 func TestFFprobeOracleBlack16(t *testing.T) {
 	if os.Getenv("GOH264_ORACLE") != "1" {
 		t.Skip("set GOH264_ORACLE=1 to run native ffprobe oracle")
@@ -836,6 +908,93 @@ func annexBToAVC(t *testing.T, data []byte, nalLengthSize int) []byte {
 		out = append(out, nal.Raw...)
 	}
 	return out
+}
+
+func annexBToAVCConfigAndPacket(t *testing.T, data []byte, nalLengthSize int) ([]byte, []byte) {
+	t.Helper()
+	if nalLengthSize < 1 || nalLengthSize > 4 {
+		t.Fatalf("invalid nalLengthSize %d", nalLengthSize)
+	}
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var spsNals [][]byte
+	var ppsNals [][]byte
+	var packet []byte
+	for _, nal := range nals {
+		switch nal.Type {
+		case h264.NALSPS:
+			spsNals = append(spsNals, nal.Raw)
+		case h264.NALPPS:
+			ppsNals = append(ppsNals, nal.Raw)
+		default:
+			packet = appendAVCNALUnit(t, packet, nal.Raw, nalLengthSize)
+		}
+	}
+	if len(spsNals) == 0 || len(spsNals) > 31 || len(ppsNals) == 0 || len(ppsNals) > 255 {
+		t.Fatalf("parameter set counts: sps=%d pps=%d", len(spsNals), len(ppsNals))
+	}
+	if len(spsNals[0]) < 4 {
+		t.Fatalf("short SPS NAL: %x", spsNals[0])
+	}
+
+	config := []byte{
+		1,
+		spsNals[0][1],
+		spsNals[0][2],
+		spsNals[0][3],
+		0xfc | byte(nalLengthSize-1),
+		0xe0 | byte(len(spsNals)),
+	}
+	for _, raw := range spsNals {
+		config = appendAVCConfigNALUnit(t, config, raw)
+	}
+	config = append(config, byte(len(ppsNals)))
+	for _, raw := range ppsNals {
+		config = appendAVCConfigNALUnit(t, config, raw)
+	}
+	return config, packet
+}
+
+func appendAVCNALUnit(t *testing.T, dst []byte, raw []byte, nalLengthSize int) []byte {
+	t.Helper()
+	maxSize := uint64(1)<<(uint(nalLengthSize)*8) - 1
+	size := len(raw)
+	if size == 0 || uint64(size) > maxSize {
+		t.Fatalf("NAL size %d exceeds %d-byte length field", size, nalLengthSize)
+	}
+	for shift := (nalLengthSize - 1) * 8; shift >= 0; shift -= 8 {
+		dst = append(dst, byte(size>>shift))
+	}
+	return append(dst, raw...)
+}
+
+func appendAVCConfigNALUnit(t *testing.T, dst []byte, raw []byte) []byte {
+	t.Helper()
+	if len(raw) == 0 || len(raw) > 0xffff {
+		t.Fatalf("bad config NAL size %d", len(raw))
+	}
+	dst = append(dst, byte(len(raw)>>8), byte(len(raw)))
+	return append(dst, raw...)
+}
+
+func assertFrameMD5Strings(t *testing.T, frames []*Frame, want []string) {
+	t.Helper()
+	if len(frames) != len(want) {
+		t.Fatalf("frames = %d, want %d", len(frames), len(want))
+	}
+	for i, frame := range frames {
+		raw, err := frame.AppendRawYUV(nil)
+		if err != nil {
+			t.Fatalf("frame[%d] raw yuv: %v", i, err)
+		}
+		got := md5.Sum(raw)
+		if hex.EncodeToString(got[:]) != want[i] {
+			t.Fatalf("frame[%d] md5 = %x, want %s", i, got, want[i])
+		}
+	}
 }
 
 func writeTempH264(t *testing.T, data []byte) string {

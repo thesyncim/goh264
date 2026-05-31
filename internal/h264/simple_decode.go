@@ -51,9 +51,30 @@ func DecodeAVCSimpleFrames(data []byte, nalLengthSize int) ([]*DecodedFrame, err
 	return DecodeSimpleNALUnits(nals)
 }
 
+func DecodeAVCSimpleFramesWithConfigurationRecord(config []byte, data []byte) ([]*DecodedFrame, error) {
+	cfg, err := DecodeAVCDecoderConfigurationRecord(config)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeAVCSimpleFramesWithConfig(data, cfg)
+}
+
+func DecodeAVCSimpleFramesWithConfig(data []byte, cfg AVCDecoderConfigurationRecord) ([]*DecodedFrame, error) {
+	if cfg.NALLengthSize < 1 || cfg.NALLengthSize > 4 {
+		return nil, ErrInvalidData
+	}
+	nals, err := SplitAVCC(data, cfg.NALLengthSize)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeSimpleNALUnitsWithParamSets(nals, cfg.SPS, cfg.PPS)
+}
+
 func DecodeSimpleNALUnits(nals []NALUnit) ([]*DecodedFrame, error) {
-	var spsList [maxSPSCount]*SPS
-	var ppsList [maxPPSCount]*PPS
+	return DecodeSimpleNALUnitsWithParamSets(nals, [maxSPSCount]*SPS{}, [maxPPSCount]*PPS{})
+}
+
+func DecodeSimpleNALUnitsWithParamSets(nals []NALUnit, spsList [maxSPSCount]*SPS, ppsList [maxPPSCount]*PPS) ([]*DecodedFrame, error) {
 	var frame *DecodedFrame
 	var tables *macroblockTables
 	var motionScratch *h264MotionCompScratch
