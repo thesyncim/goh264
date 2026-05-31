@@ -30,6 +30,23 @@ b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d
 713d3000800000016588843a2628000902e0
 `
 
+const black16IPAnnexBHex = `
+000000016742c00ada7b011000000300100000030028f1226a0000000168ce0fc80000010605ffff51dc45e9bde6d948
+b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d20482e3236342f4d
+5045472d342041564320636f646563202d20436f70796c65667420323030332d32303235202d20687474703a2f2f7777
+772e766964656f6c616e2e6f72672f783236342e68746d6c202d206f7074696f6e733a2063616261633d30207265663d
+31206465626c6f636b3d303a303a3020616e616c7973653d303a30206d653d646961207375626d653d30207073793d31
+207073795f72643d312e30303a302e3030206d697865645f7265663d30206d655f72616e67653d3136206368726f6d61
+5f6d653d31207472656c6c69733d30203878386463743d302063716d3d3020646561647a6f6e653d32312c3131206661
+73745f70736b69703d31206368726f6d615f71705f6f66667365743d3020746872656164733d31206c6f6f6b61686561
+645f746872656164733d3120736c696365645f746872656164733d30206e723d3020646563696d6174653d3120696e74
+65726c616365643d3020626c757261795f636f6d7061743d3020636f6e73747261696e65645f696e7472613d30206266
+72616d65733d3020776569676874703d30206b6579696e743d323530206b6579696e745f6d696e3d313236207363656e
+656375743d3020696e7472615f726566726573683d302072633d637266206d62747265653d30206372663d32332e3020
+71636f6d703d302e36302071706d696e3d302071706d61783d3639207170737465703d342069705f726174696f3d312e
+34302061713d3000800000016588843a2628000902e000000001419a2014a5
+`
+
 func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	dec := NewDecoder()
@@ -88,6 +105,33 @@ func TestDecodeAnnexBBlack16Frame(t *testing.T) {
 	}
 	if got := md5.Sum(raw); got != [16]byte{0x8a, 0xae, 0xfe, 0x0a, 0xdc, 0xea, 0x09, 0x4c, 0xfb, 0x51, 0x61, 0xa0, 0x60, 0xba, 0xb4, 0xe2} {
 		t.Fatalf("frame md5 = %x, want 8aaefe0adcea094cfb5161a060bab4e2", got)
+	}
+}
+
+func TestDecodeAnnexBBlack16IPFrames(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	dec := NewDecoder()
+	frames, err := dec.DecodeAnnexBFrames(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("frames = %d, want 2", len(frames))
+	}
+	for i, frame := range frames {
+		if frame.Width != 16 || frame.Height != 16 || frame.ChromaFormatIDC != 1 {
+			t.Fatalf("frame[%d] metadata = %dx%d chroma %d", i, frame.Width, frame.Height, frame.ChromaFormatIDC)
+		}
+		raw, err := frame.AppendRawYUV(nil)
+		if err != nil {
+			t.Fatalf("frame[%d] raw yuv: %v", i, err)
+		}
+		if got := md5.Sum(raw); got != [16]byte{0x8a, 0xae, 0xfe, 0x0a, 0xdc, 0xea, 0x09, 0x4c, 0xfb, 0x51, 0x61, 0xa0, 0x60, 0xba, 0xb4, 0xe2} {
+			t.Fatalf("frame[%d] md5 = %x, want 8aaefe0adcea094cfb5161a060bab4e2", i, got)
+		}
+	}
+	if _, err := dec.DecodeAnnexB(data); err != ErrUnsupported {
+		t.Fatalf("single-frame DecodeAnnexB err = %v, want ErrUnsupported for multi-frame packet", err)
 	}
 }
 
@@ -168,6 +212,35 @@ func TestFFmpegFrameMD5OracleBlack16(t *testing.T) {
 		t.Fatalf("ffmpeg framemd5: %v", err)
 	}
 	if !bytes.Contains(out, []byte("0,          0,          0,        1,      384, 8aaefe0adcea094cfb5161a060bab4e2")) {
+		t.Fatalf("unexpected framemd5:\n%s", out)
+	}
+}
+
+func TestFFmpegFrameMD5OracleBlack16IP(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	path := writeTempH264(t, data)
+
+	cmd := exec.Command("ffmpeg",
+		"-v", "error",
+		"-f", "h264",
+		"-i", path,
+		"-an", "-sn", "-dn",
+		"-f", "framemd5",
+		"-",
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg framemd5: %v", err)
+	}
+	if !bytes.Contains(out, []byte("0,          0,          0,        1,      384, 8aaefe0adcea094cfb5161a060bab4e2")) ||
+		!bytes.Contains(out, []byte("0,          1,          1,        1,      384, 8aaefe0adcea094cfb5161a060bab4e2")) {
 		t.Fatalf("unexpected framemd5:\n%s", out)
 	}
 }

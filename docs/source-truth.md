@@ -38,9 +38,10 @@ pinned FFmpeg `libavcodec/cabac.c` and `cabac_functions.h` from
 `.upstream/ffmpeg-n8.0.1` in a temporary directory and compares primitive traces
 against the Go port.
 
-The embedded smoke bitstream currently has this decoded-frame oracle:
+The embedded smoke bitstreams currently have these decoded-frame oracles:
 
-- rawvideo frame MD5: `8aaefe0adcea094cfb5161a060bab4e2`
+- single-IDR rawvideo frame MD5: `8aaefe0adcea094cfb5161a060bab4e2`
+- two-frame IDR/P rawvideo frame MD5s: `8aaefe0adcea094cfb5161a060bab4e2`, `8aaefe0adcea094cfb5161a060bab4e2`
 - dimensions: `16x16`
 - frame payload size: `384` bytes (`yuv420p`)
 

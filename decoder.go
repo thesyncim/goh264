@@ -47,14 +47,29 @@ func NewDecoder() *Decoder {
 }
 
 func (d *Decoder) DecodeAnnexB(data []byte) (*Frame, error) {
-	if d == nil {
-		return nil, ErrInvalidData
-	}
-	frame, err := h264.DecodeAnnexBSimple(data)
+	frames, err := d.DecodeAnnexBFrames(data)
 	if err != nil {
 		return nil, err
 	}
-	return frameFromH264(frame), nil
+	if len(frames) != 1 {
+		return nil, ErrUnsupported
+	}
+	return frames[0], nil
+}
+
+func (d *Decoder) DecodeAnnexBFrames(data []byte) ([]*Frame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	frames, err := h264.DecodeAnnexBSimpleFrames(data)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Frame, len(frames))
+	for i, frame := range frames {
+		out[i] = frameFromH264(frame)
+	}
+	return out, nil
 }
 
 func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {

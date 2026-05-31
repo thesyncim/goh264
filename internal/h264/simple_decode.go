@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Source-shaped single-frame integration around FFmpeg n8.0.1
+// Source-shaped simple-frame integration around FFmpeg n8.0.1
 // libavcodec/h264dec.c decode_nal_units/ff_h264_queue_decode_slice and
 // libavcodec/h264_slice.c decode_slice. This is intentionally limited to the
 // simple frame-picture subset whose macroblock decode/reconstruct path is
@@ -24,6 +24,17 @@ type DecodedFrame struct {
 }
 
 func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
+	frames, err := DecodeAnnexBSimpleFrames(data)
+	if err != nil {
+		return nil, err
+	}
+	if len(frames) != 1 {
+		return nil, ErrUnsupported
+	}
+	return frames[0], nil
+}
+
+func DecodeAnnexBSimpleFrames(data []byte) ([]*DecodedFrame, error) {
 	nals, err := SplitAnnexB(data)
 	if err != nil {
 		return nil, err
@@ -34,6 +45,8 @@ func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
 	var frame *DecodedFrame
 	var tables *macroblockTables
 	var motionScratch *h264MotionCompScratch
+	var lastRef *DecodedFrame
+	var frames []*DecodedFrame
 	var sliceNum uint16
 	haveSlice := false
 	frameComplete := false
@@ -60,11 +73,22 @@ func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
 			if sh.RedundantPicCount != 0 {
 				continue
 			}
-			if sh.SliceTypeNoS != PictureTypeI {
+			if sh.SliceTypeNoS != PictureTypeI && sh.SliceTypeNoS != PictureTypeP {
 				return nil, ErrUnsupported
 			}
+			if err := validateSimpleFrameReferenceSyntax(sh, lastRef); err != nil {
+				return nil, err
+			}
 			if frameComplete || haveSlice && sh.FirstMBAddr == 0 {
-				return nil, ErrUnsupported
+				if sh.FirstMBAddr != 0 {
+					return nil, ErrInvalidData
+				}
+				frame = nil
+				tables = nil
+				motionScratch = nil
+				sliceNum = 0
+				haveSlice = false
+				frameComplete = false
 			}
 			if !haveSlice && sh.FirstMBAddr != 0 {
 				return nil, ErrInvalidData
@@ -84,8 +108,10 @@ func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
 				return nil, ErrInvalidData
 			}
 			pic := frame.picturePlanes()
+			refs := simpleFrameRefs(lastRef)
 			result, err := tables.decodeFrameSliceData(&payload, &pic, sh, h264FrameSliceDecodeInput{
 				SliceNum:      sliceNum,
+				Refs:          refs,
 				PredWeight:    &sh.PredWeightTable,
 				MotionScratch: motionScratch,
 			})
@@ -94,6 +120,10 @@ func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
 			}
 			if result.EndOfFrame {
 				frameComplete = true
+				frames = append(frames, frame)
+				if nal.RefIDC != 0 {
+					lastRef = frame
+				}
 			}
 			haveSlice = true
 		default:
@@ -101,10 +131,10 @@ func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
 		}
 	}
 
-	if !haveSlice || frame == nil || !frameComplete {
+	if len(frames) == 0 || haveSlice && !frameComplete {
 		return nil, ErrInvalidData
 	}
-	return frame, nil
+	return frames, nil
 }
 
 func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
@@ -203,4 +233,38 @@ func newH264MotionCompScratchForFrame(f *DecodedFrame) *h264MotionCompScratch {
 		Cr:   make([]uint8, len(f.Cr)),
 		Edge: make([]uint8, edge),
 	}
+}
+
+func validateSimpleFrameReferenceSyntax(sh *SliceHeader, lastRef *DecodedFrame) error {
+	if sh == nil {
+		return ErrInvalidData
+	}
+	if sh.NBRefModifications[0] != 0 || sh.NBRefModifications[1] != 0 || sh.NBMMCO != 0 {
+		return ErrUnsupported
+	}
+	if sh.SliceTypeNoS == PictureTypeP {
+		if lastRef == nil || sh.RefCount[0] == 0 {
+			return ErrInvalidData
+		}
+		if sh.RefCount[0] != 1 {
+			return ErrUnsupported
+		}
+		if err := lastRef.matchesSPS(sh.SPS); err != nil {
+			return err
+		}
+		if sh.PPS != nil && sh.PPS.WeightedPred != 0 {
+			return ErrUnsupported
+		}
+	}
+	return nil
+}
+
+func simpleFrameRefs(ref *DecodedFrame) [2][]*h264PicturePlanes {
+	var refs [2][]*h264PicturePlanes
+	if ref == nil {
+		return refs
+	}
+	pic := ref.picturePlanes()
+	refs[0] = []*h264PicturePlanes{&pic}
+	return refs
 }
