@@ -7,7 +7,7 @@ The port is intentionally decoder-only. Encoder, muxer, filter, and unrelated co
 Current safe point:
 
 - Upstream source truth is pinned to FFmpeg `n8.0.1`, commit `894da5ca7d742e4429ffb2af534fcda0103ef593`.
-- The active Go slice covers Annex B NAL splitting, RBSP emulation-prevention removal, bit reading, unsigned/signed Exp-Golomb reads, and SPS metadata parsing.
+- The active Go slice covers Annex B NAL splitting, RBSP emulation-prevention removal, bit reading, unsigned/signed Exp-Golomb reads, and SPS/PPS metadata parsing.
 - Frame reconstruction, CABAC/CAVLC residual decode, prediction, inverse transform, deblocking, DPB, threading, and public `Decode` output are not yet implemented.
 
 Run the default tests:
@@ -29,4 +29,3 @@ scripts/fetch-upstream.sh
 ```
 
 The file-by-file status lives in [docs/translation-ledger.md](docs/translation-ledger.md).
-

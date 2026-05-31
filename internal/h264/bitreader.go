@@ -5,6 +5,8 @@
 
 package h264
 
+import "math/bits"
+
 type bitReader struct {
 	buf     []byte
 	bitPos  uint32
@@ -16,6 +18,34 @@ func newBitReader(buf []byte) bitReader {
 		buf:     buf,
 		numBits: uint32(len(buf)) * 8,
 	}
+}
+
+func newRBSPBitReader(buf []byte) (bitReader, error) {
+	numBits, err := rbspBitLength(buf)
+	if err != nil {
+		return bitReader{}, err
+	}
+	return bitReader{
+		buf:     buf,
+		numBits: numBits,
+	}, nil
+}
+
+func rbspBitLength(buf []byte) (uint32, error) {
+	size := len(buf)
+	for size > 0 && buf[size-1] == 0 {
+		size--
+	}
+	if size == 0 {
+		return 0, ErrInvalidData
+	}
+
+	trailingPadding := bits.TrailingZeros8(buf[size-1]) + 1
+	numBits := size*8 - trailingPadding
+	if numBits < 0 {
+		return 0, ErrInvalidData
+	}
+	return uint32(numBits), nil
 }
 
 func (gb *bitReader) bitsLeft() int32 {

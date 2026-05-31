@@ -30,7 +30,8 @@ b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d
 
 func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
-	info, err := NewDecoder().ParseHeadersAnnexB(data)
+	dec := NewDecoder()
+	info, err := dec.ParseHeadersAnnexB(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,6 +47,12 @@ func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	}
 	if info.ChromaFormatIDC != 1 || info.BitDepthLuma != 8 || info.BitDepthChroma != 8 {
 		t.Fatalf("format = chroma %d depth %d/%d", info.ChromaFormatIDC, info.BitDepthLuma, info.BitDepthChroma)
+	}
+	if dec.pps[0] == nil {
+		t.Fatal("PPS 0 was not retained")
+	}
+	if dec.pps[0].CABAC != 0 || dec.pps[0].SliceGroupCount != 1 || dec.pps[0].RefCount != [2]uint32{1, 1} {
+		t.Fatalf("pps = %+v", dec.pps[0])
 	}
 }
 

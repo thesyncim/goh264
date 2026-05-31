@@ -62,7 +62,10 @@ type SPS struct {
 }
 
 func DecodeSPS(rbsp []byte) (*SPS, error) {
-	gb := newBitReader(rbsp)
+	gb, err := newRBSPBitReader(rbsp)
+	if err != nil {
+		return nil, err
+	}
 	sps := &SPS{
 		TimeOffsetLength: 24,
 		BitDepthLuma:     8,
@@ -149,7 +152,7 @@ func DecodeSPS(rbsp []byte) (*SPS, error) {
 			return nil, err
 		}
 		if present != 0 {
-			if err := decodeScalingMatrices(&gb, sps.ChromaFormatIDC, &sps.ScalingMatrixPresentMask); err != nil {
+			if err := decodeScalingMatrices(&gb, sps.ChromaFormatIDC, true, &sps.ScalingMatrixPresentMask); err != nil {
 				return nil, err
 			}
 			sps.ScalingMatrixPresent = 1
@@ -296,10 +299,13 @@ func isHighProfile(profileIDC int32) bool {
 	}
 }
 
-func decodeScalingMatrices(gb *bitReader, chromaFormatIDC uint32, mask *uint16) error {
-	count := 8
-	if chromaFormatIDC == 3 {
-		count = 12
+func decodeScalingMatrices(gb *bitReader, chromaFormatIDC uint32, include8x8 bool, mask *uint16) error {
+	count := 6
+	if include8x8 {
+		count = 8
+		if chromaFormatIDC == 3 {
+			count = 12
+		}
 	}
 
 	for i := 0; i < count; i++ {

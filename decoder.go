@@ -11,6 +11,7 @@ var (
 
 type Decoder struct {
 	sps [32]*h264.SPS
+	pps [256]*h264.PPS
 }
 
 type StreamInfo struct {
@@ -35,21 +36,39 @@ func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
 		return StreamInfo{}, err
 	}
 
+	var info StreamInfo
+	haveSPS := false
 	for _, nal := range nals {
-		if nal.Type != h264.NALSPS {
+		switch nal.Type {
+		case h264.NALSPS:
+			sps, err := h264.DecodeSPS(nal.RBSP)
+			if err != nil {
+				return StreamInfo{}, err
+			}
+			if sps.SPSID < uint32(len(d.sps)) {
+				d.sps[sps.SPSID] = sps
+			}
+			if !haveSPS {
+				info = streamInfoFromSPS(sps)
+				haveSPS = true
+			}
+		case h264.NALPPS:
+			pps, err := h264.DecodePPS(nal.RBSP, &d.sps)
+			if err != nil {
+				return StreamInfo{}, err
+			}
+			if pps.PPSID < uint32(len(d.pps)) {
+				d.pps[pps.PPSID] = pps
+			}
+		default:
 			continue
 		}
-		sps, err := h264.DecodeSPS(nal.RBSP)
-		if err != nil {
-			return StreamInfo{}, err
-		}
-		if sps.SPSID < uint32(len(d.sps)) {
-			d.sps[sps.SPSID] = sps
-		}
-		return streamInfoFromSPS(sps), nil
 	}
 
-	return StreamInfo{}, ErrInvalidData
+	if !haveSPS {
+		return StreamInfo{}, ErrInvalidData
+	}
+	return info, nil
 }
 
 func streamInfoFromSPS(sps *h264.SPS) StreamInfo {
