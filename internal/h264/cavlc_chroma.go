@@ -7,6 +7,8 @@ package h264
 
 func (c *cavlcResidualContext) decodeChromaResidual(gb *bitReader, pps *PPS, scan []uint8, mbType uint32, cbp int, chromaFormatIDC int32, chromaQP [2]uint8) error {
 	if chromaFormatIDC != 1 && chromaFormatIDC != 2 {
+		fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[16]), 4, 4, 8, 0)
+		fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[32]), 4, 4, 8, 0)
 		return nil
 	}
 

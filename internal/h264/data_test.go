@@ -22,6 +22,15 @@ func TestMBTypeTables(t *testing.T) {
 	}
 }
 
+func TestCBPTables(t *testing.T) {
+	if h264GolombToIntra4x4CBP[0] != 47 || h264GolombToIntra4x4CBP[3] != 0 || h264GolombToIntra4x4CBP[47] != 41 {
+		t.Fatalf("intra cbp spots = %d %d %d", h264GolombToIntra4x4CBP[0], h264GolombToIntra4x4CBP[3], h264GolombToIntra4x4CBP[47])
+	}
+	if h264GolombToInterCBP[0] != 0 || h264GolombToInterCBP[12] != 47 || h264GolombToInterCBP[47] != 41 {
+		t.Fatalf("inter cbp spots = %d %d %d", h264GolombToInterCBP[0], h264GolombToInterCBP[12], h264GolombToInterCBP[47])
+	}
+}
+
 func TestChromaQPTableShape(t *testing.T) {
 	cases := []struct {
 		depth int32

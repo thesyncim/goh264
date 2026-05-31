@@ -91,6 +91,11 @@ func TestDecodeCAVLCLumaResidualClearsSkipped8x8(t *testing.T) {
 
 func cavlcFlatQMulPPS() *PPS {
 	pps := &PPS{}
+	for list := range pps.ChromaQPTable {
+		for qp := range pps.ChromaQPTable[list] {
+			pps.ChromaQPTable[list][qp] = uint8(qp)
+		}
+	}
 	for cqm := range pps.Dequant4Buffer {
 		for qp := range pps.Dequant4Buffer[cqm] {
 			for i := range pps.Dequant4Buffer[cqm][qp] {

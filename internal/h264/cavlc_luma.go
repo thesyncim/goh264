@@ -122,6 +122,10 @@ func isIntra(mbType uint32) bool {
 	return mbType&(MBTypeIntra4x4|MBTypeIntra16x16|MBTypeIntraPCM) != 0
 }
 
+func isIntra4x4(mbType uint32) bool {
+	return mbType&MBTypeIntra4x4 != 0
+}
+
 func isIntra16x16(mbType uint32) bool {
 	return mbType&MBTypeIntra16x16 != 0
 }
