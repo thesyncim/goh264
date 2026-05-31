@@ -4,6 +4,7 @@ package goh264
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -66,6 +67,27 @@ func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	}
 	if dec.slices[0].ChromaQP != [2]uint8{dec.pps[0].ChromaQPTable[0][dec.slices[0].QScale], dec.pps[0].ChromaQPTable[1][dec.slices[0].QScale]} {
 		t.Fatalf("slice chroma qp = %+v", dec.slices[0].ChromaQP)
+	}
+}
+
+func TestDecodeAnnexBBlack16Frame(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	frame, err := NewDecoder().DecodeAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame.Width != 16 || frame.Height != 16 || frame.ChromaFormatIDC != 1 || frame.BitDepthLuma != 8 || frame.BitDepthChroma != 8 {
+		t.Fatalf("frame metadata = %dx%d chroma %d depth %d/%d", frame.Width, frame.Height, frame.ChromaFormatIDC, frame.BitDepthLuma, frame.BitDepthChroma)
+	}
+	raw, err := frame.AppendRawYUV(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) != 384 {
+		t.Fatalf("raw frame size = %d, want 384", len(raw))
+	}
+	if got := md5.Sum(raw); got != [16]byte{0x8a, 0xae, 0xfe, 0x0a, 0xdc, 0xea, 0x09, 0x4c, 0xfb, 0x51, 0x61, 0xa0, 0x60, 0xba, 0xb4, 0xe2} {
+		t.Fatalf("frame md5 = %x, want 8aaefe0adcea094cfb5161a060bab4e2", got)
 	}
 }
 

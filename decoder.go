@@ -27,8 +27,34 @@ type StreamInfo struct {
 	BitDepthChroma  int
 }
 
+type Frame struct {
+	Width           int
+	Height          int
+	CropLeft        int
+	CropTop         int
+	ChromaFormatIDC uint32
+	BitDepthLuma    int
+	BitDepthChroma  int
+	YStride         int
+	CStride         int
+	Y               []byte
+	Cb              []byte
+	Cr              []byte
+}
+
 func NewDecoder() *Decoder {
 	return &Decoder{}
+}
+
+func (d *Decoder) DecodeAnnexB(data []byte) (*Frame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	frame, err := h264.DecodeAnnexBSimple(data)
+	if err != nil {
+		return nil, err
+	}
+	return frameFromH264(frame), nil
 }
 
 func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
@@ -76,6 +102,100 @@ func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
 		return StreamInfo{}, ErrInvalidData
 	}
 	return info, nil
+}
+
+func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
+	if f == nil || f.Width <= 0 || f.Height <= 0 {
+		return dst, ErrInvalidData
+	}
+	if f.BitDepthLuma != 8 || f.BitDepthChroma != 8 {
+		return dst, ErrUnsupported
+	}
+	if f.CropLeft < 0 || f.CropTop < 0 || f.YStride < f.Width+f.CropLeft ||
+		len(f.Y) < (f.CropTop+f.Height-1)*f.YStride+f.CropLeft+f.Width {
+		return dst, ErrInvalidData
+	}
+	for y := 0; y < f.Height; y++ {
+		row := (f.CropTop+y)*f.YStride + f.CropLeft
+		dst = append(dst, f.Y[row:row+f.Width]...)
+	}
+
+	chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, f.ChromaFormatIDC)
+	if err != nil {
+		return dst, err
+	}
+	if chromaWidth == 0 || chromaHeight == 0 {
+		return dst, nil
+	}
+	chromaCropLeft, chromaCropTop, err := frameChromaCrop(f.CropLeft, f.CropTop, f.ChromaFormatIDC)
+	if err != nil {
+		return dst, err
+	}
+	if f.CStride < chromaWidth+chromaCropLeft ||
+		len(f.Cb) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth ||
+		len(f.Cr) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth {
+		return dst, ErrInvalidData
+	}
+	for y := 0; y < chromaHeight; y++ {
+		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
+		dst = append(dst, f.Cb[row:row+chromaWidth]...)
+	}
+	for y := 0; y < chromaHeight; y++ {
+		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
+		dst = append(dst, f.Cr[row:row+chromaWidth]...)
+	}
+	return dst, nil
+}
+
+func frameFromH264(src *h264.DecodedFrame) *Frame {
+	if src == nil {
+		return nil
+	}
+	return &Frame{
+		Width:           src.Width,
+		Height:          src.Height,
+		CropLeft:        src.CropLeft,
+		CropTop:         src.CropTop,
+		ChromaFormatIDC: uint32(src.ChromaFormatIDC),
+		BitDepthLuma:    src.BitDepthLuma,
+		BitDepthChroma:  src.BitDepthChroma,
+		YStride:         src.LumaStride,
+		CStride:         src.ChromaStride,
+		Y:               src.Y,
+		Cb:              src.Cb,
+		Cr:              src.Cr,
+	}
+}
+
+func frameChromaSize(width int, height int, chromaFormatIDC uint32) (int, int, error) {
+	switch chromaFormatIDC {
+	case 0:
+		return 0, 0, nil
+	case 1:
+		return (width + 1) >> 1, (height + 1) >> 1, nil
+	case 2:
+		return (width + 1) >> 1, height, nil
+	case 3:
+		return width, height, nil
+	default:
+		return 0, 0, ErrInvalidData
+	}
+}
+
+func frameChromaCrop(cropLeft int, cropTop int, chromaFormatIDC uint32) (int, int, error) {
+	if cropLeft < 0 || cropTop < 0 {
+		return 0, 0, ErrInvalidData
+	}
+	switch chromaFormatIDC {
+	case 0, 3:
+		return cropLeft, cropTop, nil
+	case 1:
+		return cropLeft >> 1, cropTop >> 1, nil
+	case 2:
+		return cropLeft >> 1, cropTop, nil
+	default:
+		return 0, 0, ErrInvalidData
+	}
 }
 
 func streamInfoFromSPS(sps *h264.SPS) StreamInfo {
