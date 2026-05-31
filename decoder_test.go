@@ -145,6 +145,65 @@ bfb401e8829ad3a1ec838a47200a3f7240514000000001419a425aff523bf415f7b3ec84fdb633d1
 5856ea076eba90dafa15a6d1c40fcc414500000001419a63afd90aa719c3475592a4047bed17a9de8f346653382872a0
 `
 
+const testsrc16CAVLC422AnnexBHex = `
+00000001677a000abcb4f6022000000300200000030041e244d40000000168ce0f2c800000010605ffff6ddc45e9bde
+6d948b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d20482e323634
+2f4d5045472d342041564320636f646563202d20436f70796c65667420323030332d32303235202d20687474703a2f
+2f7777772e766964656f6c616e2e6f72672f783236342e68746d6c202d206f7074696f6e733a2063616261633d3020
+7265663d31206465626c6f636b3d313a313a3020616e616c7973653d3078313a3078313131206d653d68657820737562
+6d653d37207073793d31207073795f72643d312e30303a302e3030206d697865645f7265663d30206d655f72616e67
+653d3136206368726f6d615f6d653d31207472656c6c69733d31203878386463743d302063716d3d3020646561647a
+6f6e653d32312c313120666173745f70736b69703d31206368726f6d615f71705f6f66667365743d2d322074687265
+6164733d31206c6f6f6b61686561645f746872656164733d3120736c696365645f746872656164733d30206e723d30
+20646563696d6174653d3120696e7465726c616365643d3020626c757261795f636f6d7061743d3020636f6e737472
+61696e65645f696e7472613d3020626672616d65733d3020776569676874703d30206b6579696e743d323530206b65
+79696e745f6d696e3d313236207363656e656375743d3020696e7472615f726566726573683d302072635f6c6f6f6b
+61686561643d34302072633d637266206d62747265653d31206372663d32332e302071636f6d703d302e3630207170
+6d696e3d302071706d61783d3639207170737465703d342069705f726174696f3d312e34302061713d313a312e3030
+00800000016588843d710c5581810bf0045360c46003eb5061800391978535441d84a825125ffe03a081d900ba036141
+4b862b578c5905731a7793be9ecf088b4727985635102515841fa4c110b9823ea97814ffec0883274b47561d3e114f
+fac881b2050c497444663d5eb70970a2f887496cf57a800350c510ac2c05a29ff7cd601a0ee6a2de0e8cb17f800e8
+18080e1ec8117f003800448d241c3e10002c13b08f0cf6785a31814e1b029a4610421fe601987042250b03ac89eb
+252490001c6609afd202b5300024433a530002217f32ecf4bbc000404868bbcae400b5a2301367840001a03810272
+4b56780fbf4c802687d5251831ae244c2b33a3b60002010345e85724328d0000808c2b573d000012a1cc1d0848b
+656a0002006c0b9174aa800000001419a20f5f1b0e0783a4801a05018984036d45d7f3f7bc938e30042d308a42
+d6afd8f7c00e0007c00e00d2264225a460071c0954c31000b00233c2448e67cf760acda600060016d1603d3785
+981fbf8f0bf4257dd870058000805a00a14d74219eaaa661420080d130104c69a5ed26a4494cff498a4c1f000000
+001419a40b5f1b803f203e25529c58171a6565ef7699f00e1d9ad4d97adc22290b5aaf533b1ec01a401a0a5bf85
+ee500bd030cacf78dc090697a31a558038da14b8f0b612b16b1f3c01e04f1733bae0f840900ee52679177a61d5
+f558d62185362000000001419a635f0cf82fb841ff70b2c01166b958f0fe00bb6bacf5b5beff80
+`
+
+const testsrc16CABAC422AnnexBHex = `
+00000001677a000abcb4f6022000000300200000030041e244d40000000168ee0f2c800000010605ffff6ddc45e9bde
+6d948b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d20482e323634
+2f4d5045472d342041564320636f646563202d20436f70796c65667420323030332d32303235202d20687474703a2f
+2f7777772e766964656f6c616e2e6f72672f783236342e68746d6c202d206f7074696f6e733a2063616261633d3120
+7265663d31206465626c6f636b3d313a313a3020616e616c7973653d3078313a3078313131206d653d68657820737562
+6d653d37207073793d31207073795f72643d312e30303a302e3030206d697865645f7265663d30206d655f72616e67
+653d3136206368726f6d615f6d653d31207472656c6c69733d31203878386463743d302063716d3d3020646561647a
+6f6e653d32312c313120666173745f70736b69703d31206368726f6d615f71705f6f66667365743d2d322074687265
+6164733d31206c6f6f6b61686561645f746872656164733d3120736c696365645f746872656164733d30206e723d30
+20646563696d6174653d3120696e7465726c616365643d3020626c757261795f636f6d7061743d3020636f6e737472
+61696e65645f696e7472613d3020626672616d65733d3020776569676874703d30206b6579696e743d323530206b65
+79696e745f6d696e3d313236207363656e656375743d3020696e7472615f726566726573683d302072635f6c6f6f6b
+61686561643d34302072633d637266206d62747265653d31206372663d32332e302071636f6d703d302e3630207170
+6d696e3d302071706d61783d3639207170737465703d342069705f726174696f3d312e34302061713d313a312e3030
+00800000016588843d7fb807d16f5ebb08170ee5539a5348977d63670c41749e4c1b8ad1880e37487b6885eea190
+35671c61e1c57f07149b8a2b6f8dcb03eb4c53c8ab4c9110a806d4366e8932cc6f94b005310c0bd460a3b9e87
+7b335ab50d2e5404c32dd68210b86a877a1ce0e4a7d7cc4de438550e5346d0d74b97aec55913ed42f40f0c7c
+70cb13301bf34c4dabe48de7ce8f7189f945a6e8609dfb626228a083a5f889d1e0bffca5fc07f0b80c0682c0bc
+506a746b4a9f77f7b8dbcce85a2364e18ce3c967e9095dd1371407c06e9031fead250899c71c86d55eef84c
+9142dc34f87ef41ed25a9d2339d0a28e9cfbe69eb9efc4ce821f0ab48449146d6d9b7f2332255d7e1d92d12
+b29fb86f1736c9da3678100000001419a227aff60949bc49fbde59eaf44cd5388d782a019dbb7ab4bb730b2cb3
+ccb07846bf00bc37cc9d04e0c9cd1b317df12412cc858788eb3463f5fa65ff0e755245cd1b6232f83edafffdec
+71bf76d11778b0a3ee3eb9ee9895eb1e13de8a8632b995bc14f8407d4ecfb9f008a093c6d68d6f966ea259140
+cd157dc8734886eb927ffe00000001419a425aff523bf415f7b3ec84fdb633d17afd5ca65137967d81f22e2c4388
+ccb3a1e31e9c180f08fe1835891d369c18261e698f3edb857dae08f7e17cd8b746b6546637ad5cec5509c9d6
+9cead974d0da4ab018cb5b777c853538ac73129a9aa0d7c900000001419a63afd90aa719c34755988b947c0a60b
+16ce16dad84c715edf368d1cad2
+`
+
 func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	dec := NewDecoder()
@@ -244,6 +303,38 @@ func TestParseHeadersAnnexBCABAC(t *testing.T) {
 	}
 	if dec.slices[0].SliceTypeNoS != h264.PictureTypeI || dec.slices[1].SliceTypeNoS != h264.PictureTypeP {
 		t.Fatalf("slice types = %d/%d", dec.slices[0].SliceTypeNoS, dec.slices[1].SliceTypeNoS)
+	}
+}
+
+func TestParseHeadersAnnexBHigh422(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		hex   string
+		cabac int32
+	}{
+		{name: "cavlc", hex: testsrc16CAVLC422AnnexBHex, cabac: 0},
+		{name: "cabac", hex: testsrc16CABAC422AnnexBHex, cabac: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			dec := NewDecoder()
+			info, err := dec.ParseHeadersAnnexB(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Profile != "High 4:2:2" || info.ProfileIDC != 122 || info.LevelIDC != 10 {
+				t.Fatalf("profile/level = %q/%d/%d, want High 4:2:2/122/10", info.Profile, info.ProfileIDC, info.LevelIDC)
+			}
+			if info.Width != 16 || info.Height != 16 || info.ChromaFormatIDC != 2 || info.BitDepthLuma != 8 || info.BitDepthChroma != 8 {
+				t.Fatalf("stream info = %+v", info)
+			}
+			if dec.pps[0] == nil || dec.pps[0].CABAC != tt.cabac {
+				t.Fatalf("pps = %+v, want cabac %d", dec.pps[0], tt.cabac)
+			}
+			if len(dec.slices) != 4 {
+				t.Fatalf("slices = %d, want 4", len(dec.slices))
+			}
+		})
 	}
 }
 
@@ -531,6 +622,83 @@ func TestDecodeAVCTestsrc16CABACFrames(t *testing.T) {
 	}
 }
 
+func TestDecodeAnnexBTestsrc16High422Frames(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		hex  string
+		want []string
+	}{
+		{
+			name: "cavlc",
+			hex:  testsrc16CAVLC422AnnexBHex,
+			want: []string{
+				"b37a1f7943ce6c7d9646786f348f4ce9",
+				"e705648238ec1a68ce2fc83f8d1b7293",
+				"13cfed6389834373ccb5b6bb61f6cf9d",
+				"f0b4d1caf4e666cc4767cfe273de480e",
+			},
+		},
+		{
+			name: "cabac",
+			hex:  testsrc16CABAC422AnnexBHex,
+			want: []string{
+				"e06b0f34fe689940304653e5c3840a53",
+				"424fb373278235a5d2b0808968cb0e58",
+				"b6e4d159f8c0b0bb452de55824214ac6",
+				"892dfdee5dbf37558f99a6fe0c278abb",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			frames, err := NewDecoder().DecodeAnnexBFrames(decodeHexFixture(t, tt.hex))
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertHigh422FrameMD5Strings(t, frames, tt.want)
+		})
+	}
+}
+
+func TestDecodeAVCTestsrc16High422Frames(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		hex  string
+		want []string
+	}{
+		{
+			name: "cavlc",
+			hex:  testsrc16CAVLC422AnnexBHex,
+			want: []string{
+				"b37a1f7943ce6c7d9646786f348f4ce9",
+				"e705648238ec1a68ce2fc83f8d1b7293",
+				"13cfed6389834373ccb5b6bb61f6cf9d",
+				"f0b4d1caf4e666cc4767cfe273de480e",
+			},
+		},
+		{
+			name: "cabac",
+			hex:  testsrc16CABAC422AnnexBHex,
+			want: []string{
+				"e06b0f34fe689940304653e5c3840a53",
+				"424fb373278235a5d2b0808968cb0e58",
+				"b6e4d159f8c0b0bb452de55824214ac6",
+				"892dfdee5dbf37558f99a6fe0c278abb",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+				}
+				assertHigh422FrameMD5Strings(t, frames, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseAVCDecoderConfigurationRecordCABAC(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CABACAnnexBHex)
 	config, packet := annexBToAVCConfigAndPacket(t, data, 3)
@@ -603,6 +771,47 @@ func TestDecodeAVCWithConfigurationRecordCABACFrames(t *testing.T) {
 	}
 }
 
+func TestDecodeAVCWithConfigurationRecordHigh422Frames(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		hex  string
+		want []string
+	}{
+		{
+			name: "cavlc",
+			hex:  testsrc16CAVLC422AnnexBHex,
+			want: []string{
+				"b37a1f7943ce6c7d9646786f348f4ce9",
+				"e705648238ec1a68ce2fc83f8d1b7293",
+				"13cfed6389834373ccb5b6bb61f6cf9d",
+				"f0b4d1caf4e666cc4767cfe273de480e",
+			},
+		},
+		{
+			name: "cabac",
+			hex:  testsrc16CABAC422AnnexBHex,
+			want: []string{
+				"e06b0f34fe689940304653e5c3840a53",
+				"424fb373278235a5d2b0808968cb0e58",
+				"b6e4d159f8c0b0bb452de55824214ac6",
+				"892dfdee5dbf37558f99a6fe0c278abb",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
+				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+				}
+				assertHigh422FrameMD5Strings(t, frames, tt.want)
+			}
+		})
+	}
+}
+
 func TestDecodeConfiguredAVCAcrossSamplesRef2Frames(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16Ref2AnnexBHex)
 	want := []string{
@@ -652,6 +861,54 @@ func TestDecodeConfiguredAVCAcrossSamplesCABACFrames(t *testing.T) {
 			t.Fatalf("sample[%d]: %v", i, err)
 		}
 		assertFrameMD5Strings(t, []*Frame{frame}, want[i:i+1])
+	}
+}
+
+func TestDecodeConfiguredAVCAcrossSamplesHigh422Frames(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		hex  string
+		want []string
+	}{
+		{
+			name: "cavlc",
+			hex:  testsrc16CAVLC422AnnexBHex,
+			want: []string{
+				"b37a1f7943ce6c7d9646786f348f4ce9",
+				"e705648238ec1a68ce2fc83f8d1b7293",
+				"13cfed6389834373ccb5b6bb61f6cf9d",
+				"f0b4d1caf4e666cc4767cfe273de480e",
+			},
+		},
+		{
+			name: "cabac",
+			hex:  testsrc16CABAC422AnnexBHex,
+			want: []string{
+				"e06b0f34fe689940304653e5c3840a53",
+				"424fb373278235a5d2b0808968cb0e58",
+				"b6e4d159f8c0b0bb452de55824214ac6",
+				"892dfdee5dbf37558f99a6fe0c278abb",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			config, samples := annexBToAVCConfigAndSamples(t, decodeHexFixture(t, tt.hex), 3)
+			if len(samples) != len(tt.want) {
+				t.Fatalf("samples = %d, want %d", len(samples), len(tt.want))
+			}
+
+			dec := NewDecoder()
+			if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+				t.Fatal(err)
+			}
+			for i, sample := range samples {
+				frame, err := dec.DecodeConfiguredAVC(sample)
+				if err != nil {
+					t.Fatalf("sample[%d]: %v", i, err)
+				}
+				assertHigh422FrameMD5Strings(t, []*Frame{frame}, tt.want[i:i+1])
+			}
+		})
 	}
 }
 
@@ -705,6 +962,69 @@ func TestFFprobeOracleBlack16(t *testing.T) {
 	}
 	if stream.Profile != info.Profile || stream.Width != info.Width || stream.Height != info.Height || stream.Level != int(info.LevelIDC) {
 		t.Fatalf("oracle %+v, go %+v", stream, info)
+	}
+}
+
+func TestFFprobeOracleHigh422(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffprobe oracle")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not available")
+	}
+
+	for _, tt := range []struct {
+		name string
+		hex  string
+	}{
+		{name: "cavlc", hex: testsrc16CAVLC422AnnexBHex},
+		{name: "cabac", hex: testsrc16CABAC422AnnexBHex},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			path := writeTempH264(t, data)
+
+			cmd := exec.Command("ffprobe",
+				"-v", "error",
+				"-select_streams", "v:0",
+				"-show_entries", "stream=codec_name,profile,width,height,level,pix_fmt",
+				"-of", "json",
+				path,
+			)
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("ffprobe: %v", err)
+			}
+
+			var probe struct {
+				Streams []struct {
+					CodecName string `json:"codec_name"`
+					Profile   string `json:"profile"`
+					Width     int    `json:"width"`
+					Height    int    `json:"height"`
+					Level     int    `json:"level"`
+					PixFmt    string `json:"pix_fmt"`
+				} `json:"streams"`
+			}
+			if err := json.Unmarshal(out, &probe); err != nil {
+				t.Fatal(err)
+			}
+			if len(probe.Streams) != 1 {
+				t.Fatalf("ffprobe streams = %d", len(probe.Streams))
+			}
+
+			info, err := NewDecoder().ParseHeadersAnnexB(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stream := probe.Streams[0]
+			if stream.CodecName != "h264" || stream.PixFmt != "yuv422p" {
+				t.Fatalf("unexpected oracle stream: %+v", stream)
+			}
+			if stream.Profile != info.Profile || stream.Width != info.Width || stream.Height != info.Height || stream.Level != int(info.LevelIDC) {
+				t.Fatalf("oracle %+v, go %+v", stream, info)
+			}
+		})
 	}
 }
 
@@ -927,6 +1247,65 @@ func TestFFmpegFrameMD5OracleTestsrc16CABAC(t *testing.T) {
 	}
 }
 
+func TestFFmpegFrameMD5OracleTestsrc16High422(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	for _, tt := range []struct {
+		name string
+		hex  string
+		want []string
+	}{
+		{
+			name: "cavlc",
+			hex:  testsrc16CAVLC422AnnexBHex,
+			want: []string{
+				"0,          0,          0,        1,      512, b37a1f7943ce6c7d9646786f348f4ce9",
+				"0,          1,          1,        1,      512, e705648238ec1a68ce2fc83f8d1b7293",
+				"0,          2,          2,        1,      512, 13cfed6389834373ccb5b6bb61f6cf9d",
+				"0,          3,          3,        1,      512, f0b4d1caf4e666cc4767cfe273de480e",
+			},
+		},
+		{
+			name: "cabac",
+			hex:  testsrc16CABAC422AnnexBHex,
+			want: []string{
+				"0,          0,          0,        1,      512, e06b0f34fe689940304653e5c3840a53",
+				"0,          1,          1,        1,      512, 424fb373278235a5d2b0808968cb0e58",
+				"0,          2,          2,        1,      512, b6e4d159f8c0b0bb452de55824214ac6",
+				"0,          3,          3,        1,      512, 892dfdee5dbf37558f99a6fe0c278abb",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			path := writeTempH264(t, data)
+
+			cmd := exec.Command("ffmpeg",
+				"-v", "error",
+				"-f", "h264",
+				"-i", path,
+				"-an", "-sn", "-dn",
+				"-f", "framemd5",
+				"-",
+			)
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("ffmpeg framemd5: %v", err)
+			}
+			for _, line := range tt.want {
+				if !bytes.Contains(out, []byte(line)) {
+					t.Fatalf("missing %q in framemd5:\n%s", line, out)
+				}
+			}
+		})
+	}
+}
+
 func decodeHexFixture(t *testing.T, s string) []byte {
 	t.Helper()
 	clean := strings.NewReplacer("\n", "", "\t", "", " ", "").Replace(s)
@@ -1065,6 +1444,29 @@ func assertFrameMD5Strings(t *testing.T, frames []*Frame, want []string) {
 		raw, err := frame.AppendRawYUV(nil)
 		if err != nil {
 			t.Fatalf("frame[%d] raw yuv: %v", i, err)
+		}
+		got := md5.Sum(raw)
+		if hex.EncodeToString(got[:]) != want[i] {
+			t.Fatalf("frame[%d] md5 = %x, want %s", i, got, want[i])
+		}
+	}
+}
+
+func assertHigh422FrameMD5Strings(t *testing.T, frames []*Frame, want []string) {
+	t.Helper()
+	if len(frames) != len(want) {
+		t.Fatalf("frames = %d, want %d", len(frames), len(want))
+	}
+	for i, frame := range frames {
+		if frame.Width != 16 || frame.Height != 16 || frame.ChromaFormatIDC != 2 || frame.BitDepthLuma != 8 || frame.BitDepthChroma != 8 {
+			t.Fatalf("frame[%d] metadata = %dx%d chroma %d depth %d/%d", i, frame.Width, frame.Height, frame.ChromaFormatIDC, frame.BitDepthLuma, frame.BitDepthChroma)
+		}
+		raw, err := frame.AppendRawYUV(nil)
+		if err != nil {
+			t.Fatalf("frame[%d] raw yuv: %v", i, err)
+		}
+		if len(raw) != 512 {
+			t.Fatalf("frame[%d] raw frame size = %d, want 512", i, len(raw))
 		}
 		got := md5.Sum(raw)
 		if hex.EncodeToString(got[:]) != want[i] {

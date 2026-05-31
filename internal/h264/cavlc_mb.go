@@ -43,45 +43,145 @@ func (c *cavlcResidualContext) decodeCAVLCIntraMacroblockAfterType(gb *bitReader
 	}
 
 	if isIntra4x4(mb.MBType) {
-		di := 1
-		if dct8x8Allowed {
-			flag, err := gb.readBit()
-			if err != nil {
-				return mb, err
-			}
-			if flag != 0 {
-				mb.MBType |= MBType8x8DCT
-				mb.TransformSize8x8DCT = true
-				di = 4
-			}
+		var err error
+		mb, err = decodeCAVLCIntra4x4ModesFromPred(gb, mb, dct8x8Allowed, predIntra4x4)
+		if err != nil {
+			return mb, err
 		}
+	}
 
-		for i := 0; i < 16; i += di {
-			mode := int(predIntra4x4[i])
-			if mode < 0 || mode > 8 {
-				return mb, ErrInvalidData
-			}
-			prevIntra4x4PredModeFlag, err := gb.readBit()
+	return c.decodeCAVLCIntraMacroblockAfterPred(gb, pps, sps, mb, qscale, dct8x8Allowed)
+}
+
+func (c *cavlcResidualContext) decodeCAVLCFrameIntraMacroblockAfterType(gb *bitReader, pps *PPS, sps *SPS, mb cavlcMacroblockSyntax, qscale int, dct8x8Allowed bool, intraCache *[h264IntraPredModeCacheSize]int8) (cavlcMacroblockSyntax, error) {
+	if gb == nil || pps == nil || sps == nil {
+		return mb, ErrInvalidData
+	}
+	if !isIntra(mb.MBType) {
+		return mb, ErrUnsupported
+	}
+	if mb.MBType&MBTypeIntraPCM != 0 {
+		return mb, ErrUnsupported
+	}
+
+	if isIntra4x4(mb.MBType) {
+		var err error
+		mb, err = decodeCAVLCIntra4x4ModesWithCache(gb, mb, dct8x8Allowed, intraCache)
+		if err != nil {
+			return mb, err
+		}
+	}
+
+	return c.decodeCAVLCIntraMacroblockAfterPred(gb, pps, sps, mb, qscale, dct8x8Allowed)
+}
+
+func decodeCAVLCIntra4x4ModesFromPred(gb *bitReader, mb cavlcMacroblockSyntax, dct8x8Allowed bool, predIntra4x4 [16]int8) (cavlcMacroblockSyntax, error) {
+	if gb == nil {
+		return mb, ErrInvalidData
+	}
+	di := 1
+	if dct8x8Allowed {
+		flag, err := gb.readBit()
+		if err != nil {
+			return mb, err
+		}
+		if flag != 0 {
+			mb.MBType |= MBType8x8DCT
+			mb.TransformSize8x8DCT = true
+			di = 4
+		}
+	}
+
+	for i := 0; i < 16; i += di {
+		mode := int(predIntra4x4[i])
+		if mode < 0 || mode > 8 {
+			return mb, ErrInvalidData
+		}
+		prevIntra4x4PredModeFlag, err := gb.readBit()
+		if err != nil {
+			return mb, err
+		}
+		if prevIntra4x4PredModeFlag == 0 {
+			remMode, err := gb.readBits(3)
 			if err != nil {
 				return mb, err
 			}
-			if prevIntra4x4PredModeFlag == 0 {
-				remMode, err := gb.readBits(3)
-				if err != nil {
-					return mb, err
-				}
-				mode = int(remMode)
-				if mode >= int(predIntra4x4[i]) {
-					mode++
-				}
-			}
-			if mode > 8 {
-				return mb, ErrInvalidData
-			}
-			for j := 0; j < di; j++ {
-				mb.Intra4x4PredMode[i+j] = int8(mode)
+			mode = int(remMode)
+			if mode >= int(predIntra4x4[i]) {
+				mode++
 			}
 		}
+		if mode > 8 {
+			return mb, ErrInvalidData
+		}
+		for j := 0; j < di; j++ {
+			mb.Intra4x4PredMode[i+j] = int8(mode)
+		}
+	}
+	return mb, nil
+}
+
+func decodeCAVLCIntra4x4ModesWithCache(gb *bitReader, mb cavlcMacroblockSyntax, dct8x8Allowed bool, cache *[h264IntraPredModeCacheSize]int8) (cavlcMacroblockSyntax, error) {
+	if gb == nil || cache == nil {
+		return mb, ErrInvalidData
+	}
+	di := 1
+	if dct8x8Allowed {
+		flag, err := gb.readBit()
+		if err != nil {
+			return mb, err
+		}
+		if flag != 0 {
+			mb.MBType |= MBType8x8DCT
+			mb.TransformSize8x8DCT = true
+			di = 4
+		}
+	}
+
+	for i := 0; i < 16; i += di {
+		pred, err := predIntraMode(cache, i)
+		if err != nil {
+			return mb, err
+		}
+		mode := int(pred)
+		prevIntra4x4PredModeFlag, err := gb.readBit()
+		if err != nil {
+			return mb, err
+		}
+		if prevIntra4x4PredModeFlag == 0 {
+			remMode, err := gb.readBits(3)
+			if err != nil {
+				return mb, err
+			}
+			mode = int(remMode)
+			if mode >= int(pred) {
+				mode++
+			}
+		}
+		if mode < 0 || mode > 8 {
+			return mb, ErrInvalidData
+		}
+		if di == 4 {
+			fillIntraPredModeRectangle(cache, int(h264Scan8[i]), 2, 2, 8, int8(mode))
+		} else {
+			cache[h264Scan8[i]] = int8(mode)
+		}
+		for j := 0; j < di; j++ {
+			mb.Intra4x4PredMode[i+j] = int8(mode)
+		}
+	}
+	return mb, nil
+}
+
+func (c *cavlcResidualContext) decodeCAVLCIntraMacroblockAfterPred(gb *bitReader, pps *PPS, sps *SPS, mb cavlcMacroblockSyntax, qscale int, dct8x8Allowed bool) (cavlcMacroblockSyntax, error) {
+	if gb == nil || pps == nil || sps == nil {
+		return mb, ErrInvalidData
+	}
+	if !isIntra(mb.MBType) {
+		return mb, ErrUnsupported
+	}
+	if mb.MBType&MBTypeIntraPCM != 0 {
+		return mb, ErrUnsupported
 	}
 
 	decodeChroma := sps.ChromaFormatIDC == 1 || sps.ChromaFormatIDC == 2

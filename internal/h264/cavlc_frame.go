@@ -202,16 +202,7 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithWork(sh *SliceHe
 }
 
 func (m *macroblockTables) decodeCAVLCFrameIntraMacroblock(gb *bitReader, in cavlcFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, intraCache *[h264IntraPredModeCacheSize]int8, cacheResult frameMacroblockDecodeCacheResult, result cavlcFrameMacroblockResult) (cavlcFrameMacroblockResult, error) {
-	var pred [16]int8
-	var err error
-	if isIntra4x4(base.MBType) {
-		pred, err = predIntra4x4Modes(intraCache)
-		if err != nil {
-			return result, err
-		}
-	}
-
-	mb, err := residual.decodeCAVLCIntraMacroblockAfterType(gb, in.PPS, in.SPS, base, in.QScale, in.DCT8x8Allowed, pred)
+	mb, err := residual.decodeCAVLCFrameIntraMacroblockAfterType(gb, in.PPS, in.SPS, base, in.QScale, in.DCT8x8Allowed, intraCache)
 	if err != nil {
 		return result, err
 	}

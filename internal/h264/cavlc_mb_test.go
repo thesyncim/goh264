@@ -149,3 +149,23 @@ func TestDecodeCAVLCIntra4x4MacroblockNoResidual(t *testing.T) {
 		t.Fatalf("consumed %d bits, want 23", gb.bitPos)
 	}
 }
+
+func TestDecodeCAVLCIntra4x4ModesWithCacheUsesDecodedNeighbors(t *testing.T) {
+	var cache [h264IntraPredModeCacheSize]int8
+	for i := range cache {
+		cache[i] = 8
+	}
+	gb := newBitReader(cavlcBitString("0111111111111111111"))
+	mb := cavlcMacroblockSyntax{MBType: MBTypeIntra4x4}
+
+	got, err := decodeCAVLCIntra4x4ModesWithCache(&gb, mb, false, &cache)
+	if err != nil {
+		t.Fatalf("decode intra4x4 modes failed: %v", err)
+	}
+	if got.Intra4x4PredMode[0] != 7 || got.Intra4x4PredMode[1] != 7 {
+		t.Fatalf("modes[0:2] = %d/%d, want 7/7", got.Intra4x4PredMode[0], got.Intra4x4PredMode[1])
+	}
+	if cache[h264Scan8[1]] != 7 {
+		t.Fatalf("cache block1 = %d, want 7", cache[h264Scan8[1]])
+	}
+}
