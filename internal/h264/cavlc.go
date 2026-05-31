@@ -19,6 +19,7 @@ const (
 )
 
 const lumaDCBlockIndex = 48
+const chromaDCBlockIndex = 49
 
 var cavlcGolombToInterCBPGray = [16]uint8{
 	0, 1, 2, 4, 8, 3, 5, 10, 12, 15, 7, 11, 13, 14, 6, 9,
