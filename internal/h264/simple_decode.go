@@ -280,9 +280,6 @@ func validateSimpleFrameReferenceSyntax(sh *SliceHeader) error {
 				return ErrUnsupported
 			}
 		}
-		if sh.PPS != nil && sh.PPS.WeightedPred != 0 {
-			return ErrUnsupported
-		}
 	}
 	return nil
 }

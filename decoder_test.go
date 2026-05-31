@@ -94,6 +94,28 @@ cffbf186dc3836bc8000000001419a387fe16a6018b01719525f8241b9970804ee5142002465186c
 038000000001419a607ff8d87b097f8662a8390581e6916a4d14be58430389468a086d081fe0
 `
 
+const testsrc16WeightedPAnnexBHex = `
+00000001674d400ada7b011000000300100000030020f1226a0000000168cf025c800000010605ffff51dc45e9bde6d
+948b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d20482e3236342f
+4d5045472d342041564320636f646563202d20436f70796c65667420323030332d32303235202d20687474703a2f2f77
+77772e766964656f6c616e2e6f72672f783236342e68746d6c202d206f7074696f6e733a2063616261633d3020726566
+3d31206465626c6f636b3d313a303a3020616e616c7973653d303a30206d653d646961207375626d653d30207073793d
+31207073795f72643d312e30303a302e3030206d697865645f7265663d30206d655f72616e67653d3136206368726f6d
+615f6d653d31207472656c6c69733d30203878386463743d302063716d3d3020646561647a6f6e653d32312c31312066
+6173745f70736b69703d31206368726f6d615f71705f6f66667365743d3020746872656164733d31206c6f6f6b616865
+61645f746872656164733d3120736c696365645f746872656164733d30206e723d3020646563696d6174653d3120696e
+7465726c616365643d3020626c757261795f636f6d7061743d3020636f6e73747261696e65645f696e7472613d302062
+6672616d65733d3020776569676874703d32206b6579696e743d323530206b6579696e745f6d696e3d31323620736365
+6e656375743d3020696e7472615f726566726573683d302072633d637266206d62747265653d30206372663d33352e30
+2071636f6d703d302e36302071706d696e3d302071706d61783d3639207170737465703d342069705f726174696f3d31
+2e34302061713d3000800000016588843f2628000834e000000001419a2605ff1b1706913211e949d2c0fc94c6a10eea
+779ac468ef7830b60521d05015482083c5003fc1461b72de99e8d40260f12e4d97c1729400000001419a418d03f06e
+07a01da020002021ffc6c39e5aa48e88456e34d9a625c3051b7e68df18f2e93ff63153a27e588266c91d9ed9c769f
+b5af5d84d53d7bc443ddc77bc45e121ce35e9a94f076b6c31025d471e6aee67ff53d44c87c17a00000001419a61d4
+05f0f926010208ff1bb65e43d01b7e19889bb80c25b606de776a18d2f223e7e65610ce780551c2e9448bf410ccca
+43bb93434a0d4dbced8d2ab1a29212608099e1ff0349a3f2
+`
+
 func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	dec := NewDecoder()
@@ -131,6 +153,44 @@ func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	}
 	if dec.slices[0].ChromaQP != [2]uint8{dec.pps[0].ChromaQPTable[0][dec.slices[0].QScale], dec.pps[0].ChromaQPTable[1][dec.slices[0].QScale]} {
 		t.Fatalf("slice chroma qp = %+v", dec.slices[0].ChromaQP)
+	}
+}
+
+func TestParseHeadersAnnexBWeightedP(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16WeightedPAnnexBHex)
+	dec := NewDecoder()
+	info, err := dec.ParseHeadersAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Profile != "Main" || info.ProfileIDC != 77 {
+		t.Fatalf("profile = %q/%d, want Main/77", info.Profile, info.ProfileIDC)
+	}
+	if dec.pps[0] == nil || dec.pps[0].WeightedPred != 1 {
+		t.Fatalf("weighted_pred = %+v", dec.pps[0])
+	}
+	if len(dec.slices) != 4 {
+		t.Fatalf("slices = %d, want 4", len(dec.slices))
+	}
+
+	pwt := dec.slices[2].PredWeightTable
+	if pwt.UseWeight != 1 || pwt.LumaLog2WeightDenom != 5 || pwt.ChromaLog2WeightDenom != 5 {
+		t.Fatalf("slice[2] weight header = use %d denom %d/%d", pwt.UseWeight, pwt.LumaLog2WeightDenom, pwt.ChromaLog2WeightDenom)
+	}
+	if pwt.LumaWeight[0][0] != [2]int32{63, -13} ||
+		pwt.ChromaWeight[0][0][0] != [2]int32{61, -118} ||
+		pwt.ChromaWeight[0][0][1] != [2]int32{64, -128} {
+		t.Fatalf("slice[2] weights = luma %+v chroma %+v", pwt.LumaWeight[0][0], pwt.ChromaWeight[0][0])
+	}
+
+	pwt = dec.slices[3].PredWeightTable
+	if pwt.UseWeight != 1 || pwt.LumaLog2WeightDenom != 6 || pwt.ChromaLog2WeightDenom != 1 {
+		t.Fatalf("slice[3] weight header = use %d denom %d/%d", pwt.UseWeight, pwt.LumaLog2WeightDenom, pwt.ChromaLog2WeightDenom)
+	}
+	if pwt.LumaWeight[0][0] != [2]int32{95, -7} ||
+		pwt.ChromaWeight[0][0][0] != [2]int32{2, 0} ||
+		pwt.ChromaWeight[0][0][1] != [2]int32{3, -64} {
+		t.Fatalf("slice[3] weights = luma %+v chroma %+v", pwt.LumaWeight[0][0], pwt.ChromaWeight[0][0])
 	}
 }
 
@@ -238,6 +298,32 @@ func TestDecodeAnnexBTestsrc16Ref2Frames(t *testing.T) {
 		{0x68, 0x1e, 0x6d, 0x4e, 0xf3, 0x05, 0x8d, 0x38, 0x80, 0x34, 0x6e, 0x80, 0x39, 0xe9, 0x5b, 0x94},
 		{0xef, 0x38, 0xcc, 0x80, 0xfb, 0x47, 0xf6, 0x0e, 0x38, 0xab, 0xc2, 0x50, 0x2a, 0xf7, 0xe5, 0xf9},
 		{0x0c, 0xee, 0x44, 0xff, 0x1f, 0x82, 0x79, 0xa9, 0x7b, 0xc3, 0xe5, 0x6e, 0x4f, 0x58, 0xf8, 0x02},
+	}
+	for i, frame := range frames {
+		raw, err := frame.AppendRawYUV(nil)
+		if err != nil {
+			t.Fatalf("frame[%d] raw yuv: %v", i, err)
+		}
+		if got := md5.Sum(raw); got != want[i] {
+			t.Fatalf("frame[%d] md5 = %x, want %x", i, got, want[i])
+		}
+	}
+}
+
+func TestDecodeAnnexBTestsrc16WeightedPFrames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16WeightedPAnnexBHex)
+	frames, err := NewDecoder().DecodeAnnexBFrames(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 4 {
+		t.Fatalf("frames = %d, want 4", len(frames))
+	}
+	want := [][16]byte{
+		{0x8a, 0xae, 0xfe, 0x0a, 0xdc, 0xea, 0x09, 0x4c, 0xfb, 0x51, 0x61, 0xa0, 0x60, 0xba, 0xb4, 0xe2},
+		{0x50, 0xde, 0x7a, 0x95, 0x91, 0x98, 0x0d, 0x98, 0x58, 0x0e, 0x8c, 0xc5, 0xbd, 0xf9, 0x07, 0xcb},
+		{0xc6, 0xdf, 0x93, 0x14, 0xa9, 0xf5, 0x4e, 0x22, 0xd4, 0x9d, 0xb2, 0x31, 0x6f, 0x12, 0xeb, 0x99},
+		{0x92, 0x44, 0x80, 0x3e, 0x5a, 0x61, 0x5a, 0x34, 0x42, 0x76, 0x08, 0x35, 0x0b, 0xe0, 0xfb, 0xda},
 	}
 	for i, frame := range frames {
 		raw, err := frame.AppendRawYUV(nil)
@@ -445,6 +531,41 @@ func TestFFmpegFrameMD5OracleTestsrc16Ref2(t *testing.T) {
 		"0,          1,          1,        1,      384, 681e6d4ef3058d3880346e8039e95b94",
 		"0,          2,          2,        1,      384, ef38cc80fb47f60e38abc2502af7e5f9",
 		"0,          3,          3,        1,      384, 0cee44ff1f8279a97bc3e56e4f58f802",
+	} {
+		if !bytes.Contains(out, []byte(line)) {
+			t.Fatalf("missing %q in framemd5:\n%s", line, out)
+		}
+	}
+}
+
+func TestFFmpegFrameMD5OracleTestsrc16WeightedP(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	data := decodeHexFixture(t, testsrc16WeightedPAnnexBHex)
+	path := writeTempH264(t, data)
+
+	cmd := exec.Command("ffmpeg",
+		"-v", "error",
+		"-f", "h264",
+		"-i", path,
+		"-an", "-sn", "-dn",
+		"-f", "framemd5",
+		"-",
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg framemd5: %v", err)
+	}
+	for _, line := range []string{
+		"0,          0,          0,        1,      384, 8aaefe0adcea094cfb5161a060bab4e2",
+		"0,          1,          1,        1,      384, 50de7a9591980d98580e8cc5bdf907cb",
+		"0,          2,          2,        1,      384, c6df9314a9f54e22d49db2316f12eb99",
+		"0,          3,          3,        1,      384, 9244803e5a615a34427608350be0fbda",
 	} {
 		if !bytes.Contains(out, []byte(line)) {
 			t.Fatalf("missing %q in framemd5:\n%s", line, out)
