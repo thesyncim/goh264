@@ -14,6 +14,11 @@ type cabacSyntaxSource interface {
 	terminate() int
 }
 
+type cabacIntraPCMSource interface {
+	cabacSyntaxSource
+	intraPCMBytes(n int) ([]byte, error)
+}
+
 type cabacSyntaxDecoder struct {
 	cabac *cabacContext
 	state *[1024]uint8
@@ -33,6 +38,13 @@ func (d cabacSyntaxDecoder) bypassSign(val int32) int32 {
 
 func (d cabacSyntaxDecoder) terminate() int {
 	return d.cabac.getCABACTerminate()
+}
+
+func (d cabacSyntaxDecoder) intraPCMBytes(n int) ([]byte, error) {
+	if d.cabac == nil {
+		return nil, ErrInvalidData
+	}
+	return d.cabac.readIntraPCMBytes(n)
 }
 
 func decodeCABACMBType[S cabacSyntaxSource](src S, sliceType int32, sliceTypeNoS int32, leftType uint32, topType uint32) (cavlcMacroblockSyntax, error) {

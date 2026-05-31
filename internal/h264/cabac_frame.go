@@ -32,6 +32,7 @@ type cabacFrameMacroblockResult struct {
 	Neighbors      macroblockDecodeNeighbors
 	Intra          cavlcMacroblockSyntax
 	Inter          cavlcInterMacroblockSyntax
+	IntraPCM       []byte
 	IsIntra        bool
 	IsInter        bool
 	Skipped        bool
@@ -106,7 +107,7 @@ func (m *macroblockTables) decodeCABACFrameMacroblock(src cabacSyntaxSource, in 
 	}
 	result.MBType = base.MBType
 	if base.MBType&MBTypeIntraPCM != 0 {
-		return result, ErrUnsupported
+		return m.decodeCABACFrameIntraPCMMacroblock(src, in, base, result)
 	}
 
 	listCount, err := cavlcFrameListCount(in.SliceTypeNoS)
@@ -136,6 +137,28 @@ func (m *macroblockTables) decodeCABACFrameMacroblock(src cabacSyntaxSource, in 
 		return m.decodeCABACFrameIntraMacroblock(src, in, base, &residual, &intraCache, cacheResult, result)
 	}
 	return m.decodeCABACFrameInterMacroblock(src, in, base, &residual, &motion, listCount, cacheResult, result)
+}
+
+func (m *macroblockTables) decodeCABACFrameIntraPCMMacroblock(src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax, result cabacFrameMacroblockResult) (cabacFrameMacroblockResult, error) {
+	pcm, err := readCABACIntraPCMBytes(src, in.SPS)
+	if err != nil {
+		return result, err
+	}
+	base.IntraPCM = pcm
+	base.QScale = 0
+	base.CBPTable = 0xf7ef
+	if err := m.writeBackCABACIntraPCMMacroblock(in.MBXY, in.SliceNum); err != nil {
+		return result, err
+	}
+	result.MBType = base.MBType
+	result.CBP = 0
+	result.CBPTable = 0xf7ef
+	result.QScale = 0
+	result.LastQScaleDiff = 0
+	result.Intra = base
+	result.IntraPCM = pcm
+	result.IsIntra = true
+	return result, nil
 }
 
 func (m *macroblockTables) decodeCABACMBSkip(src cabacSyntaxSource, mbXY int, sliceTypeNoS int32, sliceNum uint16) (bool, error) {
@@ -338,6 +361,20 @@ func (m *macroblockTables) decodeCABACMBChromaPredMode(src cabacSyntaxSource, n 
 		return 2
 	}
 	return 3
+}
+
+func readCABACIntraPCMBytes(src cabacSyntaxSource, sps *SPS) ([]byte, error) {
+	if src == nil || sps == nil || sps.ChromaFormatIDC >= uint32(len(h264IntraPCMSampleCount)) {
+		return nil, ErrInvalidData
+	}
+	if sps.BitDepthLuma != 8 {
+		return nil, ErrUnsupported
+	}
+	pcmSrc, ok := src.(cabacIntraPCMSource)
+	if !ok {
+		return nil, ErrUnsupported
+	}
+	return pcmSrc.intraPCMBytes(h264IntraPCMSampleCount[sps.ChromaFormatIDC])
 }
 
 func decodeCABACInterMotionSyntax(src cabacSyntaxSource, mb *cavlcInterMacroblockSyntax, motion *macroblockMotionCache, sliceTypeNoS int32, listCount int, refCount [2]uint32) error {

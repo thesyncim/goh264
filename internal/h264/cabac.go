@@ -158,6 +158,32 @@ func (c *cabacContext) getCABACTerminate() int {
 	return c.bytestream - c.bytestreamStart
 }
 
+func (c *cabacContext) readIntraPCMBytes(n int) ([]byte, error) {
+	if c == nil || n < 0 || c.bytestreamEnd < 0 || c.bytestreamEnd > len(c.buf) {
+		return nil, ErrInvalidData
+	}
+
+	ptr := c.bytestream
+	if c.low&0x1 != 0 {
+		ptr--
+	}
+	if cabacBits == 16 && c.low&0x1ff != 0 {
+		ptr--
+	}
+	if ptr < 0 || ptr > c.bytestreamEnd || n > c.bytestreamEnd-ptr {
+		return nil, ErrInvalidData
+	}
+
+	pcm := c.buf[ptr : ptr+n]
+	next := ptr + n
+	nextCABAC, err := initCABACDecoder(c.buf[next:c.bytestreamEnd])
+	if err != nil {
+		return nil, err
+	}
+	*c = nextCABAC
+	return pcm, nil
+}
+
 func (c *cabacContext) renormCABACDecoderOnce() {
 	shift := int32(uint32(c.rng-0x100) >> 31)
 	c.rng <<= shift

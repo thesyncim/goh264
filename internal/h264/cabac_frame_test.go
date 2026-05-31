@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestDecodeCABACFrameIntra4x4MacroblockWritesState(t *testing.T) {
 	m, err := newMacroblockTables(2, 2, 1)
@@ -51,6 +54,63 @@ func TestDecodeCABACFrameIntra4x4MacroblockWritesState(t *testing.T) {
 		}
 	}
 	wantIndexes(t, src, append(append([]int{3}, repeatCABACBits(16, 68)...), []int{64, 73, 74, 75, 76, 77}...))
+}
+
+func TestDecodeCABACFrameIntraPCMMacroblockWritesState(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	pcm := h264ReconstructIntraPCM(1, 41)
+	src := &scriptedCABACSource{
+		bits:  []int{1},
+		terms: []int{1},
+		pcm:   append([]byte(nil), pcm...),
+	}
+	sh := &SliceHeader{
+		SliceType:        PictureTypeI,
+		SliceTypeNoS:     PictureTypeI,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           23,
+	}
+	state := &cabacFrameSliceState{LastQScaleDiff: -2}
+
+	got, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, 0, 6)
+	if err != nil {
+		t.Fatalf("decode cabac frame intra pcm failed: %v", err)
+	}
+	if !got.IsIntra || got.IsInter || got.MBType != MBTypeIntraPCM || got.CBP != 0 || got.CBPTable != 0xf7ef || got.QScale != 0 || got.LastQScaleDiff != 0 {
+		t.Fatalf("result intra/inter/type/cbp/cbpTable/q/diff = %v/%v/%#x/%d/%#x/%d/%d", got.IsIntra, got.IsInter, got.MBType, got.CBP, got.CBPTable, got.QScale, got.LastQScaleDiff)
+	}
+	if state.PrevMBSkipped || state.LastQScaleDiff != 0 {
+		t.Fatalf("slice state skipped/diff = %v/%d, want false/0", state.PrevMBSkipped, state.LastQScaleDiff)
+	}
+	if len(got.IntraPCM) != len(pcm) || len(got.Intra.IntraPCM) != len(pcm) {
+		t.Fatalf("pcm lengths result/intra = %d/%d, want %d", len(got.IntraPCM), len(got.Intra.IntraPCM), len(pcm))
+	}
+	if got.IntraPCM[0] != pcm[0] || got.IntraPCM[len(pcm)-1] != pcm[len(pcm)-1] {
+		t.Fatalf("pcm endpoints = %d/%d, want %d/%d", got.IntraPCM[0], got.IntraPCM[len(pcm)-1], pcm[0], pcm[len(pcm)-1])
+	}
+	if m.MacroblockTyp[0] != MBTypeIntraPCM || m.CBPTable[0] != 0xf7ef || m.QScaleTable[0] != 0 || m.SliceTable[0] != 6 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	if m.ChromaPred[0] != 0 {
+		t.Fatalf("chroma pred = %d, want 0", m.ChromaPred[0])
+	}
+	for i, v := range m.NonZeroCount[0] {
+		if v != 16 {
+			t.Fatalf("nnz[%d] = %d, want 16", i, v)
+		}
+	}
+	if !reflect.DeepEqual(src.pcmReadSizes, []int{len(pcm)}) {
+		t.Fatalf("pcm read sizes = %v, want [%d]", src.pcmReadSizes, len(pcm))
+	}
+	wantIndexes(t, src, []int{3})
 }
 
 func TestDecodeCABACFrameP16x16MacroblockAppliesNeighborMotion(t *testing.T) {

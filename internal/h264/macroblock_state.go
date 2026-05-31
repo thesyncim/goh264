@@ -55,6 +55,17 @@ func (m *macroblockTables) writeBackCAVLCIntraPCMMacroblock(mbXY int, sliceNum u
 	return nil
 }
 
+func (m *macroblockTables) writeBackCABACIntraPCMMacroblock(mbXY int, sliceNum uint16) error {
+	if err := m.writeBackMacroblockTables(mbXY, MBTypeIntraPCM, 0xf7ef, 0, sliceNum); err != nil {
+		return err
+	}
+	m.ChromaPred[mbXY] = 0
+	for i := range m.NonZeroCount[mbXY] {
+		m.NonZeroCount[mbXY][i] = 16
+	}
+	return nil
+}
+
 func (m *macroblockTables) writeBackCABACIntraMacroblock(mbXY int, mb *cavlcMacroblockSyntax, c *cavlcResidualContext, intraCache *[h264IntraPredModeCacheSize]int8, sliceNum uint16) error {
 	if mb == nil || c == nil || !isIntra(mb.MBType) {
 		return ErrInvalidData

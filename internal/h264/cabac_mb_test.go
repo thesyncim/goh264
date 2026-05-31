@@ -8,11 +8,13 @@ import (
 )
 
 type scriptedCABACSource struct {
-	bits       []int
-	bypassBits []int
-	signs      []int32
-	terms      []int
-	indexes    []int
+	bits         []int
+	bypassBits   []int
+	signs        []int32
+	terms        []int
+	pcm          []byte
+	indexes      []int
+	pcmReadSizes []int
 }
 
 func (s *scriptedCABACSource) get(idx int) int {
@@ -50,6 +52,16 @@ func (s *scriptedCABACSource) terminate() int {
 	term := s.terms[0]
 	s.terms = s.terms[1:]
 	return term
+}
+
+func (s *scriptedCABACSource) intraPCMBytes(n int) ([]byte, error) {
+	s.pcmReadSizes = append(s.pcmReadSizes, n)
+	if n < 0 || len(s.pcm) < n {
+		return nil, ErrInvalidData
+	}
+	pcm := s.pcm[:n]
+	s.pcm = s.pcm[n:]
+	return pcm, nil
 }
 
 func TestDecodeCABACMBType(t *testing.T) {
