@@ -167,6 +167,48 @@ static void print_biweight_case(int width)
     printf("\n");
 }
 
+typedef void (*loop_filter_tc_fn)(uint8_t *pix, ptrdiff_t stride, int alpha, int beta, int8_t *tc0);
+typedef void (*loop_filter_intra_fn)(uint8_t *pix, ptrdiff_t stride, int alpha, int beta);
+
+static void init_loop_fixture(uint8_t *pix, int stride, int rows)
+{
+    for (int y = 0; y < rows; y++)
+        for (int x = 0; x < stride; x++)
+            pix[y * stride + x] = 80 + (x * 2 + y * 3) % 64;
+}
+
+static void print_loop_window(const char *label, uint8_t *pix, int stride, int offset)
+{
+    printf("%s", label);
+    for (int y = -4; y < 12; y++)
+        for (int x = -4; x < 12; x++)
+            printf(" %u", pix[offset + y * stride + x]);
+    printf("\n");
+}
+
+static void print_loop_tc_case(const char *label, loop_filter_tc_fn fn)
+{
+    const int stride = 32;
+    const int offset = 12 * stride + 12;
+    uint8_t pix[32 * 32];
+    int8_t tc0[4] = { 2, 0, -1, 4 };
+
+    init_loop_fixture(pix, stride, 32);
+    fn(pix + offset, stride, 80, 80, tc0);
+    print_loop_window(label, pix, stride, offset);
+}
+
+static void print_loop_intra_case(const char *label, loop_filter_intra_fn fn)
+{
+    const int stride = 32;
+    const int offset = 12 * stride + 12;
+    uint8_t pix[32 * 32];
+
+    init_loop_fixture(pix, stride, 32);
+    fn(pix + offset, stride, 80, 80);
+    print_loop_window(label, pix, stride, offset);
+}
+
 int main(void)
 {
     print_add4();
@@ -180,6 +222,22 @@ int main(void)
     print_biweight_case(4);
     print_biweight_case(8);
     print_biweight_case(16);
+    print_loop_tc_case("vluma", h264_v_loop_filter_luma_8_c);
+    print_loop_tc_case("hluma", h264_h_loop_filter_luma_8_c);
+    print_loop_tc_case("hlumambaff", h264_h_loop_filter_luma_mbaff_8_c);
+    print_loop_intra_case("vlumai", h264_v_loop_filter_luma_intra_8_c);
+    print_loop_intra_case("hlumai", h264_h_loop_filter_luma_intra_8_c);
+    print_loop_intra_case("hlumambaffi", h264_h_loop_filter_luma_mbaff_intra_8_c);
+    print_loop_tc_case("vchroma", h264_v_loop_filter_chroma_8_c);
+    print_loop_tc_case("hchroma", h264_h_loop_filter_chroma_8_c);
+    print_loop_tc_case("hchromambaff", h264_h_loop_filter_chroma_mbaff_8_c);
+    print_loop_tc_case("hchroma422", h264_h_loop_filter_chroma422_8_c);
+    print_loop_tc_case("hchroma422mbaff", h264_h_loop_filter_chroma422_mbaff_8_c);
+    print_loop_intra_case("vchromai", h264_v_loop_filter_chroma_intra_8_c);
+    print_loop_intra_case("hchromai", h264_h_loop_filter_chroma_intra_8_c);
+    print_loop_intra_case("hchromambaffi", h264_h_loop_filter_chroma_mbaff_intra_8_c);
+    print_loop_intra_case("hchroma422i", h264_h_loop_filter_chroma422_intra_8_c);
+    print_loop_intra_case("hchroma422mbaffi", h264_h_loop_filter_chroma422_mbaff_intra_8_c);
     return 0;
 }
 `
@@ -272,6 +330,22 @@ func h264DSPOracleWant(t *testing.T) string {
 	for _, width := range []int{2, 4, 8, 16} {
 		printDSPBiweightOracleWant(t, &b, width)
 	}
+	printDSPLoopTCOracleWant(t, &b, "vluma", h264VLoopFilterLuma)
+	printDSPLoopTCOracleWant(t, &b, "hluma", h264HLoopFilterLuma)
+	printDSPLoopTCOracleWant(t, &b, "hlumambaff", h264HLoopFilterLumaMBAFF)
+	printDSPLoopIntraOracleWant(t, &b, "vlumai", h264VLoopFilterLumaIntra)
+	printDSPLoopIntraOracleWant(t, &b, "hlumai", h264HLoopFilterLumaIntra)
+	printDSPLoopIntraOracleWant(t, &b, "hlumambaffi", h264HLoopFilterLumaMBAFFIntra)
+	printDSPLoopTCOracleWant(t, &b, "vchroma", h264VLoopFilterChroma)
+	printDSPLoopTCOracleWant(t, &b, "hchroma", h264HLoopFilterChroma)
+	printDSPLoopTCOracleWant(t, &b, "hchromambaff", h264HLoopFilterChromaMBAFF)
+	printDSPLoopTCOracleWant(t, &b, "hchroma422", h264HLoopFilterChroma422)
+	printDSPLoopTCOracleWant(t, &b, "hchroma422mbaff", h264HLoopFilterChroma422MBAFF)
+	printDSPLoopIntraOracleWant(t, &b, "vchromai", h264VLoopFilterChromaIntra)
+	printDSPLoopIntraOracleWant(t, &b, "hchromai", h264HLoopFilterChromaIntra)
+	printDSPLoopIntraOracleWant(t, &b, "hchromambaffi", h264HLoopFilterChromaMBAFFIntra)
+	printDSPLoopIntraOracleWant(t, &b, "hchroma422i", h264HLoopFilterChroma422Intra)
+	printDSPLoopIntraOracleWant(t, &b, "hchroma422mbaffi", h264HLoopFilterChroma422MBAFFIntra)
 	return b.String()
 }
 
@@ -372,6 +446,54 @@ func printDSPBiweightOracleWant(t *testing.T, b *strings.Builder, width int) {
 	for y := 0; y < 3; y++ {
 		for x := 0; x < width; x++ {
 			fmt.Fprintf(b, " %d", dst[y*20+x])
+		}
+	}
+	fmt.Fprint(b, "\n")
+}
+
+type h264LoopFilterTCFunc func([]uint8, int, int, int, int, *[4]int8) error
+type h264LoopFilterIntraFunc func([]uint8, int, int, int, int) error
+
+func printDSPLoopTCOracleWant(t *testing.T, b *strings.Builder, label string, fn h264LoopFilterTCFunc) {
+	t.Helper()
+	const stride = 32
+	const offset = 12*stride + 12
+	pix := h264LoopFilterOracleFixture(stride, 32)
+	tc0 := [4]int8{2, 0, -1, 4}
+
+	if err := fn(pix, offset, stride, 80, 80, &tc0); err != nil {
+		t.Fatal(err)
+	}
+	printDSPLoopWindow(b, label, pix, stride, offset)
+}
+
+func printDSPLoopIntraOracleWant(t *testing.T, b *strings.Builder, label string, fn h264LoopFilterIntraFunc) {
+	t.Helper()
+	const stride = 32
+	const offset = 12*stride + 12
+	pix := h264LoopFilterOracleFixture(stride, 32)
+
+	if err := fn(pix, offset, stride, 80, 80); err != nil {
+		t.Fatal(err)
+	}
+	printDSPLoopWindow(b, label, pix, stride, offset)
+}
+
+func h264LoopFilterOracleFixture(stride int, rows int) []uint8 {
+	pix := make([]uint8, stride*rows)
+	for y := 0; y < rows; y++ {
+		for x := 0; x < stride; x++ {
+			pix[y*stride+x] = uint8(80 + (x*2+y*3)%64)
+		}
+	}
+	return pix
+}
+
+func printDSPLoopWindow(b *strings.Builder, label string, pix []uint8, stride int, offset int) {
+	fmt.Fprint(b, label)
+	for y := -4; y < 12; y++ {
+		for x := -4; x < 12; x++ {
+			fmt.Fprintf(b, " %d", pix[offset+y*stride+x])
 		}
 	}
 	fmt.Fprint(b, "\n")

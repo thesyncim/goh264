@@ -75,6 +75,218 @@ func h264BiweightPixels(dst []uint8, src []uint8, stride int, height int, log2De
 	return nil
 }
 
+func h264VLoopFilterLuma(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
+	return h264LoopFilterLuma(pix, offset, stride, 1, 4, alpha, beta, tc0)
+}
+
+func h264HLoopFilterLuma(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
+	return h264LoopFilterLuma(pix, offset, 1, stride, 4, alpha, beta, tc0)
+}
+
+func h264HLoopFilterLumaMBAFF(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
+	return h264LoopFilterLuma(pix, offset, 1, stride, 2, alpha, beta, tc0)
+}
+
+func h264VLoopFilterLumaIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
+	return h264LoopFilterLumaIntra(pix, offset, stride, 1, 4, alpha, beta)
+}
+
+func h264HLoopFilterLumaIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
+	return h264LoopFilterLumaIntra(pix, offset, 1, stride, 4, alpha, beta)
+}
+
+func h264HLoopFilterLumaMBAFFIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
+	return h264LoopFilterLumaIntra(pix, offset, 1, stride, 2, alpha, beta)
+}
+
+func h264VLoopFilterChroma(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
+	return h264LoopFilterChroma(pix, offset, stride, 1, 2, alpha, beta, tc0)
+}
+
+func h264HLoopFilterChroma(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
+	return h264LoopFilterChroma(pix, offset, 1, stride, 2, alpha, beta, tc0)
+}
+
+func h264HLoopFilterChromaMBAFF(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
+	return h264LoopFilterChroma(pix, offset, 1, stride, 1, alpha, beta, tc0)
+}
+
+func h264HLoopFilterChroma422(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
+	return h264LoopFilterChroma(pix, offset, 1, stride, 4, alpha, beta, tc0)
+}
+
+func h264HLoopFilterChroma422MBAFF(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
+	return h264LoopFilterChroma(pix, offset, 1, stride, 2, alpha, beta, tc0)
+}
+
+func h264VLoopFilterChromaIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
+	return h264LoopFilterChromaIntra(pix, offset, stride, 1, 2, alpha, beta)
+}
+
+func h264HLoopFilterChromaIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
+	return h264LoopFilterChromaIntra(pix, offset, 1, stride, 2, alpha, beta)
+}
+
+func h264HLoopFilterChromaMBAFFIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
+	return h264LoopFilterChromaIntra(pix, offset, 1, stride, 1, alpha, beta)
+}
+
+func h264HLoopFilterChroma422Intra(pix []uint8, offset int, stride int, alpha int, beta int) error {
+	return h264LoopFilterChromaIntra(pix, offset, 1, stride, 4, alpha, beta)
+}
+
+func h264HLoopFilterChroma422MBAFFIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
+	return h264LoopFilterChromaIntra(pix, offset, 1, stride, 2, alpha, beta)
+}
+
+func h264LoopFilterLuma(pix []uint8, offset int, xstride int, ystride int, innerIters int, alpha int, beta int, tc0 *[4]int8) error {
+	if tc0 == nil {
+		return ErrInvalidData
+	}
+	if err := checkLoopFilterArgs(pix, offset, xstride, ystride, innerIters, 4, 3, 2); err != nil {
+		return err
+	}
+	pos := offset
+	for i := 0; i < 4; i++ {
+		tcOrig := int(tc0[i])
+		if tcOrig < 0 {
+			pos += innerIters * ystride
+			continue
+		}
+		for d := 0; d < innerIters; d++ {
+			p0 := int(pix[pos-1*xstride])
+			p1 := int(pix[pos-2*xstride])
+			p2 := int(pix[pos-3*xstride])
+			q0 := int(pix[pos])
+			q1 := int(pix[pos+1*xstride])
+			q2 := int(pix[pos+2*xstride])
+
+			if absInt(p0-q0) < alpha &&
+				absInt(p1-p0) < beta &&
+				absInt(q1-q0) < beta {
+				tc := tcOrig
+
+				if absInt(p2-p0) < beta {
+					if tcOrig != 0 {
+						pix[pos-2*xstride] = uint8(p1 + clipInt(((p2+((p0+q0+1)>>1))>>1)-p1, -tcOrig, tcOrig))
+					}
+					tc++
+				}
+				if absInt(q2-q0) < beta {
+					if tcOrig != 0 {
+						pix[pos+xstride] = uint8(q1 + clipInt(((q2+((p0+q0+1)>>1))>>1)-q1, -tcOrig, tcOrig))
+					}
+					tc++
+				}
+
+				delta := clipInt((((q0-p0)*4)+(p1-q1)+4)>>3, -tc, tc)
+				pix[pos-xstride] = clipUint8(p0 + delta)
+				pix[pos] = clipUint8(q0 - delta)
+			}
+			pos += ystride
+		}
+	}
+	return nil
+}
+
+func h264LoopFilterLumaIntra(pix []uint8, offset int, xstride int, ystride int, innerIters int, alpha int, beta int) error {
+	if err := checkLoopFilterArgs(pix, offset, xstride, ystride, innerIters, 4, 4, 3); err != nil {
+		return err
+	}
+	pos := offset
+	for d := 0; d < 4*innerIters; d++ {
+		p2 := int(pix[pos-3*xstride])
+		p1 := int(pix[pos-2*xstride])
+		p0 := int(pix[pos-1*xstride])
+		q0 := int(pix[pos])
+		q1 := int(pix[pos+1*xstride])
+		q2 := int(pix[pos+2*xstride])
+
+		if absInt(p0-q0) < alpha &&
+			absInt(p1-p0) < beta &&
+			absInt(q1-q0) < beta {
+			if absInt(p0-q0) < ((alpha >> 2) + 2) {
+				if absInt(p2-p0) < beta {
+					p3 := int(pix[pos-4*xstride])
+					pix[pos-1*xstride] = uint8((p2 + 2*p1 + 2*p0 + 2*q0 + q1 + 4) >> 3)
+					pix[pos-2*xstride] = uint8((p2 + p1 + p0 + q0 + 2) >> 2)
+					pix[pos-3*xstride] = uint8((2*p3 + 3*p2 + p1 + p0 + q0 + 4) >> 3)
+				} else {
+					pix[pos-1*xstride] = uint8((2*p1 + p0 + q1 + 2) >> 2)
+				}
+				if absInt(q2-q0) < beta {
+					q3 := int(pix[pos+3*xstride])
+					pix[pos] = uint8((p1 + 2*p0 + 2*q0 + 2*q1 + q2 + 4) >> 3)
+					pix[pos+1*xstride] = uint8((p0 + q0 + q1 + q2 + 2) >> 2)
+					pix[pos+2*xstride] = uint8((2*q3 + 3*q2 + q1 + q0 + p0 + 4) >> 3)
+				} else {
+					pix[pos] = uint8((2*q1 + q0 + p1 + 2) >> 2)
+				}
+			} else {
+				pix[pos-1*xstride] = uint8((2*p1 + p0 + q1 + 2) >> 2)
+				pix[pos] = uint8((2*q1 + q0 + p1 + 2) >> 2)
+			}
+		}
+		pos += ystride
+	}
+	return nil
+}
+
+func h264LoopFilterChroma(pix []uint8, offset int, xstride int, ystride int, innerIters int, alpha int, beta int, tc0 *[4]int8) error {
+	if tc0 == nil {
+		return ErrInvalidData
+	}
+	if err := checkLoopFilterArgs(pix, offset, xstride, ystride, innerIters, 4, 2, 1); err != nil {
+		return err
+	}
+	pos := offset
+	for i := 0; i < 4; i++ {
+		tc := int(tc0[i])
+		if tc <= 0 {
+			pos += innerIters * ystride
+			continue
+		}
+		for d := 0; d < innerIters; d++ {
+			p0 := int(pix[pos-1*xstride])
+			p1 := int(pix[pos-2*xstride])
+			q0 := int(pix[pos])
+			q1 := int(pix[pos+1*xstride])
+
+			if absInt(p0-q0) < alpha &&
+				absInt(p1-p0) < beta &&
+				absInt(q1-q0) < beta {
+				delta := clipInt(((q0-p0)*4+(p1-q1)+4)>>3, -tc, tc)
+				pix[pos-xstride] = clipUint8(p0 + delta)
+				pix[pos] = clipUint8(q0 - delta)
+			}
+			pos += ystride
+		}
+	}
+	return nil
+}
+
+func h264LoopFilterChromaIntra(pix []uint8, offset int, xstride int, ystride int, innerIters int, alpha int, beta int) error {
+	if err := checkLoopFilterArgs(pix, offset, xstride, ystride, innerIters, 4, 2, 1); err != nil {
+		return err
+	}
+	pos := offset
+	for d := 0; d < 4*innerIters; d++ {
+		p0 := int(pix[pos-1*xstride])
+		p1 := int(pix[pos-2*xstride])
+		q0 := int(pix[pos])
+		q1 := int(pix[pos+1*xstride])
+
+		if absInt(p0-q0) < alpha &&
+			absInt(p1-p0) < beta &&
+			absInt(q1-q0) < beta {
+			pix[pos-xstride] = uint8((2*p1 + p0 + q1 + 2) >> 2)
+			pix[pos] = uint8((2*q1 + q0 + p1 + 2) >> 2)
+		}
+		pos += ystride
+	}
+	return nil
+}
+
 func checkWeightedPixelsArgs(dst []uint8, src []uint8, stride int, height int, width int, log2Denom int) error {
 	if stride <= 0 || height < 0 || log2Denom < 0 {
 		return ErrInvalidData
@@ -93,4 +305,33 @@ func checkWeightedPixelsArgs(dst []uint8, src []uint8, stride int, height int, w
 		return ErrInvalidData
 	}
 	return nil
+}
+
+func checkLoopFilterArgs(pix []uint8, offset int, xstride int, ystride int, innerIters int, groups int, before int, after int) error {
+	if offset < 0 || xstride <= 0 || ystride <= 0 || innerIters <= 0 || groups <= 0 {
+		return ErrInvalidData
+	}
+	minIndex := offset - before*xstride
+	maxIndex := offset + (groups*innerIters-1)*ystride + after*xstride
+	if minIndex < 0 || maxIndex >= len(pix) {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func clipInt(v int, lo int, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }

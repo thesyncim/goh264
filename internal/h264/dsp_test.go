@@ -103,6 +103,69 @@ func TestH264BiweightPixelsClipsAndRounds(t *testing.T) {
 	}
 }
 
+func TestH264LoopFilterLumaMutatesBoundary(t *testing.T) {
+	const stride = 16
+	pix := makeLoopFilterUnitFixture(stride, 16)
+	offset := 8*stride + 4
+	pix[offset-3*stride] = 98
+	pix[offset-2*stride] = 100
+	pix[offset-1*stride] = 102
+	pix[offset] = 108
+	pix[offset+stride] = 110
+	pix[offset+2*stride] = 112
+	tc0 := [4]int8{2, -1, 0, 1}
+
+	if err := h264VLoopFilterLuma(pix, offset, stride, 20, 20, &tc0); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset-2*stride] != 101 || pix[offset-1*stride] != 104 || pix[offset] != 106 || pix[offset+stride] != 108 {
+		t.Fatalf("filtered luma edge = %d/%d/%d/%d, want 101/104/106/108",
+			pix[offset-2*stride], pix[offset-1*stride], pix[offset], pix[offset+stride])
+	}
+}
+
+func TestH264LoopFilterLumaIntraStrongPath(t *testing.T) {
+	const stride = 16
+	pix := makeLoopFilterUnitFixture(stride, 16)
+	offset := 8*stride + 4
+	pix[offset-4*stride] = 96
+	pix[offset-3*stride] = 98
+	pix[offset-2*stride] = 100
+	pix[offset-1*stride] = 102
+	pix[offset] = 108
+	pix[offset+stride] = 110
+	pix[offset+2*stride] = 112
+	pix[offset+3*stride] = 114
+
+	if err := h264VLoopFilterLumaIntra(pix, offset, stride, 200, 20); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset-3*stride] != 100 || pix[offset-2*stride] != 102 || pix[offset-1*stride] != 104 ||
+		pix[offset] != 107 || pix[offset+stride] != 108 || pix[offset+2*stride] != 111 {
+		t.Fatalf("filtered intra luma edge = %d/%d/%d/%d/%d/%d, want 100/102/104/107/108/111",
+			pix[offset-3*stride], pix[offset-2*stride], pix[offset-1*stride],
+			pix[offset], pix[offset+stride], pix[offset+2*stride])
+	}
+}
+
+func TestH264LoopFilterChromaMutatesBoundary(t *testing.T) {
+	const stride = 16
+	pix := makeLoopFilterUnitFixture(stride, 16)
+	offset := 8*stride + 4
+	pix[offset-2*stride] = 100
+	pix[offset-1*stride] = 102
+	pix[offset] = 108
+	pix[offset+stride] = 110
+	tc0 := [4]int8{2, -1, 0, 1}
+
+	if err := h264VLoopFilterChroma(pix, offset, stride, 20, 20, &tc0); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset-1*stride] != 104 || pix[offset] != 106 {
+		t.Fatalf("filtered chroma edge = %d/%d, want 104/106", pix[offset-1*stride], pix[offset])
+	}
+}
+
 func TestH264WeightedPixelsValidateGeometry(t *testing.T) {
 	if err := h264WeightPixels(make([]uint8, 4), 4, 1, 0, 1, 0, 3); err != ErrInvalidData {
 		t.Fatalf("invalid width error = %v, want ErrInvalidData", err)
@@ -110,4 +173,18 @@ func TestH264WeightedPixelsValidateGeometry(t *testing.T) {
 	if err := h264BiweightPixels(make([]uint8, 4), make([]uint8, 3), 4, 1, 0, 1, 1, 0, 4); err != ErrInvalidData {
 		t.Fatalf("short src error = %v, want ErrInvalidData", err)
 	}
+	if err := h264VLoopFilterLuma(make([]uint8, 64), 0, 8, 20, 20, &[4]int8{}); err != ErrInvalidData {
+		t.Fatalf("short loop-filter margin error = %v, want ErrInvalidData", err)
+	}
+	if err := h264VLoopFilterChroma(make([]uint8, 64), 32, 8, 20, 20, nil); err != ErrInvalidData {
+		t.Fatalf("nil tc0 error = %v, want ErrInvalidData", err)
+	}
+}
+
+func makeLoopFilterUnitFixture(stride int, rows int) []uint8 {
+	pix := make([]uint8, stride*rows)
+	for i := range pix {
+		pix[i] = uint8(30 + (i*7)%180)
+	}
+	return pix
 }
