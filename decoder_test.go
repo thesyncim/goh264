@@ -3,6 +3,7 @@
 package goh264
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -112,6 +113,34 @@ func TestFFprobeOracleBlack16(t *testing.T) {
 	}
 	if stream.Profile != info.Profile || stream.Width != info.Width || stream.Height != info.Height || stream.Level != int(info.LevelIDC) {
 		t.Fatalf("oracle %+v, go %+v", stream, info)
+	}
+}
+
+func TestFFmpegFrameMD5OracleBlack16(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	data := decodeHexFixture(t, black16AnnexBHex)
+	path := writeTempH264(t, data)
+
+	cmd := exec.Command("ffmpeg",
+		"-v", "error",
+		"-f", "h264",
+		"-i", path,
+		"-an", "-sn", "-dn",
+		"-f", "framemd5",
+		"-",
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg framemd5: %v", err)
+	}
+	if !bytes.Contains(out, []byte("0,          0,          0,        1,      384, 8aaefe0adcea094cfb5161a060bab4e2")) {
+		t.Fatalf("unexpected framemd5:\n%s", out)
 	}
 }
 

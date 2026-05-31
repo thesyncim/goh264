@@ -33,6 +33,12 @@ The oracle tests are opt-in because they depend on local binaries:
 GOH264_ORACLE=1 go test ./...
 ```
 
+The embedded smoke bitstream currently has this decoded-frame oracle:
+
+- rawvideo frame MD5: `8aaefe0adcea094cfb5161a060bab4e2`
+- dimensions: `16x16`
+- frame payload size: `384` bytes (`yuv420p`)
+
 ## Decoder Boundary
 
 Included:
@@ -48,4 +54,3 @@ Excluded unless directly required by decoder parity:
 - FFmpeg muxer/demuxer/filter frontends
 - Hardware acceleration backends
 - Non-H.264 codecs
-
