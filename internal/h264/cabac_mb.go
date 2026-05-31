@@ -311,6 +311,42 @@ func decodeCABACMBMVD[S cabacSyntaxSource](src S, ctxBase int, amvd int) (int32,
 	return src.bypassSign(int32(-mvd)), mvda, nil
 }
 
+func decodeCABACQScaleDiff[S cabacSyntaxSource](src S, qscale int, lastQScaleDiff int, maxQP int) (int, int, error) {
+	ctx := 0
+	if lastQScaleDiff != 0 {
+		ctx = 1
+	}
+	if src.get(60+ctx) == 0 {
+		return qscale, 0, nil
+	}
+
+	val := 1
+	ctx = 2
+	for src.get(60+ctx) != 0 {
+		ctx = 3
+		val++
+		if val > 2*maxQP {
+			return qscale, lastQScaleDiff, ErrInvalidData
+		}
+	}
+
+	diff := 0
+	if val&1 != 0 {
+		diff = (val + 1) >> 1
+	} else {
+		diff = -((val + 1) >> 1)
+	}
+	qscale += diff
+	if uint32(qscale) > uint32(maxQP) {
+		if qscale < 0 {
+			qscale += maxQP + 1
+		} else {
+			qscale -= maxQP + 1
+		}
+	}
+	return qscale, diff, nil
+}
+
 func cabacMVDContext(ctxBase int, amvd int) int {
 	return ctxBase + int(int32(amvd-3)>>31) + int(int32(amvd-33)>>31) + 2
 }

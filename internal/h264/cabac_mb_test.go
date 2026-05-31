@@ -201,6 +201,38 @@ func TestDecodeCABACMBRefAndMVD(t *testing.T) {
 	wantIndexes(t, src, []int{42, 43, 44, 45})
 }
 
+func TestDecodeCABACQScaleDiff(t *testing.T) {
+	src := &scriptedCABACSource{bits: []int{0}}
+	qscale, diff, err := decodeCABACQScaleDiff(src, 26, 0, 51)
+	if err != nil {
+		t.Fatalf("zero qscale diff failed: %v", err)
+	}
+	if qscale != 26 || diff != 0 {
+		t.Fatalf("qscale=%d diff=%d, want 26/0", qscale, diff)
+	}
+	wantIndexes(t, src, []int{60})
+
+	src = &scriptedCABACSource{bits: []int{1, 1, 0}}
+	qscale, diff, err = decodeCABACQScaleDiff(src, 51, 4, 51)
+	if err != nil {
+		t.Fatalf("wrapped negative qscale diff failed: %v", err)
+	}
+	if qscale != 50 || diff != -1 {
+		t.Fatalf("qscale=%d diff=%d, want 50/-1", qscale, diff)
+	}
+	wantIndexes(t, src, []int{61, 62, 63})
+
+	src = &scriptedCABACSource{bits: []int{1, 0}}
+	qscale, diff, err = decodeCABACQScaleDiff(src, 51, 0, 51)
+	if err != nil {
+		t.Fatalf("wrapped positive qscale diff failed: %v", err)
+	}
+	if qscale != 0 || diff != 1 {
+		t.Fatalf("qscale=%d diff=%d, want 0/1", qscale, diff)
+	}
+	wantIndexes(t, src, []int{60, 62})
+}
+
 func TestCABACMVDContext(t *testing.T) {
 	cases := []struct {
 		amvd int
