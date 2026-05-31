@@ -215,7 +215,7 @@ func (m *macroblockTables) decodeCAVLCFrameIntraMacroblock(gb *bitReader, in cav
 	if err != nil {
 		return result, err
 	}
-	if err := validateCAVLCFrameIntraPredModes(&mb, in.SPS, cacheResult.Intra); err != nil {
+	if err := validateCAVLCFrameIntraPredModes(&mb, in.SPS, intraCache, cacheResult.Intra); err != nil {
 		return result, err
 	}
 	if err := m.writeBackCAVLCIntraMacroblock(in.MBXY, &mb, residual, in.SliceNum); err != nil {
@@ -268,16 +268,18 @@ func (m *macroblockTables) decodeCAVLCFrameInterMacroblock(gb *bitReader, in cav
 	return result, nil
 }
 
-func validateCAVLCFrameIntraPredModes(mb *cavlcMacroblockSyntax, sps *SPS, cacheResult intraPredDecodeCacheResult) error {
+func validateCAVLCFrameIntraPredModes(mb *cavlcMacroblockSyntax, sps *SPS, cache *[h264IntraPredModeCacheSize]int8, cacheResult intraPredDecodeCacheResult) error {
 	if mb == nil || sps == nil {
 		return ErrInvalidData
 	}
 	if isIntra4x4(mb.MBType) {
-		var checkCache [h264IntraPredModeCacheSize]int8
-		if err := fillIntra4x4PredModeCacheFromSyntax(&checkCache, &mb.Intra4x4PredMode); err != nil {
+		if cache == nil {
+			return ErrInvalidData
+		}
+		if err := fillIntra4x4PredModeCacheFromSyntax(cache, &mb.Intra4x4PredMode); err != nil {
 			return err
 		}
-		if err := checkIntra4x4PredModeCache(&checkCache, cacheResult.TopSamplesAvailable, cacheResult.LeftSamplesAvailable); err != nil {
+		if err := checkIntra4x4PredModeCache(cache, cacheResult.TopSamplesAvailable, cacheResult.LeftSamplesAvailable); err != nil {
 			return err
 		}
 	} else if isIntra16x16(mb.MBType) {

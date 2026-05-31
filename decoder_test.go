@@ -118,6 +118,33 @@ b5af5d84d53d7bc443ddc77bc45e121ce35e9a94f076b6c31025d471e6aee67ff53d44c87c17a000
 43bb93434a0d4dbced8d2ab1a29212608099e1ff0349a3f2
 `
 
+const testsrc16CABACAnnexBHex = `
+00000001674d400ada7b011000000300100000030020f1226a0000000168ee0f2c800000010605ffff6ddc45e9bde6d
+948b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d20482e3236342f
+4d5045472d342041564320636f646563202d20436f70796c65667420323030332d32303235202d20687474703a2f2f77
+77772e766964656f6c616e2e6f72672f783236342e68746d6c202d206f7074696f6e733a2063616261633d31207265
+663d31206465626c6f636b3d313a313a3020616e616c7973653d3078313a3078313131206d653d686578207375626d65
+3d37207073793d31207073795f72643d312e30303a302e3030206d697865645f7265663d30206d655f72616e67653d31
+36206368726f6d615f6d653d31207472656c6c69733d31203878386463743d302063716d3d3020646561647a6f6e653d
+32312c313120666173745f70736b69703d31206368726f6d615f71705f6f66667365743d2d3220746872656164733d31
+206c6f6f6b61686561645f746872656164733d3120736c696365645f746872656164733d30206e723d3020646563696d
+6174653d3120696e7465726c616365643d3020626c757261795f636f6d7061743d3020636f6e73747261696e65645f69
+6e7472613d3020626672616d65733d3020776569676874703d30206b6579696e743d323530206b6579696e745f6d696e
+3d313236207363656e656375743d3020696e7472615f726566726573683d302072635f6c6f6f6b61686561643d34302072
+633d637266206d62747265653d31206372663d32332e302071636f6d703d302e36302071706d696e3d302071706d6178
+3d3639207170737465703d342069705f726174696f3d312e34302061713d313a312e303000800000016588843d7fb807
+d16f5ebb08170ee5539a5348977d63670c41749e4c1b8ad1880e37487b6885eea19035671c61e1c57f07149b8a2b6
+f8dcb03eb4c53c8ab4c9110a806d4366e8932cc6f94b005310c0bd460a3b9e877b335ab50d2e5404c32dd68210b
+86a877a1ce0e4a7d7cc4de438550e5346d0d74b97aec55913ed42f40f0c7c70cb1356d044e8b2080e25675311e
+7f97116c167ec8388ce47cf3cbba718433d7a03d8cb9202a94eb6c515a994ce3778e8d93e02db8e39a795ef1ce75
+7ca62ada6677ed111738994d20a7fba5b9bd1d3635d6106f12295032a37dc5f1797241af0dd3f937f49f5de10000
+0001419a227aff60949bc49fbde59eaf44cd5388d782a019dbb7ab4bb730b2cb3ccb07846bf150fcd024c5fdb699
+90d1681202fbbfffe420b0b21ce69583d2093c7b1608878605ff96f69e31deb00a791d4ba5bfcd2dffc1947a5f
+bfb401e8829ad3a1ec838a47200a3f7240514000000001419a425aff523bf415f7b3ec84fdb633d17afd5ca651
+37967d81f22e2c4388ccb3a1e31e9c180f1d0ff3c470ceb1d0ffe7b7537c8f7d031506df4ce7a32da46d2c
+5856ea076eba90dafa15a6d1c40fcc414500000001419a63afd90aa719c3475592a4047bed17a9de8f346653382872a0
+`
+
 func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	dec := NewDecoder()
@@ -193,6 +220,30 @@ func TestParseHeadersAnnexBWeightedP(t *testing.T) {
 		pwt.ChromaWeight[0][0][0] != [2]int32{2, 0} ||
 		pwt.ChromaWeight[0][0][1] != [2]int32{3, -64} {
 		t.Fatalf("slice[3] weights = luma %+v chroma %+v", pwt.LumaWeight[0][0], pwt.ChromaWeight[0][0])
+	}
+}
+
+func TestParseHeadersAnnexBCABAC(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CABACAnnexBHex)
+	dec := NewDecoder()
+	info, err := dec.ParseHeadersAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Profile != "Main" || info.ProfileIDC != 77 || info.LevelIDC != 10 {
+		t.Fatalf("profile/level = %q/%d/%d, want Main/77/10", info.Profile, info.ProfileIDC, info.LevelIDC)
+	}
+	if info.Width != 16 || info.Height != 16 || info.ChromaFormatIDC != 1 {
+		t.Fatalf("stream = %dx%d chroma %d", info.Width, info.Height, info.ChromaFormatIDC)
+	}
+	if dec.pps[0] == nil || dec.pps[0].CABAC != 1 || dec.pps[0].DeblockingFilterParametersPresent != 1 {
+		t.Fatalf("pps = %+v", dec.pps[0])
+	}
+	if len(dec.slices) != 4 {
+		t.Fatalf("slices = %d, want 4", len(dec.slices))
+	}
+	if dec.slices[0].SliceTypeNoS != h264.PictureTypeI || dec.slices[1].SliceTypeNoS != h264.PictureTypeP {
+		t.Fatalf("slice types = %d/%d", dec.slices[0].SliceTypeNoS, dec.slices[1].SliceTypeNoS)
 	}
 }
 
@@ -420,6 +471,62 @@ func TestDecodeAnnexBTestsrc16WeightedPFrames(t *testing.T) {
 		}
 		if got := md5.Sum(raw); got != want[i] {
 			t.Fatalf("frame[%d] md5 = %x, want %x", i, got, want[i])
+		}
+	}
+}
+
+func TestDecodeAnnexBTestsrc16CABACFrames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CABACAnnexBHex)
+	frames, err := NewDecoder().DecodeAnnexBFrames(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 4 {
+		t.Fatalf("frames = %d, want 4", len(frames))
+	}
+	want := []string{
+		"57948a884e4468c79f3291b2693263de",
+		"4fb1e27b7087e9f1aa485402993ca525",
+		"a7e3e74bb19403d111dd2ffdb4455102",
+		"1202e58b9b15f56a341fea8787bcc769",
+	}
+	for i, frame := range frames {
+		raw, err := frame.AppendRawYUV(nil)
+		if err != nil {
+			t.Fatalf("frame[%d] raw yuv: %v", i, err)
+		}
+		got := md5.Sum(raw)
+		if hex.EncodeToString(got[:]) != want[i] {
+			t.Fatalf("frame[%d] md5 = %x, want %s", i, got, want[i])
+		}
+	}
+}
+
+func TestDecodeAVCTestsrc16CABACFrames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CABACAnnexBHex)
+	want := []string{
+		"57948a884e4468c79f3291b2693263de",
+		"4fb1e27b7087e9f1aa485402993ca525",
+		"a7e3e74bb19403d111dd2ffdb4455102",
+		"1202e58b9b15f56a341fea8787bcc769",
+	}
+	for _, nalLengthSize := range []int{2, 3, 4} {
+		frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
+		if err != nil {
+			t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+		}
+		if len(frames) != 4 {
+			t.Fatalf("nalLengthSize=%d: frames = %d, want 4", nalLengthSize, len(frames))
+		}
+		for i, frame := range frames {
+			raw, err := frame.AppendRawYUV(nil)
+			if err != nil {
+				t.Fatalf("nalLengthSize=%d frame[%d] raw yuv: %v", nalLengthSize, i, err)
+			}
+			got := md5.Sum(raw)
+			if hex.EncodeToString(got[:]) != want[i] {
+				t.Fatalf("nalLengthSize=%d frame[%d] md5 = %x, want %s", nalLengthSize, i, got, want[i])
+			}
 		}
 	}
 }
@@ -654,6 +761,41 @@ func TestFFmpegFrameMD5OracleTestsrc16WeightedP(t *testing.T) {
 		"0,          1,          1,        1,      384, 50de7a9591980d98580e8cc5bdf907cb",
 		"0,          2,          2,        1,      384, c6df9314a9f54e22d49db2316f12eb99",
 		"0,          3,          3,        1,      384, 9244803e5a615a34427608350be0fbda",
+	} {
+		if !bytes.Contains(out, []byte(line)) {
+			t.Fatalf("missing %q in framemd5:\n%s", line, out)
+		}
+	}
+}
+
+func TestFFmpegFrameMD5OracleTestsrc16CABAC(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	data := decodeHexFixture(t, testsrc16CABACAnnexBHex)
+	path := writeTempH264(t, data)
+
+	cmd := exec.Command("ffmpeg",
+		"-v", "error",
+		"-f", "h264",
+		"-i", path,
+		"-an", "-sn", "-dn",
+		"-f", "framemd5",
+		"-",
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg framemd5: %v", err)
+	}
+	for _, line := range []string{
+		"0,          0,          0,        1,      384, 57948a884e4468c79f3291b2693263de",
+		"0,          1,          1,        1,      384, 4fb1e27b7087e9f1aa485402993ca525",
+		"0,          2,          2,        1,      384, a7e3e74bb19403d111dd2ffdb4455102",
+		"0,          3,          3,        1,      384, 1202e58b9b15f56a341fea8787bcc769",
 	} {
 		if !bytes.Contains(out, []byte(line)) {
 			t.Fatalf("missing %q in framemd5:\n%s", line, out)

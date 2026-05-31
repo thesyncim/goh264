@@ -236,6 +236,7 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithWork(sh *SliceHe
 
 func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, intraCache *[h264IntraPredModeCacheSize]int8, cacheResult frameMacroblockDecodeCacheResult, result cabacFrameMacroblockResult) (cabacFrameMacroblockResult, error) {
 	mb := base
+	var writeBackIntraCache [h264IntraPredModeCacheSize]int8
 	if isIntra4x4(mb.MBType) {
 		di := 1
 		if in.DCT8x8Allowed && src.get(399+cacheResult.Intra.NeighborTransformSize) != 0 {
@@ -261,6 +262,7 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 				mb.Intra4x4PredMode[i+j] = int8(mode)
 			}
 		}
+		writeBackIntraCache = *intraCache
 		if err := validateCABACFrameIntra4x4PredModes(intraCache, cacheResult.Intra); err != nil {
 			return result, err
 		}
@@ -299,7 +301,7 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 	mb.QScale = qscale
 	mb.ChromaQP = chromaQP
 	mb.CBPTable = cbpTable
-	if err := m.writeBackCABACIntraMacroblock(in.MBXY, &mb, residual, intraCache, in.SliceNum); err != nil {
+	if err := m.writeBackCABACIntraMacroblock(in.MBXY, &mb, residual, &writeBackIntraCache, in.SliceNum); err != nil {
 		return result, err
 	}
 
@@ -650,8 +652,7 @@ func validateCABACFrameIntra4x4PredModes(cache *[h264IntraPredModeCacheSize]int8
 	if cache == nil {
 		return ErrInvalidData
 	}
-	checkCache := *cache
-	return checkIntra4x4PredModeCache(&checkCache, cacheResult.TopSamplesAvailable, cacheResult.LeftSamplesAvailable)
+	return checkIntra4x4PredModeCache(cache, cacheResult.TopSamplesAvailable, cacheResult.LeftSamplesAvailable)
 }
 
 func fillIntraPredModeRectangle(cache *[h264IntraPredModeCacheSize]int8, start int, width int, height int, stride int, value int8) {
