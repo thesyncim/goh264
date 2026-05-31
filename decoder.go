@@ -10,8 +10,9 @@ var (
 )
 
 type Decoder struct {
-	sps [32]*h264.SPS
-	pps [256]*h264.PPS
+	sps    [32]*h264.SPS
+	pps    [256]*h264.PPS
+	slices []h264.SliceHeader
 }
 
 type StreamInfo struct {
@@ -60,6 +61,12 @@ func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
 			if pps.PPSID < uint32(len(d.pps)) {
 				d.pps[pps.PPSID] = pps
 			}
+		case h264.NALSlice, h264.NALIDRSlice:
+			slice, err := h264.ParseSliceHeader(nal, &d.pps)
+			if err != nil {
+				return StreamInfo{}, err
+			}
+			d.slices = append(d.slices, *slice)
 		default:
 			continue
 		}

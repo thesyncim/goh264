@@ -54,6 +54,12 @@ func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	if dec.pps[0].CABAC != 0 || dec.pps[0].SliceGroupCount != 1 || dec.pps[0].RefCount != [2]uint32{1, 1} {
 		t.Fatalf("pps = %+v", dec.pps[0])
 	}
+	if len(dec.slices) != 1 {
+		t.Fatalf("slices = %d", len(dec.slices))
+	}
+	if dec.slices[0].SliceType != 1 || dec.slices[0].PPSID != 0 || dec.slices[0].PictureStructure != 3 {
+		t.Fatalf("slice = %+v", dec.slices[0])
+	}
 }
 
 func TestFFprobeOracleBlack16(t *testing.T) {
