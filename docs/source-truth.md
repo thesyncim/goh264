@@ -55,6 +55,12 @@ big-endian length-prefixed NAL units while preserving each raw NAL payload. The
 default Go tests compare the same rawvideo MD5s through explicit `nal_length_size`
 values 2, 3, and 4; avcC extradata parsing remains outside this safe point.
 
+Reference-picture unit coverage now includes FFmpeg's progressive frame-picture
+long-term P-list behavior: default long refs after short refs, ref-list
+modification op `2`, IDR/non-IDR long-term marking, short-to-long moves,
+long-to-unused removal, max-long pruning, reset, and mixed short/long sliding
+window accounting. A native long-ref bitstream oracle is still pending.
+
 ## Decoder Boundary
 
 Included:

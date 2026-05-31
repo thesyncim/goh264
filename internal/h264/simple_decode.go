@@ -266,12 +266,9 @@ func validateSimpleFrameReferenceSyntax(sh *SliceHeader) error {
 	if sh.NBRefModifications[1] != 0 {
 		return ErrUnsupported
 	}
-	if sh.NALType == NALIDRSlice && sh.NBMMCO != 0 {
-		return ErrUnsupported
-	}
 	for i := uint32(0); i < sh.NBMMCO; i++ {
 		switch sh.MMCO[i].Opcode {
-		case mmcoEnd, mmcoShort2Unused, mmcoReset:
+		case mmcoEnd, mmcoShort2Unused, mmcoLong2Unused, mmcoShort2Long, mmcoSetMaxLong, mmcoReset, mmcoLong:
 		default:
 			return ErrUnsupported
 		}
@@ -287,7 +284,7 @@ func validateSimpleFrameReferenceSyntax(sh *SliceHeader) error {
 			if i >= maxRefMods {
 				return ErrInvalidData
 			}
-			if sh.RefModifications[0][i].Op > 1 {
+			if sh.RefModifications[0][i].Op > 2 {
 				return ErrUnsupported
 			}
 		}
