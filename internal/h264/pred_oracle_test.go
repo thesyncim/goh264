@@ -38,7 +38,13 @@ static const uint8_t scan8[16 * 3 + 3] = {
 };
 
 typedef void (*pred_fn)(uint8_t *src, ptrdiff_t stride);
+typedef void (*pred4_fn)(uint8_t *src, const uint8_t *topright,
+                         ptrdiff_t stride);
+typedef void (*pred8l_fn)(uint8_t *src, int has_topleft, int has_topright,
+                          ptrdiff_t stride);
 typedef void (*pred4_add_fn)(uint8_t *pix, int16_t *block, ptrdiff_t stride);
+typedef void (*pred8l_add_fn)(uint8_t *src, int16_t *block, int has_topleft,
+                              int has_topright, ptrdiff_t stride);
 typedef void (*pred_offset_add_fn)(uint8_t *pix, const int *block_offset,
                                    int16_t *block, ptrdiff_t stride);
 
@@ -114,6 +120,37 @@ static void print_pred8x16(const char *label, pred_fn fn)
     print_block(label, pix, stride, offset, 8, 16);
 }
 
+static void print_pred4(const char *label, pred4_fn fn)
+{
+    const int stride = 12;
+    const int offset = 3 * stride + 3;
+    uint8_t pix[12 * 12];
+    const uint8_t topright[4] = { 91, 123, 155, 177 };
+    init_fixture(pix, stride, 12);
+    fn(pix + offset, topright, stride);
+    print_block(label, pix, stride, offset, 4, 4);
+}
+
+static void print_pred8l(const char *label, pred8l_fn fn,
+                         int has_topleft, int has_topright)
+{
+    const int stride = 28;
+    const int offset = 5 * stride + 5;
+    uint8_t pix[28 * 18];
+    init_fixture(pix, stride, 18);
+    fn(pix + offset, has_topleft, has_topright, stride);
+    print_block(label, pix, stride, offset, 8, 8);
+}
+
+static void print_pred8l_cases(const char *label, pred8l_fn fn)
+{
+    char name[64];
+    snprintf(name, sizeof(name), "%s_11", label);
+    print_pred8l(name, fn, 1, 1);
+    snprintf(name, sizeof(name), "%s_00", label);
+    print_pred8l(name, fn, 0, 0);
+}
+
 static void print_add4(const char *label, pred4_add_fn fn)
 {
     const int stride = 8;
@@ -125,6 +162,29 @@ static void print_add4(const char *label, pred4_add_fn fn)
     fn(pix + offset, block, stride);
     print_block(label, pix, stride, offset, 4, 4);
     printf("%s_sum %d\n", label, sum_i16(block, 16));
+}
+
+static void print_pred8l_add(const char *label, pred8l_add_fn fn,
+                             int has_topleft, int has_topright)
+{
+    const int stride = 28;
+    const int offset = 5 * stride + 5;
+    uint8_t pix[28 * 18];
+    int16_t block[64];
+    init_fixture(pix, stride, 18);
+    init_block(block, 64);
+    fn(pix + offset, block, has_topleft, has_topright, stride);
+    print_block(label, pix, stride, offset, 8, 8);
+    printf("%s_sum %d\n", label, sum_i16(block, 64));
+}
+
+static void print_pred8l_add_cases(const char *label, pred8l_add_fn fn)
+{
+    char name[64];
+    snprintf(name, sizeof(name), "%s_11", label);
+    print_pred8l_add(name, fn, 1, 1);
+    snprintf(name, sizeof(name), "%s_00", label);
+    print_pred8l_add(name, fn, 0, 0);
 }
 
 static void print_offset_add(const char *label, pred_offset_add_fn fn,
@@ -145,6 +205,19 @@ static void print_offset_add(const char *label, pred_offset_add_fn fn,
 
 int main(void)
 {
+    print_pred4("pred4v", pred4x4_vertical_8_c);
+    print_pred4("pred4h", pred4x4_horizontal_8_c);
+    print_pred4("pred4dc", pred4x4_dc_8_c);
+    print_pred4("pred4ldc", pred4x4_left_dc_8_c);
+    print_pred4("pred4tdc", pred4x4_top_dc_8_c);
+    print_pred4("pred4dc128", pred4x4_128_dc_8_c);
+    print_pred4("pred4dr", pred4x4_down_right_8_c);
+    print_pred4("pred4dl", pred4x4_down_left_8_c);
+    print_pred4("pred4vr", pred4x4_vertical_right_8_c);
+    print_pred4("pred4vl", pred4x4_vertical_left_8_c);
+    print_pred4("pred4hu", pred4x4_horizontal_up_8_c);
+    print_pred4("pred4hd", pred4x4_horizontal_down_8_c);
+
     print_pred16("pred16v", pred16x16_vertical_8_c);
     print_pred16("pred16h", pred16x16_horizontal_8_c);
     print_pred16("pred16dc", pred16x16_dc_8_c);
@@ -173,8 +246,23 @@ int main(void)
     print_pred8x16("pred8x16dc128", pred8x16_128_dc_8_c);
     print_pred8x16("pred8x16plane", pred8x16_plane_8_c);
 
+    print_pred8l_cases("pred8ldc128", pred8x8l_128_dc_8_c);
+    print_pred8l_cases("pred8lldc", pred8x8l_left_dc_8_c);
+    print_pred8l_cases("pred8ltdc", pred8x8l_top_dc_8_c);
+    print_pred8l_cases("pred8ldc", pred8x8l_dc_8_c);
+    print_pred8l_cases("pred8lh", pred8x8l_horizontal_8_c);
+    print_pred8l_cases("pred8lv", pred8x8l_vertical_8_c);
+    print_pred8l_cases("pred8ldl", pred8x8l_down_left_8_c);
+    print_pred8l_cases("pred8ldr", pred8x8l_down_right_8_c);
+    print_pred8l_cases("pred8lvr", pred8x8l_vertical_right_8_c);
+    print_pred8l_cases("pred8lhd", pred8x8l_horizontal_down_8_c);
+    print_pred8l_cases("pred8lvl", pred8x8l_vertical_left_8_c);
+    print_pred8l_cases("pred8lhu", pred8x8l_horizontal_up_8_c);
+
     print_add4("add4v", pred4x4_vertical_add_8_c);
     print_add4("add4h", pred4x4_horizontal_add_8_c);
+    print_pred8l_add_cases("add8lfv", pred8x8l_vertical_filter_add_8_c);
+    print_pred8l_add_cases("add8lfh", pred8x8l_horizontal_filter_add_8_c);
     print_offset_add("add16v", pred16x16_vertical_add_8_c, 16, 16, 16);
     print_offset_add("add16h", pred16x16_horizontal_add_8_c, 16, 16, 16);
     print_offset_add("add8v", pred8x8_vertical_add_8_c, 8, 8, 4);
@@ -293,6 +381,45 @@ func h264PredictionOracleWant(t *testing.T) string {
 	var b strings.Builder
 	for _, c := range []struct {
 		label string
+		fn    h264Pred4Func
+	}{
+		{"pred4v", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4Vertical(pix, offset, stride)
+		}},
+		{"pred4h", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4Horizontal(pix, offset, stride)
+		}},
+		{"pred4dc", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4DC(pix, offset, stride)
+		}},
+		{"pred4ldc", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4LeftDC(pix, offset, stride)
+		}},
+		{"pred4tdc", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4TopDC(pix, offset, stride)
+		}},
+		{"pred4dc128", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4DC128(pix, offset, stride)
+		}},
+		{"pred4dr", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4DownRight(pix, offset, stride)
+		}},
+		{"pred4dl", h264Pred4x4DownLeft},
+		{"pred4vr", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4VerticalRight(pix, offset, stride)
+		}},
+		{"pred4vl", h264Pred4x4VerticalLeft},
+		{"pred4hu", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4HorizontalUp(pix, offset, stride)
+		}},
+		{"pred4hd", func(pix []uint8, offset int, stride int, topRight []uint8) error {
+			return h264Pred4x4HorizontalDown(pix, offset, stride)
+		}},
+	} {
+		printPred4OracleWant(t, &b, c.label, c.fn)
+	}
+	for _, c := range []struct {
+		label string
 		fn    h264PredFunc
 	}{
 		{"pred16v", h264Pred16x16Vertical},
@@ -337,8 +464,29 @@ func h264PredictionOracleWant(t *testing.T) string {
 	} {
 		printPredOracleWant(t, &b, c.label, c.fn, 16, 24, 4*16+4, 8, 16)
 	}
+	for _, c := range []struct {
+		label string
+		fn    h264Pred8LFunc
+	}{
+		{"pred8ldc128", h264Pred8x8LDC128},
+		{"pred8lldc", h264Pred8x8LLeftDC},
+		{"pred8ltdc", h264Pred8x8LTopDC},
+		{"pred8ldc", h264Pred8x8LDC},
+		{"pred8lh", h264Pred8x8LHorizontal},
+		{"pred8lv", h264Pred8x8LVertical},
+		{"pred8ldl", h264Pred8x8LDownLeft},
+		{"pred8ldr", h264Pred8x8LDownRight},
+		{"pred8lvr", h264Pred8x8LVerticalRight},
+		{"pred8lhd", h264Pred8x8LHorizontalDown},
+		{"pred8lvl", h264Pred8x8LVerticalLeft},
+		{"pred8lhu", h264Pred8x8LHorizontalUp},
+	} {
+		printPred8LCasesOracleWant(t, &b, c.label, c.fn)
+	}
 	printPred4AddOracleWant(t, &b, "add4v", h264Pred4x4VerticalAdd)
 	printPred4AddOracleWant(t, &b, "add4h", h264Pred4x4HorizontalAdd)
+	printPred8LAddCasesOracleWant(t, &b, "add8lfv", h264Pred8x8LVerticalFilterAdd)
+	printPred8LAddCasesOracleWant(t, &b, "add8lfh", h264Pred8x8LHorizontalFilterAdd)
 	printPredOffsetAddOracleWant(t, &b, "add16v", h264Pred16x16VerticalAdd, 16, 16, 16)
 	printPredOffsetAddOracleWant(t, &b, "add16h", h264Pred16x16HorizontalAdd, 16, 16, 16)
 	printPredOffsetAddOracleWant(t, &b, "add8v", h264Pred8x8VerticalAdd, 8, 8, 4)
@@ -349,7 +497,10 @@ func h264PredictionOracleWant(t *testing.T) string {
 }
 
 type h264PredFunc func([]uint8, int, int) error
+type h264Pred4Func func([]uint8, int, int, []uint8) error
+type h264Pred8LFunc func([]uint8, int, int, bool, bool) error
 type h264Pred4AddFunc func([]uint8, int, []int32, int) error
+type h264Pred8LAddFunc func([]uint8, int, []int32, int, bool, bool) error
 type h264PredOffsetAddFunc func([]uint8, *[48]int, []int32, int) error
 
 func printPredOracleWant(t *testing.T, b *strings.Builder, label string, fn h264PredFunc, stride int, rows int, offset int, width int, height int) {
@@ -359,6 +510,35 @@ func printPredOracleWant(t *testing.T, b *strings.Builder, label string, fn h264
 		t.Fatal(err)
 	}
 	printPredBlock(b, label, pix, stride, offset, width, height)
+}
+
+func printPred4OracleWant(t *testing.T, b *strings.Builder, label string, fn h264Pred4Func) {
+	t.Helper()
+	const stride = 12
+	const offset = 3*stride + 3
+	pix := makePredictionFixture(stride, 12)
+	topRight := []uint8{91, 123, 155, 177}
+	if err := fn(pix, offset, stride, topRight); err != nil {
+		t.Fatal(err)
+	}
+	printPredBlock(b, label, pix, stride, offset, 4, 4)
+}
+
+func printPred8LCasesOracleWant(t *testing.T, b *strings.Builder, label string, fn h264Pred8LFunc) {
+	t.Helper()
+	printPred8LOracleWant(t, b, label+"_11", fn, true, true)
+	printPred8LOracleWant(t, b, label+"_00", fn, false, false)
+}
+
+func printPred8LOracleWant(t *testing.T, b *strings.Builder, label string, fn h264Pred8LFunc, hasTopLeft bool, hasTopRight bool) {
+	t.Helper()
+	const stride = 28
+	const offset = 5*stride + 5
+	pix := makePredictionFixture(stride, 18)
+	if err := fn(pix, offset, stride, hasTopLeft, hasTopRight); err != nil {
+		t.Fatal(err)
+	}
+	printPredBlock(b, label, pix, stride, offset, 8, 8)
 }
 
 func printPred4AddOracleWant(t *testing.T, b *strings.Builder, label string, fn h264Pred4AddFunc) {
@@ -371,6 +551,25 @@ func printPred4AddOracleWant(t *testing.T, b *strings.Builder, label string, fn 
 		t.Fatal(err)
 	}
 	printPredBlock(b, label, pix, stride, offset, 4, 4)
+	fmt.Fprintf(b, "%s_sum %d\n", label, sumInt32(block))
+}
+
+func printPred8LAddCasesOracleWant(t *testing.T, b *strings.Builder, label string, fn h264Pred8LAddFunc) {
+	t.Helper()
+	printPred8LAddOracleWant(t, b, label+"_11", fn, true, true)
+	printPred8LAddOracleWant(t, b, label+"_00", fn, false, false)
+}
+
+func printPred8LAddOracleWant(t *testing.T, b *strings.Builder, label string, fn h264Pred8LAddFunc, hasTopLeft bool, hasTopRight bool) {
+	t.Helper()
+	const stride = 28
+	const offset = 5*stride + 5
+	pix := makePredictionFixture(stride, 18)
+	block := makePredictionBlock(64)
+	if err := fn(pix, offset, block, stride, hasTopLeft, hasTopRight); err != nil {
+		t.Fatal(err)
+	}
+	printPredBlock(b, label, pix, stride, offset, 8, 8)
 	fmt.Fprintf(b, "%s_sum %d\n", label, sumInt32(block))
 }
 

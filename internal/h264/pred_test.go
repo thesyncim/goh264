@@ -56,6 +56,96 @@ func TestH264Pred8x16Plane(t *testing.T) {
 	}
 }
 
+func TestH264Pred4x4AngularModes(t *testing.T) {
+	const stride = 12
+	const offset = 3*stride + 3
+	topRight := []uint8{91, 123, 155, 177}
+
+	pix := makePredictionFixture(stride, 12)
+	if err := h264Pred4x4DownLeft(pix, offset, stride, topRight); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset] != 64 || pix[offset+3] != 95 || pix[offset+3*stride] != 95 || pix[offset+3*stride+3] != 172 {
+		t.Fatalf("pred4x4 down-left corners = %d/%d/%d/%d, want 64/95/95/172",
+			pix[offset], pix[offset+3], pix[offset+3*stride], pix[offset+3*stride+3])
+	}
+
+	pix = makePredictionFixture(stride, 12)
+	if err := h264Pred4x4VerticalLeft(pix, offset, stride, topRight); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset] != 62 || pix[offset+3] != 83 || pix[offset+3*stride] != 69 || pix[offset+3*stride+3] != 123 {
+		t.Fatalf("pred4x4 vertical-left corners = %d/%d/%d/%d, want 62/83/69/123",
+			pix[offset], pix[offset+3], pix[offset+3*stride], pix[offset+3*stride+3])
+	}
+}
+
+func TestH264Pred8x8LFilteredEdges(t *testing.T) {
+	const stride = 28
+	const offset = 5*stride + 5
+
+	pix := makePredictionFixture(stride, 18)
+	if err := h264Pred8x8LVerticalLeft(pix, offset, stride, true, true); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset] != 86 || pix[offset+7] != 121 || pix[offset+7*stride] != 103 || pix[offset+7*stride+7] != 138 {
+		t.Fatalf("pred8x8l vertical-left corners = %d/%d/%d/%d, want 86/121/103/138",
+			pix[offset], pix[offset+7], pix[offset+7*stride], pix[offset+7*stride+7])
+	}
+
+	pix = makePredictionFixture(stride, 18)
+	if err := h264Pred8x8LDownLeft(pix, offset, stride, false, false); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset] != 88 || pix[offset+7] != 118 || pix[offset+7*stride] != 118 || pix[offset+7*stride+7] != 118 {
+		t.Fatalf("pred8x8l down-left no-topright corners = %d/%d/%d/%d, want 88/118/118/118",
+			pix[offset], pix[offset+7], pix[offset+7*stride], pix[offset+7*stride+7])
+	}
+
+	pix = makePredictionFixture(stride, 18)
+	if err := h264Pred8x8LDC(pix, offset, stride, false, false); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset] != 105 || pix[offset+7*stride+7] != 105 {
+		t.Fatalf("pred8x8l dc samples = %d/%d, want 105/105", pix[offset], pix[offset+7*stride+7])
+	}
+}
+
+func TestH264Pred8x8LFilterAddWrapsAndClears(t *testing.T) {
+	const stride = 28
+	const offset = 5*stride + 5
+
+	pix := makePredictionFixture(stride, 18)
+	block := makePredictionBlock(64)
+	if err := h264Pred8x8LVerticalFilterAdd(pix, offset, block, stride, true, true); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset] != 74 || pix[offset+7] != 109 || pix[offset+7*stride] != 74 || pix[offset+7*stride+7] != 109 {
+		t.Fatalf("pred8x8l vertical filter-add corners = %d/%d/%d/%d, want 74/109/74/109",
+			pix[offset], pix[offset+7], pix[offset+7*stride], pix[offset+7*stride+7])
+	}
+	for i, coeff := range block {
+		if coeff != 0 {
+			t.Fatalf("vertical filter-add block[%d] = %d, want cleared", i, coeff)
+		}
+	}
+
+	pix = makePredictionFixture(stride, 18)
+	block = makePredictionBlock(64)
+	if err := h264Pred8x8LHorizontalFilterAdd(pix, offset, block, stride, false, false); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset] != 78 || pix[offset+7] != 78 || pix[offset+7*stride] != 123 || pix[offset+7*stride+7] != 123 {
+		t.Fatalf("pred8x8l horizontal filter-add corners = %d/%d/%d/%d, want 78/78/123/123",
+			pix[offset], pix[offset+7], pix[offset+7*stride], pix[offset+7*stride+7])
+	}
+	for i, coeff := range block {
+		if coeff != 0 {
+			t.Fatalf("horizontal filter-add block[%d] = %d, want cleared", i, coeff)
+		}
+	}
+}
+
 func TestH264Pred4x4AddWrapsAndClears(t *testing.T) {
 	const stride = 8
 	const offset = 2*stride + 2
