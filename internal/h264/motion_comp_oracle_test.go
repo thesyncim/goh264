@@ -28,6 +28,22 @@ const motionCompOracleC = `
 #include "h264chroma_template.c"
 #undef BIT_DEPTH
 
+#define av_always_inline inline
+#define av_flatten
+#define FFABS(a) ((a) >= 0 ? (a) : -(a))
+static inline int av_clip(int v, int amin, int amax)
+{
+    if (v < amin)
+        return amin;
+    if (v > amax)
+        return amax;
+    return v;
+}
+
+#define BIT_DEPTH 8
+#include "h264dsp_template.c"
+#undef BIT_DEPTH
+
 #define MB_TYPE_16x16      (1U << 3)
 #define MB_TYPE_16x8       (1U << 4)
 #define MB_TYPE_8x16       (1U << 5)
@@ -54,6 +70,11 @@ static const uint8_t scan8[16] = {
 typedef void (*qpel_fn)(uint8_t *dst, const uint8_t *src, ptrdiff_t stride);
 typedef void (*chroma_fn)(uint8_t *dst, const uint8_t *src, ptrdiff_t stride,
                           int h, int x, int y);
+typedef void (*weight_fn)(uint8_t *block, ptrdiff_t stride, int height,
+                          int log2_denom, int weight, int offset);
+typedef void (*biweight_fn)(uint8_t *dst, uint8_t *src, ptrdiff_t stride,
+                            int height, int log2_denom, int weightd,
+                            int weights, int offset);
 
 #define QPEL_FN(prefix, size, suffix) prefix ## size ## _mc ## suffix ## _8_c
 #define QPEL_LIST(prefix, size) { \
@@ -86,6 +107,16 @@ typedef struct MotionCtx {
     int16_t mv_cache[2][MOTION_CACHE_SIZE][2];
     int8_t ref_cache[2][MOTION_CACHE_SIZE];
 } MotionCtx;
+
+typedef struct PWT {
+    int use_weight;
+    int use_weight_chroma;
+    int luma_log2_weight_denom;
+    int chroma_log2_weight_denom;
+    int luma_weight[48][2][2];
+    int chroma_weight[48][2][2][2];
+    int implicit_weight[48][48][2];
+} PWT;
 
 static qpel_fn qpel_func(int size, int idx, int avg)
 {
@@ -125,6 +156,28 @@ static chroma_fn chroma_func(int width, int avg)
     return 0;
 }
 
+static weight_fn weight_func(int width)
+{
+    switch (width) {
+    case 2:  return weight_h264_pixels2_8_c;
+    case 4:  return weight_h264_pixels4_8_c;
+    case 8:  return weight_h264_pixels8_8_c;
+    case 16: return weight_h264_pixels16_8_c;
+    }
+    return 0;
+}
+
+static biweight_fn biweight_func(int width)
+{
+    switch (width) {
+    case 2:  return biweight_h264_pixels2_8_c;
+    case 4:  return biweight_h264_pixels4_8_c;
+    case 8:  return biweight_h264_pixels8_8_c;
+    case 16: return biweight_h264_pixels16_8_c;
+    }
+    return 0;
+}
+
 static int is_dir(uint32_t mb_type, int part, int list)
 {
     if (list == 0) {
@@ -159,6 +212,25 @@ static void init_motion(MotionCtx *ctx)
     for (int list = 0; list < 2; list++)
         for (int i = 0; i < MOTION_CACHE_SIZE; i++)
             ctx->ref_cache[list][i] = -1;
+}
+
+static void init_pwt(PWT *pwt)
+{
+    memset(pwt, 0, sizeof(*pwt));
+    for (int ref = 0; ref < 48; ref++) {
+        for (int list = 0; list < 2; list++) {
+            pwt->luma_weight[ref][list][0] = 1;
+            pwt->luma_weight[ref][list][1] = 0;
+            for (int c = 0; c < 2; c++) {
+                pwt->chroma_weight[ref][list][c][0] = 1;
+                pwt->chroma_weight[ref][list][c][1] = 0;
+            }
+        }
+        for (int ref1 = 0; ref1 < 48; ref1++) {
+            pwt->implicit_weight[ref][ref1][0] = 32;
+            pwt->implicit_weight[ref][ref1][1] = 32;
+        }
+    }
 }
 
 static void set_ref_mv(MotionCtx *ctx, int list, int n, int ref, int mx, int my)
@@ -264,6 +336,107 @@ static void mc_part_std(Pic *dst, Pic *refs[2][2], MotionCtx *ctx,
         mc_dir_part(dst, refs[1][refn], ctx, n, square, height, delta, 1,
                     dest_y, dest_cb, dest_cr, x_offset, y_offset,
                     qpel_size, chroma_width, avg);
+    }
+}
+
+static void mc_part_weighted(Pic *dst, Pic *refs[2][2], MotionCtx *ctx, PWT *pwt,
+                             int mb_x, int mb_y, int n, int part, int square,
+                             int height, int delta, int x_offset, int y_offset,
+                             int qpel_size, int chroma_width, int luma_width,
+                             int list0, int list1)
+{
+    uint8_t *dest_y = dst->y + mb_y * 16 * LUMA_STRIDE + mb_x * 16;
+    uint8_t *dest_cb = pic_cb(dst, mb_x, mb_y);
+    uint8_t *dest_cr = pic_cr(dst, mb_x, mb_y);
+    int chroma_height;
+    int chroma_weight_width = chroma_width;
+
+    dest_y += 2 * x_offset + 2 * y_offset * LUMA_STRIDE;
+    if (dst->chroma_idc == 3) {
+        chroma_height = height;
+        chroma_weight_width = luma_width;
+        dest_cb += 2 * x_offset + 2 * y_offset * LUMA_STRIDE;
+        dest_cr += 2 * x_offset + 2 * y_offset * LUMA_STRIDE;
+    } else if (dst->chroma_idc == 2) {
+        chroma_height = height;
+        dest_cb += x_offset + 2 * y_offset * dst->chroma_stride;
+        dest_cr += x_offset + 2 * y_offset * dst->chroma_stride;
+    } else {
+        chroma_height = height >> 1;
+        dest_cb += x_offset + y_offset * dst->chroma_stride;
+        dest_cr += x_offset + y_offset * dst->chroma_stride;
+    }
+    x_offset += 8 * mb_x;
+    y_offset += 8 * mb_y;
+
+    if (list0 && list1) {
+        uint8_t tmp_y[LUMA_STRIDE * 16] = {0};
+        uint8_t tmp_cb[LUMA_STRIDE * 16] = {0};
+        uint8_t tmp_cr[LUMA_STRIDE * 16] = {0};
+        int refn0 = ctx->ref_cache[0][scan8[n]];
+        int refn1 = ctx->ref_cache[1][scan8[n]];
+
+        mc_dir_part(dst, refs[0][refn0], ctx, n, square, height, delta, 0,
+                    dest_y, dest_cb, dest_cr, x_offset, y_offset,
+                    qpel_size, chroma_width, 0);
+        mc_dir_part(dst, refs[1][refn1], ctx, n, square, height, delta, 1,
+                    tmp_y, tmp_cb, tmp_cr, x_offset, y_offset,
+                    qpel_size, chroma_width, 0);
+
+        if (pwt->use_weight == 2) {
+            int weight0 = pwt->implicit_weight[refn0][refn1][mb_y & 1];
+            int weight1 = 64 - weight0;
+            biweight_func(luma_width)(dest_y, tmp_y, LUMA_STRIDE, height, 5,
+                                      weight0, weight1, 0);
+            biweight_func(chroma_weight_width)(dest_cb, tmp_cb, dst->chroma_stride,
+                                               chroma_height, 5, weight0, weight1, 0);
+            biweight_func(chroma_weight_width)(dest_cr, tmp_cr, dst->chroma_stride,
+                                               chroma_height, 5, weight0, weight1, 0);
+        } else {
+            biweight_func(luma_width)(dest_y, tmp_y, LUMA_STRIDE, height,
+                                      pwt->luma_log2_weight_denom,
+                                      pwt->luma_weight[refn0][0][0],
+                                      pwt->luma_weight[refn1][1][0],
+                                      pwt->luma_weight[refn0][0][1] +
+                                      pwt->luma_weight[refn1][1][1]);
+            biweight_func(chroma_weight_width)(dest_cb, tmp_cb, dst->chroma_stride,
+                                               chroma_height,
+                                               pwt->chroma_log2_weight_denom,
+                                               pwt->chroma_weight[refn0][0][0][0],
+                                               pwt->chroma_weight[refn1][1][0][0],
+                                               pwt->chroma_weight[refn0][0][0][1] +
+                                               pwt->chroma_weight[refn1][1][0][1]);
+            biweight_func(chroma_weight_width)(dest_cr, tmp_cr, dst->chroma_stride,
+                                               chroma_height,
+                                               pwt->chroma_log2_weight_denom,
+                                               pwt->chroma_weight[refn0][0][1][0],
+                                               pwt->chroma_weight[refn1][1][1][0],
+                                               pwt->chroma_weight[refn0][0][1][1] +
+                                               pwt->chroma_weight[refn1][1][1][1]);
+        }
+    } else {
+        int list = list1 ? 1 : 0;
+        int refn = ctx->ref_cache[list][scan8[n]];
+        mc_dir_part(dst, refs[list][refn], ctx, n, square, height, delta, list,
+                    dest_y, dest_cb, dest_cr, x_offset, y_offset,
+                    qpel_size, chroma_width, 0);
+
+        weight_func(luma_width)(dest_y, LUMA_STRIDE, height,
+                                pwt->luma_log2_weight_denom,
+                                pwt->luma_weight[refn][list][0],
+                                pwt->luma_weight[refn][list][1]);
+        if (pwt->use_weight_chroma) {
+            weight_func(chroma_weight_width)(dest_cb, dst->chroma_stride,
+                                             chroma_height,
+                                             pwt->chroma_log2_weight_denom,
+                                             pwt->chroma_weight[refn][list][0][0],
+                                             pwt->chroma_weight[refn][list][0][1]);
+            weight_func(chroma_weight_width)(dest_cr, dst->chroma_stride,
+                                             chroma_height,
+                                             pwt->chroma_log2_weight_denom,
+                                             pwt->chroma_weight[refn][list][1][0],
+                                             pwt->chroma_weight[refn][list][1][1]);
+        }
     }
 }
 
@@ -414,12 +587,69 @@ static void run_sub8x8_420(void)
     print_mb("sub8x8_420", &dst, 1, 1);
 }
 
+static void run_weighted_p16x16_420(void)
+{
+    Pic dst, ref0;
+    Pic *refs[2][2] = {{0}};
+    MotionCtx ctx;
+    PWT pwt;
+    init_pic(&dst, 1, 23);
+    init_pic(&ref0, 1, 91);
+    refs[0][0] = &ref0;
+    init_motion(&ctx);
+    init_pwt(&pwt);
+    set_ref_mv(&ctx, 0, 0, 0, 0, 0);
+    pwt.use_weight = 1;
+    pwt.use_weight_chroma = 1;
+    pwt.luma_log2_weight_denom = 2;
+    pwt.chroma_log2_weight_denom = 1;
+    pwt.luma_weight[0][0][0] = 3;
+    pwt.luma_weight[0][0][1] = -2;
+    pwt.chroma_weight[0][0][0][0] = 2;
+    pwt.chroma_weight[0][0][0][1] = 1;
+    pwt.chroma_weight[0][0][1][0] = -1;
+    pwt.chroma_weight[0][0][1][1] = 3;
+
+    mc_part_weighted(&dst, refs, &ctx, &pwt, 1, 1, 0, 0, 1, 16, 0, 0, 0,
+                     16, 8, 16, 1, 0);
+    print_mb("weighted_p16x16_420", &dst, 1, 1);
+}
+
+static void run_weighted_implicit_b16x8_422(void)
+{
+    Pic dst, ref0, ref1;
+    Pic *refs[2][2] = {{0}};
+    MotionCtx ctx;
+    PWT pwt;
+    init_pic(&dst, 2, 37);
+    init_pic(&ref0, 2, 79);
+    init_pic(&ref1, 2, 119);
+    refs[0][0] = &ref0;
+    refs[1][0] = &ref1;
+    init_motion(&ctx);
+    init_pwt(&pwt);
+    set_ref_mv(&ctx, 0, 0, 0, 4, 2);
+    set_ref_mv(&ctx, 1, 0, 0, 8, 6);
+    set_ref_mv(&ctx, 0, 8, 0, 12, 10);
+    set_ref_mv(&ctx, 1, 8, 0, 16, 14);
+    pwt.use_weight = 2;
+    pwt.implicit_weight[0][0][1] = 21;
+
+    mc_part_weighted(&dst, refs, &ctx, &pwt, 1, 1, 0, 0, 0, 8, 8, 0, 0,
+                     8, 8, 16, 1, 1);
+    mc_part_weighted(&dst, refs, &ctx, &pwt, 1, 1, 8, 1, 0, 8, 8, 0, 4,
+                     8, 8, 16, 1, 1);
+    print_mb("weighted_implicit_b16x8_422", &dst, 1, 1);
+}
+
 int main(void)
 {
     run_p16x16_420();
     run_b16x8_420();
     run_p8x16_422();
     run_sub8x8_420();
+    run_weighted_p16x16_420();
+    run_weighted_implicit_b16x8_422();
     return 0;
 }
 `
@@ -463,6 +693,10 @@ func TestH264MotionCompUpstreamOracle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	dspTemplate, err := os.ReadFile(filepath.Join(upstreamDir, "h264dsp_template.c"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	dir := t.TempDir()
 	writeOracleFile(t, filepath.Join(dir, "oracle.c"), motionCompOracleC)
@@ -473,6 +707,7 @@ func TestH264MotionCompUpstreamOracle(t *testing.T) {
 	writeOracleFile(t, filepath.Join(dir, "rnd_avg.h"), string(rndAvgH))
 	writeOracleFile(t, filepath.Join(dir, "bit_depth_template.c"), string(bitDepthTemplate))
 	writeOracleFile(t, filepath.Join(dir, "h264chroma_template.c"), string(chromaTemplate))
+	writeOracleFile(t, filepath.Join(dir, "h264dsp_template.c"), string(dspTemplate))
 	writeOracleFile(t, filepath.Join(dir, "mathops.h"), "")
 	if err := os.Mkdir(filepath.Join(dir, "libavutil"), 0o755); err != nil {
 		t.Fatal(err)
@@ -504,6 +739,8 @@ func h264MotionCompOracleWant(t *testing.T) string {
 	appendH264MotionCompOracleB16x8(t, &b)
 	appendH264MotionCompOracleP8x16(t, &b)
 	appendH264MotionCompOracleSub8x8(t, &b)
+	appendH264MotionCompOracleWeightedP16x16(t, &b)
+	appendH264MotionCompOracleWeightedImplicitB16x8(t, &b)
 	return b.String()
 }
 
@@ -575,6 +812,50 @@ func appendH264MotionCompOracleSub8x8(t *testing.T, b *strings.Builder) {
 		t.Fatal(err)
 	}
 	printH264MotionCompMB(b, "sub8x8_420", dst, 1, 1)
+}
+
+func appendH264MotionCompOracleWeightedP16x16(t *testing.T, b *strings.Builder) {
+	dst := makeH264MotionCompPicture(1, 23)
+	ref0 := makeH264MotionCompPicture(1, 91)
+	refs := [2][]*h264PicturePlanes{{ref0}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+	pwt := h264MotionCompTestPWT(1)
+	pwt.UseWeight = 1
+	pwt.UseWeightChroma = 1
+	pwt.LumaLog2WeightDenom = 2
+	pwt.ChromaLog2WeightDenom = 1
+	pwt.LumaWeight[0][0] = [2]int32{3, -2}
+	pwt.ChromaWeight[0][0][0] = [2]int32{2, 1}
+	pwt.ChromaWeight[0][0][1] = [2]int32{-1, 3}
+	if err := h264HLMotionFrameWeighted(dst, refs, &cache, MBType16x16|MBTypeP0L0, [4]uint32{}, 1, 1, 1, &pwt, nil); err != nil {
+		t.Fatal(err)
+	}
+	printH264MotionCompMB(b, "weighted_p16x16_420", dst, 1, 1)
+}
+
+func appendH264MotionCompOracleWeightedImplicitB16x8(t *testing.T, b *strings.Builder) {
+	dst := makeH264MotionCompPicture(2, 37)
+	ref0 := makeH264MotionCompPicture(2, 79)
+	ref1 := makeH264MotionCompPicture(2, 119)
+	refs := [2][]*h264PicturePlanes{{ref0}, {ref1}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+	cache.Ref[1][h264Scan8[0]] = 0
+	cache.Ref[0][h264Scan8[8]] = 0
+	cache.Ref[1][h264Scan8[8]] = 0
+	cache.MV[0][h264Scan8[0]] = [2]int16{4, 2}
+	cache.MV[1][h264Scan8[0]] = [2]int16{8, 6}
+	cache.MV[0][h264Scan8[8]] = [2]int16{12, 10}
+	cache.MV[1][h264Scan8[8]] = [2]int16{16, 14}
+	pwt := h264MotionCompTestPWT(2)
+	pwt.UseWeight = 2
+	pwt.ImplicitWeight[0][0][1] = 21
+	mbType := MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeP0L1 | MBTypeP1L1
+	if err := h264HLMotionFrameWeighted(dst, refs, &cache, mbType, [4]uint32{}, 1, 1, 2, &pwt, makeH264MotionCompScratch(dst)); err != nil {
+		t.Fatal(err)
+	}
+	printH264MotionCompMB(b, "weighted_implicit_b16x8_422", dst, 1, 1)
 }
 
 func printH264MotionCompMB(b *strings.Builder, label string, p *h264PicturePlanes, mbX int, mbY int) {

@@ -96,6 +96,7 @@ type PredWeightTable struct {
 	ChromaWeightFlag      [2]int32
 	LumaWeight            [48][2][2]int32
 	ChromaWeight          [48][2][2][2]int32
+	ImplicitWeight        [48][48][2]int32
 }
 
 func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, error) {
