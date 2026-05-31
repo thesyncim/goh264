@@ -603,6 +603,58 @@ func TestDecodeAVCWithConfigurationRecordCABACFrames(t *testing.T) {
 	}
 }
 
+func TestDecodeConfiguredAVCAcrossSamplesRef2Frames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16Ref2AnnexBHex)
+	want := []string{
+		"54b049d05d99dc31d270402e798d4af4",
+		"681e6d4ef3058d3880346e8039e95b94",
+		"ef38cc80fb47f60e38abc2502af7e5f9",
+		"0cee44ff1f8279a97bc3e56e4f58f802",
+	}
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != len(want) {
+		t.Fatalf("samples = %d, want %d", len(samples), len(want))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	for i, sample := range samples {
+		frame, err := dec.DecodeConfiguredAVC(sample)
+		if err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+		assertFrameMD5Strings(t, []*Frame{frame}, want[i:i+1])
+	}
+}
+
+func TestDecodeConfiguredAVCAcrossSamplesCABACFrames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CABACAnnexBHex)
+	want := []string{
+		"57948a884e4468c79f3291b2693263de",
+		"4fb1e27b7087e9f1aa485402993ca525",
+		"a7e3e74bb19403d111dd2ffdb4455102",
+		"1202e58b9b15f56a341fea8787bcc769",
+	}
+	config, samples := annexBToAVCConfigAndSamples(t, data, 3)
+	if len(samples) != len(want) {
+		t.Fatalf("samples = %d, want %d", len(samples), len(want))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	for i, sample := range samples {
+		frame, err := dec.DecodeConfiguredAVC(sample)
+		if err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+		assertFrameMD5Strings(t, []*Frame{frame}, want[i:i+1])
+	}
+}
+
 func TestFFprobeOracleBlack16(t *testing.T) {
 	if os.Getenv("GOH264_ORACLE") != "1" {
 		t.Skip("set GOH264_ORACLE=1 to run native ffprobe oracle")
@@ -912,6 +964,16 @@ func annexBToAVC(t *testing.T, data []byte, nalLengthSize int) []byte {
 
 func annexBToAVCConfigAndPacket(t *testing.T, data []byte, nalLengthSize int) ([]byte, []byte) {
 	t.Helper()
+	config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
+	var packet []byte
+	for _, sample := range samples {
+		packet = append(packet, sample...)
+	}
+	return config, packet
+}
+
+func annexBToAVCConfigAndSamples(t *testing.T, data []byte, nalLengthSize int) ([]byte, [][]byte) {
+	t.Helper()
 	if nalLengthSize < 1 || nalLengthSize > 4 {
 		t.Fatalf("invalid nalLengthSize %d", nalLengthSize)
 	}
@@ -922,7 +984,9 @@ func annexBToAVCConfigAndPacket(t *testing.T, data []byte, nalLengthSize int) ([
 
 	var spsNals [][]byte
 	var ppsNals [][]byte
-	var packet []byte
+	var samples [][]byte
+	var sample []byte
+	hasVCL := false
 	for _, nal := range nals {
 		switch nal.Type {
 		case h264.NALSPS:
@@ -930,8 +994,20 @@ func annexBToAVCConfigAndPacket(t *testing.T, data []byte, nalLengthSize int) ([
 		case h264.NALPPS:
 			ppsNals = append(ppsNals, nal.Raw)
 		default:
-			packet = appendAVCNALUnit(t, packet, nal.Raw, nalLengthSize)
+			isVCL := nal.Type == h264.NALSlice || nal.Type == h264.NALIDRSlice
+			if isVCL && hasVCL {
+				samples = append(samples, sample)
+				sample = nil
+				hasVCL = false
+			}
+			sample = appendAVCNALUnit(t, sample, nal.Raw, nalLengthSize)
+			if isVCL {
+				hasVCL = true
+			}
 		}
+	}
+	if len(sample) != 0 {
+		samples = append(samples, sample)
 	}
 	if len(spsNals) == 0 || len(spsNals) > 31 || len(ppsNals) == 0 || len(ppsNals) > 255 {
 		t.Fatalf("parameter set counts: sps=%d pps=%d", len(spsNals), len(ppsNals))
@@ -955,7 +1031,7 @@ func annexBToAVCConfigAndPacket(t *testing.T, data []byte, nalLengthSize int) ([
 	for _, raw := range ppsNals {
 		config = appendAVCConfigNALUnit(t, config, raw)
 	}
-	return config, packet
+	return config, samples
 }
 
 func appendAVCNALUnit(t *testing.T, dst []byte, raw []byte, nalLengthSize int) []byte {

@@ -57,7 +57,9 @@ default Go tests compare the same rawvideo MD5s through explicit `nal_length_siz
 values 2, 3, and 4. The configured AVC tests additionally build FFmpeg-style
 `avcC` extradata from SPS/PPS NAL units, remove those parameter sets from the
 packet payload, and prove the separated-config CAVLC ref-list and CABAC IDR/P
-packets against the same frame MD5s.
+packets against the same frame MD5s both as bundled packets and as successive
+single-frame sample packets that require DPB reference state to survive across
+public decoder calls.
 
 Reference-picture unit coverage now includes FFmpeg's progressive frame-picture
 long-term P-list behavior: default long refs after short refs, ref-list

@@ -24,6 +24,47 @@ type DecodedFrame struct {
 	frameNum        uint32
 }
 
+type SimpleDecoder struct {
+	sps [maxSPSCount]*SPS
+	pps [maxPPSCount]*PPS
+	dpb simpleFrameDPB
+}
+
+func (d *SimpleDecoder) StoreAVCDecoderConfiguration(cfg AVCDecoderConfigurationRecord) error {
+	if d == nil || cfg.NALLengthSize < 1 || cfg.NALLengthSize > 4 {
+		return ErrInvalidData
+	}
+	d.sps = cfg.SPS
+	d.pps = cfg.PPS
+	d.dpb.reset()
+	return nil
+}
+
+func (d *SimpleDecoder) DecodeNALUnits(nals []NALUnit) ([]*DecodedFrame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb)
+}
+
+func (d *SimpleDecoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*DecodedFrame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	nals, err := SplitAVCC(data, nalLengthSize)
+	if err != nil {
+		return nil, err
+	}
+	return d.DecodeNALUnits(nals)
+}
+
+func (d *SimpleDecoder) DecodeAVCFramesWithConfig(data []byte, cfg AVCDecoderConfigurationRecord) ([]*DecodedFrame, error) {
+	if err := d.StoreAVCDecoderConfiguration(cfg); err != nil {
+		return nil, err
+	}
+	return d.DecodeAVCFrames(data, cfg.NALLengthSize)
+}
+
 func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
 	frames, err := DecodeAnnexBSimpleFrames(data)
 	if err != nil {
@@ -60,14 +101,8 @@ func DecodeAVCSimpleFramesWithConfigurationRecord(config []byte, data []byte) ([
 }
 
 func DecodeAVCSimpleFramesWithConfig(data []byte, cfg AVCDecoderConfigurationRecord) ([]*DecodedFrame, error) {
-	if cfg.NALLengthSize < 1 || cfg.NALLengthSize > 4 {
-		return nil, ErrInvalidData
-	}
-	nals, err := SplitAVCC(data, cfg.NALLengthSize)
-	if err != nil {
-		return nil, err
-	}
-	return DecodeSimpleNALUnitsWithParamSets(nals, cfg.SPS, cfg.PPS)
+	var dec SimpleDecoder
+	return dec.DecodeAVCFramesWithConfig(data, cfg)
 }
 
 func DecodeSimpleNALUnits(nals []NALUnit) ([]*DecodedFrame, error) {
@@ -75,10 +110,17 @@ func DecodeSimpleNALUnits(nals []NALUnit) ([]*DecodedFrame, error) {
 }
 
 func DecodeSimpleNALUnitsWithParamSets(nals []NALUnit, spsList [maxSPSCount]*SPS, ppsList [maxPPSCount]*PPS) ([]*DecodedFrame, error) {
+	var dpb simpleFrameDPB
+	return decodeSimpleNALUnitsWithState(nals, &spsList, &ppsList, &dpb)
+}
+
+func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS, dpb *simpleFrameDPB) ([]*DecodedFrame, error) {
+	if spsList == nil || ppsList == nil || dpb == nil {
+		return nil, ErrInvalidData
+	}
 	var frame *DecodedFrame
 	var tables *macroblockTables
 	var motionScratch *h264MotionCompScratch
-	var dpb simpleFrameDPB
 	var frames []*DecodedFrame
 	var loopFilterSlices []h264LoopFilterSliceParams
 	var sliceNum uint16
@@ -94,13 +136,13 @@ func DecodeSimpleNALUnitsWithParamSets(nals []NALUnit, spsList [maxSPSCount]*SPS
 			}
 			spsList[sps.SPSID] = sps
 		case NALPPS:
-			pps, err := DecodePPS(nal.RBSP, &spsList)
+			pps, err := DecodePPS(nal.RBSP, spsList)
 			if err != nil {
 				return nil, err
 			}
 			ppsList[pps.PPSID] = pps
 		case NALSlice, NALIDRSlice:
-			sh, payload, err := parseSliceHeaderWithPayload(nal, &ppsList)
+			sh, payload, err := parseSliceHeaderWithPayload(nal, ppsList)
 			if err != nil {
 				return nil, err
 			}

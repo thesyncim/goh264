@@ -14,6 +14,7 @@ type Decoder struct {
 	pps              [256]*h264.PPS
 	slices           []h264.SliceHeader
 	avcNALLengthSize int
+	simple           h264.SimpleDecoder
 }
 
 type StreamInfo struct {
@@ -119,12 +120,11 @@ func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	if d == nil || d.avcNALLengthSize == 0 {
 		return nil, ErrInvalidData
 	}
-	cfg := h264.AVCDecoderConfigurationRecord{
-		NALLengthSize: d.avcNALLengthSize,
-		SPS:           d.sps,
-		PPS:           d.pps,
+	frames, err := d.simple.DecodeAVCFrames(data, d.avcNALLengthSize)
+	if err != nil {
+		return nil, err
 	}
-	return d.decodeAVCFramesWithConfig(data, cfg)
+	return framesFromH264(frames), nil
 }
 
 func (d *Decoder) DecodeAVCWithConfigurationRecord(config []byte, data []byte) (*Frame, error) {
@@ -151,15 +151,19 @@ func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []b
 }
 
 func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConfigurationRecord) ([]*Frame, error) {
-	frames, err := h264.DecodeAVCSimpleFramesWithConfig(data, cfg)
+	frames, err := d.simple.DecodeAVCFramesWithConfig(data, cfg)
 	if err != nil {
 		return nil, err
 	}
+	return framesFromH264(frames), nil
+}
+
+func framesFromH264(frames []*h264.DecodedFrame) []*Frame {
 	out := make([]*Frame, len(frames))
 	for i, frame := range frames {
 		out[i] = frameFromH264(frame)
 	}
-	return out, nil
+	return out
 }
 
 func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
@@ -246,6 +250,7 @@ func (d *Decoder) storeAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationR
 	d.sps = cfg.SPS
 	d.pps = cfg.PPS
 	d.avcNALLengthSize = cfg.NALLengthSize
+	_ = d.simple.StoreAVCDecoderConfiguration(cfg)
 }
 
 func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
