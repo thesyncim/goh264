@@ -70,3 +70,21 @@ func TestDequantTablesFlatScaling(t *testing.T) {
 		t.Fatalf("dequant8[5][10][63] = %d, want %d", got, want)
 	}
 }
+
+func TestScanTables(t *testing.T) {
+	if h264Scan8[0] != 12 || h264Scan8[15] != 39 || h264Scan8[48] != 0 || h264Scan8[50] != 80 {
+		t.Fatalf("scan8 spots = %d %d %d %d", h264Scan8[0], h264Scan8[15], h264Scan8[48], h264Scan8[50])
+	}
+	if h264ZigzagScanCAVLC[1] != 4 || h264ZigzagScanCAVLC[2] != 1 || h264ZigzagScanCAVLC[15] != 15 {
+		t.Fatalf("zigzag cavlc spots = %d %d %d", h264ZigzagScanCAVLC[1], h264ZigzagScanCAVLC[2], h264ZigzagScanCAVLC[15])
+	}
+	if h264ZigzagScan8x8CAVLC[1] != 9 || h264ZigzagScan8x8CAVLC[7] != 56 || h264ZigzagScan8x8CAVLC[63] != 63 {
+		t.Fatalf("zigzag8x8 cavlc spots = %d %d %d", h264ZigzagScan8x8CAVLC[1], h264ZigzagScan8x8CAVLC[7], h264ZigzagScan8x8CAVLC[63])
+	}
+	if h264ChromaDCScan != ([4]uint8{0, 16, 32, 48}) {
+		t.Fatalf("chroma dc scan = %v", h264ChromaDCScan)
+	}
+	if h264Chroma422DCScan != ([8]uint8{0, 32, 16, 64, 96, 48, 80, 112}) {
+		t.Fatalf("chroma422 dc scan = %v", h264Chroma422DCScan)
+	}
+}
