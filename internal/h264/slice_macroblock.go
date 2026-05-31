@@ -15,6 +15,12 @@ type sliceMacroblockCursor struct {
 	MBXY     int
 }
 
+type frameMacroblockDecodeWork struct {
+	IntraCache [h264IntraPredModeCacheSize]int8
+	Residual   cavlcResidualContext
+	Motion     macroblockMotionCache
+}
+
 func newSliceMacroblockCursor(m *macroblockTables, sh *SliceHeader) (sliceMacroblockCursor, error) {
 	var cur sliceMacroblockCursor
 	if m == nil || sh == nil || sh.SPS == nil || sh.PPS == nil {

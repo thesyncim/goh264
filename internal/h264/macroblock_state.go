@@ -133,24 +133,37 @@ func (m *macroblockTables) writeBackCABACInterMacroblock(mbXY int, mb *cavlcInte
 }
 
 func (m *macroblockTables) writeBackPskipMacroblock(mbXY int, qscale int, n motionDecodeNeighbors, sliceNum uint16) error {
-	return m.writeBackPskipMacroblockWithCABAC(mbXY, qscale, n, sliceNum, false)
+	return m.writeBackPskipMacroblockWithCABAC(mbXY, qscale, n, sliceNum, false, nil)
+}
+
+func (m *macroblockTables) writeBackPskipMacroblockWithMotion(mbXY int, qscale int, n motionDecodeNeighbors, sliceNum uint16, motion *macroblockMotionCache) error {
+	return m.writeBackPskipMacroblockWithCABAC(mbXY, qscale, n, sliceNum, false, motion)
 }
 
 func (m *macroblockTables) writeBackCABACPskipMacroblock(mbXY int, qscale int, n motionDecodeNeighbors, sliceNum uint16) error {
-	return m.writeBackPskipMacroblockWithCABAC(mbXY, qscale, n, sliceNum, true)
+	return m.writeBackPskipMacroblockWithCABAC(mbXY, qscale, n, sliceNum, true, nil)
 }
 
-func (m *macroblockTables) writeBackPskipMacroblockWithCABAC(mbXY int, qscale int, n motionDecodeNeighbors, sliceNum uint16, cabac bool) error {
+func (m *macroblockTables) writeBackCABACPskipMacroblockWithMotion(mbXY int, qscale int, n motionDecodeNeighbors, sliceNum uint16, motion *macroblockMotionCache) error {
+	return m.writeBackPskipMacroblockWithCABAC(mbXY, qscale, n, sliceNum, true, motion)
+}
+
+func (m *macroblockTables) writeBackPskipMacroblockWithCABAC(mbXY int, qscale int, n motionDecodeNeighbors, sliceNum uint16, cabac bool, motion *macroblockMotionCache) error {
 	if qscale < 0 || qscale > qpMaxNum {
 		return ErrInvalidData
 	}
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
 	var cache macroblockMotionCache
+	if motion != nil {
+		*motion = macroblockMotionCache{}
+	} else {
+		motion = &cache
+	}
 	n.MBType = mbType
-	if err := m.predPSkipMotion(&cache, n); err != nil {
+	if err := m.predPSkipMotion(motion, n); err != nil {
 		return err
 	}
-	if err := m.writeBackMotion(mbXY, mbType, PictureTypeP, cabac, nil, &cache); err != nil {
+	if err := m.writeBackMotion(mbXY, mbType, PictureTypeP, cabac, nil, motion); err != nil {
 		return err
 	}
 	if err := m.writeBackMacroblockTables(mbXY, mbType, 0, qscale, sliceNum); err != nil {
