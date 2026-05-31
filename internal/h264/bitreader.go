@@ -80,6 +80,41 @@ func (gb *bitReader) readBits(n uint32) (uint32, error) {
 	return out, nil
 }
 
+func (gb *bitReader) showBits(n uint32) (uint32, error) {
+	if n > 32 || int32(n) > gb.bitsLeft() {
+		return 0, ErrInvalidData
+	}
+
+	bitPos := gb.bitPos
+	out, err := gb.readBits(n)
+	gb.bitPos = bitPos
+	return out, err
+}
+
+func (gb *bitReader) showBitsPadded(n uint32) uint32 {
+	if n > 32 {
+		n = 32
+	}
+
+	available := n
+	if left := gb.bitsLeft(); left < int32(available) {
+		if left <= 0 {
+			return 0
+		}
+		available = uint32(left)
+	}
+
+	bitPos := gb.bitPos
+	var out uint32
+	for i := uint32(0); i < available; i++ {
+		byteIndex := bitPos >> 3
+		bitOffset := 7 - (bitPos & 7)
+		out = (out << 1) | uint32((gb.buf[byteIndex]>>bitOffset)&1)
+		bitPos++
+	}
+	return out << (n - available)
+}
+
 func (gb *bitReader) skipBits(n uint32) error {
 	if int32(n) > gb.bitsLeft() {
 		return ErrInvalidData
