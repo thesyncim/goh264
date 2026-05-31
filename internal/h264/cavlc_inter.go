@@ -151,6 +151,138 @@ func (c *cavlcResidualContext) decodeCAVLCInterPMacroblock(gb *bitReader, pps *P
 	return mb, nil
 }
 
+func (c *cavlcResidualContext) decodeCAVLCInterBMacroblock(gb *bitReader, pps *PPS, sps *SPS, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
+	var mb cavlcInterMacroblockSyntax
+	if pps == nil || sps == nil {
+		return mb, ErrInvalidData
+	}
+	for list := 0; list < 2; list++ {
+		for i := 0; i < 4; i++ {
+			mb.Ref[list][i] = -1
+		}
+	}
+
+	base, err := decodeCAVLCMBType(gb, PictureTypeB, PictureTypeB)
+	if err != nil {
+		return mb, err
+	}
+	mb.cavlcMacroblockSyntax = base
+	if isIntra(mb.MBType) {
+		return mb, ErrUnsupported
+	}
+	if isDirect(mb.MBType) {
+		return mb, ErrUnsupported
+	}
+
+	if mb.PartitionCount == 4 {
+		for i := 0; i < 4; i++ {
+			subType, err := gb.readUEGolomb31()
+			if err != nil {
+				return mb, err
+			}
+			if subType >= 13 {
+				return mb, ErrInvalidData
+			}
+			info := h264BSubMBTypeInfo[subType]
+			mb.SubPartitionCount[i] = info.PartitionCount
+			mb.SubMBType[i] = info.Type
+			if isDirect(mb.SubMBType[i]) {
+				return mb, ErrUnsupported
+			}
+		}
+
+		for list := 0; list < 2; list++ {
+			refTotal := refCount[list]
+			if isRef0(mb.MBType) {
+				refTotal = 1
+			}
+			for i := 0; i < 4; i++ {
+				if isDir(mb.SubMBType[i], 0, list) {
+					ref, err := readCAVLCRefIndex(gb, refTotal)
+					if err != nil {
+						return mb, err
+					}
+					mb.Ref[list][i] = ref
+				}
+			}
+		}
+
+		for list := 0; list < 2; list++ {
+			for i := 0; i < 4; i++ {
+				if !isDir(mb.SubMBType[i], 0, list) {
+					continue
+				}
+				blockWidth := 1
+				if mb.SubMBType[i]&(MBType16x16|MBType16x8) != 0 {
+					blockWidth = 2
+				}
+				for j := 0; j < int(mb.SubPartitionCount[i]); j++ {
+					index := 4*i + blockWidth*j
+					if err := readCAVLCMVD(gb, &mb.MVD[list][index]); err != nil {
+						return mb, err
+					}
+				}
+			}
+		}
+	} else if is16x16(mb.MBType) || is16x8(mb.MBType) || is8x16(mb.MBType) {
+		partitions := 1
+		if is16x8(mb.MBType) || is8x16(mb.MBType) {
+			partitions = 2
+		}
+		for list := 0; list < 2; list++ {
+			for i := 0; i < partitions; i++ {
+				if isDir(mb.MBType, i, list) {
+					ref, err := readCAVLCRefIndex(gb, refCount[list])
+					if err != nil {
+						return mb, err
+					}
+					mb.Ref[list][i] = ref
+				}
+			}
+		}
+		for list := 0; list < 2; list++ {
+			for i := 0; i < partitions; i++ {
+				if !isDir(mb.MBType, i, list) {
+					continue
+				}
+				index := 0
+				if is16x8(mb.MBType) {
+					index = 8 * i
+				} else if is8x16(mb.MBType) {
+					index = 4 * i
+				}
+				if err := readCAVLCMVD(gb, &mb.MVD[list][index]); err != nil {
+					return mb, err
+				}
+			}
+		}
+	} else {
+		return mb, ErrUnsupported
+	}
+
+	cbp, err := decodeCAVLCCBP(gb, mb.MBType, sps.ChromaFormatIDC == 1 || sps.ChromaFormatIDC == 2, mb.CBP)
+	if err != nil {
+		return mb, err
+	}
+	mb.CBP = cbp
+	if dct8x8Allowed && (mb.CBP&15) != 0 {
+		flag, err := gb.readBit()
+		if err != nil {
+			return mb, err
+		}
+		if flag != 0 {
+			mb.MBType |= MBType8x8DCT
+			mb.TransformSize8x8DCT = true
+		}
+	}
+
+	mb.QScale, mb.ChromaQP, mb.CBPTable, err = c.decodeCAVLCResidualPayload(gb, pps, sps, mb.MBType, mb.CBP, qscale)
+	if err != nil {
+		return mb, err
+	}
+	return mb, nil
+}
+
 func readCAVLCRefIndex(gb *bitReader, refCount uint32) (int32, error) {
 	if refCount == 0 {
 		return 0, ErrInvalidData
@@ -204,6 +336,10 @@ func isDir(mbType uint32, part int, list int) bool {
 
 func isRef0(mbType uint32) bool {
 	return mbType&MBTypeRef0 != 0
+}
+
+func isDirect(mbType uint32) bool {
+	return mbType&MBTypeDirect2 != 0
 }
 
 func is16x16(mbType uint32) bool {

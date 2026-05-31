@@ -97,3 +97,62 @@ func TestDecodeCAVLCInterP8x8SubMacroblockNoResidual(t *testing.T) {
 		t.Fatalf("cbp/consumed = %d/%d, want 0/18", mb.CBP, gb.bitPos)
 	}
 }
+
+func TestDecodeCAVLCInterBDirectUnsupported(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+	var ctx cavlcResidualContext
+	gb := newBitReader(cavlcBitString("1"))
+
+	_, err := ctx.decodeCAVLCInterBMacroblock(&gb, pps, sps, 18, [2]uint32{1, 1}, false)
+	if err != ErrUnsupported {
+		t.Fatalf("err = %v, want ErrUnsupported", err)
+	}
+}
+
+func TestDecodeCAVLCInterB16x16BiMacroblockNoResidual(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+	var ctx cavlcResidualContext
+	gb := newBitReader(cavlcBitString("001000010110111"))
+
+	mb, err := ctx.decodeCAVLCInterBMacroblock(&gb, pps, sps, 22, [2]uint32{2, 1}, false)
+	if err != nil {
+		t.Fatalf("decode inter b16x16 mb failed: %v", err)
+	}
+	if mb.MBType != (MBType16x16|MBTypeP0L0|MBTypeP0L1) || mb.Ref[0][0] != 1 || mb.Ref[1][0] != 0 {
+		t.Fatalf("type/ref0/ref1 = %#x/%v/%v", mb.MBType, mb.Ref[0], mb.Ref[1])
+	}
+	if mb.MVD[0][0] != ([2]int32{1, 0}) || mb.MVD[1][0] != ([2]int32{0, -1}) {
+		t.Fatalf("mvd list0=%v list1=%v, want [1 0] [0 -1]", mb.MVD[0][0], mb.MVD[1][0])
+	}
+	if mb.CBP != 0 || gb.bitPos != 15 {
+		t.Fatalf("cbp/consumed = %d/%d, want 0/15", mb.CBP, gb.bitPos)
+	}
+}
+
+func TestDecodeCAVLCInterB8x8SubMacroblockNoResidual(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+	var ctx cavlcResidualContext
+	gb := newBitReader(cavlcBitString("000010111010010010010111111111"))
+
+	mb, err := ctx.decodeCAVLCInterBMacroblock(&gb, pps, sps, 16, [2]uint32{1, 1}, false)
+	if err != nil {
+		t.Fatalf("decode inter b8x8 mb failed: %v", err)
+	}
+	if mb.MBType != (MBType8x8|MBTypeP0L0|MBTypeP0L1|MBTypeP1L0|MBTypeP1L1) || mb.PartitionCount != 4 {
+		t.Fatalf("type/partitions = %#x/%d", mb.MBType, mb.PartitionCount)
+	}
+	for i := 0; i < 4; i++ {
+		if mb.SubMBType[i] != (MBType16x16|MBTypeP0L0) || mb.Ref[0][i] != 0 || mb.Ref[1][i] != -1 {
+			t.Fatalf("sub[%d] type/ref0/ref1 = %#x/%d/%d", i, mb.SubMBType[i], mb.Ref[0][i], mb.Ref[1][i])
+		}
+		if mb.MVD[0][4*i] != ([2]int32{}) {
+			t.Fatalf("sub[%d] mvd = %v, want zero", i, mb.MVD[0][4*i])
+		}
+	}
+	if mb.CBP != 0 || gb.bitPos != 30 {
+		t.Fatalf("cbp/consumed = %d/%d, want 0/30", mb.CBP, gb.bitPos)
+	}
+}
