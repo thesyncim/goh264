@@ -21,6 +21,53 @@ type h264FrameSliceDecodeResult struct {
 	EndOfFrame  bool
 }
 
+type cabacFrameSliceDecoder struct {
+	cabac cabacContext
+	state [1024]uint8
+}
+
+func (d *cabacFrameSliceDecoder) source() cabacSyntaxDecoder {
+	return cabacSyntaxDecoder{
+		cabac: &d.cabac,
+		state: &d.state,
+	}
+}
+
+func (m *macroblockTables) decodeFrameSliceData(gb *bitReader, dst *h264PicturePlanes, sh *SliceHeader, in h264FrameSliceDecodeInput) (h264FrameSliceDecodeResult, error) {
+	var result h264FrameSliceDecodeResult
+	if sh == nil || sh.PPS == nil {
+		return result, ErrInvalidData
+	}
+	if sh.PPS.CABAC == 0 {
+		return m.decodeCAVLCFrameSlice(gb, dst, sh, in)
+	}
+	dec, err := initCABACFrameSliceDecoder(gb, sh)
+	if err != nil {
+		return result, err
+	}
+	return m.decodeCABACFrameSlice(dec.source(), dst, sh, in)
+}
+
+func initCABACFrameSliceDecoder(gb *bitReader, sh *SliceHeader) (cabacFrameSliceDecoder, error) {
+	var dec cabacFrameSliceDecoder
+	if gb == nil || sh == nil || sh.SPS == nil {
+		return dec, ErrInvalidData
+	}
+	buf, err := gb.remainingAlignedBytes()
+	if err != nil {
+		return dec, err
+	}
+	dec.cabac, err = initCABACDecoder(buf)
+	if err != nil {
+		return dec, err
+	}
+	dec.state, err = initH264CABACStates(sh.SliceTypeNoS, sh.CABACInitIDC, int32(sh.QScale), int32(sh.SPS.BitDepthLuma))
+	if err != nil {
+		return dec, err
+	}
+	return dec, nil
+}
+
 func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264PicturePlanes, sh *SliceHeader, in h264FrameSliceDecodeInput) (h264FrameSliceDecodeResult, error) {
 	var result h264FrameSliceDecodeResult
 	if m == nil || gb == nil || dst == nil || sh == nil || sh.PPS == nil || sh.SPS == nil {

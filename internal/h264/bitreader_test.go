@@ -33,3 +33,21 @@ func TestBitReaderReadAlignedBytesRejectsShortBuffer(t *testing.T) {
 		t.Fatalf("bitPos after failed aligned read = %d, want 1", gb.bitPos)
 	}
 }
+
+func TestBitReaderRemainingAlignedBytes(t *testing.T) {
+	gb := newBitReader([]byte{0xe0, 0x2a, 0x40, 0x80, 0x11})
+	gb.numBits = 35
+	if got, err := gb.readBits(3); err != nil || got != 0b111 {
+		t.Fatalf("prefix bits = %b, %v; want 111, nil", got, err)
+	}
+	got, err := gb.remainingAlignedBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gb.bitPos != 8 {
+		t.Fatalf("bitPos = %d, want byte-aligned 8", gb.bitPos)
+	}
+	if len(got) != 4 || got[0] != 0x2a || got[3] != 0x11 {
+		t.Fatalf("remaining bytes = % x, want 2a 40 80 11", got)
+	}
+}

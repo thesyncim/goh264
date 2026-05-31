@@ -147,3 +147,22 @@ func (gb *bitReader) readAlignedBytes(n int) ([]byte, error) {
 	gb.bitPos = aligned + uint32(n)*8
 	return gb.buf[start : start+n], nil
 }
+
+func (gb *bitReader) remainingAlignedBytes() ([]byte, error) {
+	if gb == nil {
+		return nil, ErrInvalidData
+	}
+	if err := gb.alignToByte(); err != nil {
+		return nil, err
+	}
+	left := gb.bitsLeft()
+	if left < 0 {
+		return nil, ErrInvalidData
+	}
+	n := int((left + 7) >> 3)
+	start := int(gb.bitPos >> 3)
+	if start < 0 || n < 0 || start+n > len(gb.buf) {
+		return nil, ErrInvalidData
+	}
+	return gb.buf[start : start+n], nil
+}

@@ -100,13 +100,18 @@ type PredWeightTable struct {
 }
 
 func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, error) {
+	sh, _, err := parseSliceHeaderWithPayload(nal, ppsList)
+	return sh, err
+}
+
+func parseSliceHeaderWithPayload(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, bitReader, error) {
 	if nal.Type != NALSlice && nal.Type != NALIDRSlice {
-		return nil, ErrInvalidData
+		return nil, bitReader{}, ErrInvalidData
 	}
 
 	gb, err := newRBSPBitReader(nal.RBSP)
 	if err != nil {
-		return nil, err
+		return nil, bitReader{}, err
 	}
 
 	sh := &SliceHeader{
@@ -116,15 +121,15 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 
 	sh.FirstMBAddr, err = gb.readUEGolombLong()
 	if err != nil {
-		return nil, err
+		return nil, bitReader{}, err
 	}
 
 	sliceType, err := gb.readUEGolomb31()
 	if err != nil {
-		return nil, err
+		return nil, bitReader{}, err
 	}
 	if sliceType > 9 {
-		return nil, ErrInvalidData
+		return nil, bitReader{}, ErrInvalidData
 	}
 	if sliceType > 4 {
 		sliceType -= 5
@@ -134,22 +139,22 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 	sh.SliceType = h264GolombToPictureType[sliceType]
 	sh.SliceTypeNoS = sh.SliceType & 3
 	if nal.Type == NALIDRSlice && sh.SliceTypeNoS != PictureTypeI {
-		return nil, ErrInvalidData
+		return nil, bitReader{}, ErrInvalidData
 	}
 
 	sh.PPSID, err = gb.readUEGolombLong()
 	if err != nil {
-		return nil, err
+		return nil, bitReader{}, err
 	}
 	if sh.PPSID >= maxPPSCount || ppsList[sh.PPSID] == nil {
-		return nil, ErrInvalidData
+		return nil, bitReader{}, ErrInvalidData
 	}
 	sh.PPS = ppsList[sh.PPSID]
 	sh.SPS = sh.PPS.SPS
 
 	frameNum, err := gb.readBits(uint32(sh.SPS.Log2MaxFrameNum))
 	if err != nil {
-		return nil, err
+		return nil, bitReader{}, err
 	}
 	sh.FrameNum = frameNum
 
@@ -157,16 +162,16 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 		sh.PictureStructure = PictureFrame
 	} else {
 		if sh.SPS.Direct8x8InferenceFlag == 0 && sh.SliceType == PictureTypeB {
-			return nil, ErrInvalidData
+			return nil, bitReader{}, ErrInvalidData
 		}
 		fieldPicFlag, err := gb.readBit()
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 		if fieldPicFlag != 0 {
 			bottomFieldFlag, err := gb.readBit()
 			if err != nil {
-				return nil, err
+				return nil, bitReader{}, err
 			}
 			sh.PictureStructure = PictureTopField + int32(bottomFieldFlag)
 		} else {
@@ -188,7 +193,7 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 	if nal.Type == NALIDRSlice {
 		idrPicID, err := gb.readUEGolombLong()
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 		if idrPicID < 65536 {
 			sh.IDRPicID = idrPicID
@@ -198,14 +203,14 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 	if sh.SPS.PocType == 0 {
 		pocLSB, err := gb.readBits(uint32(sh.SPS.Log2MaxPocLSB))
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 		sh.POCLSB = pocLSB
 
 		if sh.PPS.PicOrderPresent == 1 && sh.PictureStructure == PictureFrame {
 			sh.DeltaPOCBottom, err = gb.readSEGolombLong()
 			if err != nil {
-				return nil, err
+				return nil, bitReader{}, err
 			}
 		}
 	}
@@ -213,12 +218,12 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 	if sh.SPS.PocType == 1 && sh.SPS.DeltaPicOrderAlwaysZeroFlag == 0 {
 		sh.DeltaPOC[0], err = gb.readSEGolombLong()
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 		if sh.PPS.PicOrderPresent == 1 && sh.PictureStructure == PictureFrame {
 			sh.DeltaPOC[1], err = gb.readSEGolombLong()
 			if err != nil {
-				return nil, err
+				return nil, bitReader{}, err
 			}
 		}
 	}
@@ -226,61 +231,61 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 	if sh.PPS.RedundantPicCntPresent != 0 {
 		sh.RedundantPicCount, err = gb.readUEGolombLong()
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 	}
 
 	if sh.SliceTypeNoS == PictureTypeB {
 		directSpatialMVPred, err := gb.readBit()
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 		sh.DirectSpatialMVPred = int32(directSpatialMVPred)
 	}
 
 	if err := parseRefCount(&gb, sh); err != nil {
-		return nil, err
+		return nil, bitReader{}, err
 	}
 	if sh.SliceTypeNoS != PictureTypeI {
 		if err := decodeRefPicListReordering(&gb, sh); err != nil {
 			sh.RefCount[0] = 0
 			sh.RefCount[1] = 0
-			return nil, err
+			return nil, bitReader{}, err
 		}
 	}
 
 	if (sh.PPS.WeightedPred != 0 && sh.SliceTypeNoS == PictureTypeP) ||
 		(sh.PPS.WeightedBipredIDC == 1 && sh.SliceTypeNoS == PictureTypeB) {
 		if err := predWeightTable(&gb, sh); err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 	}
 
 	if nal.RefIDC != 0 {
 		if err := decodeRefPicMarking(&gb, sh); err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 	}
 
 	if sh.SliceTypeNoS != PictureTypeI && sh.PPS.CABAC != 0 {
 		cabacInitIDC, err := gb.readUEGolomb31()
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 		if cabacInitIDC > 2 {
-			return nil, ErrInvalidData
+			return nil, bitReader{}, ErrInvalidData
 		}
 		sh.CABACInitIDC = cabacInitIDC
 	}
 
 	sliceQPDelta, err := gb.readSEGolombLong()
 	if err != nil {
-		return nil, err
+		return nil, bitReader{}, err
 	}
 	qscale := sh.PPS.InitQP + sliceQPDelta
 	maxQP := int32(51 + 6*(sh.SPS.BitDepthLuma-8))
 	if qscale < 0 || qscale > maxQP {
-		return nil, ErrInvalidData
+		return nil, bitReader{}, ErrInvalidData
 	}
 	sh.QScale = uint32(qscale)
 	sh.ChromaQP[0] = sh.PPS.ChromaQPTable[0][sh.QScale]
@@ -289,14 +294,14 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 	if sh.SliceType == PictureTypeSP {
 		spForSwitchFlag, err := gb.readBit()
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 		sh.SPForSwitchFlag = int32(spForSwitchFlag)
 	}
 	if sh.SliceType == PictureTypeSP || sh.SliceType == PictureTypeSI {
 		sh.SliceQSDelta, err = gb.readSEGolombLong()
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 	}
 
@@ -304,10 +309,10 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 	if sh.PPS.DeblockingFilterParametersPresent != 0 {
 		disableIDC, err := gb.readUEGolomb31()
 		if err != nil {
-			return nil, err
+			return nil, bitReader{}, err
 		}
 		if disableIDC > 2 {
-			return nil, ErrInvalidData
+			return nil, bitReader{}, ErrInvalidData
 		}
 		sh.DeblockingFilter = int32(disableIDC)
 		if sh.DeblockingFilter < 2 {
@@ -316,21 +321,21 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 		if sh.DeblockingFilter != 0 {
 			alpha, err := gb.readSEGolombLong()
 			if err != nil {
-				return nil, err
+				return nil, bitReader{}, err
 			}
 			beta, err := gb.readSEGolombLong()
 			if err != nil {
-				return nil, err
+				return nil, bitReader{}, err
 			}
 			if alpha > 6 || alpha < -6 || beta > 6 || beta < -6 {
-				return nil, ErrInvalidData
+				return nil, bitReader{}, ErrInvalidData
 			}
 			sh.SliceAlphaC0Offset = alpha * 2
 			sh.SliceBetaOffset = beta * 2
 		}
 	}
 
-	return sh, nil
+	return sh, gb, nil
 }
 
 func parseRefCount(gb *bitReader, sh *SliceHeader) error {

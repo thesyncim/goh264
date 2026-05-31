@@ -46,6 +46,75 @@ func TestDecodeCAVLCFrameSliceReconstructsIntraPCMRun(t *testing.T) {
 	}
 }
 
+func TestDecodeFrameSliceDataDispatchesCAVLC(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	sh := &SliceHeader{
+		FirstMBAddr:      0,
+		SliceType:        PictureTypeI,
+		SliceTypeNoS:     PictureTypeI,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           20,
+		DeblockingFilter: 0,
+	}
+	dst := makeH264SliceDecodePicture(1, 1, 1)
+	pcm := h264ReconstructIntraPCM(1, 17)
+	gb := newBitReader(cavlcIntraPCMBytes(pcm))
+
+	got, err := m.decodeFrameSliceData(&gb, dst, sh, h264FrameSliceDecodeInput{SliceNum: 7})
+	if err != nil {
+		t.Fatalf("decode dispatched cavlc slice failed: %v", err)
+	}
+	if got.Macroblocks != 1 || !got.EndOfFrame || !got.EndOfSlice {
+		t.Fatalf("slice result = %+v, want one-MB frame end", got)
+	}
+	assertH264SliceDecodePCM(t, dst, 0, 0, pcm)
+}
+
+func TestDecodeFrameSliceDataDispatchesCABACStartup(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	pps.CABAC = 1
+	sh := &SliceHeader{
+		FirstMBAddr:      0,
+		SliceType:        PictureTypeI,
+		SliceTypeNoS:     PictureTypeI,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           20,
+		DeblockingFilter: 0,
+	}
+	dst := makeH264SliceDecodePicture(1, 1, 1)
+	gb := newBitReader([]byte{0xe0, 0x2a})
+	if _, err := gb.readBits(3); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = m.decodeFrameSliceData(&gb, dst, sh, h264FrameSliceDecodeInput{SliceNum: 7})
+	if err != ErrInvalidData {
+		t.Fatalf("err = %v, want ErrInvalidData from CABAC startup", err)
+	}
+	if gb.bitPos != 8 {
+		t.Fatalf("bitPos = %d, want CABAC byte realignment", gb.bitPos)
+	}
+	if m.MacroblockTyp[0] != 0 || m.SliceTable[0] != 0xffff {
+		t.Fatalf("tables type/slice = %#x/%#x, want untouched", m.MacroblockTyp[0], m.SliceTable[0])
+	}
+}
+
 func TestDecodeCABACFrameSliceReconstructsIntraPCMAndEOS(t *testing.T) {
 	m, err := newMacroblockTables(1, 1, 1)
 	if err != nil {
@@ -88,6 +157,49 @@ func TestDecodeCABACFrameSliceReconstructsIntraPCMAndEOS(t *testing.T) {
 		t.Fatalf("pcm read sizes = %v, want [%d]", src.pcmReadSizes, len(pcm))
 	}
 	wantIndexes(t, src, []int{3})
+}
+
+func TestInitCABACFrameSliceDecoderAlignsAndInitializesStates(t *testing.T) {
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	pps.CABAC = 1
+	sh := &SliceHeader{
+		SliceType:        PictureTypeP,
+		SliceTypeNoS:     PictureTypeP,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		CABACInitIDC:     2,
+		QScale:           31,
+	}
+	gb := newBitReader([]byte{0xe0, 0x2a, 0x40, 0x80, 0x11})
+	gb.numBits = 35
+	if _, err := gb.readBits(3); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := initCABACFrameSliceDecoder(&gb, sh)
+	if err != nil {
+		t.Fatalf("init cabac frame slice decoder failed: %v", err)
+	}
+	wantCABAC, err := initCABACDecoder(gb.buf[1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantState, err := initH264CABACStates(PictureTypeP, 2, 31, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gb.bitPos != 8 {
+		t.Fatalf("bitPos = %d, want aligned 8", gb.bitPos)
+	}
+	if got.cabac.low != wantCABAC.low || got.cabac.rng != wantCABAC.rng || got.cabac.bytestream != wantCABAC.bytestream || got.cabac.bytestreamEnd != wantCABAC.bytestreamEnd {
+		t.Fatalf("cabac ctx = low %#x range %#x byte %d end %d, want low %#x range %#x byte %d end %d", got.cabac.low, got.cabac.rng, got.cabac.bytestream, got.cabac.bytestreamEnd, wantCABAC.low, wantCABAC.rng, wantCABAC.bytestream, wantCABAC.bytestreamEnd)
+	}
+	if got.state[0] != wantState[0] || got.state[60] != wantState[60] || got.state[399] != wantState[399] {
+		t.Fatalf("cabac states = %d/%d/%d, want %d/%d/%d", got.state[0], got.state[60], got.state[399], wantState[0], wantState[60], wantState[399])
+	}
 }
 
 func TestDecodeCAVLCFrameSliceReconstructsPSkip(t *testing.T) {
