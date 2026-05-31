@@ -23,13 +23,16 @@ type cavlcMacroblockSyntax struct {
 
 func (c *cavlcResidualContext) decodeCAVLCIntraMacroblock(gb *bitReader, pps *PPS, sps *SPS, sliceType int32, sliceTypeNoS int32, qscale int, dct8x8Allowed bool, predIntra4x4 [16]int8) (cavlcMacroblockSyntax, error) {
 	var mb cavlcMacroblockSyntax
-	if pps == nil || sps == nil {
-		return mb, ErrInvalidData
-	}
-
 	mb, err := decodeCAVLCMBType(gb, sliceType, sliceTypeNoS)
 	if err != nil {
 		return mb, err
+	}
+	return c.decodeCAVLCIntraMacroblockAfterType(gb, pps, sps, mb, qscale, dct8x8Allowed, predIntra4x4)
+}
+
+func (c *cavlcResidualContext) decodeCAVLCIntraMacroblockAfterType(gb *bitReader, pps *PPS, sps *SPS, mb cavlcMacroblockSyntax, qscale int, dct8x8Allowed bool, predIntra4x4 [16]int8) (cavlcMacroblockSyntax, error) {
+	if gb == nil || pps == nil || sps == nil {
+		return mb, ErrInvalidData
 	}
 	if !isIntra(mb.MBType) {
 		return mb, ErrUnsupported

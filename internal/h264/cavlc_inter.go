@@ -17,15 +17,18 @@ type cavlcInterMacroblockSyntax struct {
 
 func (c *cavlcResidualContext) decodeCAVLCInterPMacroblock(gb *bitReader, pps *PPS, sps *SPS, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
 	var mb cavlcInterMacroblockSyntax
-	if pps == nil || sps == nil {
-		return mb, ErrInvalidData
-	}
-
 	base, err := decodeCAVLCMBType(gb, PictureTypeP, PictureTypeP)
 	if err != nil {
 		return mb, err
 	}
 	mb.cavlcMacroblockSyntax = base
+	return c.decodeCAVLCInterPMacroblockAfterType(gb, pps, sps, mb, qscale, refCount, dct8x8Allowed)
+}
+
+func (c *cavlcResidualContext) decodeCAVLCInterPMacroblockAfterType(gb *bitReader, pps *PPS, sps *SPS, mb cavlcInterMacroblockSyntax, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
+	if gb == nil || pps == nil || sps == nil {
+		return mb, ErrInvalidData
+	}
 	if isIntra(mb.MBType) {
 		return mb, ErrUnsupported
 	}
@@ -153,7 +156,16 @@ func (c *cavlcResidualContext) decodeCAVLCInterPMacroblock(gb *bitReader, pps *P
 
 func (c *cavlcResidualContext) decodeCAVLCInterBMacroblock(gb *bitReader, pps *PPS, sps *SPS, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
 	var mb cavlcInterMacroblockSyntax
-	if pps == nil || sps == nil {
+	base, err := decodeCAVLCMBType(gb, PictureTypeB, PictureTypeB)
+	if err != nil {
+		return mb, err
+	}
+	mb.cavlcMacroblockSyntax = base
+	return c.decodeCAVLCInterBMacroblockAfterType(gb, pps, sps, mb, qscale, refCount, dct8x8Allowed)
+}
+
+func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterType(gb *bitReader, pps *PPS, sps *SPS, mb cavlcInterMacroblockSyntax, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
+	if gb == nil || pps == nil || sps == nil {
 		return mb, ErrInvalidData
 	}
 	for list := 0; list < 2; list++ {
@@ -161,12 +173,6 @@ func (c *cavlcResidualContext) decodeCAVLCInterBMacroblock(gb *bitReader, pps *P
 			mb.Ref[list][i] = -1
 		}
 	}
-
-	base, err := decodeCAVLCMBType(gb, PictureTypeB, PictureTypeB)
-	if err != nil {
-		return mb, err
-	}
-	mb.cavlcMacroblockSyntax = base
 	if isIntra(mb.MBType) {
 		return mb, ErrUnsupported
 	}
