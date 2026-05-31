@@ -59,6 +59,7 @@ type macroblockTables struct {
 	ChromaPred      []int8
 	Intra4x4Pred    []int8
 	MacroblockTyp   []uint32
+	SliceTable      []uint16
 	RefIndex        [2][]int8
 	MotionVal       [2][][2]int16
 	MVDTable        [2][][2]uint8
@@ -154,8 +155,12 @@ func newMacroblockTables(mbWidth int, mbHeight int, chromaFormatIDC int) (*macro
 		ChromaPred:      make([]int8, bigMBNum),
 		Intra4x4Pred:    make([]int8, rowMBNum*8),
 		MacroblockTyp:   make([]uint32, bigMBNum),
+		SliceTable:      make([]uint16, bigMBNum),
 		DirectTable:     make([]uint8, bigMBNum*4),
 		ListCounts:      make([]uint8, bigMBNum),
+	}
+	for i := range m.SliceTable {
+		m.SliceTable[i] = ^uint16(0)
 	}
 	for list := 0; list < 2; list++ {
 		m.RefIndex[list] = make([]int8, 4*mbArraySize)
