@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+package h264
+
+import "testing"
+
+func TestDecodeCABACChromaResidual420DC(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	var ctx cavlcResidualContext
+	src := &scriptedCABACSource{
+		bits:  []int{1, 1, 1, 0, 0},
+		signs: []int32{1},
+	}
+
+	err := ctx.decodeCABACChromaResidual(src, pps, h264ZigzagScanCAVLC[:], MBTypeIntra4x4, 0x10, 1, [2]uint8{0, 0}, 0, 0, false)
+	if err != nil {
+		t.Fatalf("decode chroma residual failed: %v", err)
+	}
+	if ctx.MB[256] != 1 {
+		t.Fatalf("chroma dc coeff = %d, want 1", ctx.MB[256])
+	}
+	if ctx.NonZeroCountCache[h264Scan8[chromaDCBlockIndex]] != 1 {
+		t.Fatalf("chroma dc0 nnz = %d, want 1", ctx.NonZeroCountCache[h264Scan8[chromaDCBlockIndex]])
+	}
+	if ctx.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+1]] != 0 {
+		t.Fatalf("chroma dc1 nnz = %d, want 0", ctx.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+1]])
+	}
+	wantIndexes(t, src, []int{97, 149, 210, 258, 97})
+}
+
+func TestDecodeCABACChromaResidualClearsSkippedChroma(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	var ctx cavlcResidualContext
+	for _, n := range []int{16, 17, 18, 19, 32, 33, 34, 35} {
+		ctx.NonZeroCountCache[h264Scan8[n]] = 9
+	}
+	src := &scriptedCABACSource{}
+
+	if err := ctx.decodeCABACChromaResidual(src, pps, h264ZigzagScanCAVLC[:], MBTypeIntra4x4, 0, 1, [2]uint8{0, 0}, 0, 0, false); err != nil {
+		t.Fatalf("decode skipped chroma residual failed: %v", err)
+	}
+	for _, n := range []int{16, 17, 18, 19, 32, 33, 34, 35} {
+		if ctx.NonZeroCountCache[h264Scan8[n]] != 0 {
+			t.Fatalf("chroma nnz block%d = %d, want 0", n, ctx.NonZeroCountCache[h264Scan8[n]])
+		}
+	}
+	wantIndexes(t, src, nil)
+}
