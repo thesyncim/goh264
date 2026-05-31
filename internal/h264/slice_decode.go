@@ -2,8 +2,9 @@
 //
 // Source-shaped simple frame-MB slice decode/reconstruct loop from FFmpeg
 // n8.0.1 libavcodec/h264_slice.c decode_slice. This layer keeps the raw
-// "entropy MB, then hl_decode_mb" order for frame pictures while deblocking,
-// MBAFF/field pictures, error resilience, and threading remain separate lanes.
+// "entropy MB, then hl_decode_mb" order for frame pictures while row-threaded
+// deblocking, MBAFF/field pictures, error resilience, and threading remain
+// separate lanes.
 
 package h264
 
@@ -152,7 +153,7 @@ func validateSimpleFrameSliceDecodeInputs(m *macroblockTables, dst *h264PictureP
 	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
 		return ErrUnsupported
 	}
-	if sh.DeblockingFilter != 0 || sh.SPS.TransformBypass != 0 || sh.SPS.BitDepthLuma != 8 || sh.SPS.ChromaFormatIDC == 3 {
+	if sh.SPS.TransformBypass != 0 || sh.SPS.BitDepthLuma != 8 || sh.SPS.ChromaFormatIDC == 3 {
 		return ErrUnsupported
 	}
 	if sh.QScale > qpMaxNum {

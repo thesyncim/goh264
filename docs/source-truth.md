@@ -42,6 +42,9 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 
 - single-IDR rawvideo frame MD5: `8aaefe0adcea094cfb5161a060bab4e2`
 - two-frame IDR/P rawvideo frame MD5s: `8aaefe0adcea094cfb5161a060bab4e2`, `8aaefe0adcea094cfb5161a060bab4e2`
+- deblock-enabled `testsrc2` IDR rawvideo frame MD5: `54b049d05d99dc31d270402e798d4af4`
+- deblock-enabled `testsrc2` IDR/P rawvideo frame MD5s: `54b049d05d99dc31d270402e798d4af4`, `681e6d4ef3058d3880346e8039e95b94`
+- same `testsrc2` encode with loop filter disabled: `b729e0367dccdfd707a7ea0c6e68c06e`
 - dimensions: `16x16`
 - frame payload size: `384` bytes (`yuv420p`)
 

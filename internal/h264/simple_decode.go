@@ -47,6 +47,7 @@ func DecodeAnnexBSimpleFrames(data []byte) ([]*DecodedFrame, error) {
 	var motionScratch *h264MotionCompScratch
 	var lastRef *DecodedFrame
 	var frames []*DecodedFrame
+	var loopFilterSlices []h264LoopFilterSliceParams
 	var sliceNum uint16
 	haveSlice := false
 	frameComplete := false
@@ -86,6 +87,7 @@ func DecodeAnnexBSimpleFrames(data []byte) ([]*DecodedFrame, error) {
 				frame = nil
 				tables = nil
 				motionScratch = nil
+				loopFilterSlices = nil
 				sliceNum = 0
 				haveSlice = false
 				frameComplete = false
@@ -107,6 +109,10 @@ func DecodeAnnexBSimpleFrames(data []byte) ([]*DecodedFrame, error) {
 			if sliceNum == ^uint16(0) {
 				return nil, ErrInvalidData
 			}
+			for len(loopFilterSlices) <= int(sliceNum) {
+				loopFilterSlices = append(loopFilterSlices, h264LoopFilterSliceParams{})
+			}
+			loopFilterSlices[sliceNum] = h264LoopFilterSliceParamsFromHeader(sh)
 			pic := frame.picturePlanes()
 			refs := simpleFrameRefs(lastRef)
 			result, err := tables.decodeFrameSliceData(&payload, &pic, sh, h264FrameSliceDecodeInput{
@@ -119,6 +125,9 @@ func DecodeAnnexBSimpleFrames(data []byte) ([]*DecodedFrame, error) {
 				return nil, err
 			}
 			if result.EndOfFrame {
+				if err := tables.filterFrame(&pic, loopFilterSlices); err != nil {
+					return nil, err
+				}
 				frameComplete = true
 				frames = append(frames, frame)
 				if nal.RefIDC != 0 {

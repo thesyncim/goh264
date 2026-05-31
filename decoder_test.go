@@ -47,6 +47,31 @@ b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d
 34302061713d3000800000016588843a2628000902e000000001419a2014a5
 `
 
+const testsrc16DeblockAnnexBHex = `
+000000016742c00ada7b011000000300100000030020f1226a0000000168ce025c800000010605ffff51dc45e9bde6d
+948b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d20482e3236342f
+4d5045472d342041564320636f646563202d20436f70796c65667420323030332d32303235202d20687474703a2f2f77
+77772e766964656f6c616e2e6f72672f783236342e68746d6c202d206f7074696f6e733a2063616261633d3020726566
+3d31206465626c6f636b3d313a303a3020616e616c7973653d303a30206d653d646961207375626d653d30207073793d
+31207073795f72643d312e30303a302e3030206d697865645f7265663d30206d655f72616e67653d3136206368726f6d
+615f6d653d31207472656c6c69733d30203878386463743d302063716d3d3020646561647a6f6e653d32312c31312066
+6173745f70736b69703d31206368726f6d615f71705f6f66667365743d3020746872656164733d31206c6f6f6b616865
+61645f746872656164733d3120736c696365645f746872656164733d30206e723d3020646563696d6174653d3120696e
+7465726c616365643d3020626c757261795f636f6d7061743d3020636f6e73747261696e65645f696e7472613d302062
+6672616d65733d3020776569676874703d30206b6579696e743d323530206b6579696e745f6d696e3d31323620736365
+6e656375743d3020696e7472615f726566726573683d302072633d637266206d62747265653d30206372663d33352e30
+2071636f6d703d302e36302071706d696e3d302071706d61783d3639207170737465703d342069705f726174696f3d31
+2e34302061713d3000800000016588843f0c60007225021e249d0097af0e71e4c9e58006113914e1feff4601d9812e50
+32094cb78f77fb322e4a719f7f8f0b0d232c59e3c2c05b35cc287f7d27562cbcf55e794d262e7a41d254c0fdfbe40
+cd398287f7d03800518602c1a00ce52384c793469d02c0f3718d1ffbc385c429623483ddd01dcbcc4b22cfa31ec48
+cffbf186dc3836bc80
+`
+
+const testsrc16IPDeblockAnnexBHex = testsrc16DeblockAnnexBHex + `
+00000001419a20ffc2d4c031602e32a4bf0483732e1009dca2840048ca30d8a77106dff4b1b7e00a89d0b18ec4c
+0c3c0
+`
+
 func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	dec := NewDecoder()
@@ -132,6 +157,48 @@ func TestDecodeAnnexBBlack16IPFrames(t *testing.T) {
 	}
 	if _, err := dec.DecodeAnnexB(data); err != ErrUnsupported {
 		t.Fatalf("single-frame DecodeAnnexB err = %v, want ErrUnsupported for multi-frame packet", err)
+	}
+}
+
+func TestDecodeAnnexBTestsrc16DeblockFrame(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16DeblockAnnexBHex)
+	frame, err := NewDecoder().DecodeAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame.Width != 16 || frame.Height != 16 || frame.ChromaFormatIDC != 1 {
+		t.Fatalf("frame metadata = %dx%d chroma %d", frame.Width, frame.Height, frame.ChromaFormatIDC)
+	}
+	raw, err := frame.AppendRawYUV(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := md5.Sum(raw); got != [16]byte{0x54, 0xb0, 0x49, 0xd0, 0x5d, 0x99, 0xdc, 0x31, 0xd2, 0x70, 0x40, 0x2e, 0x79, 0x8d, 0x4a, 0xf4} {
+		t.Fatalf("frame md5 = %x, want 54b049d05d99dc31d270402e798d4af4", got)
+	}
+}
+
+func TestDecodeAnnexBTestsrc16IPDeblockFrames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16IPDeblockAnnexBHex)
+	frames, err := NewDecoder().DecodeAnnexBFrames(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("frames = %d, want 2", len(frames))
+	}
+	want := [][16]byte{
+		{0x54, 0xb0, 0x49, 0xd0, 0x5d, 0x99, 0xdc, 0x31, 0xd2, 0x70, 0x40, 0x2e, 0x79, 0x8d, 0x4a, 0xf4},
+		{0x68, 0x1e, 0x6d, 0x4e, 0xf3, 0x05, 0x8d, 0x38, 0x80, 0x34, 0x6e, 0x80, 0x39, 0xe9, 0x5b, 0x94},
+	}
+	for i, frame := range frames {
+		raw, err := frame.AppendRawYUV(nil)
+		if err != nil {
+			t.Fatalf("frame[%d] raw yuv: %v", i, err)
+		}
+		if got := md5.Sum(raw); got != want[i] {
+			t.Fatalf("frame[%d] md5 = %x, want %x", i, got, want[i])
+		}
 	}
 }
 
@@ -241,6 +308,63 @@ func TestFFmpegFrameMD5OracleBlack16IP(t *testing.T) {
 	}
 	if !bytes.Contains(out, []byte("0,          0,          0,        1,      384, 8aaefe0adcea094cfb5161a060bab4e2")) ||
 		!bytes.Contains(out, []byte("0,          1,          1,        1,      384, 8aaefe0adcea094cfb5161a060bab4e2")) {
+		t.Fatalf("unexpected framemd5:\n%s", out)
+	}
+}
+
+func TestFFmpegFrameMD5OracleTestsrc16Deblock(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	data := decodeHexFixture(t, testsrc16DeblockAnnexBHex)
+	path := writeTempH264(t, data)
+
+	cmd := exec.Command("ffmpeg",
+		"-v", "error",
+		"-f", "h264",
+		"-i", path,
+		"-an", "-sn", "-dn",
+		"-f", "framemd5",
+		"-",
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg framemd5: %v", err)
+	}
+	if !bytes.Contains(out, []byte("0,          0,          0,        1,      384, 54b049d05d99dc31d270402e798d4af4")) {
+		t.Fatalf("unexpected framemd5:\n%s", out)
+	}
+}
+
+func TestFFmpegFrameMD5OracleTestsrc16IPDeblock(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	data := decodeHexFixture(t, testsrc16IPDeblockAnnexBHex)
+	path := writeTempH264(t, data)
+
+	cmd := exec.Command("ffmpeg",
+		"-v", "error",
+		"-f", "h264",
+		"-i", path,
+		"-an", "-sn", "-dn",
+		"-f", "framemd5",
+		"-",
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg framemd5: %v", err)
+	}
+	if !bytes.Contains(out, []byte("0,          0,          0,        1,      384, 54b049d05d99dc31d270402e798d4af4")) ||
+		!bytes.Contains(out, []byte("0,          1,          1,        1,      384, 681e6d4ef3058d3880346e8039e95b94")) {
 		t.Fatalf("unexpected framemd5:\n%s", out)
 	}
 }

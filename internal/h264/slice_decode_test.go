@@ -248,7 +248,7 @@ func TestDecodeCAVLCFrameSliceReconstructsPSkip(t *testing.T) {
 	}
 }
 
-func TestDecodeCAVLCFrameSliceRejectsPendingDeblocking(t *testing.T) {
+func TestDecodeCAVLCFrameSliceAllowsDeblockingFlag(t *testing.T) {
 	m, err := newMacroblockTables(1, 1, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -269,10 +269,14 @@ func TestDecodeCAVLCFrameSliceRejectsPendingDeblocking(t *testing.T) {
 	dst := makeH264SliceDecodePicture(1, 1, 1)
 	gb := newBitReader(cavlcIntraPCMBytes(h264ReconstructIntraPCM(1, 5)))
 
-	_, err = m.decodeCAVLCFrameSlice(&gb, dst, sh, h264FrameSliceDecodeInput{SliceNum: 1})
-	if err != ErrUnsupported {
-		t.Fatalf("err = %v, want ErrUnsupported", err)
+	got, err := m.decodeCAVLCFrameSlice(&gb, dst, sh, h264FrameSliceDecodeInput{SliceNum: 1})
+	if err != nil {
+		t.Fatalf("decode err = %v", err)
 	}
+	if !got.EndOfFrame || got.Macroblocks != 1 {
+		t.Fatalf("slice result = %+v, want one MB frame end", got)
+	}
+	assertH264SliceDecodePCM(t, dst, 0, 0, h264ReconstructIntraPCM(1, 5))
 }
 
 func makeH264SliceDecodePicture(mbWidth int, mbHeight int, chromaFormatIDC int) *h264PicturePlanes {
