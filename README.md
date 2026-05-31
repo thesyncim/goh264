@@ -7,7 +7,7 @@ The port is intentionally decoder-only. Encoder, muxer, filter, and unrelated co
 Current safe point:
 
 - Upstream source truth is pinned to FFmpeg `n8.0.1`, commit `894da5ca7d742e4429ffb2af534fcda0103ef593`.
-- The active Go slice covers Annex B NAL splitting, RBSP emulation-prevention removal, bit reading, unsigned/signed Exp-Golomb reads, SPS/PPS metadata parsing, and slice-header parsing through reference counts.
+- The active Go slice covers Annex B NAL splitting, RBSP emulation-prevention removal, bit reading, unsigned/signed Exp-Golomb reads, SPS/PPS metadata parsing, and slice-header parsing up to macroblock payload.
 - Frame reconstruction, CABAC/CAVLC residual decode, prediction, inverse transform, deblocking, DPB, threading, and public `Decode` output are not yet implemented.
 
 Run the default tests:
