@@ -33,6 +33,11 @@ The oracle tests are opt-in because they depend on local binaries:
 GOH264_ORACLE=1 go test ./...
 ```
 
+The CABAC arithmetic oracle also requires a local C compiler. It compiles the
+pinned FFmpeg `libavcodec/cabac.c` and `cabac_functions.h` from
+`.upstream/ffmpeg-n8.0.1` in a temporary directory and compares primitive traces
+against the Go port.
+
 The embedded smoke bitstream currently has this decoded-frame oracle:
 
 - rawvideo frame MD5: `8aaefe0adcea094cfb5161a060bab4e2`
