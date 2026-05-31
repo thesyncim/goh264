@@ -46,6 +46,8 @@ type SPS struct {
 	ConstraintSetFlags          int32
 	ScalingMatrixPresent        int32
 	ScalingMatrixPresentMask    uint16
+	ScalingMatrix4              [6][16]uint8
+	ScalingMatrix8              [6][64]uint8
 	BitstreamRestrictionFlag    int32
 	NumReorderFrames            int32
 	MaxDecFrameBuffering        int32
@@ -71,6 +73,7 @@ func DecodeSPS(rbsp []byte) (*SPS, error) {
 		BitDepthLuma:     8,
 		BitDepthChroma:   8,
 	}
+	initFlatScalingMatrices(&sps.ScalingMatrix4, &sps.ScalingMatrix8)
 
 	profileIDC, err := gb.readBits(8)
 	if err != nil {
@@ -152,7 +155,7 @@ func DecodeSPS(rbsp []byte) (*SPS, error) {
 			return nil, err
 		}
 		if present != 0 {
-			if err := decodeScalingMatrices(&gb, sps.ChromaFormatIDC, true, &sps.ScalingMatrixPresentMask); err != nil {
+			if err := decodeScalingMatrices(&gb, nil, sps, true, true, true, &sps.ScalingMatrixPresentMask, &sps.ScalingMatrix4, &sps.ScalingMatrix8); err != nil {
 				return nil, err
 			}
 			sps.ScalingMatrixPresent = 1
@@ -299,40 +302,100 @@ func isHighProfile(profileIDC int32) bool {
 	}
 }
 
-func decodeScalingMatrices(gb *bitReader, chromaFormatIDC uint32, include8x8 bool, mask *uint16) error {
-	count := 6
-	if include8x8 {
-		count = 8
-		if chromaFormatIDC == 3 {
-			count = 12
+func initFlatScalingMatrices(scaling4 *[6][16]uint8, scaling8 *[6][64]uint8) {
+	for i := range scaling4 {
+		for j := range scaling4[i] {
+			scaling4[i][j] = 16
 		}
 	}
-
-	for i := 0; i < count; i++ {
-		size := 16
-		if i >= 6 {
-			size = 64
+	for i := range scaling8 {
+		for j := range scaling8[i] {
+			scaling8[i][j] = 16
 		}
-		if err := decodeScalingList(gb, size, mask, uint(i)); err != nil {
+	}
+}
+
+func decodeScalingMatrices(gb *bitReader, sps *SPS, targetSPS *SPS, isSPS bool, include8x8 bool, presentFlag bool, mask *uint16, scaling4 *[6][16]uint8, scaling8 *[6][64]uint8) error {
+	*mask = 0
+	if !presentFlag {
+		return nil
+	}
+
+	chromaFormatIDC := targetSPS.ChromaFormatIDC
+	fallbackSPS := !isSPS && sps != nil && sps.ScalingMatrixPresent != 0
+	fallback4Intra := h264DefaultScaling4[0][:]
+	fallback4Inter := h264DefaultScaling4[1][:]
+	fallback8Intra := h264DefaultScaling8[0][:]
+	fallback8Inter := h264DefaultScaling8[1][:]
+	if fallbackSPS {
+		fallback4Intra = sps.ScalingMatrix4[0][:]
+		fallback4Inter = sps.ScalingMatrix4[3][:]
+		fallback8Intra = sps.ScalingMatrix8[0][:]
+		fallback8Inter = sps.ScalingMatrix8[3][:]
+	}
+
+	if err := decodeScalingList(gb, scaling4[0][:], h264DefaultScaling4[0][:], fallback4Intra, mask, 0); err != nil {
+		return err
+	}
+	if err := decodeScalingList(gb, scaling4[1][:], h264DefaultScaling4[0][:], scaling4[0][:], mask, 1); err != nil {
+		return err
+	}
+	if err := decodeScalingList(gb, scaling4[2][:], h264DefaultScaling4[0][:], scaling4[1][:], mask, 2); err != nil {
+		return err
+	}
+	if err := decodeScalingList(gb, scaling4[3][:], h264DefaultScaling4[1][:], fallback4Inter, mask, 3); err != nil {
+		return err
+	}
+	if err := decodeScalingList(gb, scaling4[4][:], h264DefaultScaling4[1][:], scaling4[3][:], mask, 4); err != nil {
+		return err
+	}
+	if err := decodeScalingList(gb, scaling4[5][:], h264DefaultScaling4[1][:], scaling4[4][:], mask, 5); err != nil {
+		return err
+	}
+
+	if isSPS || include8x8 {
+		if err := decodeScalingList(gb, scaling8[0][:], h264DefaultScaling8[0][:], fallback8Intra, mask, 6); err != nil {
 			return err
+		}
+		if err := decodeScalingList(gb, scaling8[3][:], h264DefaultScaling8[1][:], fallback8Inter, mask, 7); err != nil {
+			return err
+		}
+		if chromaFormatIDC == 3 {
+			if err := decodeScalingList(gb, scaling8[1][:], h264DefaultScaling8[0][:], scaling8[0][:], mask, 8); err != nil {
+				return err
+			}
+			if err := decodeScalingList(gb, scaling8[4][:], h264DefaultScaling8[1][:], scaling8[3][:], mask, 9); err != nil {
+				return err
+			}
+			if err := decodeScalingList(gb, scaling8[2][:], h264DefaultScaling8[0][:], scaling8[1][:], mask, 10); err != nil {
+				return err
+			}
+			if err := decodeScalingList(gb, scaling8[5][:], h264DefaultScaling8[1][:], scaling8[4][:], mask, 11); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func decodeScalingList(gb *bitReader, size int, mask *uint16, pos uint) error {
+func decodeScalingList(gb *bitReader, factors []uint8, jvtList []uint8, fallbackList []uint8, mask *uint16, pos uint) error {
 	present, err := gb.readBit()
 	if err != nil {
 		return err
 	}
 	*mask |= uint16(present) << pos
 	if present == 0 {
+		copy(factors, fallbackList)
 		return nil
 	}
 
 	var last int32 = 8
 	var next int32 = 8
-	for i := 0; i < size; i++ {
+	scan := h264ZigzagDirect[:]
+	if len(factors) == 16 {
+		scan = h264ZigzagScan[:]
+	}
+	for i := 0; i < len(factors); i++ {
 		if next != 0 {
 			delta, err := gb.readSEGolombLong()
 			if err != nil {
@@ -344,11 +407,13 @@ func decodeScalingList(gb *bitReader, size int, mask *uint16, pos uint) error {
 			next = (last + delta) & 0xff
 		}
 		if i == 0 && next == 0 {
+			copy(factors, jvtList)
 			break
 		}
 		if next != 0 {
 			last = next
 		}
+		factors[scan[i]] = uint8(last)
 	}
 	return nil
 }

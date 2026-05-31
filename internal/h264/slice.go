@@ -68,6 +68,7 @@ type SliceHeader struct {
 	NBMMCO              uint32
 	CABACInitIDC        uint32
 	QScale              uint32
+	ChromaQP            [2]uint8
 	SPForSwitchFlag     int32
 	SliceQSDelta        int32
 	DeblockingFilter    int32
@@ -281,6 +282,8 @@ func ParseSliceHeader(nal NALUnit, ppsList *[maxPPSCount]*PPS) (*SliceHeader, er
 		return nil, ErrInvalidData
 	}
 	sh.QScale = uint32(qscale)
+	sh.ChromaQP[0] = sh.PPS.ChromaQPTable[0][sh.QScale]
+	sh.ChromaQP[1] = sh.PPS.ChromaQPTable[1][sh.QScale]
 
 	if sh.SliceType == PictureTypeSP {
 		spForSwitchFlag, err := gb.readBit()

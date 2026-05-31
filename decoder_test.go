@@ -55,11 +55,17 @@ func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	if dec.pps[0].CABAC != 0 || dec.pps[0].SliceGroupCount != 1 || dec.pps[0].RefCount != [2]uint32{1, 1} {
 		t.Fatalf("pps = %+v", dec.pps[0])
 	}
+	if dec.pps[0].ChromaQPTable[0][30] != 29 || dec.pps[0].Dequant4Buffer[0][0][0] != 640 {
+		t.Fatalf("pps tables not initialized: chromaQP=%d dequant=%d", dec.pps[0].ChromaQPTable[0][30], dec.pps[0].Dequant4Buffer[0][0][0])
+	}
 	if len(dec.slices) != 1 {
 		t.Fatalf("slices = %d", len(dec.slices))
 	}
 	if dec.slices[0].SliceType != 1 || dec.slices[0].PPSID != 0 || dec.slices[0].PictureStructure != 3 {
 		t.Fatalf("slice = %+v", dec.slices[0])
+	}
+	if dec.slices[0].ChromaQP != [2]uint8{dec.pps[0].ChromaQPTable[0][dec.slices[0].QScale], dec.pps[0].ChromaQPTable[1][dec.slices[0].QScale]} {
+		t.Fatalf("slice chroma qp = %+v", dec.slices[0].ChromaQP)
 	}
 }
 

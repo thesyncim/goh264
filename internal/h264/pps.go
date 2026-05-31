@@ -27,7 +27,12 @@ type PPS struct {
 	Transform8x8Mode                  int32
 	PicScalingMatrixPresentFlag       int32
 	PicScalingMatrixPresentMask       uint16
+	ScalingMatrix4                    [6][16]uint8
+	ScalingMatrix8                    [6][64]uint8
+	ChromaQPTable                     [2][qpMaxNum + 1]uint8
 	ChromaQPDiff                      int32
+	Dequant4Buffer                    [6][qpMaxNum + 1][16]uint32
+	Dequant8Buffer                    [6][qpMaxNum + 1][64]uint32
 }
 
 func DecodePPS(rbsp []byte, spsList *[maxSPSCount]*SPS) (*PPS, error) {
@@ -53,6 +58,8 @@ func DecodePPS(rbsp []byte, spsList *[maxSPSCount]*SPS) (*PPS, error) {
 		return nil, ErrInvalidData
 	}
 	pps.SPS = spsList[pps.SPSID]
+	pps.ScalingMatrix4 = pps.SPS.ScalingMatrix4
+	pps.ScalingMatrix8 = pps.SPS.ScalingMatrix8
 
 	if pps.SPS.BitDepthLuma > 14 {
 		return nil, ErrInvalidData
@@ -162,7 +169,7 @@ func DecodePPS(rbsp []byte, spsList *[maxSPSCount]*SPS) (*PPS, error) {
 		}
 		pps.PicScalingMatrixPresentFlag = int32(flag)
 		if flag != 0 {
-			if err := decodeScalingMatrices(&gb, pps.SPS.ChromaFormatIDC, pps.Transform8x8Mode != 0, &pps.PicScalingMatrixPresentMask); err != nil {
+			if err := decodeScalingMatrices(&gb, pps.SPS, pps.SPS, false, pps.Transform8x8Mode != 0, true, &pps.PicScalingMatrixPresentMask, &pps.ScalingMatrix4, &pps.ScalingMatrix8); err != nil {
 				return nil, err
 			}
 		}
@@ -181,6 +188,9 @@ func DecodePPS(rbsp []byte, spsList *[maxSPSCount]*SPS) (*PPS, error) {
 	if pps.ChromaQPIndexOffset[0] != pps.ChromaQPIndexOffset[1] {
 		pps.ChromaQPDiff = 1
 	}
+	buildQPTable(pps, 0, pps.ChromaQPIndexOffset[0], pps.SPS.BitDepthLuma)
+	buildQPTable(pps, 1, pps.ChromaQPIndexOffset[1], pps.SPS.BitDepthLuma)
+	initDequantTables(pps, pps.SPS)
 
 	return pps, nil
 }
@@ -188,4 +198,76 @@ func DecodePPS(rbsp []byte, spsList *[maxSPSCount]*SPS) (*PPS, error) {
 func moreRBSPDataInPPS(sps *SPS) bool {
 	profileIDC := sps.ProfileIDC
 	return !((profileIDC == 66 || profileIDC == 77 || profileIDC == 88) && (sps.ConstraintSetFlags&7) != 0)
+}
+
+func buildQPTable(pps *PPS, table int, index int32, depth int32) {
+	maxQP := int32(51 + 6*(depth-8))
+	for i := int32(0); i <= maxQP; i++ {
+		pps.ChromaQPTable[table][i] = h264ChromaQP(depth, uint32(clipInt32(i+index, 0, maxQP)))
+	}
+}
+
+func initDequantTables(pps *PPS, sps *SPS) {
+	initDequant4CoeffTable(pps, sps)
+	if pps.Transform8x8Mode != 0 {
+		initDequant8CoeffTable(pps, sps)
+	}
+	if sps.TransformBypass != 0 {
+		for i := 0; i < 6; i++ {
+			for x := 0; x < 16; x++ {
+				pps.Dequant4Buffer[i][0][x] = 1 << 6
+			}
+		}
+		if pps.Transform8x8Mode != 0 {
+			for i := 0; i < 6; i++ {
+				for x := 0; x < 64; x++ {
+					pps.Dequant8Buffer[i][0][x] = 1 << 6
+				}
+			}
+		}
+	}
+}
+
+func initDequant4CoeffTable(pps *PPS, sps *SPS) {
+	maxQP := int(51 + 6*(sps.BitDepthLuma-8))
+	for i := 0; i < 6; i++ {
+		for q := 0; q <= maxQP; q++ {
+			shift := h264QuantDiv6[q] + 2
+			idx := h264QuantRem6[q]
+			for x := 0; x < 16; x++ {
+				dst := (x >> 2) | ((x << 2) & 0x0f)
+				initIdx := (x & 1) + ((x >> 2) & 1)
+				pps.Dequant4Buffer[i][q][dst] =
+					uint32(h264Dequant4CoeffInit[idx][initIdx]) *
+						uint32(pps.ScalingMatrix4[i][x]) << shift
+			}
+		}
+	}
+}
+
+func initDequant8CoeffTable(pps *PPS, sps *SPS) {
+	maxQP := int(51 + 6*(sps.BitDepthLuma-8))
+	for i := 0; i < 6; i++ {
+		for q := 0; q <= maxQP; q++ {
+			shift := h264QuantDiv6[q]
+			idx := h264QuantRem6[q]
+			for x := 0; x < 64; x++ {
+				dst := (x >> 3) | ((x & 7) << 3)
+				initIdx := h264Dequant8CoeffInitScan[((x>>1)&12)|(x&3)]
+				pps.Dequant8Buffer[i][q][dst] =
+					uint32(h264Dequant8CoeffInit[idx][initIdx]) *
+						uint32(pps.ScalingMatrix8[i][x]) << shift
+			}
+		}
+	}
+}
+
+func clipInt32(v, lo, hi int32) int32 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
