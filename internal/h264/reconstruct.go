@@ -29,10 +29,11 @@ type h264FrameMBReconstructInput struct {
 	TransformBypass     bool
 	DeblockingFilter    bool
 	ConstrainedIntra444 bool
+	IntraPCM            []byte
 }
 
 func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstructInput) error {
-	if dst == nil || in.PPS == nil || in.Residual == nil || in.MBX < 0 || in.MBY < 0 || in.QScale < 0 || in.QScale > qpMaxNum {
+	if dst == nil || in.MBX < 0 || in.MBY < 0 || in.QScale < 0 || in.QScale > qpMaxNum {
 		return ErrInvalidData
 	}
 	if in.TransformBypass || in.DeblockingFilter || in.ConstrainedIntra444 {
@@ -45,9 +46,6 @@ func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstru
 		return ErrInvalidData
 	}
 	if dst.ChromaFormatIDC == 3 {
-		return ErrUnsupported
-	}
-	if in.MBType&MBTypeIntraPCM != 0 {
 		return ErrUnsupported
 	}
 
@@ -64,6 +62,12 @@ func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstru
 		return err
 	}
 
+	if in.MBType&MBTypeIntraPCM != 0 {
+		return h264HLDecodeFrameIntraPCM(dst, dstY, dstCb, dstCr, in.IntraPCM)
+	}
+	if in.PPS == nil || in.Residual == nil {
+		return ErrInvalidData
+	}
 	if isIntra(in.MBType) {
 		if err := h264HLDecodeFrameIntraPredict(dst, dstY, dstCb, dstCr, &blockOffset, in); err != nil {
 			return err
@@ -86,6 +90,45 @@ func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstru
 	}
 	if dst.ChromaFormatIDC != 0 && in.CBP&0x30 != 0 {
 		return h264HLDecodeMBIDCTChroma(dst.Cb[dstCb:], dst.Cr[dstCr:], dst.ChromaStride, &blockOffset, dst.ChromaFormatIDC, in.MBType, in.CBP, in.ChromaQP, in.PPS, in.Residual)
+	}
+	return nil
+}
+
+func h264HLDecodeFrameIntraPCM(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, pcm []byte) error {
+	if dst == nil || dst.ChromaFormatIDC < 0 || dst.ChromaFormatIDC >= len(h264IntraPCMSampleCount) || dst.ChromaFormatIDC == 3 {
+		return ErrUnsupported
+	}
+	required := h264IntraPCMSampleCount[dst.ChromaFormatIDC]
+	if len(pcm) < required {
+		return ErrInvalidData
+	}
+	if err := h264CopyRows(dst.Y, dstY, dst.LumaStride, 16, 16, pcm, 16); err != nil {
+		return err
+	}
+	if dst.ChromaFormatIDC == 0 {
+		return nil
+	}
+	blockH := 8
+	if dst.ChromaFormatIDC == 2 {
+		blockH = 16
+	}
+	srcCb := 256
+	srcCr := srcCb + blockH*8
+	if err := h264CopyRows(dst.Cb, dstCb, dst.ChromaStride, 8, blockH, pcm[srcCb:], 8); err != nil {
+		return err
+	}
+	return h264CopyRows(dst.Cr, dstCr, dst.ChromaStride, 8, blockH, pcm[srcCr:], 8)
+}
+
+func h264CopyRows(dst []uint8, offset int, stride int, width int, height int, src []byte, srcStride int) error {
+	if offset < 0 || stride <= 0 || width <= 0 || height <= 0 || srcStride < width || len(src) < (height-1)*srcStride+width {
+		return ErrInvalidData
+	}
+	if len(dst) < offset+(height-1)*stride+width {
+		return ErrInvalidData
+	}
+	for y := 0; y < height; y++ {
+		copy(dst[offset+y*stride:offset+y*stride+width], src[y*srcStride:y*srcStride+width])
 	}
 	return nil
 }

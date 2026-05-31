@@ -48,6 +48,49 @@ func TestDecodeCAVLCFrameIntra4x4MacroblockWritesState(t *testing.T) {
 	}
 }
 
+func TestDecodeCAVLCFrameIntraPCMMacroblockAlignsAndWritesState(t *testing.T) {
+	m, err := newMacroblockTables(2, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	pcm := h264ReconstructIntraPCM(1, 33)
+	buf := append([]byte{0x0d, 0x00}, pcm...)
+	gb := newBitReader(buf)
+
+	got, err := m.decodeCAVLCFrameMacroblock(&gb, cavlcFrameMacroblockInput{
+		MBXY:         0,
+		SliceNum:     5,
+		SliceType:    PictureTypeI,
+		SliceTypeNoS: PictureTypeI,
+		QScale:       20,
+		PPS:          pps,
+		SPS:          sps,
+	})
+	if err != nil {
+		t.Fatalf("decode frame intra pcm failed: %v", err)
+	}
+	if !got.IsIntra || got.IsInter || got.MBType != MBTypeIntraPCM || got.QScale != 0 || len(got.IntraPCM) != len(pcm) {
+		t.Fatalf("result intra/inter/type/q/pcm = %v/%v/%#x/%d/%d", got.IsIntra, got.IsInter, got.MBType, got.QScale, len(got.IntraPCM))
+	}
+	if got.IntraPCM[0] != pcm[0] || got.IntraPCM[len(pcm)-1] != pcm[len(pcm)-1] {
+		t.Fatalf("pcm endpoints = %d/%d, want %d/%d", got.IntraPCM[0], got.IntraPCM[len(pcm)-1], pcm[0], pcm[len(pcm)-1])
+	}
+	if m.MacroblockTyp[0] != MBTypeIntraPCM || m.CBPTable[0] != 0 || m.QScaleTable[0] != 0 || m.SliceTable[0] != 5 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	for i, v := range m.NonZeroCount[0] {
+		if v != 16 {
+			t.Fatalf("nnz[%d] = %d, want 16", i, v)
+		}
+	}
+	if gb.bitPos != uint32(16+len(pcm)*8) {
+		t.Fatalf("consumed %d bits, want %d", gb.bitPos, 16+len(pcm)*8)
+	}
+}
+
 func TestDecodeCAVLCFrameP16x16MacroblockAppliesNeighborMotion(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {

@@ -19,6 +19,7 @@ type cavlcMacroblockSyntax struct {
 	ChromaPredMode      int32
 	Intra4x4PredMode    [16]int8
 	TransformSize8x8DCT bool
+	IntraPCM            []byte
 }
 
 func (c *cavlcResidualContext) decodeCAVLCIntraMacroblock(gb *bitReader, pps *PPS, sps *SPS, sliceType int32, sliceTypeNoS int32, qscale int, dct8x8Allowed bool, predIntra4x4 [16]int8) (cavlcMacroblockSyntax, error) {

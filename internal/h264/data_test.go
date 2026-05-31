@@ -31,6 +31,12 @@ func TestCBPTables(t *testing.T) {
 	}
 }
 
+func TestIntraPCMSampleCounts(t *testing.T) {
+	if h264IntraPCMSampleCount != ([4]int{256, 384, 512, 768}) {
+		t.Fatalf("intra pcm sizes = %v", h264IntraPCMSampleCount)
+	}
+}
+
 func TestChromaQPTableShape(t *testing.T) {
 	cases := []struct {
 		depth int32

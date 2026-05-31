@@ -68,6 +68,52 @@ func TestH264HLDecodeFrameMacroblockInterP16x16MotionThenResidual(t *testing.T) 
 	}
 }
 
+func TestH264HLDecodeFrameMacroblockIntraPCMReconstructs420(t *testing.T) {
+	dst := makeH264MotionCompPicture(1, 17)
+	pcm := h264ReconstructIntraPCM(1, 33)
+	mbX, mbY := 1, 1
+
+	if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInput{
+		MBType:   MBTypeIntraPCM,
+		MBX:      mbX,
+		MBY:      mbY,
+		IntraPCM: pcm,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	yOff, cbOff, crOff, err := h264MBDestPartOffsets(dst, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertH264Rows(t, "pcm y", dst.Y, yOff, dst.LumaStride, 16, 16, pcm, 16)
+	assertH264Rows(t, "pcm cb", dst.Cb, cbOff, dst.ChromaStride, 8, 8, pcm[256:], 8)
+	assertH264Rows(t, "pcm cr", dst.Cr, crOff, dst.ChromaStride, 8, 8, pcm[256+8*8:], 8)
+}
+
+func TestH264HLDecodeFrameMacroblockIntraPCMReconstructs422(t *testing.T) {
+	dst := makeH264MotionCompPicture(2, 21)
+	pcm := h264ReconstructIntraPCM(2, 49)
+	mbX, mbY := 1, 1
+
+	if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInput{
+		MBType:   MBTypeIntraPCM,
+		MBX:      mbX,
+		MBY:      mbY,
+		IntraPCM: pcm,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	yOff, cbOff, crOff, err := h264MBDestPartOffsets(dst, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertH264Rows(t, "pcm y", dst.Y, yOff, dst.LumaStride, 16, 16, pcm, 16)
+	assertH264Rows(t, "pcm cb", dst.Cb, cbOff, dst.ChromaStride, 8, 16, pcm[256:], 8)
+	assertH264Rows(t, "pcm cr", dst.Cr, crOff, dst.ChromaStride, 8, 16, pcm[256+16*8:], 8)
+}
+
 func TestH264HLDecodeFrameMacroblockIntra4x4Reconstructs420(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
 	residual := h264ReconstructResidualIntra4x4()
@@ -194,6 +240,28 @@ func h264ReconstructResidualInter420() cavlcResidualContext {
 	c.MB[16*16+32] = -2
 	c.MB[16*16+48] = 4
 	return c
+}
+
+func h264ReconstructIntraPCM(chromaFormatIDC int, seed int) []byte {
+	n := h264IntraPCMSampleCount[chromaFormatIDC]
+	pcm := make([]byte, n)
+	for i := range pcm {
+		pcm[i] = uint8((seed + 17*i + (i >> 3) + 3*(i>>6)) & 255)
+	}
+	return pcm
+}
+
+func assertH264Rows(t *testing.T, label string, dst []uint8, offset int, stride int, width int, height int, src []byte, srcStride int) {
+	t.Helper()
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			got := dst[offset+y*stride+x]
+			want := src[y*srcStride+x]
+			if got != want {
+				t.Fatalf("%s[%d,%d] = %d, want %d", label, x, y, got, want)
+			}
+		}
+	}
 }
 
 func h264ReconstructResidualIntra4x4() cavlcResidualContext {

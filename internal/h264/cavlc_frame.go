@@ -30,6 +30,7 @@ type cavlcFrameMacroblockResult struct {
 	Neighbors  macroblockDecodeNeighbors
 	Intra      cavlcMacroblockSyntax
 	Inter      cavlcInterMacroblockSyntax
+	IntraPCM   []byte
 	IsIntra    bool
 	IsInter    bool
 	Skipped    bool
@@ -104,7 +105,7 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblock(gb *bitReader, in cavlcFra
 	}
 	result.MBType = base.MBType
 	if base.MBType&MBTypeIntraPCM != 0 {
-		return result, ErrUnsupported
+		return m.decodeCAVLCFrameIntraPCMMacroblock(gb, in, base, result)
 	}
 
 	listCount, err := cavlcFrameListCount(in.SliceTypeNoS)
@@ -134,6 +135,26 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblock(gb *bitReader, in cavlcFra
 		return m.decodeCAVLCFrameIntraMacroblock(gb, in, base, &residual, &intraCache, cacheResult, result)
 	}
 	return m.decodeCAVLCFrameInterMacroblock(gb, in, base, &residual, &motion, listCount, result)
+}
+
+func (m *macroblockTables) decodeCAVLCFrameIntraPCMMacroblock(gb *bitReader, in cavlcFrameMacroblockInput, base cavlcMacroblockSyntax, result cavlcFrameMacroblockResult) (cavlcFrameMacroblockResult, error) {
+	pcm, err := readCAVLCIntraPCMBytes(gb, in.SPS)
+	if err != nil {
+		return result, err
+	}
+	base.IntraPCM = pcm
+	base.QScale = 0
+	if err := m.writeBackCAVLCIntraPCMMacroblock(in.MBXY, in.SliceNum); err != nil {
+		return result, err
+	}
+	result.MBType = base.MBType
+	result.CBP = 0
+	result.CBPTable = 0
+	result.QScale = 0
+	result.Intra = base
+	result.IntraPCM = pcm
+	result.IsIntra = true
+	return result, nil
 }
 
 func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblock(sh *SliceHeader, mbXY int, sliceNum uint16) (cavlcFrameMacroblockResult, error) {
@@ -259,6 +280,16 @@ func validateCAVLCFrameIntraPredModes(mb *cavlcMacroblockSyntax, sps *SPS, cache
 		mb.ChromaPredMode = intraPredDC1288x8
 	}
 	return nil
+}
+
+func readCAVLCIntraPCMBytes(gb *bitReader, sps *SPS) ([]byte, error) {
+	if gb == nil || sps == nil || sps.ChromaFormatIDC >= uint32(len(h264IntraPCMSampleCount)) {
+		return nil, ErrInvalidData
+	}
+	if sps.BitDepthLuma != 8 {
+		return nil, ErrUnsupported
+	}
+	return gb.readAlignedBytes(h264IntraPCMSampleCount[sps.ChromaFormatIDC])
 }
 
 func cavlcFrameListCount(sliceTypeNoS int32) (int, error) {

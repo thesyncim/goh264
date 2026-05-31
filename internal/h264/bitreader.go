@@ -122,3 +122,28 @@ func (gb *bitReader) skipBits(n uint32) error {
 	gb.bitPos += n
 	return nil
 }
+
+func (gb *bitReader) alignToByte() error {
+	aligned := (gb.bitPos + 7) &^ 7
+	if aligned > gb.numBits {
+		return ErrInvalidData
+	}
+	gb.bitPos = aligned
+	return nil
+}
+
+func (gb *bitReader) readAlignedBytes(n int) ([]byte, error) {
+	if n < 0 {
+		return nil, ErrInvalidData
+	}
+	aligned := (gb.bitPos + 7) &^ 7
+	if aligned > gb.numBits {
+		return nil, ErrInvalidData
+	}
+	if uint64(n)*8 > uint64(gb.numBits-aligned) {
+		return nil, ErrInvalidData
+	}
+	start := int(aligned >> 3)
+	gb.bitPos = aligned + uint32(n)*8
+	return gb.buf[start : start+n], nil
+}

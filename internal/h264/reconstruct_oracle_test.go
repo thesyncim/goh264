@@ -76,6 +76,12 @@ static void init_pic(Pic *p, int chroma_idc, int seed)
     fill_plane(p->cr, sizeof(p->cr), seed + 71);
 }
 
+static void init_intra_pcm(uint8_t *pcm, int n, int seed)
+{
+    for (int i = 0; i < n; i++)
+        pcm[i] = (uint8_t)((seed + 17 * i + (i >> 3) + 3 * (i >> 6)) & 255);
+}
+
 static uint8_t *pic_y(Pic *p, int mb_x, int mb_y)
 {
     return p->y + mb_y * 16 * LUMA_STRIDE + mb_x * 16;
@@ -336,6 +342,44 @@ static void run_intra16x16_422(void)
     print_mb("intra16x16_422", &dst, mb_x, mb_y);
 }
 
+static void run_intra_pcm_420(void)
+{
+    Pic dst;
+    uint8_t pcm[384];
+    const int mb_x = 1, mb_y = 1;
+    init_pic(&dst, 1, 17);
+    init_intra_pcm(pcm, sizeof(pcm), 33);
+
+    for (int i = 0; i < 16; i++)
+        memcpy(pic_y(&dst, mb_x, mb_y) + i * LUMA_STRIDE, pcm + i * 16, 16);
+    const uint8_t *src_cb = pcm + 256;
+    const uint8_t *src_cr = pcm + 256 + 8 * 8;
+    for (int i = 0; i < 8; i++) {
+        memcpy(pic_cb(&dst, mb_x, mb_y) + i * CHROMA_STRIDE, src_cb + i * 8, 8);
+        memcpy(pic_cr(&dst, mb_x, mb_y) + i * CHROMA_STRIDE, src_cr + i * 8, 8);
+    }
+    print_mb("intra_pcm_420", &dst, mb_x, mb_y);
+}
+
+static void run_intra_pcm_422(void)
+{
+    Pic dst;
+    uint8_t pcm[512];
+    const int mb_x = 1, mb_y = 1;
+    init_pic(&dst, 2, 21);
+    init_intra_pcm(pcm, sizeof(pcm), 49);
+
+    for (int i = 0; i < 16; i++)
+        memcpy(pic_y(&dst, mb_x, mb_y) + i * LUMA_STRIDE, pcm + i * 16, 16);
+    const uint8_t *src_cb = pcm + 256;
+    const uint8_t *src_cr = pcm + 256 + 16 * 8;
+    for (int i = 0; i < 16; i++) {
+        memcpy(pic_cb(&dst, mb_x, mb_y) + i * CHROMA_STRIDE, src_cb + i * 8, 8);
+        memcpy(pic_cr(&dst, mb_x, mb_y) + i * CHROMA_STRIDE, src_cr + i * 8, 8);
+    }
+    print_mb("intra_pcm_422", &dst, mb_x, mb_y);
+}
+
 static void run_intra4x4_420(void)
 {
     Pic dst;
@@ -432,6 +476,8 @@ int main(void)
 {
     run_intra16x16_420();
     run_intra16x16_422();
+    run_intra_pcm_420();
+    run_intra_pcm_422();
     run_intra4x4_420();
     run_intra8x8_422();
     return 0;
@@ -556,6 +602,8 @@ func h264ReconstructOracleWant(t *testing.T) string {
 	var b strings.Builder
 	appendH264ReconstructOracleIntra16x16(t, &b, "intra16x16_420", 1, 17, int32(intraPred8x8Horizontal), int8(intraPred8x8Vertical), h264ReconstructResidual420())
 	appendH264ReconstructOracleIntra16x16(t, &b, "intra16x16_422", 2, 31, int32(intraPred8x8Vertical), int8(intraPred8x8DC), h264ReconstructResidual422())
+	appendH264ReconstructOracleIntraPCM(t, &b, "intra_pcm_420", 1, 17, h264ReconstructIntraPCM(1, 33))
+	appendH264ReconstructOracleIntraPCM(t, &b, "intra_pcm_422", 2, 21, h264ReconstructIntraPCM(2, 49))
 	appendH264ReconstructOracleIntra4x4(t, &b, "intra4x4_420", 1, 17, int32(intraPred8x8DC), 0xffff, 0xeeff, h264ReconstructResidualIntra4x4())
 	appendH264ReconstructOracleIntra8x8(t, &b, "intra8x8_422", 2, 31, int32(intraPred8x8Plane), 0xffff, 0xffff, h264ReconstructResidualIntra8x8())
 	return b.String()
@@ -574,6 +622,19 @@ func appendH264ReconstructOracleIntra16x16(t *testing.T, b *strings.Builder, lab
 		Intra16x16PredMode: lumaPred,
 		PPS:                cavlcFlatQMulPPS(),
 		Residual:           &residual,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	printH264MotionCompMB(b, label, dst, 1, 1)
+}
+
+func appendH264ReconstructOracleIntraPCM(t *testing.T, b *strings.Builder, label string, chromaFormatIDC int, seed int, pcm []byte) {
+	dst := makeH264MotionCompPicture(chromaFormatIDC, seed)
+	if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInput{
+		MBType:   MBTypeIntraPCM,
+		MBX:      1,
+		MBY:      1,
+		IntraPCM: pcm,
 	}); err != nil {
 		t.Fatal(err)
 	}

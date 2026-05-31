@@ -141,6 +141,8 @@ var h264GolombToInterCBP = [48]uint8{
 	17, 18, 20, 24, 19, 21, 26, 28, 23, 27, 29, 30, 22, 25, 38, 41,
 }
 
+var h264IntraPCMSampleCount = [4]int{256, 384, 512, 768}
+
 var h264Dequant4CoeffInit = [6][3]uint8{
 	{10, 13, 16},
 	{11, 14, 18},
