@@ -88,6 +88,184 @@ func TestSimpleFrameDPBReordersLongRefs(t *testing.T) {
 	}
 }
 
+func TestSimplePOCType0FrameOrder(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sps.Log2MaxFrameNum = 4
+	sps.PocType = 0
+	sps.Log2MaxPocLSB = 4
+	var dpb simpleFrameDPB
+	dpb.reset()
+
+	idr := simpleDPBTestFrame(sps, 0)
+	idrHeader := simpleDPBTestPOCHeader(sps, NALIDRSlice, PictureTypeI, 0, 0)
+	if err := dpb.initFramePOC(idr, idrHeader, 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := dpb.markDecodedFrame(idr, idrHeader, 3); err != nil {
+		t.Fatal(err)
+	}
+
+	p := simpleDPBTestFrame(sps, 1)
+	pHeader := simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeP, 1, 4)
+	if err := dpb.initFramePOC(p, pHeader, 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := dpb.markDecodedFrame(p, pHeader, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	b := simpleDPBTestFrame(sps, 2)
+	bHeader := simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeB, 2, 2)
+	if err := dpb.initFramePOC(b, bHeader, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := dpb.markDecodedFrame(b, bHeader, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if !(idr.poc < b.poc && b.poc < p.poc) {
+		t.Fatalf("poc order idr/b/p = %d/%d/%d, want display order", idr.poc, b.poc, p.poc)
+	}
+	if len(dpb.short) != 2 || dpb.short[0] != p || dpb.short[1] != idr {
+		t.Fatalf("short refs after non-ref B = %v, want P/IDR only", simpleDPBFrameNums(dpb.short))
+	}
+}
+
+func TestSimpleFrameDPBBuildsDefaultBListsAroundCurrentPOC(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	past := simpleDPBTestFrame(sps, 0)
+	past.poc = 0
+	future := simpleDPBTestFrame(sps, 1)
+	future.poc = 4
+	dpb := simpleFrameDPB{short: []*DecodedFrame{future, past}}
+
+	lists, err := dpb.buildBRefLists(simpleDPBTestBHeader(sps, 2, 1, 1), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lists[0]) != 1 || len(lists[1]) != 1 {
+		t.Fatalf("B list lengths = %d/%d, want 1/1", len(lists[0]), len(lists[1]))
+	}
+	if lists[0][0] != past || lists[1][0] != future {
+		t.Fatalf("B lists = %p/%p, want list0 past %p list1 future %p", lists[0][0], lists[1][0], past, future)
+	}
+}
+
+func TestSimpleFrameDPBSwapsIdenticalBLists(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	newer := simpleDPBTestFrame(sps, 1)
+	newer.poc = 4
+	older := simpleDPBTestFrame(sps, 0)
+	older.poc = 0
+	dpb := simpleFrameDPB{short: []*DecodedFrame{newer, older}}
+
+	lists, err := dpb.buildBRefLists(simpleDPBTestBHeader(sps, 2, 2, 2), 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lists[0]) != 2 || len(lists[1]) != 2 {
+		t.Fatalf("B list lengths = %d/%d, want 2/2", len(lists[0]), len(lists[1]))
+	}
+	if lists[0][0] != newer || lists[0][1] != older ||
+		lists[1][0] != older || lists[1][1] != newer {
+		t.Fatalf("B lists = [%p %p] / [%p %p], want list1 swap", lists[0][0], lists[0][1], lists[1][0], lists[1][1])
+	}
+}
+
+func TestSimpleFrameDPBDelaysBOutputUntilFlush(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sps.NumReorderFrames = 1
+	var dpb simpleFrameDPB
+	dpb.reset()
+	idr := simpleDPBTestFrame(sps, 0)
+	idr.poc = 0
+	idr.keyFrame = true
+	p := simpleDPBTestFrame(sps, 1)
+	p.poc = 4
+	b := simpleDPBTestFrame(sps, 2)
+	b.poc = 2
+
+	if err := dpb.holdOutputFrame(idr, simpleDPBTestPOCHeader(sps, NALIDRSlice, PictureTypeI, 0, 0)); err != nil {
+		t.Fatal(err)
+	}
+	out, err := dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("output after IDR = %d frames, want delayed", len(out))
+	}
+
+	if err := dpb.holdOutputFrame(p, simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeP, 1, 4)); err != nil {
+		t.Fatal(err)
+	}
+	out, err = dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != idr {
+		t.Fatalf("output after P = %v, want IDR %p", out, idr)
+	}
+
+	if err := dpb.holdOutputFrame(b, simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeB, 2, 2)); err != nil {
+		t.Fatal(err)
+	}
+	out, err = dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != b {
+		t.Fatalf("output after B = %v, want B %p", out, b)
+	}
+
+	out, err = dpb.drainOutputFrames(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != p {
+		t.Fatalf("flush output = %v, want P %p", out, p)
+	}
+}
+
+func TestSimpleFrameDPBMMCOResetPreservesDelayedOutputState(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	old := simpleDPBTestFrame(sps, 1)
+	old.poc = 2
+	current := simpleDPBTestFrame(sps, 3)
+	dpb := simpleFrameDPB{
+		short:             []*DecodedFrame{old},
+		delayed:           []*DecodedFrame{old},
+		hasBFrames:        1,
+		nextOutputedPOC:   2,
+		nextOutputedValid: true,
+	}
+	dpb.poc.frameNum = 3
+	sh := &SliceHeader{
+		NALType:            NALSlice,
+		SPS:                sps,
+		FrameNum:           3,
+		PictureStructure:   PictureFrame,
+		ExplicitRefMarking: 1,
+		NBMMCO:             1,
+		MMCO: [maxMMCOCount]MMCO{
+			{Opcode: mmcoReset},
+		},
+	}
+
+	if err := dpb.markDecodedFrame(current, sh, 2); err != nil {
+		t.Fatal(err)
+	}
+	if len(dpb.delayed) != 1 || dpb.delayed[0] != old || dpb.hasBFrames != 1 || !dpb.nextOutputedValid {
+		t.Fatalf("delayed output state changed: len=%d hasB=%d nextValid=%v", len(dpb.delayed), dpb.hasBFrames, dpb.nextOutputedValid)
+	}
+	if !current.mmcoReset || current.frameNum != 0 || dpb.poc.frameNum != 0 {
+		t.Fatalf("current reset state = mmco %v frame %d poc frame %d, want reset to 0", current.mmcoReset, current.frameNum, dpb.poc.frameNum)
+	}
+	if len(dpb.short) != 1 || dpb.short[0] != current {
+		t.Fatalf("short refs after reset = %v, want current only", simpleDPBFrameNums(dpb.short))
+	}
+}
+
 func TestSimpleFrameDPBSlidingWindowMarking(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	var dpb simpleFrameDPB
@@ -266,6 +444,16 @@ func TestValidateSimpleFrameReferenceSyntaxAllowsLongRefs(t *testing.T) {
 	}
 }
 
+func TestValidateSimpleFrameReferenceSyntaxAllowsBList1Reorder(t *testing.T) {
+	sh := simpleDPBTestBHeader(simpleDPBTestSPS(2), 3, 1, 1)
+	sh.NBRefModifications[1] = 1
+	sh.RefModifications[1][0] = RefModification{Op: 0, Val: 0}
+
+	if err := validateSimpleFrameReferenceSyntax(sh); err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+}
+
 func simpleDPBTestSPS(refs uint32) *SPS {
 	return &SPS{
 		RefFrameCount:    refs,
@@ -307,6 +495,33 @@ func simpleDPBTestPHeader(sps *SPS, frameNum uint32, refCount uint32) *SliceHead
 		MaxPicNum:        16,
 		PictureStructure: PictureFrame,
 		RefCount:         [2]uint32{refCount, 0},
+	}
+}
+
+func simpleDPBTestBHeader(sps *SPS, frameNum uint32, refCount0 uint32, refCount1 uint32) *SliceHeader {
+	return &SliceHeader{
+		SliceTypeNoS:     PictureTypeB,
+		SPS:              sps,
+		FrameNum:         frameNum,
+		CurrPicNum:       frameNum,
+		MaxPicNum:        16,
+		PictureStructure: PictureFrame,
+		RefCount:         [2]uint32{refCount0, refCount1},
+		ListCount:        2,
+	}
+}
+
+func simpleDPBTestPOCHeader(sps *SPS, nalType NALUnitType, sliceType int32, frameNum uint32, pocLSB uint32) *SliceHeader {
+	return &SliceHeader{
+		NALType:          nalType,
+		SliceTypeNoS:     sliceType,
+		SPS:              sps,
+		FrameNum:         frameNum,
+		CurrPicNum:       frameNum,
+		MaxPicNum:        16,
+		POCLSB:           pocLSB,
+		PictureStructure: PictureFrame,
+		RefCount:         [2]uint32{1, 1},
 	}
 }
 

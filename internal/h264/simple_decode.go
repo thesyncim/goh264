@@ -22,6 +22,10 @@ type DecodedFrame struct {
 	BitDepthLuma    int
 	BitDepthChroma  int
 	frameNum        uint32
+	fieldPOC        [2]int32
+	poc             int32
+	keyFrame        bool
+	mmcoReset       bool
 }
 
 type SimpleDecoder struct {
@@ -44,7 +48,7 @@ func (d *SimpleDecoder) DecodeNALUnits(nals []NALUnit) ([]*DecodedFrame, error) 
 	if d == nil {
 		return nil, ErrInvalidData
 	}
-	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb)
+	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, false)
 }
 
 func (d *SimpleDecoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*DecodedFrame, error) {
@@ -62,7 +66,11 @@ func (d *SimpleDecoder) DecodeAVCFramesWithConfig(data []byte, cfg AVCDecoderCon
 	if err := d.StoreAVCDecoderConfiguration(cfg); err != nil {
 		return nil, err
 	}
-	return d.DecodeAVCFrames(data, cfg.NALLengthSize)
+	nals, err := SplitAVCC(data, cfg.NALLengthSize)
+	if err != nil {
+		return nil, err
+	}
+	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, true)
 }
 
 func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
@@ -111,10 +119,11 @@ func DecodeSimpleNALUnits(nals []NALUnit) ([]*DecodedFrame, error) {
 
 func DecodeSimpleNALUnitsWithParamSets(nals []NALUnit, spsList [maxSPSCount]*SPS, ppsList [maxPPSCount]*PPS) ([]*DecodedFrame, error) {
 	var dpb simpleFrameDPB
-	return decodeSimpleNALUnitsWithState(nals, &spsList, &ppsList, &dpb)
+	dpb.reset()
+	return decodeSimpleNALUnitsWithState(nals, &spsList, &ppsList, &dpb, true)
 }
 
-func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS, dpb *simpleFrameDPB) ([]*DecodedFrame, error) {
+func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS, dpb *simpleFrameDPB, flushOutput bool) ([]*DecodedFrame, error) {
 	if spsList == nil || ppsList == nil || dpb == nil {
 		return nil, ErrInvalidData
 	}
@@ -126,6 +135,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 	var sliceNum uint16
 	haveSlice := false
 	frameComplete := false
+	decodedFrames := 0
 
 	for _, nal := range nals {
 		switch nal.Type {
@@ -149,7 +159,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 			if sh.RedundantPicCount != 0 {
 				continue
 			}
-			if sh.SliceTypeNoS != PictureTypeI && sh.SliceTypeNoS != PictureTypeP {
+			if sh.SliceTypeNoS != PictureTypeI && sh.SliceTypeNoS != PictureTypeP && sh.SliceTypeNoS != PictureTypeB {
 				return nil, ErrUnsupported
 			}
 			if err := validateSimpleFrameReferenceSyntax(sh); err != nil {
@@ -175,6 +185,10 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				if err != nil {
 					return nil, err
 				}
+				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
+					return nil, err
+				}
+				frame.keyFrame = nal.Type == NALIDRSlice
 				motionScratch = newH264MotionCompScratchForFrame(frame)
 			} else if err := frame.matchesSPS(sh.SPS); err != nil {
 				return nil, err
@@ -189,7 +203,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 			}
 			loopFilterSlices[sliceNum] = h264LoopFilterSliceParamsFromHeader(sh)
 			pic := frame.picturePlanes()
-			refs, err := dpb.buildRefLists(sh)
+			refs, err := dpb.buildRefLists(sh, frame)
 			if err != nil {
 				return nil, err
 			}
@@ -207,9 +221,19 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 					return nil, err
 				}
 				frameComplete = true
-				frames = append(frames, frame)
+				decodedFrames++
 				if err := dpb.markDecodedFrame(frame, sh, nal.RefIDC); err != nil {
 					return nil, err
+				}
+				if err := dpb.holdOutputFrame(frame, sh); err != nil {
+					return nil, err
+				}
+				if !flushOutput {
+					out, err := dpb.drainOutputFrames(false)
+					if err != nil {
+						return nil, err
+					}
+					frames = append(frames, out...)
 				}
 			}
 			haveSlice = true
@@ -218,7 +242,14 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 		}
 	}
 
-	if len(frames) == 0 || haveSlice && !frameComplete {
+	if flushOutput {
+		out, err := dpb.drainOutputFrames(true)
+		if err != nil {
+			return nil, err
+		}
+		frames = append(frames, out...)
+	}
+	if decodedFrames == 0 || haveSlice && !frameComplete {
 		return nil, ErrInvalidData
 	}
 	return frames, nil
@@ -326,9 +357,6 @@ func validateSimpleFrameReferenceSyntax(sh *SliceHeader) error {
 	if sh == nil {
 		return ErrInvalidData
 	}
-	if sh.NBRefModifications[1] != 0 {
-		return ErrUnsupported
-	}
 	for i := uint32(0); i < sh.NBMMCO; i++ {
 		switch sh.MMCO[i].Opcode {
 		case mmcoEnd, mmcoShort2Unused, mmcoLong2Unused, mmcoShort2Long, mmcoSetMaxLong, mmcoReset, mmcoLong:
@@ -336,19 +364,33 @@ func validateSimpleFrameReferenceSyntax(sh *SliceHeader) error {
 			return ErrUnsupported
 		}
 	}
-	if sh.SliceTypeNoS == PictureTypeP {
+	if sh.SliceTypeNoS == PictureTypeP || sh.SliceTypeNoS == PictureTypeB {
 		if sh.RefCount[0] == 0 {
 			return ErrInvalidData
 		}
 		if sh.RefCount[0] > simpleMaxShortRefs {
 			return ErrUnsupported
 		}
-		for i := uint32(0); i < sh.NBRefModifications[0]; i++ {
-			if i >= maxRefMods {
+		if sh.SliceTypeNoS == PictureTypeB {
+			if sh.RefCount[1] == 0 {
 				return ErrInvalidData
 			}
-			if sh.RefModifications[0][i].Op > 2 {
+			if sh.RefCount[1] > simpleMaxShortRefs {
 				return ErrUnsupported
+			}
+		}
+		listCount := 1
+		if sh.SliceTypeNoS == PictureTypeB {
+			listCount = 2
+		}
+		for list := 0; list < listCount; list++ {
+			for i := uint32(0); i < sh.NBRefModifications[list]; i++ {
+				if i >= maxRefMods {
+					return ErrInvalidData
+				}
+				if sh.RefModifications[list][i].Op > 2 {
+					return ErrUnsupported
+				}
 			}
 		}
 	}
