@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -71,6 +72,58 @@ func TestH264RealVectorManifest(t *testing.T) {
 		t.Skip("set GOH264_REAL_VECTORS=1 to run external public H.264 vectors")
 	}
 	testH264CorpusManifest(t, defaultH264RealVectorManifest)
+}
+
+func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	failures := readH264CorpusManifest(t, "testdata/h264/realvectors/failures.jsonl")
+	if len(manifest) == 0 {
+		t.Fatal("real-vector manifest is empty")
+	}
+	if len(failures) == 0 {
+		t.Fatal("real-vector failure ledger is empty; delete this test only when the public vector lane is fully green")
+	}
+
+	byID := make(map[string]h264CorpusEntry, len(manifest))
+	for _, entry := range manifest {
+		validateH264CorpusEntry(t, entry)
+		if entry.URL == "" || entry.Source == "" || len(entry.FeatureTags) == 0 {
+			t.Fatalf("%s: real-vector rows need url, source, and feature_tags", entry.ID)
+		}
+		if previous, ok := byID[entry.ID]; ok {
+			t.Fatalf("%s: duplicate real-vector id: previous=%+v current=%+v", entry.ID, previous, entry)
+		}
+		byID[entry.ID] = entry
+	}
+
+	failedIDs := make(map[string]struct{}, len(failures))
+	for _, failure := range failures {
+		validateH264CorpusEntry(t, failure)
+		if failure.Expect != "decode-ok" {
+			t.Fatalf("%s: failure ledger rows must stay decode-ok oracle rows, got %q", failure.ID, failure.Expect)
+		}
+		if _, ok := failedIDs[failure.ID]; ok {
+			t.Fatalf("%s: duplicate failure-ledger id", failure.ID)
+		}
+		failedIDs[failure.ID] = struct{}{}
+		manifestEntry, ok := byID[failure.ID]
+		if !ok {
+			t.Fatalf("%s: failure-ledger row is missing from %s", failure.ID, defaultH264RealVectorManifest)
+		}
+		if !reflect.DeepEqual(failure, manifestEntry) {
+			t.Fatalf("%s: failure-ledger row drifted from real-vector manifest\nfailure=%+v\nmanifest=%+v", failure.ID, failure, manifestEntry)
+		}
+	}
+
+	var greenCanaries []string
+	for _, entry := range manifest {
+		if _, failing := failedIDs[entry.ID]; !failing {
+			greenCanaries = append(greenCanaries, entry.ID)
+		}
+	}
+	if len(greenCanaries) == 0 {
+		t.Fatal("real-vector manifest has no green canary outside failures.jsonl")
+	}
 }
 
 func testH264CorpusManifest(t *testing.T, manifest string) {
@@ -230,6 +283,18 @@ func TestValidateH264CorpusEntryAllowsURLBackedDecodeOK(t *testing.T) {
 		Surfaces:     []string{"annexb"},
 		FeatureTags:  []string{"external"},
 		Source:       "test",
+	})
+}
+
+func TestValidateH264CorpusEntryRequiresUnsupportedGuards(t *testing.T) {
+	validateH264CorpusEntry(t, h264CorpusEntry{
+		ID:            "future",
+		Path:          "future.264",
+		Format:        "annexb",
+		Expect:        "unsupported",
+		ExpectedError: "ErrUnsupported",
+		Surfaces:      []string{"annexb"},
+		GuardTags:     []string{"mbaff"},
 	})
 }
 

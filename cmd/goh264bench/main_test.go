@@ -156,3 +156,16 @@ func TestAnnotateBenchResultWithOracle(t *testing.T) {
 		t.Fatal("annotate raw md5 mismatch err = nil, want error")
 	}
 }
+
+func TestPreflightBenchFFmpegOracleRejectsStrictPixelFormatMismatch(t *testing.T) {
+	err := preflightBenchFFmpegOracle("sample.264", benchCorpusEntry{
+		ID:     "oracle",
+		PixFmt: "yuv420p",
+	}, benchOptions{
+		ffmpegPixFmt: "yuv444p",
+		strictPixFmt: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "manifest pixel format") {
+		t.Fatalf("preflight err = %v, want strict pixel format mismatch", err)
+	}
+}

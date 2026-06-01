@@ -30,7 +30,7 @@ GOH264_CORPUS_MANIFEST=testdata/h264/realvectors/failures.jsonl GOH264_CORPUS_FE
 ```
 
 The last command is intentionally red until the public FATE failure ledger is
-cleared. Narrow scout work with `GOH264_CORPUS_FILTER=caba3`, `cvwp3`, `frext`,
+cleared. Narrow scout work with `GOH264_CORPUS_FILTER=frext`, `cacqp3`, `hi422`,
 or any feature tag in the manifest.
 
 ## Benchmark

@@ -813,6 +813,7 @@ func (m *macroblockTables) writeBackMotion(mbXY int, mbType uint32, sliceTypeNoS
 		if err := checkRange(len(m.DirectTable), base, 4); err != nil {
 			return err
 		}
+		m.DirectTable[base+0] = uint8(subMBType[0] >> 1)
 		m.DirectTable[base+1] = uint8(subMBType[1] >> 1)
 		m.DirectTable[base+2] = uint8(subMBType[2] >> 1)
 		m.DirectTable[base+3] = uint8(subMBType[3] >> 1)

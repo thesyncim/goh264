@@ -115,6 +115,7 @@ type benchOptions struct {
 	ffmpegPixFmt  string
 	strictPixFmt  bool
 	corpusFilter  string
+	annexBInput   bool
 }
 
 type benchCorpusEntry struct {
@@ -236,7 +237,7 @@ func buildBenchReport(input string, manifest string, maxEntries int, opts benchO
 }
 
 func benchOneInput(input string, data []byte, opts benchOptions) ([]benchResult, error) {
-	goResult, err := benchGo(input, data, opts.iters, opts.repeats, opts.warmup, opts.rawOutput)
+	goResult, err := benchGo(input, data, opts.iters, opts.repeats, opts.warmup, opts.rawOutput, opts.annexBInput)
 	if err != nil {
 		return nil, fmt.Errorf("goh264: %w", err)
 	}
@@ -298,7 +299,17 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		if err := validateBenchBitstreamMD5(entry, data); err != nil {
 			return benchReport{}, err
 		}
-		entryResults, err := benchOneInput(inputPath, data, opts)
+		if err := preflightBenchGoOracle(inputPath, data, entry); err != nil {
+			return benchReport{}, fmt.Errorf("%s: goh264 oracle preflight: %w", entry.ID, err)
+		}
+		if opts.runFFmpeg {
+			if err := preflightBenchFFmpegOracle(inputPath, entry, opts); err != nil {
+				return benchReport{}, fmt.Errorf("%s: ffmpeg oracle preflight: %w", entry.ID, err)
+			}
+		}
+		entryOpts := opts
+		entryOpts.annexBInput = entry.Format == "annexb"
+		entryResults, err := benchOneInput(inputPath, data, entryOpts)
 		if err != nil {
 			return benchReport{}, fmt.Errorf("%s: %w", entry.ID, err)
 		}
@@ -323,7 +334,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 	if opts.runFFmpeg {
 		meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli"
 	}
-	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 match the manifest oracle; optional FFmpeg CLI rawvideo output must match the same rawvideo MD5 before results are emitted. FFmpeg timing remains a process-per-iteration CLI baseline."
+	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run. FFmpeg timing remains a process-per-iteration CLI baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
 }
 
@@ -543,9 +554,49 @@ func annotateBenchResultWithOracle(result *benchResult, entry benchCorpusEntry) 
 	return nil
 }
 
-func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawOutput bool) (benchResult, error) {
+func preflightBenchGoOracle(input string, data []byte, entry benchCorpusEntry) error {
+	run, err := decodeGoOnceForFormat(data, true, entry.Format == "annexb")
+	if err != nil {
+		return err
+	}
+	result := benchResult{
+		Name:           "goh264",
+		Input:          input,
+		RawOutput:      true,
+		RawPixelFormat: run.pixFmt,
+		FramesPerIter:  run.frames,
+		BytesPerIter:   run.bytes,
+		RawMD5:         run.md5,
+	}
+	return annotateBenchResultWithOracle(&result, entry)
+}
+
+func preflightBenchFFmpegOracle(input string, entry benchCorpusEntry, opts benchOptions) error {
+	pixFmt := opts.ffmpegPixFmt
+	if pixFmt == "" {
+		pixFmt = entry.PixFmt
+	} else if opts.strictPixFmt && pixFmt != entry.PixFmt {
+		return fmt.Errorf("-ffmpeg-pix-fmt %q does not match manifest pixel format %q", pixFmt, entry.PixFmt)
+	}
+	run, err := runFFmpegOnce(opts.ffmpegBin, ffmpegArgs(input, true, opts.ffmpegThreads, pixFmt), true)
+	if err != nil {
+		return err
+	}
+	result := benchResult{
+		Name:           "ffmpeg",
+		Input:          input,
+		RawOutput:      true,
+		RawPixelFormat: entry.PixFmt,
+		FFmpegPixelFmt: pixFmt,
+		BytesPerIter:   run.bytes,
+		RawMD5:         run.md5,
+	}
+	return annotateBenchResultWithOracle(&result, entry)
+}
+
+func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawOutput bool, annexBInput bool) (benchResult, error) {
 	for i := 0; i < warmup; i++ {
-		if _, err := decodeGoOnce(data, rawOutput); err != nil {
+		if _, err := decodeGoOnceForFormat(data, rawOutput, annexBInput); err != nil {
 			return benchResult{}, err
 		}
 	}
@@ -556,7 +607,7 @@ func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawO
 	var pixFmt string
 	var samples []benchSample
 	for repeat := 0; repeat < repeats; repeat++ {
-		sample, frames, bytes, sum, samplePixFmt, err := measureGoSample(data, iters, rawOutput)
+		sample, frames, bytes, sum, samplePixFmt, err := measureGoSample(data, iters, rawOutput, annexBInput)
 		if err != nil {
 			return benchResult{}, err
 		}
@@ -587,7 +638,7 @@ func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawO
 	return result, nil
 }
 
-func measureGoSample(data []byte, iters int, rawOutput bool) (benchSample, int, int64, string, string, error) {
+func measureGoSample(data []byte, iters int, rawOutput bool, annexBInput bool) (benchSample, int, int64, string, string, error) {
 	runtime.GC()
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -598,7 +649,7 @@ func measureGoSample(data []byte, iters int, rawOutput bool) (benchSample, int, 
 	var rawMD5 string
 	var pixFmt string
 	for i := 0; i < iters; i++ {
-		run, err := decodeGoOnce(data, rawOutput)
+		run, err := decodeGoOnceForFormat(data, rawOutput, annexBInput)
 		if err != nil {
 			return benchSample{}, 0, 0, "", "", err
 		}
@@ -640,7 +691,21 @@ func decodeGoOnce(data []byte, rawOutput bool) (decodeGoRun, error) {
 		return decodeGoRun{}, err
 	}
 	frames = append(frames, delayed...)
+	return summarizeGoFrames(frames, rawOutput)
+}
 
+func decodeGoOnceForFormat(data []byte, rawOutput bool, annexBInput bool) (decodeGoRun, error) {
+	if !annexBInput {
+		return decodeGoOnce(data, rawOutput)
+	}
+	frames, err := goh264.NewDecoder().DecodeAnnexBFrames(data)
+	if err != nil {
+		return decodeGoRun{}, err
+	}
+	return summarizeGoFrames(frames, rawOutput)
+}
+
+func summarizeGoFrames(frames []*goh264.Frame, rawOutput bool) (decodeGoRun, error) {
 	var pixFmt string
 	for i, frame := range frames {
 		framePixFmt, err := frame.RawPixelFormat()
@@ -661,6 +726,7 @@ func decodeGoOnce(data []byte, rawOutput bool) (decodeGoRun, error) {
 	var total int64
 	for _, frame := range frames {
 		scratch = scratch[:0]
+		var err error
 		scratch, err = frame.AppendRawYUVBytesLE(scratch)
 		if err != nil {
 			return decodeGoRun{}, err

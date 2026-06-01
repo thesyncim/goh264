@@ -388,6 +388,81 @@ func TestSimpleFrameDPBInfersReorderDelayFromPOCGap(t *testing.T) {
 	}
 }
 
+func TestSimpleFrameDPBPrimesReorderDelayFromLeadingLowerPOC(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sps.Log2MaxFrameNum = 4
+	sps.PocType = 0
+	sps.Log2MaxPocLSB = 4
+	var probe simpleFrameDPB
+	probe.reset()
+
+	idrHeader := simpleDPBTestPOCHeader(sps, NALIDRSlice, PictureTypeI, 0, 8)
+	if err := probe.primeOutputReorderDelayFromHeader(idrHeader, 3); err != nil {
+		t.Fatal(err)
+	}
+	if probe.hasBFrames != 0 {
+		t.Fatalf("primed delay after first IDR = %d, want 0", probe.hasBFrames)
+	}
+
+	lowerHeader := simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeP, 1, 4)
+	if err := probe.primeOutputReorderDelayFromHeader(lowerHeader, 2); err != nil {
+		t.Fatal(err)
+	}
+	if probe.hasBFrames != 1 {
+		t.Fatalf("primed delay after lower POC = %d, want 1", probe.hasBFrames)
+	}
+
+	var dpb simpleFrameDPB
+	dpb.reset()
+	dpb.hasBFrames = probe.hasBFrames
+	idr := simpleDPBTestFrame(sps, 0)
+	idr.poc = 65544
+	idr.idrKeyFrame = true
+	lower := simpleDPBTestFrame(sps, 1)
+	lower.poc = 65540
+	if err := dpb.holdOutputFrame(idr, idrHeader); err != nil {
+		t.Fatal(err)
+	}
+	out, err := dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("output after primed IDR = %v, want delayed", out)
+	}
+	if err := dpb.holdOutputFrame(lower, lowerHeader); err != nil {
+		t.Fatal(err)
+	}
+	out, err = dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != lower {
+		t.Fatalf("output after lower POC = %v, want lower %p", out, lower)
+	}
+}
+
+func TestSimpleFrameDPBPrimeReorderDelayKeepsContiguousPOCImmediate(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sps.Log2MaxFrameNum = 4
+	sps.PocType = 0
+	sps.Log2MaxPocLSB = 4
+	var probe simpleFrameDPB
+	probe.reset()
+
+	idrHeader := simpleDPBTestPOCHeader(sps, NALIDRSlice, PictureTypeI, 0, 0)
+	if err := probe.primeOutputReorderDelayFromHeader(idrHeader, 3); err != nil {
+		t.Fatal(err)
+	}
+	pHeader := simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeP, 1, 2)
+	if err := probe.primeOutputReorderDelayFromHeader(pHeader, 2); err != nil {
+		t.Fatal(err)
+	}
+	if probe.hasBFrames != 0 {
+		t.Fatalf("primed delay for contiguous POC = %d, want 0", probe.hasBFrames)
+	}
+}
+
 func TestSimpleFrameDPBMMCOResetPreservesDelayedOutputState(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	old := simpleDPBTestFrame(sps, 1)

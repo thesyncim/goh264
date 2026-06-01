@@ -29,6 +29,45 @@ func TestH264ApplyLoopFilterEdge444UsesLumaChromaPlanes(t *testing.T) {
 	}
 }
 
+func TestFillLoopFilterCachesFrameCanonicalizesBListRefs(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.MacroblockTyp[0] = MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	m.SliceTable[0] = 0
+	for list := 0; list < 2; list++ {
+		for i := 0; i < 4; i++ {
+			m.RefIndex[list][i] = 0
+		}
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 1,
+	}
+	params := []h264LoopFilterSliceParams{{
+		PPS:              pps,
+		ListCount:        2,
+		DeblockingFilter: 1,
+		Ref2Frame: [2][]int8{
+			{3},
+			{5},
+		},
+	}}
+
+	ctx, err := m.fillLoopFilterCachesFrame(0, 0, params[0], params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := int(h264Scan8[0])
+	if ctx.Motion.Ref[0][base] != 3 || ctx.Motion.Ref[1][base] != 5 {
+		t.Fatalf("loop-filter refs = %d/%d, want canonical 3/5", ctx.Motion.Ref[0][base], ctx.Motion.Ref[1][base])
+	}
+}
+
 func TestH264LoopFilterThresholdsHighBitDepthQPBDOffset(t *testing.T) {
 	alpha8, beta8, index8, err := h264LoopFilterThresholdsForBitDepth(30, 0, 0, 8)
 	if err != nil {

@@ -213,12 +213,16 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 	if spsList == nil || ppsList == nil || dpb == nil || sei == nil {
 		return nil, ErrInvalidData
 	}
+	if flushOutput {
+		dpb.primeOutputReorderDelayFromNALs(nals, spsList, ppsList)
+	}
 	var frame *DecodedFrame
 	var tables *macroblockTables
 	var motionScratch *h264MotionCompScratch
 	var motionScratchHigh *h264MotionCompScratchHigh
 	var frames []*DecodedFrame
 	var loopFilterSlices []h264LoopFilterSliceParams
+	var loopFilterRefFrameIDs map[*DecodedFrame]int8
 	var sliceNum uint16
 	haveSlice := false
 	frameComplete := false
@@ -267,6 +271,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				motionScratch = nil
 				motionScratchHigh = nil
 				loopFilterSlices = nil
+				loopFilterRefFrameIDs = nil
 				sliceNum = 0
 				haveSlice = false
 				frameComplete = false
@@ -299,6 +304,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				} else {
 					motionScratchHigh = newH264MotionCompScratchHighForFrame(frame)
 				}
+				loopFilterRefFrameIDs = make(map[*DecodedFrame]int8)
 			} else if err := frame.matchesSPS(sh.SPS); err != nil {
 				return nil, err
 			}
@@ -312,6 +318,10 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 			}
 			loopFilterSlices[sliceNum] = h264LoopFilterSliceParamsFromHeader(sh)
 			refctx, err := dpb.buildRefContext(sh, frame)
+			if err != nil {
+				return nil, err
+			}
+			loopFilterSlices[sliceNum].Ref2Frame, err = h264LoopFilterRef2Frame(refctx.Entries, loopFilterRefFrameIDs)
 			if err != nil {
 				return nil, err
 			}

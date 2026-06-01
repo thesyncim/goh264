@@ -834,6 +834,78 @@ func (d *simpleFrameDPB) holdOutputFrame(frame *DecodedFrame, sh *SliceHeader) e
 	return nil
 }
 
+// primeOutputReorderDelayFromNALs mirrors the parser-fed avctx->has_b_frames
+// state consumed by FFmpeg's h264_select_output_frame. The simple whole-file
+// entry points do not have a separate parser pass, so leading lower-POC
+// pictures can otherwise arrive after the first decoded IDR has already been
+// emitted.
+func (d *simpleFrameDPB) primeOutputReorderDelayFromNALs(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS) {
+	if d == nil || spsList == nil || ppsList == nil || !d.canPrimeOutputReorderDelay() {
+		return
+	}
+	probeSPS := *spsList
+	probePPS := *ppsList
+	probe := *d
+	probe.delayed = nil
+
+	for _, nal := range nals {
+		switch nal.Type {
+		case NALSPS:
+			sps, err := DecodeSPS(nal.RBSP)
+			if err != nil || sps.SPSID >= maxSPSCount {
+				return
+			}
+			probeSPS[sps.SPSID] = sps
+		case NALPPS:
+			pps, err := DecodePPS(nal.RBSP, &probeSPS)
+			if err != nil || pps.PPSID >= maxPPSCount {
+				return
+			}
+			probePPS[pps.PPSID] = pps
+		case NALSlice, NALIDRSlice:
+			sh, _, err := parseSliceHeaderWithPayload(nal, &probePPS)
+			if err != nil {
+				return
+			}
+			if sh.RedundantPicCount != 0 || sh.FirstMBAddr != 0 {
+				continue
+			}
+			if sh.SliceTypeNoS != PictureTypeI && sh.SliceTypeNoS != PictureTypeP && sh.SliceTypeNoS != PictureTypeB {
+				return
+			}
+			if err := probe.primeOutputReorderDelayFromHeader(sh, nal.RefIDC); err != nil {
+				return
+			}
+			if probe.hasBFrames > d.hasBFrames {
+				d.hasBFrames = probe.hasBFrames
+			}
+			if d.hasBFrames > 0 {
+				return
+			}
+		}
+	}
+}
+
+func (d *simpleFrameDPB) canPrimeOutputReorderDelay() bool {
+	if d == nil || d.hasBFrames != 0 || len(d.delayed) != 0 || len(d.short) != 0 || d.nextOutputedValid {
+		return false
+	}
+	return d.longCount() == 0
+}
+
+func (d *simpleFrameDPB) primeOutputReorderDelayFromHeader(sh *SliceHeader, nalRefIDC uint8) error {
+	if d == nil || sh == nil {
+		return ErrInvalidData
+	}
+	frame := DecodedFrame{}
+	if err := d.initFramePOC(&frame, sh, nalRefIDC); err != nil {
+		return err
+	}
+	d.updateReorderDelay(&frame, sh)
+	d.finishFramePOC(nalRefIDC)
+	return nil
+}
+
 // updateReorderDelay mirrors FFmpeg n8.0.1 libavcodec/h264_slice.c
 // h264_select_output_frame's dynamic has_b_frames / last_pocs logic.
 func (d *simpleFrameDPB) updateReorderDelay(frame *DecodedFrame, sh *SliceHeader) {
