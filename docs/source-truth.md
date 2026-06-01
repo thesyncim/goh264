@@ -464,8 +464,10 @@ Included:
 - Decoder benchmark harness `cmd/goh264bench`, including Go decode/raw-output
   timing, raw MD5 reporting, allocation counters, repeated samples/statistics,
   machine-readable input/host/VCS/FFmpeg metadata, Go raw pixel-format reporting,
-  FFmpeg `-pix_fmt` auto-selection for raw-MD5 parity, and an optional FFmpeg CLI
-  rawvideo baseline over the same input with explicit timed-scope caveats.
+  FFmpeg `-pix_fmt` auto-selection for raw-MD5 parity, an optional FFmpeg CLI
+  rawvideo baseline over the same input with explicit timed-scope caveats, and a
+  manifest benchmark mode that runs decode-ok corpus rows only after bitstream
+  MD5, raw shape, and rawvideo MD5 oracle checks pass.
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:
@@ -483,5 +485,5 @@ Excluded unless directly required by decoder parity:
   partitioned B, partitioned P, broader high deblocking, additional
   depth/chroma fixtures, and MBAFF remain later lanes.
 - Full conformance/testvector corpus passing and production benchmark claims
-  remain pending until curated external corpora are added and benchmark corpus
-  mode or an equivalent suite runner reports stable larger-clip results.
+  remain pending until curated external corpora are added and manifest benchmark
+  reports cover stable larger clips with a fair in-process/native baseline.

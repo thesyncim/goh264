@@ -148,13 +148,16 @@ frames/sec, MiB/sec, and Go allocation counters, and can run an FFmpeg rawvideo
 CLI baseline over the same input. The harness now emits a JSON report envelope
 with input MD5/size, Go/OS/CPU/GOMAXPROCS, module and VCS state, FFmpeg version,
 repeated samples, mean/median/min/max/stddev/CV timing, raw pixel format, raw
-MD5, and machine-readable timing-scope flags. FFmpeg raw output defaults to the
-Go raw pixel format for MD5 parity, but the FFmpeg path is still labeled as a
-CLI baseline because it includes process startup, CLI demux/parser setup, file
-reads, and stdout pipe cost per timed iteration. Tiny embedded fixtures are
-useful smoke tests, but production throughput comparisons still need stable
-larger clips from the same testvector corpus and a suite/corpus benchmark mode
-or equivalent report aggregation.
+MD5, and machine-readable timing-scope flags. `-manifest` binds benchmark runs
+to decode-ok corpus rows and refuses to emit results unless bitstream MD5, Go
+raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5
+match the oracle; optional FFmpeg CLI raw output must match the same MD5. FFmpeg
+raw output defaults to the Go raw pixel format for MD5 parity, but the FFmpeg
+path is still labeled as a CLI baseline because it includes process startup,
+CLI demux/parser setup, file reads, and stdout pipe cost per timed iteration.
+Tiny embedded fixtures are useful smoke tests, but production throughput
+comparisons still need stable larger clips from the same testvector corpus and
+an in-process libavcodec/native baseline before making broad claims.
 
 ## Gap Ledger
 

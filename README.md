@@ -33,10 +33,14 @@ GOH264_CORPUS_MANIFEST=/path/to/manifest.jsonl go test . -run TestH264CorpusMani
 
 Run the benchmark harness with repeated samples and an FFmpeg CLI rawvideo
 baseline. The JSON report includes input, host, VCS, timing-scope, raw pixel
-format, and per-repeat statistics:
+format, and per-repeat statistics. For corpus-bound reports, use `-manifest`;
+that mode validates bitstream MD5, raw pixel format, frame count, raw byte
+count, and rawvideo MD5 against the manifest oracle before emitting timing
+results:
 
 ```sh
 go run ./cmd/goh264bench -input testdata/h264/cavlc_b8x8_spatial_direct_sub.h264 -iters 5 -repeats 5 -ffmpeg -json
+go run ./cmd/goh264bench -manifest testdata/h264/corpus/manifest.jsonl -iters 5 -repeats 5 -ffmpeg -json
 ```
 
 Fetch the pinned upstream source snapshot into the ignored local cache:

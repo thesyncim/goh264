@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
@@ -14,6 +15,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -32,6 +34,10 @@ type benchMetadata struct {
 	Input          string `json:"input"`
 	InputBytes     int64  `json:"input_bytes"`
 	InputMD5       string `json:"input_md5"`
+	CorpusManifest string `json:"corpus_manifest,omitempty"`
+	CorpusEntries  int    `json:"corpus_entries,omitempty"`
+	CorpusDecodeOK int    `json:"corpus_decode_ok_entries,omitempty"`
+	FairnessPolicy string `json:"fairness_policy,omitempty"`
 	GoVersion      string `json:"go_version"`
 	GOOS           string `json:"goos"`
 	GOARCH         string `json:"goarch"`
@@ -47,6 +53,7 @@ type benchMetadata struct {
 
 type benchResult struct {
 	Name            string        `json:"name"`
+	EntryID         string        `json:"entry_id,omitempty"`
 	Input           string        `json:"input"`
 	Iterations      int           `json:"iterations"`
 	Repeats         int           `json:"repeats"`
@@ -70,6 +77,11 @@ type benchResult struct {
 	AllocBytes      uint64        `json:"alloc_bytes,omitempty"`
 	Allocs          uint64        `json:"allocs,omitempty"`
 	RawMD5          string        `json:"raw_md5,omitempty"`
+	ExpectedRawMD5  string        `json:"expected_raw_md5,omitempty"`
+	ExpectedPixFmt  string        `json:"expected_raw_pixel_format,omitempty"`
+	ExpectedFrames  int           `json:"expected_frames_per_iter,omitempty"`
+	ExpectedBytes   int64         `json:"expected_bytes_per_iter,omitempty"`
+	ParityStatus    string        `json:"parity_status,omitempty"`
 	Command         string        `json:"command,omitempty"`
 	ProcessPerIter  bool          `json:"process_per_iter"`
 	InputReadTimed  bool          `json:"input_read_timed"`
@@ -90,8 +102,37 @@ type benchSample struct {
 	RawMD5      string  `json:"raw_md5,omitempty"`
 }
 
+type benchOptions struct {
+	iters         int
+	repeats       int
+	warmup        int
+	rawOutput     bool
+	runFFmpeg     bool
+	ffmpegBin     string
+	ffmpegThreads string
+	ffmpegPixFmt  string
+	strictPixFmt  bool
+}
+
+type benchCorpusEntry struct {
+	ID           string   `json:"id"`
+	Path         string   `json:"path"`
+	Format       string   `json:"format"`
+	Expect       string   `json:"expect"`
+	PixFmt       string   `json:"pix_fmt,omitempty"`
+	FrameCount   int      `json:"frame_count,omitempty"`
+	FrameSize    int      `json:"frame_size,omitempty"`
+	BitstreamMD5 string   `json:"bitstream_md5,omitempty"`
+	RawVideoMD5  string   `json:"rawvideo_md5,omitempty"`
+	FrameMD5     []string `json:"frame_md5,omitempty"`
+	Surfaces     []string `json:"surfaces,omitempty"`
+	GuardTags    []string `json:"guard_tags,omitempty"`
+}
+
 func main() {
 	input := flag.String("input", "", "H.264 input file")
+	manifest := flag.String("manifest", "", "JSONL H.264 corpus manifest; benchmarks decode-ok entries after oracle parity validation")
+	maxEntries := flag.Int("max-entries", 0, "maximum decode-ok manifest entries to benchmark; 0 means all")
 	iters := flag.Int("iters", 5, "measured iterations")
 	repeats := flag.Int("repeats", 1, "measured repeat samples; each sample runs -iters decodes")
 	warmup := flag.Int("warmup", 1, "warmup iterations")
@@ -104,37 +145,24 @@ func main() {
 	jsonOut := flag.Bool("json", false, "print JSON")
 	flag.Parse()
 
-	if *input == "" || *iters <= 0 || *repeats <= 0 || *warmup < 0 {
-		fmt.Fprintln(os.Stderr, "usage: goh264bench -input file.h264 [-iters 5] [-repeats 1] [-warmup 1] [-ffmpeg] [-json]")
+	if (*input == "") == (*manifest == "") || *iters <= 0 || *repeats <= 0 || *warmup < 0 || *maxEntries < 0 {
+		fmt.Fprintln(os.Stderr, "usage: goh264bench (-input file.h264 | -manifest corpus.jsonl) [-iters 5] [-repeats 1] [-warmup 1] [-ffmpeg] [-json]")
 		os.Exit(2)
 	}
-	data, err := os.ReadFile(*input)
+	opts := benchOptions{
+		iters:         *iters,
+		repeats:       *repeats,
+		warmup:        *warmup,
+		rawOutput:     *rawOutput,
+		runFFmpeg:     *runFFmpeg,
+		ffmpegBin:     *ffmpegBin,
+		ffmpegThreads: *ffmpegThreads,
+		ffmpegPixFmt:  *ffmpegPixFmt,
+		strictPixFmt:  *strictPixFmt,
+	}
+	report, err := buildBenchReport(*input, *manifest, *maxEntries, opts)
 	if err != nil {
-		die("read input", err)
-	}
-
-	var results []benchResult
-	goResult, err := benchGo(*input, data, *iters, *repeats, *warmup, *rawOutput)
-	if err != nil {
-		die("goh264", err)
-	}
-	results = append(results, goResult)
-
-	if *runFFmpeg && *rawOutput && *strictPixFmt && *ffmpegPixFmt != "" && goResult.RawPixelFormat != "" && *ffmpegPixFmt != goResult.RawPixelFormat {
-		fmt.Fprintf(os.Stderr, "-ffmpeg-pix-fmt %q does not match Go raw pixel format %q\n", *ffmpegPixFmt, goResult.RawPixelFormat)
-		os.Exit(2)
-	}
-	if *runFFmpeg {
-		ffmpegResult, err := benchFFmpeg(*input, *iters, *repeats, *warmup, *rawOutput, *ffmpegBin, *ffmpegThreads, *ffmpegPixFmt, goResult.RawPixelFormat)
-		if err != nil {
-			die("ffmpeg", err)
-		}
-		results = append(results, ffmpegResult)
-	}
-
-	report := benchReport{
-		Metadata: benchmarkMetadata(*input, data, *runFFmpeg, *ffmpegBin),
-		Results:  results,
+		die("benchmark", err)
 	}
 
 	if *jsonOut {
@@ -148,6 +176,9 @@ func main() {
 	fmt.Printf("input: %s, %d bytes, md5 %s\n", report.Metadata.Input, report.Metadata.InputBytes, report.Metadata.InputMD5)
 	for _, r := range report.Results {
 		fmt.Printf("%s: %.2f ms over %d repeat(s) x %d iter", r.Name, r.ElapsedMS, r.Repeats, r.Iterations)
+		if r.EntryID != "" {
+			fmt.Printf(", entry %s", r.EntryID)
+		}
 		if r.Repeats > 1 {
 			fmt.Printf(", median %.2f ms, cv %.4f", r.MedianElapsedMS, r.CVElapsed)
 		}
@@ -165,6 +196,9 @@ func main() {
 		if r.RawMD5 != "" {
 			fmt.Printf(", raw md5 %s", r.RawMD5)
 		}
+		if r.ParityStatus != "" {
+			fmt.Printf(", parity %s", r.ParityStatus)
+		}
 		if r.Command != "" {
 			fmt.Printf("\n  %s", r.Command)
 		}
@@ -173,6 +207,190 @@ func main() {
 		}
 		fmt.Println()
 	}
+}
+
+func buildBenchReport(input string, manifest string, maxEntries int, opts benchOptions) (benchReport, error) {
+	if manifest != "" {
+		return benchManifest(manifest, maxEntries, opts)
+	}
+	data, err := os.ReadFile(input)
+	if err != nil {
+		return benchReport{}, fmt.Errorf("read input: %w", err)
+	}
+	results, err := benchOneInput(input, data, opts)
+	if err != nil {
+		return benchReport{}, err
+	}
+	return benchReport{
+		Metadata: benchmarkMetadata(input, data, opts.runFFmpeg, opts.ffmpegBin),
+		Results:  results,
+	}, nil
+}
+
+func benchOneInput(input string, data []byte, opts benchOptions) ([]benchResult, error) {
+	goResult, err := benchGo(input, data, opts.iters, opts.repeats, opts.warmup, opts.rawOutput)
+	if err != nil {
+		return nil, fmt.Errorf("goh264: %w", err)
+	}
+	results := []benchResult{goResult}
+
+	if opts.runFFmpeg && opts.rawOutput && opts.strictPixFmt && opts.ffmpegPixFmt != "" && goResult.RawPixelFormat != "" && opts.ffmpegPixFmt != goResult.RawPixelFormat {
+		return nil, fmt.Errorf("-ffmpeg-pix-fmt %q does not match Go raw pixel format %q", opts.ffmpegPixFmt, goResult.RawPixelFormat)
+	}
+	if opts.runFFmpeg {
+		ffmpegResult, err := benchFFmpeg(input, opts.iters, opts.repeats, opts.warmup, opts.rawOutput, opts.ffmpegBin, opts.ffmpegThreads, opts.ffmpegPixFmt, goResult.RawPixelFormat)
+		if err != nil {
+			return nil, fmt.Errorf("ffmpeg: %w", err)
+		}
+		results = append(results, ffmpegResult)
+	}
+	return results, nil
+}
+
+func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport, error) {
+	if !opts.rawOutput {
+		return benchReport{}, fmt.Errorf("manifest benchmark mode requires -raw=true so oracle rawvideo parity is checked")
+	}
+	manifestData, err := os.ReadFile(path)
+	if err != nil {
+		return benchReport{}, fmt.Errorf("read manifest: %w", err)
+	}
+	entries, err := readBenchCorpusManifest(path)
+	if err != nil {
+		return benchReport{}, err
+	}
+
+	baseDir := filepath.Dir(path)
+	var results []benchResult
+	var decoded int
+	for _, entry := range entries {
+		if entry.Expect != "decode-ok" {
+			continue
+		}
+		if maxEntries > 0 && decoded >= maxEntries {
+			break
+		}
+		if err := validateBenchCorpusEntry(entry); err != nil {
+			return benchReport{}, err
+		}
+		inputPath := entry.Path
+		if !filepath.IsAbs(inputPath) {
+			inputPath = filepath.Join(baseDir, inputPath)
+		}
+		data, err := os.ReadFile(inputPath)
+		if err != nil {
+			return benchReport{}, fmt.Errorf("%s: read input: %w", entry.ID, err)
+		}
+		if err := validateBenchBitstreamMD5(entry, data); err != nil {
+			return benchReport{}, err
+		}
+		entryResults, err := benchOneInput(inputPath, data, opts)
+		if err != nil {
+			return benchReport{}, fmt.Errorf("%s: %w", entry.ID, err)
+		}
+		for i := range entryResults {
+			if err := annotateBenchResultWithOracle(&entryResults[i], entry); err != nil {
+				return benchReport{}, err
+			}
+		}
+		results = append(results, entryResults...)
+		decoded++
+	}
+	if decoded == 0 {
+		return benchReport{}, fmt.Errorf("%s: no decode-ok manifest entries selected", path)
+	}
+
+	meta := benchmarkMetadata(path, manifestData, opts.runFFmpeg, opts.ffmpegBin)
+	meta.CorpusManifest = path
+	meta.CorpusEntries = len(entries)
+	meta.CorpusDecodeOK = decoded
+	meta.ComparisonKind = "manifest-goh264-in-process"
+	if opts.runFFmpeg {
+		meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli"
+	}
+	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 match the manifest oracle; optional FFmpeg CLI rawvideo output must match the same rawvideo MD5 before results are emitted. FFmpeg timing remains a process-per-iteration CLI baseline."
+	return benchReport{Metadata: meta, Results: results}, nil
+}
+
+func readBenchCorpusManifest(path string) ([]benchCorpusEntry, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open manifest %s: %w", path, err)
+	}
+	defer f.Close()
+
+	var entries []benchCorpusEntry
+	scanner := bufio.NewScanner(f)
+	for line := 1; scanner.Scan(); line++ {
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		var entry benchCorpusEntry
+		if err := json.Unmarshal([]byte(text), &entry); err != nil {
+			return nil, fmt.Errorf("%s:%d: %w", path, line, err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read manifest %s: %w", path, err)
+	}
+	return entries, nil
+}
+
+func validateBenchCorpusEntry(entry benchCorpusEntry) error {
+	if entry.ID == "" || entry.Path == "" {
+		return fmt.Errorf("manifest entry id/path must be set: %+v", entry)
+	}
+	if entry.Format != "annexb" {
+		return fmt.Errorf("%s: format = %q, want annexb", entry.ID, entry.Format)
+	}
+	if entry.Expect != "decode-ok" {
+		return fmt.Errorf("%s: benchmark manifest mode only runs decode-ok entries, got %q", entry.ID, entry.Expect)
+	}
+	if entry.BitstreamMD5 == "" || entry.RawVideoMD5 == "" || entry.PixFmt == "" {
+		return fmt.Errorf("%s: decode-ok entries need bitstream_md5, rawvideo_md5, and pix_fmt", entry.ID)
+	}
+	if entry.FrameCount <= 0 || entry.FrameSize <= 0 || len(entry.FrameMD5) != entry.FrameCount {
+		return fmt.Errorf("%s: frame_count/frame_size/frame_md5 mismatch", entry.ID)
+	}
+	return nil
+}
+
+func validateBenchBitstreamMD5(entry benchCorpusEntry, data []byte) error {
+	sum := md5.Sum(data)
+	if got := hex.EncodeToString(sum[:]); got != entry.BitstreamMD5 {
+		return fmt.Errorf("%s: bitstream_md5 = %s, want %s", entry.ID, got, entry.BitstreamMD5)
+	}
+	return nil
+}
+
+func annotateBenchResultWithOracle(result *benchResult, entry benchCorpusEntry) error {
+	if result == nil {
+		return fmt.Errorf("%s: nil benchmark result", entry.ID)
+	}
+	expectedBytes := int64(entry.FrameCount * entry.FrameSize)
+	result.EntryID = entry.ID
+	result.ExpectedRawMD5 = entry.RawVideoMD5
+	result.ExpectedPixFmt = entry.PixFmt
+	result.ExpectedFrames = entry.FrameCount
+	result.ExpectedBytes = expectedBytes
+	if result.RawMD5 != entry.RawVideoMD5 {
+		return fmt.Errorf("%s %s: raw_md5 = %s, want %s", entry.ID, result.Name, result.RawMD5, entry.RawVideoMD5)
+	}
+	if result.BytesPerIter != expectedBytes {
+		return fmt.Errorf("%s %s: bytes_per_iter = %d, want %d", entry.ID, result.Name, result.BytesPerIter, expectedBytes)
+	}
+	if result.Name == "goh264" {
+		if result.FramesPerIter != entry.FrameCount {
+			return fmt.Errorf("%s: Go frames_per_iter = %d, want %d", entry.ID, result.FramesPerIter, entry.FrameCount)
+		}
+		if result.RawPixelFormat != entry.PixFmt {
+			return fmt.Errorf("%s: Go raw_pixel_format = %s, want %s", entry.ID, result.RawPixelFormat, entry.PixFmt)
+		}
+	}
+	result.ParityStatus = "rawvideo-md5-ok"
+	return nil
 }
 
 func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawOutput bool) (benchResult, error) {
