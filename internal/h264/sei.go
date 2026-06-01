@@ -136,6 +136,27 @@ type H2645SEIDisplayOrientation struct {
 	VFlip                 int32
 }
 
+type AVDisplayMatrix struct {
+	Present int32
+	Matrix  [9]int32
+}
+
+type AVRational struct {
+	Num int32
+	Den int32
+}
+
+type AVStereo3D struct {
+	Present                       int32
+	Type                          int32
+	Flags                         int32
+	View                          int32
+	PrimaryEye                    int32
+	Baseline                      uint32
+	HorizontalDisparityAdjustment AVRational
+	HorizontalFieldOfView         AVRational
+}
+
 type H2645SEIAlternativeTransfer struct {
 	Present                          int32
 	PreferredTransferCharacteristics int32

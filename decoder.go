@@ -57,6 +57,8 @@ type PacketSideDataType uint8
 
 const (
 	PacketSideDataNewExtradata              PacketSideDataType = 1
+	PacketSideDataDisplayMatrix             PacketSideDataType = 5
+	PacketSideDataStereo3D                  PacketSideDataType = 6
 	PacketSideDataMasteringDisplayMetadata  PacketSideDataType = 20
 	PacketSideDataContentLightLevel         PacketSideDataType = 22
 	PacketSideDataA53ClosedCaptions         PacketSideDataType = 23
@@ -158,6 +160,7 @@ const (
 	Stereo3DTypeSideBySideQuincunx
 	Stereo3DTypeLines
 	Stereo3DTypeColumns
+	Stereo3DTypeUnspecified
 )
 
 type Stereo3DView uint8
@@ -169,11 +172,28 @@ const (
 	Stereo3DViewUnspecified
 )
 
+type Stereo3DPrimaryEye uint8
+
+const (
+	Stereo3DPrimaryEyeNone Stereo3DPrimaryEye = iota
+	Stereo3DPrimaryEyeLeft
+	Stereo3DPrimaryEyeRight
+)
+
+type Rational struct {
+	Num int32
+	Den int32
+}
+
 type Stereo3D struct {
-	Type       Stereo3DType
-	Inverted   bool
-	View       Stereo3DView
-	StereoMode string
+	Type                          Stereo3DType
+	Inverted                      bool
+	View                          Stereo3DView
+	PrimaryEye                    Stereo3DPrimaryEye
+	Baseline                      uint32
+	HorizontalDisparityAdjustment Rational
+	HorizontalFieldOfView         Rational
+	StereoMode                    string
 }
 
 type DisplayOrientation struct {
@@ -637,6 +657,16 @@ func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameS
 	if side, ok := packetSideDataGet(sideData, PacketSideDataS12MTimecode); ok {
 		out.S12MTimecodes = s12mTimecodesFromPacketSideData(side.Data)
 	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataStereo3D); ok {
+		if stereo, ok := stereo3DFromPacketSideData(side.Data); ok {
+			out.Stereo3D = stereo
+		}
+	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataDisplayMatrix); ok {
+		if matrix, ok := displayMatrixFromPacketSideData(side.Data); ok {
+			out.DisplayMatrix = matrix
+		}
+	}
 	if side, ok := packetSideDataGet(sideData, PacketSideDataAmbientViewingEnvironment); ok {
 		if ambient, ok := ambientViewingFromPacketSideData(side.Data); ok {
 			out.AmbientViewing = ambient
@@ -669,6 +699,42 @@ func s12mTimecodesFromPacketSideData(data []byte) []uint32 {
 		out[i] = binary.LittleEndian.Uint32(data[off : off+4])
 	}
 	return out
+}
+
+func displayMatrixFromPacketSideData(data []byte) (h264.AVDisplayMatrix, bool) {
+	const displayMatrixSideDataSize = 9 * 4
+	if len(data) < displayMatrixSideDataSize {
+		return h264.AVDisplayMatrix{}, false
+	}
+	out := h264.AVDisplayMatrix{Present: 1}
+	for i := range out.Matrix {
+		off := i * 4
+		out.Matrix[i] = int32(binary.LittleEndian.Uint32(data[off : off+4]))
+	}
+	return out, true
+}
+
+func stereo3DFromPacketSideData(data []byte) (h264.AVStereo3D, bool) {
+	const stereo3DStructSize = 36
+	if len(data) < stereo3DStructSize {
+		return h264.AVStereo3D{}, false
+	}
+	return h264.AVStereo3D{
+		Present:    1,
+		Type:       int32(binary.LittleEndian.Uint32(data[:4])),
+		Flags:      int32(binary.LittleEndian.Uint32(data[4:8])),
+		View:       int32(binary.LittleEndian.Uint32(data[8:12])),
+		PrimaryEye: int32(binary.LittleEndian.Uint32(data[12:16])),
+		Baseline:   binary.LittleEndian.Uint32(data[16:20]),
+		HorizontalDisparityAdjustment: h264.AVRational{
+			Num: int32(binary.LittleEndian.Uint32(data[20:24])),
+			Den: int32(binary.LittleEndian.Uint32(data[24:28])),
+		},
+		HorizontalFieldOfView: h264.AVRational{
+			Num: int32(binary.LittleEndian.Uint32(data[28:32])),
+			Den: int32(binary.LittleEndian.Uint32(data[32:36])),
+		},
+	}, true
 }
 
 func ambientViewingFromPacketSideData(data []byte) (h264.H2645SEIAmbientViewingEnvironment, bool) {
@@ -939,6 +1005,12 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 		out.Stereo3D = stereo3DFromFramePacking(src.FramePacking)
 	}
 	out.DisplayOrientation = displayOrientationFromH264(src.DisplayOrientation)
+	if src.Stereo3D.Present != 0 {
+		out.Stereo3D = stereo3DFromPacketSideDataValue(src.Stereo3D)
+	}
+	if src.DisplayMatrix.Present != 0 {
+		out.DisplayOrientation = displayOrientationFromPacketMatrix(src.DisplayMatrix)
+	}
 	if src.AlternativeTransfer.Present != 0 {
 		out.AlternativeTransfer = &AlternativeTransfer{
 			PreferredTransferCharacteristics: src.AlternativeTransfer.PreferredTransferCharacteristics,
@@ -967,6 +1039,10 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 		}
 	}
 	return out
+}
+
+func displayOrientationFromPacketMatrix(src h264.AVDisplayMatrix) *DisplayOrientation {
+	return &DisplayOrientation{Matrix: src.Matrix}
 }
 
 func masteringDisplayFromPacketMetadata(src h264.AVMasteringDisplayMetadata) *MasteringDisplay {
@@ -1126,6 +1202,68 @@ func stereo3DFromFramePacking(src h264.H2645SEIFramePacking) *Stereo3D {
 		out.Type = Stereo3DType2D
 	}
 	return out
+}
+
+func stereo3DFromPacketSideDataValue(src h264.AVStereo3D) *Stereo3D {
+	if src.Present == 0 || src.Type < 0 || src.Type > int32(Stereo3DTypeUnspecified) ||
+		src.View < 0 || src.View > int32(Stereo3DViewUnspecified) ||
+		src.PrimaryEye < 0 || src.PrimaryEye > int32(Stereo3DPrimaryEyeRight) {
+		return nil
+	}
+	out := &Stereo3D{
+		Type:                          Stereo3DType(src.Type),
+		Inverted:                      src.Flags&1 != 0,
+		View:                          Stereo3DView(src.View),
+		PrimaryEye:                    Stereo3DPrimaryEye(src.PrimaryEye),
+		Baseline:                      src.Baseline,
+		HorizontalDisparityAdjustment: rationalFromH264(src.HorizontalDisparityAdjustment),
+		HorizontalFieldOfView:         rationalFromH264(src.HorizontalFieldOfView),
+	}
+	out.StereoMode = stereo3DMode(out.Type, out.Inverted)
+	return out
+}
+
+func rationalFromH264(src h264.AVRational) Rational {
+	return Rational{Num: src.Num, Den: src.Den}
+}
+
+func stereo3DMode(typ Stereo3DType, inverted bool) string {
+	switch typ {
+	case Stereo3DType2D:
+		return "mono"
+	case Stereo3DTypeSideBySide, Stereo3DTypeSideBySideQuincunx:
+		if inverted {
+			return "right_left"
+		}
+		return "left_right"
+	case Stereo3DTypeTopBottom:
+		if inverted {
+			return "bottom_top"
+		}
+		return "top_bottom"
+	case Stereo3DTypeFrameSequence:
+		if inverted {
+			return "block_rl"
+		}
+		return "block_lr"
+	case Stereo3DTypeCheckerboard:
+		if inverted {
+			return "checkerboard_rl"
+		}
+		return "checkerboard_lr"
+	case Stereo3DTypeLines:
+		if inverted {
+			return "row_interleaved_rl"
+		}
+		return "row_interleaved_lr"
+	case Stereo3DTypeColumns:
+		if inverted {
+			return "col_interleaved_rl"
+		}
+		return "col_interleaved_lr"
+	default:
+		return ""
+	}
 }
 
 func validH264FramePackingType(t int32) bool {

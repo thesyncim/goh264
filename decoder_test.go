@@ -571,9 +571,15 @@ func TestDecodePacketFramesPacketSideDataMapsToFrame(t *testing.T) {
 func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	primaries := [3][2]uint16{{30000, 35000}, {10000, 20000}, {15000, 25000}}
 	white := [2]uint16{15635, 16450}
+	matrix := [9]int32{65536, 0, 0, 0, -65536, 0, 123, 456, 1 << 30}
 	frame, err := NewDecoder().DecodePacket(Packet{
 		Data: decodeHexFixture(t, black16AnnexBHex),
 		SideData: []PacketSideData{
+			{Type: PacketSideDataDisplayMatrix, Data: decoderPacketDisplayMatrixSideData(matrix)},
+			{Type: PacketSideDataStereo3D, Data: decoderPacketStereo3DSideData(
+				int32(Stereo3DTypeTopBottom), 1, int32(Stereo3DViewLeft), int32(Stereo3DPrimaryEyeRight), 65000,
+				Rational{Num: -1, Den: 2}, Rational{Num: 90, Den: 1},
+			)},
 			{Type: PacketSideDataAmbientViewingEnvironment, Data: decoderPacketAmbientViewingSideData(12345, 25000, 16667)},
 			{Type: PacketSideDataMasteringDisplayMetadata, Data: decoderPacketMasteringDisplaySideData(primaries, white, 10000000, 100, true, true)},
 			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(4000, 300)},
@@ -584,6 +590,20 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	}
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 	side := frame.SideData
+	if side.DisplayOrientation == nil || side.DisplayOrientation.Matrix != matrix {
+		t.Fatalf("packet display matrix = %+v", side.DisplayOrientation)
+	}
+	if side.Stereo3D == nil ||
+		side.Stereo3D.Type != Stereo3DTypeTopBottom ||
+		!side.Stereo3D.Inverted ||
+		side.Stereo3D.View != Stereo3DViewLeft ||
+		side.Stereo3D.PrimaryEye != Stereo3DPrimaryEyeRight ||
+		side.Stereo3D.Baseline != 65000 ||
+		side.Stereo3D.HorizontalDisparityAdjustment != (Rational{Num: -1, Den: 2}) ||
+		side.Stereo3D.HorizontalFieldOfView != (Rational{Num: 90, Den: 1}) ||
+		side.Stereo3D.StereoMode != "bottom_top" {
+		t.Fatalf("packet stereo3d = %+v", side.Stereo3D)
+	}
 	if side.AmbientViewing == nil || side.AmbientViewing.AmbientIlluminance != 12345 ||
 		side.AmbientViewing.AmbientLightX != 25000 || side.AmbientViewing.AmbientLightY != 16667 {
 		t.Fatalf("packet ambient viewing = %+v", side.AmbientViewing)
@@ -599,6 +619,38 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	if side.ContentLight == nil || side.ContentLight.MaxContentLightLevel != 4000 ||
 		side.ContentLight.MaxPicAverageLightLevel != 300 {
 		t.Fatalf("packet content light = %+v", side.ContentLight)
+	}
+}
+
+func TestDecodePacketFramesPacketDisplayAndStereoWinPublicFirstSideData(t *testing.T) {
+	matrix := [9]int32{0, 65536, 0, -65536, 0, 0, 0, 0, 1 << 30}
+	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeDisplayOrientation, payload: decoderSEIDisplayOrientationPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeFramePackingArrangement, payload: decoderSEIFramePackingPayload()},
+	))
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: data,
+		SideData: []PacketSideData{
+			{Type: PacketSideDataDisplayMatrix, Data: decoderPacketDisplayMatrixSideData(matrix)},
+			{Type: PacketSideDataStereo3D, Data: decoderPacketStereo3DSideData(
+				int32(Stereo3DTypeColumns), 0, int32(Stereo3DViewRight), int32(Stereo3DPrimaryEyeLeft), 32000,
+				Rational{Num: 0, Den: 1}, Rational{Num: 100, Den: 1},
+			)},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if frame.SideData.DisplayOrientation == nil || frame.SideData.DisplayOrientation.Matrix != matrix {
+		t.Fatalf("display matrix = %+v", frame.SideData.DisplayOrientation)
+	}
+	if frame.SideData.Stereo3D == nil ||
+		frame.SideData.Stereo3D.Type != Stereo3DTypeColumns ||
+		frame.SideData.Stereo3D.View != Stereo3DViewRight ||
+		frame.SideData.Stereo3D.PrimaryEye != Stereo3DPrimaryEyeLeft ||
+		frame.SideData.Stereo3D.StereoMode != "col_interleaved_lr" {
+		t.Fatalf("stereo3d = %+v", frame.SideData.Stereo3D)
 	}
 }
 
@@ -1097,8 +1149,10 @@ func TestPacketGlobalSideDataLayoutMatchesNativeFFmpegOracle(t *testing.T) {
 	}
 	got := strings.TrimSpace(string(out))
 	want := strings.Join([]string{
-		fmt.Sprintf("%d %d %d", PacketSideDataMasteringDisplayMetadata, PacketSideDataContentLightLevel, PacketSideDataAmbientViewingEnvironment),
+		fmt.Sprintf("%d %d %d %d %d", PacketSideDataDisplayMatrix, PacketSideDataStereo3D, PacketSideDataMasteringDisplayMetadata, PacketSideDataContentLightLevel, PacketSideDataAmbientViewingEnvironment),
 		"8 8 0 4 24 88 0 48 64 72 80 84",
+		"36 36 0 4 8 12 16 20 28",
+		"0 1 2 3 4 5 6 7 8 0 1 2 3 1",
 	}, "\n")
 	if got != want {
 		t.Fatalf("packet side-data oracle mismatch\nC:\n%s\nGo:\n%s", got, want)
@@ -1129,11 +1183,15 @@ const packetGlobalSideDataOracleC = `
 
 #include "libavcodec/packet.h"
 #include "libavutil/ambient_viewing_environment.h"
+#include "libavutil/display.h"
 #include "libavutil/mastering_display_metadata.h"
+#include "libavutil/stereo3d.h"
 
 int main(void)
 {
-    printf("%d %d %d\n",
+    printf("%d %d %d %d %d\n",
+           AV_PKT_DATA_DISPLAYMATRIX,
+           AV_PKT_DATA_STEREO3D,
            AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
            AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
            AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT);
@@ -1150,6 +1208,31 @@ int main(void)
            offsetof(AVMasteringDisplayMetadata, max_luminance),
            offsetof(AVMasteringDisplayMetadata, has_primaries),
            offsetof(AVMasteringDisplayMetadata, has_luminance));
+    printf("%zu %zu %zu %zu %zu %zu %zu %zu %zu\n",
+           sizeof(int32_t[9]),
+           sizeof(AVStereo3D),
+           offsetof(AVStereo3D, type),
+           offsetof(AVStereo3D, flags),
+           offsetof(AVStereo3D, view),
+           offsetof(AVStereo3D, primary_eye),
+           offsetof(AVStereo3D, baseline),
+           offsetof(AVStereo3D, horizontal_disparity_adjustment),
+           offsetof(AVStereo3D, horizontal_field_of_view));
+    printf("%d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
+           AV_STEREO3D_2D,
+           AV_STEREO3D_SIDEBYSIDE,
+           AV_STEREO3D_TOPBOTTOM,
+           AV_STEREO3D_FRAMESEQUENCE,
+           AV_STEREO3D_CHECKERBOARD,
+           AV_STEREO3D_SIDEBYSIDE_QUINCUNX,
+           AV_STEREO3D_LINES,
+           AV_STEREO3D_COLUMNS,
+           AV_STEREO3D_UNSPEC,
+           AV_STEREO3D_VIEW_PACKED,
+           AV_STEREO3D_VIEW_LEFT,
+           AV_STEREO3D_VIEW_RIGHT,
+           AV_STEREO3D_VIEW_UNSPEC,
+           AV_STEREO3D_FLAG_INVERT);
     return 0;
 }
 `
@@ -2465,6 +2548,28 @@ func decoderPacketAmbientViewingSideData(illuminance uint32, lightX uint16, ligh
 	out = appendDecoderAVRationalLE(out, illuminance, 10000)
 	out = appendDecoderAVRationalLE(out, uint32(lightX), 50000)
 	out = appendDecoderAVRationalLE(out, uint32(lightY), 50000)
+	return out
+}
+
+func decoderPacketDisplayMatrixSideData(matrix [9]int32) []byte {
+	out := make([]byte, 9*4)
+	for i, v := range matrix {
+		binary.LittleEndian.PutUint32(out[i*4:i*4+4], uint32(v))
+	}
+	return out
+}
+
+func decoderPacketStereo3DSideData(typ int32, flags int32, view int32, primaryEye int32, baseline uint32, disparity Rational, fieldOfView Rational) []byte {
+	out := make([]byte, 36)
+	binary.LittleEndian.PutUint32(out[0:4], uint32(typ))
+	binary.LittleEndian.PutUint32(out[4:8], uint32(flags))
+	binary.LittleEndian.PutUint32(out[8:12], uint32(view))
+	binary.LittleEndian.PutUint32(out[12:16], uint32(primaryEye))
+	binary.LittleEndian.PutUint32(out[16:20], baseline)
+	binary.LittleEndian.PutUint32(out[20:24], uint32(disparity.Num))
+	binary.LittleEndian.PutUint32(out[24:28], uint32(disparity.Den))
+	binary.LittleEndian.PutUint32(out[28:32], uint32(fieldOfView.Num))
+	binary.LittleEndian.PutUint32(out[32:36], uint32(fieldOfView.Den))
 	return out
 }
 

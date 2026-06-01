@@ -103,13 +103,14 @@ resetting DPB reference state. The same public packet surface maps
 `AV_PKT_DATA_A53_CC`, `AV_PKT_DATA_AFD`, and
 `AV_PKT_DATA_S12M_TIMECODE` onto decoded frame side data as frames are allocated,
 so packet side data follows delayed B-frame output. The same path maps
-FFmpeg's global video metadata packet side data for mastering display, content
-light, and ambient viewing environment, using the native struct layout and
-exact AVRational scaling into the public H.264/H.274 metadata units. The tests
-cover FFmpeg's first-matching packet entry, H.264's packet-first A53/AFD
-ordering, S12M coded-timecode replacement when picture-timing exports a
-timecode, coded-SEI precedence over global packet HDR/ambient metadata, and
-delayed B-frame carriage, while preserving the rawvideo MD5. Public frame
+FFmpeg's global video metadata packet side data for display matrix, Stereo3D,
+mastering display, content light, and ambient viewing environment, using the
+native struct layouts and exact AVRational scaling into the public
+H.264/H.274 metadata units. The tests cover FFmpeg's first-matching packet
+entry, H.264's packet-first A53/AFD/display/stereo ordering, S12M
+coded-timecode replacement when picture-timing exports a timecode, coded-SEI
+precedence over global packet HDR/ambient metadata, and delayed B-frame
+carriage, while preserving the rawvideo MD5. Public frame
 side-data tests prepend synthetic
 leading SEI to the black16 fixture and prove the decoded frame retains x264
 user-data, A53 closed captions, active-format description, recovery point,
@@ -217,8 +218,9 @@ Included:
 - H.264 Annex B byte-stream parsing
 - H.264 AVC/NALFF length-prefixed packet parsing when the caller supplies `nal_length_size`
 - H.264 packet side-data handling for `AV_PKT_DATA_NEW_EXTRADATA`-style
-  parameter-set updates plus A53 captions, AFD, and SMPTE 12M timecode
-  packet-to-frame mapping
+  parameter-set updates plus A53 captions, AFD, display matrix, Stereo3D,
+  SMPTE 12M timecode, mastering display, content light, and ambient viewing
+  environment packet-to-frame mapping
 - H.264 NAL headers and RBSP handling
 - SPS VUI public metadata for SAR, video range/format, colorimetry, chroma location, and timing
 - Picture-timing-derived `repeat_pict`, interlaced, top-field-first, SMPTE 12M timecode, and key-frame public frame metadata for the simple frame-picture path

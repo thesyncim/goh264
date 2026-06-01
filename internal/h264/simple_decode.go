@@ -61,6 +61,8 @@ type DecodedFrameSideData struct {
 	GreenMetadata        H264SEIGreenMetadata
 	AFD                  H2645SEIAFD
 	FramePacking         H2645SEIFramePacking
+	Stereo3D             AVStereo3D
+	DisplayMatrix        AVDisplayMatrix
 	DisplayOrientation   H2645SEIDisplayOrientation
 	AlternativeTransfer  H2645SEIAlternativeTransfer
 	AmbientViewing       H2645SEIAmbientViewingEnvironment
@@ -387,6 +389,12 @@ func mergePacketSideDataIntoDecodedFrame(dst *DecodedFrameSideData, src DecodedF
 	}
 	if len(src.S12MTimecodes) != 0 && dst.PictureTiming.TimecodeCount == 0 {
 		dst.S12MTimecodes = append([]uint32(nil), src.S12MTimecodes...)
+	}
+	if src.Stereo3D.Present != 0 {
+		dst.Stereo3D = src.Stereo3D
+	}
+	if src.DisplayMatrix.Present != 0 {
+		dst.DisplayMatrix = src.DisplayMatrix
 	}
 	if src.AmbientViewing.Present != 0 && dst.AmbientViewing.Present == 0 {
 		dst.AmbientViewing = src.AmbientViewing

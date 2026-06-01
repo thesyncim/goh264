@@ -231,6 +231,10 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 					Type: PacketSideDataContentLightLevel,
 					Data: decoderPacketContentLightSideData(uint32(100+i), uint32(10+i)),
 				},
+				{
+					Type: PacketSideDataDisplayMatrix,
+					Data: decoderPacketDisplayMatrixSideData([9]int32{int32(i + 1), 0, 0, 0, 65536, 0, 0, 0, 1 << 30}),
+				},
 			},
 		})
 		if err != nil {
@@ -260,6 +264,9 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 		}
 		if frame.SideData.ContentLight == nil || frame.SideData.ContentLight.MaxContentLightLevel != wantCLL[i] {
 			t.Fatalf("frame[%d] packet content light = %+v, want max CLL %d", i, frame.SideData.ContentLight, wantCLL[i])
+		}
+		if frame.SideData.DisplayOrientation == nil || frame.SideData.DisplayOrientation.Matrix[0] != int32(want[i][0]) {
+			t.Fatalf("frame[%d] packet display matrix = %+v", i, frame.SideData.DisplayOrientation)
 		}
 	}
 }
