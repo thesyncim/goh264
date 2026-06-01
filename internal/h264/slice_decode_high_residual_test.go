@@ -87,28 +87,6 @@ func TestHighP16x16ResidualHandoffReconstructsExactLuma(t *testing.T) {
 }
 
 func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
-	t.Run("weighted prediction table", func(t *testing.T) {
-		m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeP)
-		sh.RefCount = [2]uint32{1, 0}
-		pwt := h264MotionCompTestPWT(1)
-		pwt.UseWeight = 1
-		gb := newBitReader([]byte{0xff})
-
-		_, err := m.decodeFrameSliceDataHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{
-			SliceNum:   41,
-			PredWeight: &pwt,
-		})
-		if err != ErrUnsupported {
-			t.Fatalf("weighted high P decode err = %v, want ErrUnsupported", err)
-		}
-		if gb.bitPos != 0 {
-			t.Fatalf("weighted high P consumed %d bits, want 0", gb.bitPos)
-		}
-		if m.MacroblockTyp[0] != 0 || m.SliceTable[0] != ^uint16(0) {
-			t.Fatalf("weighted high P tables type/slice = %#x/%#x, want untouched", m.MacroblockTyp[0], m.SliceTable[0])
-		}
-	})
-
 	t.Run("deblock enabled", func(t *testing.T) {
 		m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, true, PictureTypeP)
 		sh.RefCount = [2]uint32{1, 0}
@@ -131,8 +109,14 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 		}
 	})
 
-	t.Run("partitioned p macroblock", func(t *testing.T) {
-		sh := &SliceHeader{SliceTypeNoS: PictureTypeP}
+	t.Run("weighted partitioned p macroblock", func(t *testing.T) {
+		sh := &SliceHeader{
+			SliceTypeNoS: PictureTypeP,
+			PPS:          &PPS{WeightedPred: 1},
+			PredWeightTable: PredWeightTable{
+				UseWeight: 1,
+			},
+		}
 		mbType := MBType16x8 | MBTypeP0L0 | MBTypeP1L0
 
 		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 1, 1); err != ErrUnsupported {

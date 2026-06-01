@@ -311,6 +311,18 @@ func high10InterFixtureCases() []struct {
 			rawSize: high10CABACP16x16ResidualRawFrameSize,
 			want:    high10CABACP16x16ResidualFrameMD5,
 		},
+		{
+			name:    "cavlc-weighted-p16x16",
+			hex:     high10WeightedCAVLCAnnexBHex,
+			rawSize: high10WeightedPFrameRawSize,
+			want:    high10WeightedPFrameMD5,
+		},
+		{
+			name:    "cabac-weighted-p16x16",
+			hex:     high10WeightedCABACAnnexBHex,
+			rawSize: high10WeightedPFrameRawSize,
+			want:    high10WeightedPFrameMD5,
+		},
 	}
 }
 
