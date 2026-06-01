@@ -99,22 +99,29 @@ func TestHigh10BDeblockFixtureMacroblockSyntax(t *testing.T) {
 	}
 }
 
-func TestHigh10ImplicitPartitionedBDeblockFixtureMacroblockSyntax(t *testing.T) {
+func TestHigh10PartitionedBDeblockFixtureMacroblockSyntax(t *testing.T) {
 	for _, tt := range []struct {
-		name       string
-		file       string
-		cabac      int32
-		wantShape  uint32
-		wantSubMB  bool
-		wantCBP    int
-		wantCBPSet bool
+		name              string
+		file              string
+		cabac             int32
+		weightedBipredIDC uint32
+		wantShape         uint32
+		wantSubMB         bool
+		wantCBP           int
+		wantCBPSet        bool
 	}{
-		{name: "cavlc-b16x8", file: "high10_partitioned_implicit_weight_b_deblock_b16x8_cavlc.h264", wantShape: MBType16x8},
-		{name: "cabac-b16x8", file: "high10_partitioned_implicit_weight_b_deblock_b16x8_cabac.h264", cabac: 1, wantShape: MBType16x8},
-		{name: "cavlc-b8x16", file: "high10_partitioned_implicit_weight_b_deblock_b8x16_cavlc.h264", wantShape: MBType8x16},
-		{name: "cabac-b8x16", file: "high10_partitioned_implicit_weight_b_deblock_b8x16_cabac.h264", cabac: 1, wantShape: MBType8x16},
-		{name: "cavlc-b8x8", file: "high10_partitioned_implicit_weight_b_deblock_b8x8_cavlc.h264", wantShape: MBType8x8, wantSubMB: true, wantCBP: 0x5, wantCBPSet: true},
-		{name: "cabac-b8x8", file: "high10_partitioned_implicit_weight_b_deblock_b8x8_cabac.h264", cabac: 1, wantShape: MBType8x8, wantSubMB: true, wantCBP: 0x5, wantCBPSet: true},
+		{name: "neutral-cavlc-b16x8", file: "high10_partitioned_b_deblock_b16x8_cavlc.h264", wantShape: MBType16x8},
+		{name: "neutral-cabac-b16x8", file: "high10_partitioned_b_deblock_b16x8_cabac.h264", cabac: 1, wantShape: MBType16x8},
+		{name: "neutral-cavlc-b8x16", file: "high10_partitioned_b_deblock_b8x16_cavlc.h264", wantShape: MBType8x16},
+		{name: "neutral-cabac-b8x16", file: "high10_partitioned_b_deblock_b8x16_cabac.h264", cabac: 1, wantShape: MBType8x16},
+		{name: "neutral-cavlc-b8x8", file: "high10_partitioned_b_deblock_b8x8_cavlc.h264", wantShape: MBType8x8, wantSubMB: true, wantCBP: 0x7, wantCBPSet: true},
+		{name: "neutral-cabac-b8x8", file: "high10_partitioned_b_deblock_b8x8_cabac.h264", cabac: 1, wantShape: MBType8x8, wantSubMB: true, wantCBP: 0x7, wantCBPSet: true},
+		{name: "implicit-cavlc-b16x8", file: "high10_partitioned_implicit_weight_b_deblock_b16x8_cavlc.h264", weightedBipredIDC: 2, wantShape: MBType16x8},
+		{name: "implicit-cabac-b16x8", file: "high10_partitioned_implicit_weight_b_deblock_b16x8_cabac.h264", cabac: 1, weightedBipredIDC: 2, wantShape: MBType16x8},
+		{name: "implicit-cavlc-b8x16", file: "high10_partitioned_implicit_weight_b_deblock_b8x16_cavlc.h264", weightedBipredIDC: 2, wantShape: MBType8x16},
+		{name: "implicit-cabac-b8x16", file: "high10_partitioned_implicit_weight_b_deblock_b8x16_cabac.h264", cabac: 1, weightedBipredIDC: 2, wantShape: MBType8x16},
+		{name: "implicit-cavlc-b8x8", file: "high10_partitioned_implicit_weight_b_deblock_b8x8_cavlc.h264", weightedBipredIDC: 2, wantShape: MBType8x8, wantSubMB: true, wantCBP: 0x5, wantCBPSet: true},
+		{name: "implicit-cabac-b8x8", file: "high10_partitioned_implicit_weight_b_deblock_b8x8_cabac.h264", cabac: 1, weightedBipredIDC: 2, wantShape: MBType8x8, wantSubMB: true, wantCBP: 0x5, wantCBPSet: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "h264", tt.file))
@@ -150,14 +157,15 @@ func TestHigh10ImplicitPartitionedBDeblockFixtureMacroblockSyntax(t *testing.T) 
 					if sh.SliceTypeNoS != PictureTypeB {
 						continue
 					}
-					if sh.DeblockingFilter != 1 || sh.PPS == nil || sh.PPS.CABAC != tt.cabac || !isHighBImplicitWeighted(sh) {
-						t.Fatalf("B slice deblock/cabac/implicit = %d/%v/%t, want cabac=%d deblock-enabled implicit weighted B",
-							sh.DeblockingFilter, sh.PPS, isHighBImplicitWeighted(sh), tt.cabac)
+					if sh.DeblockingFilter != 1 || sh.PPS == nil || sh.PPS.CABAC != tt.cabac ||
+						sh.PPS.WeightedBipredIDC != tt.weightedBipredIDC {
+						t.Fatalf("B slice deblock/cabac/weighted = %d/%v/%d, want cabac=%d weighted_bipred_idc=%d",
+							sh.DeblockingFilter, sh.PPS, sh.PPS.WeightedBipredIDC, tt.cabac, tt.weightedBipredIDC)
 					}
 
 					got := decodeHigh10BDeblockFixtureMacroblocks(t, sh, &payload, tt.cabac != 0, 1, false)[0]
 					if got.MBType&tt.wantShape == 0 || got.MBType&(MBTypeDirect2|MBTypeSkip|MBTypeIntra4x4|MBTypeIntra16x16|MBTypeIntraPCM) != 0 {
-						t.Fatalf("B macroblock type = %#x, want implicit partitioned shape %#x only", got.MBType, tt.wantShape)
+						t.Fatalf("B macroblock type = %#x, want partitioned shape %#x only", got.MBType, tt.wantShape)
 					}
 					if tt.wantSubMB {
 						if !isHighB8x8ExplicitSubMacroblock(got.MBType, &got.Inter.SubMBType) {

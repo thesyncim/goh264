@@ -406,9 +406,16 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32,
 		return ErrInvalidData
 	}
 	if sh.DeblockingFilter == 1 {
-		if !isHighBImplicitWeighted(sh) &&
-			(isHighB16x16ExplicitMacroblock(mbType) || isHighB16x16DirectMacroblock(mbType)) {
-			return nil
+		if !isHighBImplicitWeighted(sh) {
+			if isHighB16x16ExplicitMacroblock(mbType) || isHighB16x16DirectMacroblock(mbType) {
+				return nil
+			}
+			if isHighB16x8Or8x16ExplicitMacroblock(mbType) && cbp == 0 && cbpTable == 0 {
+				return nil
+			}
+			if isHighB8x8ExplicitSubMacroblock(mbType, subMBType) {
+				return nil
+			}
 		}
 		if isHighBImplicitWeighted(sh) {
 			if isHighB16x8Or8x16ExplicitMacroblock(mbType) && cbp == 0 && cbpTable == 0 {
