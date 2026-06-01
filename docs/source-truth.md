@@ -56,7 +56,8 @@ dequant IDCT fixtures.
 The H.264 reconstruction oracle compiles pinned prediction and IDCT templates
 and compares source-shaped macroblock reconstruction fixtures, including
 10-bit 4:2:0, 12-bit 4:2:2, and 14-bit 4:4:4 high-bit-depth IntraPCM payload
-unpacking into uint16 planes.
+unpacking into uint16 planes plus high-bit-depth intra16x16, intra4x4, and
+intra8x8 prediction/IDCT/dequant call-site fixtures.
 
 The H.264 chroma MC and qpel oracles compile the pinned
 `libavcodec/h264chroma_template.c` and `libavcodec/h264qpel_template.c`,

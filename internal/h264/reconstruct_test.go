@@ -157,6 +157,143 @@ func TestH264HLDecodeFrameIntraPCMHighReconstructs444(t *testing.T) {
 	}
 }
 
+func TestH264HLDecodeFrameMacroblockHighIntra16x16Reconstructs420(t *testing.T) {
+	const bitDepth = 10
+	dst := makeH264ReconstructHighPicture(1, 17)
+	residual := h264ReconstructResidual420()
+	mbX, mbY := 1, 1
+	yOff := mbY*16*dst.LumaStride + mbX*16
+	before := dst.Y[yOff]
+
+	if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHigh{
+		MBType:             MBTypeIntra16x16,
+		MBX:                mbX,
+		MBY:                mbY,
+		CBP:                0x31,
+		QScale:             20,
+		ChromaQP:           [2]uint8{20, 21},
+		ChromaPredMode:     int32(intraPred8x8Horizontal),
+		Intra16x16PredMode: int8(intraPred8x8Vertical),
+		PPS:                cavlcFlatQMulPPS(),
+		Residual:           &residual,
+		BitDepth:           bitDepth,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if dst.Y[yOff] == before {
+		t.Fatalf("high luma top-left was not reconstructed, still %d", before)
+	}
+	if residual.MB[0] != 0 || residual.MB[16*16] != 0 || residual.MB[32*16] != 0 {
+		t.Fatalf("high residual blocks were not cleared after IDCT: %d/%d/%d", residual.MB[0], residual.MB[16*16], residual.MB[32*16])
+	}
+}
+
+func TestH264HLDecodeFrameMacroblockHighIntra16x16Reconstructs444PaddedChromaStride(t *testing.T) {
+	const bitDepth = 14
+	dst := makeH264ReconstructHighPicture(3, 23)
+	_, chromaHeight := h264ChromaFrameSize(dst.MBWidth, dst.MBHeight, dst.ChromaFormatIDC)
+	dst.ChromaStride = dst.LumaStride + 16
+	dst.Cb = make([]uint16, dst.ChromaStride*chromaHeight)
+	dst.Cr = make([]uint16, dst.ChromaStride*chromaHeight)
+	fillH264ReconstructHighPlane(dst.Cb, 52)
+	fillH264ReconstructHighPlane(dst.Cr, 94)
+	var residual cavlcResidualContext
+	mbX, mbY := 1, 1
+
+	if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHigh{
+		MBType:             MBTypeIntra16x16,
+		MBX:                mbX,
+		MBY:                mbY,
+		QScale:             20,
+		ChromaQP:           [2]uint8{20, 21},
+		Intra16x16PredMode: int8(intraPredDC1288x8),
+		PPS:                cavlcFlatQMulPPS(),
+		Residual:           &residual,
+		BitDepth:           bitDepth,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	yOff, cbOff, crOff, err := h264MBDestPartOffsetsHigh(dst, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertH264ConstantBlockHigh(t, "high 444 y", dst.Y, yOff, dst.LumaStride, 16, 16, 1<<(bitDepth-1))
+	assertH264ConstantBlockHigh(t, "high 444 cb", dst.Cb, cbOff, dst.ChromaStride, 16, 16, 1<<(bitDepth-1))
+	assertH264ConstantBlockHigh(t, "high 444 cr", dst.Cr, crOff, dst.ChromaStride, 16, 16, 1<<(bitDepth-1))
+}
+
+func TestH264HLDecodeFrameMacroblockHighIntra4x4Reconstructs420(t *testing.T) {
+	const bitDepth = 10
+	dst := makeH264ReconstructHighPicture(1, 17)
+	residual := h264ReconstructResidualIntra4x4()
+	predCache := h264ReconstructIntra4x4PredCache()
+	mbX, mbY := 1, 1
+	yOff := mbY*16*dst.LumaStride + mbX*16
+	before := dst.Y[yOff]
+
+	if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHigh{
+		MBType:            MBTypeIntra4x4,
+		MBX:               mbX,
+		MBY:               mbY,
+		CBP:               0x31,
+		QScale:            20,
+		ChromaQP:          [2]uint8{20, 21},
+		ChromaPredMode:    int32(intraPred8x8DC),
+		Intra4x4PredCache: &predCache,
+		TopLeftAvailable:  0xffff,
+		TopRightAvailable: 0xffff,
+		PPS:               cavlcFlatQMulPPS(),
+		Residual:          &residual,
+		BitDepth:          bitDepth,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if dst.Y[yOff] == before {
+		t.Fatalf("high intra4x4 luma top-left was not reconstructed, still %d", before)
+	}
+	if residual.MB[0] != 0 || residual.MB[5*16] != 0 || residual.MB[16*16] != 0 {
+		t.Fatalf("high intra4x4 residual blocks were not cleared after reconstruction: %d/%d/%d", residual.MB[0], residual.MB[5*16], residual.MB[16*16])
+	}
+}
+
+func TestH264HLDecodeFrameMacroblockHighIntra8x8Reconstructs422(t *testing.T) {
+	const bitDepth = 12
+	dst := makeH264ReconstructHighPicture(2, 31)
+	residual := h264ReconstructResidualIntra8x8()
+	predCache := h264ReconstructIntra8x8PredCache()
+	mbX, mbY := 1, 1
+	yOff := mbY*16*dst.LumaStride + mbX*16
+	before := dst.Y[yOff]
+
+	if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHigh{
+		MBType:            MBTypeIntra4x4 | MBType8x8DCT,
+		MBX:               mbX,
+		MBY:               mbY,
+		CBP:               0x33,
+		QScale:            22,
+		ChromaQP:          [2]uint8{22, 23},
+		ChromaPredMode:    int32(intraPred8x8Plane),
+		Intra4x4PredCache: &predCache,
+		TopLeftAvailable:  0xffff,
+		TopRightAvailable: 0xffff,
+		PPS:               cavlcFlatQMulPPS(),
+		Residual:          &residual,
+		BitDepth:          bitDepth,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if dst.Y[yOff] == before {
+		t.Fatalf("high intra8x8 luma top-left was not reconstructed, still %d", before)
+	}
+	if residual.MB[0] != 0 || residual.MB[4*16] != 0 || residual.MB[16*16] != 0 {
+		t.Fatalf("high intra8x8 residual blocks were not cleared after reconstruction: %d/%d/%d", residual.MB[0], residual.MB[4*16], residual.MB[16*16])
+	}
+}
+
 func TestH264HLDecodeFrameMacroblockIntra16x16Reconstructs444PaddedChromaStride(t *testing.T) {
 	dst := makeH264MotionCompPicture(3, 23)
 	_, chromaHeight := h264ChromaFrameSize(dst.MBWidth, dst.MBHeight, dst.ChromaFormatIDC)
@@ -412,6 +549,17 @@ func assertH264RowsHigh(t *testing.T, label string, dst []uint16, offset int, st
 }
 
 func assertH264ConstantBlock(t *testing.T, label string, dst []uint8, offset int, stride int, width int, height int, want uint8) {
+	t.Helper()
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			if got := dst[offset+y*stride+x]; got != want {
+				t.Fatalf("%s[%d,%d] = %d, want %d", label, x, y, got, want)
+			}
+		}
+	}
+}
+
+func assertH264ConstantBlockHigh(t *testing.T, label string, dst []uint16, offset int, stride int, width int, height int, want uint16) {
 	t.Helper()
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
