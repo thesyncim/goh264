@@ -20,19 +20,20 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
   decode because local DSP support is only present for 9, 10, 12, and 14.
 - QP/dequant tables are sized to `qpMaxNum == 87`, so 14-bit QP storage exists.
   Slice parsing computes `maxQP` from `BitDepthLuma`; the public simple decode
-  path still rejects non-8-bit frames before high slice reconstruction.
+  path now dispatches high-bit-depth CAVLC/CABAC slices only for the proved High
+  10 4:2:0 deblock-disabled intra subset.
 - `internal/h264/simple_decode.go` now represents decoded frames with either
   byte planes (`DecodedFrame.Y/Cb/Cr`) or uint16 planes
   (`DecodedFrame.Y16/Cb16/Cr16`). `newSimpleDecodedFrame` allocates high planes
   for 9/10/12/14-bit SPS values and validates them through
-  `picturePlanesHigh()`, but `decodeSimpleNALUnitsWithState` still returns
-  `ErrUnsupported` for high-bit-depth pictures before dispatching CAVLC/CABAC
-  slice decode.
+  `picturePlanesHigh()`. `decodeSimpleNALUnitsWithState` routes high pictures
+  through a separate uint16 slice loop when validation proves a High 10 4:2:0
+  I slice with deblocking disabled.
 - `decoder.go` exposes public `Frame.Y16/Cb16/Cr16`, `BytesPerSample`,
   `RawPixelFormat`, `RawYUVSize`, `AppendRawYUV16`, and
   `AppendRawYUVBytesLE` alongside the existing 8-bit `Frame.Y/Cb/Cr` and
-  `AppendRawYUV`. These helpers define the raw-output contract for future high
-  decode, but they do not make high-bit-depth bitstream decode public yet.
+  `AppendRawYUV`. These helpers now carry the first public High 10
+  deblock-disabled IDR/I output fixtures without downconverting samples.
 - Entropy/state layers are farther along than output: CAVLC and CABAC frame-MB
   paths already size and hand off high-bit-depth IntraPCM payloads, carry high
   QP values, and persist residual/motion/direct state in bit-depth-neutral table
@@ -42,16 +43,18 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
   and luma/chroma deblocking have 9/10/12/14-bit reference implementations.
 - `internal/h264/reconstruct_high.go` has a separate `h264PicturePlanesHigh`
   surface and internal high-bit-depth IntraPCM/intra/inter reconstruction
-  helpers for 4:2:0, 4:2:2, and 4:4:4. That high path is not called from the
-  public simple slice loop, and high deblocking/border-exchange modes remain at
-  the unsupported boundary.
+  helpers for 4:2:0, 4:2:2, and 4:4:4. The public simple slice loop now calls
+  the high path for deblock-disabled intra pictures; high P/B motion through
+  public slices and high deblocking/border-exchange modes remain at the
+  unsupported boundary.
 - `internal/h264/motion_comp_high.go` now mirrors the 8-bit `hl_motion`
   call-site layer over uint16 planes. It covers standard and weighted
   macroblock partitions, 4:2:0/4:2:2 chroma MC, 4:4:4 qpel-shaped Cb/Cr, and
   uint16 edge-emulation scratch in sample units.
 - `internal/h264/reconstruct_high.go` now consumes high motion internally for
-  inter macroblocks. The public simple slice path still rejects non-8-bit frame
-  decode, so this is MB-level parity rather than public high-bit-depth output.
+  inter macroblocks. The public simple slice path still rejects high P/B frame
+  decode, so high inter remains MB-level parity rather than public high-bit-depth
+  output.
 - `internal/h264/loop_filter.go` ports the generic frame-picture loop-filter
   strength and call-site wiring for 8-bit planes. High-bit-depth DSP kernels
   exist in `dsp.go`, but the frame filter still validates `BitDepthLuma == 8`
@@ -96,18 +99,19 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
 | Area | Current state | Remaining high-bit-depth work |
 | --- | --- | --- |
 | SPS/PPS/slice metadata | High bit depths parse; PPS/dequant tables cover 9/10/12/14; slice QP uses bit-depth max. | Preserve this behavior while removing simple-path high-bit-depth rejects only when the matching high decode path exists. |
-| Entropy-to-state | CAVLC/CABAC frame-MB handoff, residuals, motion caches, direct motion, and high IntraPCM payload sizing exist. | Prove that high QP and high residual buffers survive a full high slice loop; add high-specific regression cases where QP exceeds 51. |
-| Internal frame storage | `DecodedFrame` now has uint16 high planes, `newSimpleDecodedFrame` allocates them for 9/10/12/14-bit SPS values, `picturePlanesHigh()` validates them, the simple DPB can expose `RefsHigh`, and public `Frame` can carry `Y16/Cb16/Cr16`. | Keep actual high decode guarded until slice integration consumes high refs, reconstruction, and filtering from bitstreams. |
-| Intra reconstruction | Internal high IntraPCM/intra16x16/intra4x4/intra8x8 call sites exist and are oracle-covered. | Wire the high path into frame slice decode for deblock-disabled intra frames first, then for mixed I/P/B streams after high motion exists. |
+| Entropy-to-state | CAVLC/CABAC frame-MB handoff, residuals, motion caches, direct motion, and high IntraPCM payload sizing exist; high CAVLC/CABAC slice loops now carry deblock-disabled I pictures through reconstruction. | Add high-specific regression cases where QP exceeds 51 and extend the high slice loop beyond I slices into P/B motion. |
+| Internal frame storage | `DecodedFrame` now has uint16 high planes, `newSimpleDecodedFrame` allocates them for 9/10/12/14-bit SPS values, `picturePlanesHigh()` validates them, the simple DPB can expose `RefsHigh`, and public `Frame` can carry `Y16/Cb16/Cr16`. | Keep high P/B, high deblocking, GBR, and unproved depth/chroma combinations guarded until matching bitstream oracles land. |
+| Intra reconstruction | Internal high IntraPCM/intra16x16/intra4x4/intra8x8 call sites exist and are oracle-covered; the simple high slice path now decodes deblock-disabled High 10 4:2:0 CAVLC/CABAC IDR/I fixtures through public output. | Broaden intra coverage to 12/14-bit, 4:2:2/4:4:4, IntraPCM/lossless variants, and then mixed I/P/B streams after high motion is public. |
 | Inter/motion reconstruction | 8-bit `hl_motion` is integrated for P/B, weighted P, implicit B, direct B, and 4:4:4 planes. High `h264HLMotionFrame*` is now ported for internal MB-level 4:2:0/4:2:2/4:4:4 motion, explicit/implicit weighting, and edge emulation. | Wire high refs and motion through the simple slice/frame path, then prove public high P/B bitstreams and direct-motion consumption with framemd5. |
 | Loop filter integration | 8-bit frame-picture strength/call-site integration works post-frame for the simple path; high deblock kernels exist. | Add high frame-picture filter wiring over uint16 planes, source-shaped high threshold indexing, chroma 4:2:0/4:2:2 and 4:4:4 edge dispatch, and high bitstream fixtures with deblocking enabled. |
-| Public output | Public `Frame` exposes `Y16/Cb16/Cr16`, `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`, `AppendRawYUV16`, and `AppendRawYUVBytesLE`; `AppendRawYUV` remains 8-bit-only. | Prove the high helpers against FFmpeg rawvideo bytes once a high bitstream decode path exists; keep public decode returning `ErrUnsupported` until at least one high IDR/I fixture passes. |
-| Oracle fixtures | Kernel oracles cover high primitives; public frame-MD5 fixtures cover 8-bit High-profile streams. | Add true high-bit-depth framemd5 fixtures and default tests in the same style as current Annex B/AVC/configured packet tests. |
+| Public output | Public `Frame` exposes `Y16/Cb16/Cr16`, `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`, `AppendRawYUV16`, and `AppendRawYUVBytesLE`; `AppendRawYUV` remains 8-bit-only; High 10 deblock-disabled I output is proved against FFmpeg rawvideo MD5s. | Keep P/B, high deblocking, GBR, and unproved chroma/depth combinations guarded until matching bitstream oracles land. |
+| Oracle fixtures | Kernel oracles cover high primitives; public frame-MD5 fixtures cover 8-bit High-profile streams and the first true High 10 CAVLC/CABAC deblock-disabled IDR/I fixtures. | Build the rest of the true high-bit-depth fixture ladder in the same style as current Annex B/AVC/configured packet tests. |
 
 ## Internal Frame And Plane Work
 
-The uint16 frame-storage safe point makes high-bit-depth frames representable
-without enabling public high-bit-depth decode. It mirrors FFmpeg's separation
+The original uint16 frame-storage safe point made high-bit-depth frames
+representable; the current safe point exposes only the proved High 10 4:2:0
+deblock-disabled I subset through public output. It mirrors FFmpeg's separation
 between selected pixel format, `pixel_shift`, and `AVFrame` buffer ownership in
 `libavcodec/h264_slice.c` `get_pixel_format`, `h264_slice_header_init`,
 `alloc_picture`, and `h264_frame_start`.
@@ -141,26 +145,29 @@ Completed ref-facing storage rules:
   delayed output, and direct-motion provenance are shared between byte and uint16
   frames.
 
-The high-bit-depth public decode guard must stay in place while this is only a
-storage/output-helper safe point. Tests for this step should assert high plane
-allocation, plane sizes, strides, chroma sizing for `chroma_format_idc` 0/1/2/3,
-crop geometry, public helper error behavior, and no change in 8-bit frame MD5s.
+The high-bit-depth public decode guard is now narrowed rather than blanket:
+deblock-disabled High 10 4:2:0 I slices may reach public output, while high
+P/B, high deblocking, and unproved depth/chroma combinations remain guarded.
+Storage tests should continue to assert high plane allocation, plane sizes,
+strides, chroma sizing for `chroma_format_idc` 0/1/2/3, crop geometry, public
+helper error behavior, and no change in 8-bit frame MD5s.
 
 ## High Intra Slice Integration
 
-After high frames can be allocated, wire a narrow decode path for high
-deblock-disabled intra frames:
+After high frames can be allocated, the first narrow decode path for high
+deblock-disabled intra frames is now wired:
 
 - Split the simple slice decode dispatch by sample depth after headers are
   parsed and frame storage is allocated.
-- Add `h264FrameSliceDecodeInputHigh` carrying high refs later, but initially it
-  can carry only `SliceNum`.
-- Add high CAVLC/CABAC slice loops or shared entropy loops that call
+- Add `h264FrameSliceDecodeInputHigh` carrying `SliceNum`, high refs, direct
+  context, prediction weights, and high motion scratch so the next inter safe
+  points can extend the same call surface.
+- Add high CAVLC/CABAC slice loops that call
   `h264HLDecodeFrameMacroblockHigh`.
 - Extend `h264FrameMBReconstructInputHigh` from the current isolated helper shape
-  only as needed for parity; for the intra safe point it needs the existing
-  intra fields, residual, PPS, transform-bypass flag, bit depth, and IntraPCM
-  payload.
+  only as needed for parity; for the intra safe point it carries the existing
+  intra fields, residual, PPS, transform-bypass flag, bit depth, refs/weights,
+  high motion scratch, and IntraPCM payload.
 - Keep `DeblockingFilter` false at the reconstruction helper boundary. The
   current simple 8-bit path filters post-frame rather than doing row-time border
   exchange; high should follow the same simple-path sequencing until the
@@ -168,8 +175,10 @@ deblock-disabled intra frames:
 
 Focused fixtures for this step:
 
-- 10-bit 4:2:0 CAVLC IDR/I, deblocking disabled.
-- 10-bit 4:2:0 CABAC IDR/I, deblocking disabled.
+- 10-bit 4:2:0 CAVLC IDR/I, deblocking disabled. Done with public rawvideo MD5
+  parity.
+- 10-bit 4:2:0 CABAC IDR/I, deblocking disabled. Done with public rawvideo MD5
+  parity.
 - 12-bit 4:2:2 intra fixture if the local FFmpeg/x264 stack can generate it.
 - 14-bit 4:4:4 intra fixture, preferably small and deblock-disabled, to prove
   the luma-shaped plane path.
@@ -206,10 +215,10 @@ Completed MB-level pieces:
 
 Remaining slice/frame pieces:
 
-- Consume high ref-list construction from the simple slice path.
-- Dispatch high CAVLC/CABAC frame slices to `h264HLDecodeFrameMacroblockHigh`.
-- Preserve the current public high-bit-depth guard until a real high slice
-  reaches the output helper and passes a framemd5/rawvideo oracle.
+- Consume high ref-list construction from the simple slice path for P/B slices.
+- Extend high CAVLC/CABAC frame slices beyond intra-only validation.
+- Keep the narrowed public high-bit-depth guards for P/B, high deblock, and
+  unproved chroma/depth modes until each path passes a framemd5/rawvideo oracle.
 
 Suggested safe-point order:
 
@@ -312,10 +321,10 @@ surface must request explicit little-endian names so raw bytes are stable across
 hosts. Monochrome output intentionally follows the existing local gray oracle
 practice and appends only luma samples.
 
-Do not remove the high-bit-depth public decode guard until at least one
-high-bit-depth IDR/I fixture passes against FFmpeg rawvideo bytes through
-`AppendRawYUVBytesLE`. Once exposed, every new high inter/deblock safe point
-should compare the public output helper against FFmpeg frame MD5s.
+The high-bit-depth public decode guard is removed only for the first proved
+subset: High 10 4:2:0 deblock-disabled I pictures. Every new high
+inter/deblock/chroma-depth safe point should compare the public output helper
+against FFmpeg frame MD5s before broadening the guard again.
 
 ## Oracle And Fixture Plan
 
@@ -367,16 +376,16 @@ surface.
      behavior, DPB ref-list high view, and no 8-bit API behavior change.
 
 2. **Decode High Intra Frames Internally**
-   - Allow high-bit-depth simple slice decode only for deblock-disabled intra
-     frames.
-   - Call `h264HLDecodeFrameMacroblockHigh` from CAVLC/CABAC slice loops.
-   - Tests: internal high IDR/I CAVLC/CABAC fixtures and IntraPCM path.
+   - Done for deblock-disabled intra frames: the simple slice dispatch calls
+     `h264HLDecodeFrameMacroblockHigh` from high CAVLC/CABAC loops.
+   - Tests: internal high CAVLC/CABAC slice-loop tests, including high
+     IntraPCM path coverage.
 
 3. **Expose Public High Output**
-   - Public helper surface exists; keep it disabled by lack of high decode until
-     a real high bitstream reaches frame output.
-   - Tests: public high IDR/I frame MD5 against FFmpeg, plus crop/chroma layout
-     unit tests.
+   - Partly done for High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/I pictures
+     through Annex B, explicit AVC, and configured AVC public surfaces.
+   - Tests: public high IDR/I rawvideo MD5 against FFmpeg, plus crop/chroma
+     layout unit tests.
 
 4. **Wire High P Inter Motion**
    - Add high motion scratch, edge emulation, qpel/chroma dispatch, and P inter

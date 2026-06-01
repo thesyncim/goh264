@@ -16,6 +16,14 @@ type h264FrameSliceDecodeInput struct {
 	MotionScratch *h264MotionCompScratch
 }
 
+type h264FrameSliceDecodeInputHigh struct {
+	SliceNum      uint16
+	Refs          [2][]*h264PicturePlanesHigh
+	Direct        h264DirectMotionContext
+	PredWeight    *PredWeightTable
+	MotionScratch *h264MotionCompScratchHigh
+}
+
 type h264FrameSliceDecodeResult struct {
 	Macroblocks int
 	LastMBXY    int
@@ -48,6 +56,24 @@ func (m *macroblockTables) decodeFrameSliceData(gb *bitReader, dst *h264PictureP
 		return result, err
 	}
 	return m.decodeCABACFrameSlice(dec.source(), dst, sh, in)
+}
+
+func (m *macroblockTables) decodeFrameSliceDataHigh(gb *bitReader, dst *h264PicturePlanesHigh, sh *SliceHeader, in h264FrameSliceDecodeInputHigh) (h264FrameSliceDecodeResult, error) {
+	var result h264FrameSliceDecodeResult
+	if m == nil || gb == nil || dst == nil || sh == nil || sh.PPS == nil || sh.SPS == nil {
+		return result, ErrInvalidData
+	}
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
+		return result, err
+	}
+	if sh.PPS.CABAC == 0 {
+		return m.decodeCAVLCFrameSliceHigh(gb, dst, sh, in)
+	}
+	dec, err := initCABACFrameSliceDecoder(gb, sh)
+	if err != nil {
+		return result, err
+	}
+	return m.decodeCABACFrameSliceHigh(dec.source(), dst, sh, in)
 }
 
 func initCABACFrameSliceDecoder(gb *bitReader, sh *SliceHeader) (cabacFrameSliceDecoder, error) {
@@ -108,6 +134,44 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 	}
 }
 
+func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264PicturePlanesHigh, sh *SliceHeader, in h264FrameSliceDecodeInputHigh) (h264FrameSliceDecodeResult, error) {
+	var result h264FrameSliceDecodeResult
+	if m == nil || gb == nil || dst == nil || sh == nil || sh.PPS == nil || sh.SPS == nil {
+		return result, ErrInvalidData
+	}
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
+		return result, err
+	}
+	cur, err := newSliceMacroblockCursor(m, sh)
+	if err != nil {
+		return result, err
+	}
+
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	for {
+		var work frameMacroblockDecodeWork
+		mb, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWork(gb, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
+		if err != nil {
+			return result, err
+		}
+		if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHighFromCAVLC(sh, cur, mb, &work, in)); err != nil {
+			return result, err
+		}
+		result.Macroblocks++
+		result.LastMBXY = cur.MBXY
+
+		if !cur.advanceFrameMB() {
+			result.EndOfFrame = true
+			result.EndOfSlice = true
+			return result, nil
+		}
+		if gb.bitsLeft() <= 0 && state.MBSkipRun <= 0 {
+			result.EndOfSlice = true
+			return result, nil
+		}
+	}
+}
+
 func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h264PicturePlanes, sh *SliceHeader, in h264FrameSliceDecodeInput) (h264FrameSliceDecodeResult, error) {
 	var result h264FrameSliceDecodeResult
 	if m == nil || src == nil || dst == nil || sh == nil || sh.PPS == nil || sh.SPS == nil {
@@ -129,6 +193,45 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 			return result, err
 		}
 		if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCABAC(sh, cur, mb, &work, in)); err != nil {
+			return result, err
+		}
+		result.Macroblocks++
+		result.LastMBXY = cur.MBXY
+
+		eos := src.terminate() != 0
+		if !cur.advanceFrameMB() {
+			result.EndOfFrame = true
+			result.EndOfSlice = true
+			return result, nil
+		}
+		if eos {
+			result.EndOfSlice = true
+			return result, nil
+		}
+	}
+}
+
+func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst *h264PicturePlanesHigh, sh *SliceHeader, in h264FrameSliceDecodeInputHigh) (h264FrameSliceDecodeResult, error) {
+	var result h264FrameSliceDecodeResult
+	if m == nil || src == nil || dst == nil || sh == nil || sh.PPS == nil || sh.SPS == nil {
+		return result, ErrInvalidData
+	}
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
+		return result, err
+	}
+	cur, err := newSliceMacroblockCursor(m, sh)
+	if err != nil {
+		return result, err
+	}
+
+	state := cabacFrameSliceState{QScale: int(sh.QScale)}
+	for {
+		var work frameMacroblockDecodeWork
+		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
+		if err != nil {
+			return result, err
+		}
+		if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHighFromCABAC(sh, cur, mb, &work, in)); err != nil {
 			return result, err
 		}
 		result.Macroblocks++
@@ -172,6 +275,49 @@ func validateSimpleFrameSliceDecodeInputs(m *macroblockTables, dst *h264PictureP
 	return nil
 }
 
+func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264PicturePlanesHigh, sh *SliceHeader, sliceNum uint16) error {
+	if sliceNum == ^uint16(0) {
+		return ErrInvalidData
+	}
+	if sh == nil || sh.SPS == nil {
+		return ErrInvalidData
+	}
+	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
+		return ErrUnsupported
+	}
+	if sh.SPS.BitDepthLuma != 10 {
+		return ErrUnsupported
+	}
+	if err := checkH264DSPHighBitDepth(int(sh.SPS.BitDepthLuma)); err != nil {
+		return err
+	}
+	if sh.SPS.BitDepthChroma != sh.SPS.BitDepthLuma {
+		return ErrUnsupported
+	}
+	if sh.SPS.ChromaFormatIDC != 1 {
+		return ErrUnsupported
+	}
+	if sh.SliceTypeNoS != PictureTypeI {
+		return ErrUnsupported
+	}
+	if sh.DeblockingFilter != 0 {
+		return ErrUnsupported
+	}
+	if sh.QScale > uint32(h264MaxQPForBitDepth(int(sh.SPS.BitDepthLuma))) {
+		return ErrInvalidData
+	}
+	if _, err := cavlcFrameListCount(sh.SliceTypeNoS); err != nil {
+		return err
+	}
+	if err := dst.validate(); err != nil {
+		return err
+	}
+	if m.MBWidth != dst.MBWidth || m.MBHeight != dst.MBHeight || m.ChromaFormatIDC != dst.ChromaFormatIDC || int(sh.SPS.ChromaFormatIDC) != dst.ChromaFormatIDC {
+		return ErrInvalidData
+	}
+	return nil
+}
+
 func h264SimpleFrameSliceDecodeSupportsBitDepth(bitDepth int32) bool {
 	// High-depth entropy paths exist, but this simple slice loop still feeds
 	// 8-bit reconstruction/loop-filter state.
@@ -201,6 +347,64 @@ func h264FrameMBReconstructInputFromCAVLC(sh *SliceHeader, cur sliceMacroblockCu
 		PredWeight:         in.PredWeight,
 		MotionScratch:      in.MotionScratch,
 		TransformBypass:    sh.SPS.TransformBypass != 0 && mb.QScale == 0,
+		IntraPCM:           mb.IntraPCM,
+	}
+}
+
+func h264FrameMBReconstructInputHighFromCAVLC(sh *SliceHeader, cur sliceMacroblockCursor, mb cavlcFrameMacroblockResult, work *frameMacroblockDecodeWork, in h264FrameSliceDecodeInputHigh) h264FrameMBReconstructInputHigh {
+	listCount, _ := cavlcFrameListCount(sh.SliceTypeNoS)
+	return h264FrameMBReconstructInputHigh{
+		MBType:             mb.MBType,
+		SubMBType:          mb.Inter.SubMBType,
+		MBX:                cur.MBX,
+		MBY:                cur.MBY,
+		CBP:                mb.CBP,
+		QScale:             mb.QScale,
+		ChromaQP:           mb.ChromaQP,
+		ChromaPredMode:     mb.ChromaPred,
+		Intra16x16PredMode: mb.Intra.Intra16x16PredMode,
+		Intra4x4PredCache:  &work.IntraCache,
+		TopLeftAvailable:   mb.TopLeftAvailable,
+		TopRightAvailable:  mb.TopRightAvailable,
+		ListCount:          listCount,
+		PPS:                sh.PPS,
+		Residual:           &work.Residual,
+		Motion:             &work.Motion,
+		Refs:               in.Refs,
+		PredWeight:         in.PredWeight,
+		MotionScratch:      in.MotionScratch,
+		TransformBypass:    sh.SPS.TransformBypass != 0 && mb.QScale == 0,
+		DeblockingFilter:   sh.DeblockingFilter != 0,
+		BitDepth:           int(sh.SPS.BitDepthLuma),
+		IntraPCM:           mb.IntraPCM,
+	}
+}
+
+func h264FrameMBReconstructInputHighFromCABAC(sh *SliceHeader, cur sliceMacroblockCursor, mb cabacFrameMacroblockResult, work *frameMacroblockDecodeWork, in h264FrameSliceDecodeInputHigh) h264FrameMBReconstructInputHigh {
+	listCount, _ := cavlcFrameListCount(sh.SliceTypeNoS)
+	return h264FrameMBReconstructInputHigh{
+		MBType:             mb.MBType,
+		SubMBType:          mb.Inter.SubMBType,
+		MBX:                cur.MBX,
+		MBY:                cur.MBY,
+		CBP:                mb.CBP,
+		QScale:             mb.QScale,
+		ChromaQP:           mb.ChromaQP,
+		ChromaPredMode:     mb.ChromaPred,
+		Intra16x16PredMode: mb.Intra.Intra16x16PredMode,
+		Intra4x4PredCache:  &work.IntraCache,
+		TopLeftAvailable:   mb.TopLeftAvailable,
+		TopRightAvailable:  mb.TopRightAvailable,
+		ListCount:          listCount,
+		PPS:                sh.PPS,
+		Residual:           &work.Residual,
+		Motion:             &work.Motion,
+		Refs:               in.Refs,
+		PredWeight:         in.PredWeight,
+		MotionScratch:      in.MotionScratch,
+		TransformBypass:    sh.SPS.TransformBypass != 0 && mb.QScale == 0,
+		DeblockingFilter:   sh.DeblockingFilter != 0,
+		BitDepth:           int(sh.SPS.BitDepthLuma),
 		IntraPCM:           mb.IntraPCM,
 	}
 }

@@ -78,15 +78,17 @@ depths greater than 8; `get_pixel_format` selects the software YUV/GBR
 and derive byte offsets from `pixel_shift` and frame linesizes. Locally,
 `internal/h264/simple_decode.go` keeps one `DecodedFrame` type with byte planes
 for 8-bit frames and uint16 `Y16/Cb16/Cr16` planes for high frames. This is a
-storage safe point only: `internal/h264/simple_dpb.go` can expose high ref-list
-views over those uint16 planes, but `decodeSimpleNALUnitsWithState` still
-returns `ErrUnsupported` for high-bit-depth frames before slice reconstruction
-reaches public decode output.
+storage and narrow public-decode safe point: `internal/h264/simple_dpb.go` can
+expose high ref-list views over those uint16 planes, and
+`decodeSimpleNALUnitsWithState` dispatches high CAVLC/CABAC slices only for the
+proved High 10 4:2:0 deblock-disabled intra subset. High P/B slices, high
+deblocking, and unproved depth/chroma combinations remain guarded until their
+uint16 slice paths have matching oracles.
 
 The public high-depth raw output helper surface follows FFmpeg rawvideo byte
-layout without claiming high-bit-depth public decode support. `decoder.go`
-`RawPixelFormat`, `RawYUVSize`, `BytesPerSample`, `AppendRawYUV16`, and
-`AppendRawYUVBytesLE` preserve sample values; `AppendRawYUV` remains 8-bit-only.
+layout. `decoder.go` `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`,
+`AppendRawYUV16`, and `AppendRawYUVBytesLE` preserve sample values;
+`AppendRawYUV` remains 8-bit-only.
 `AppendRawYUVBytesLE` is shaped for FFmpeg `libavcodec/rawenc.c` `raw_encode`,
 which sizes/copies frames through `av_image_get_buffer_size` and
 `av_image_copy_to_buffer`, and for `libavutil/pixfmt.h`/`pixdesc.c` planar
@@ -125,6 +127,9 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - deblock-enabled High 4:4:4 Predictive 32x32 CAVLC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `e6522cb7daa4278fa238f995daea8594`, `274c8ec306ee4705f93c3cc6bdedc948`, `d42015040093bf782173b1d8d00a5b74`, `9d93f36ffaeb8caa764f2b06240ba5d7`
 - deblock-enabled High 4:4:4 Predictive 32x32 CABAC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `df7f5b803f967fcd46070b2b182c3805`, `5bc16fb5ebe5c3021e77c7c82c34127c`, `5e0f2020cfefc09d993a68c2963ad8ed`, `f14846abbb44addf3e1ce0e66394b683`
 - qp=0 High 4:4:4 Predictive CAVLC/CABAC `testsrc2` IDR/P yuv420p lossless rawvideo frame MD5s: `69fcf25f35e829e5a3d96cbaaf22bbb6`, `8563271dc08ef4ed388ebc1f7016834c`, `1a054a3901101da0f6b6c58d8e71bbdb`, `a0addb72f5ea0957ef8a05b782f0e9ff`
+- true High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/I rawvideo frame MD5s:
+  `fd302f00e365b8502c44005ea308c468`,
+  `38ed4870a1ba82aeb0c45b09d67e3e2a`
 - 16x16 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `4296e3dc95829cc27071a8685a428494`, `36f5a9b9064709ee891652e8f4e06992`, `aa778b981f96d21489196f6a0faa0959`
 - 16x16 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `fef9831ddd54882d715ceb50c382efde`, `4b6a7f1c59198ae9b8e31ef4de333e42`
 - 16x16 temporal-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `dca1bb7607ebcd45d700a7b7f9feb2f6`, `6248c3284f9d89ac6346701f8f226ba8`, `0e1be965e4fb7e790038cda9d21845cf`
@@ -137,7 +142,10 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - 32x32 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `88a962a713f37e05f375eee6ee9f385b`, `a165d65aadbe1410829a22df4459539b`, `8d39f667da04571db61fc68919a64ade`
 - same `testsrc2` encode with loop filter disabled: `b729e0367dccdfd707a7ea0c6e68c06e`
 - dimensions: `16x16` and `32x32`
-- frame payload size: `256` bytes (`gray`/`chroma_format_idc == 0`), `384` or `1536` bytes (`yuv420p`), `512` bytes (`yuv422p`), and `768` or `3072` bytes (`yuv444p`)
+- frame payload size: `256` bytes (`gray`/`chroma_format_idc == 0`), `384`
+  bytes (8-bit 16x16 `yuv420p`), `768` bytes (10-bit 16x16 `yuv420p10le`),
+  `1536` bytes (8-bit 32x32 `yuv420p`), `512` bytes (`yuv422p`), and `768` or
+  `3072` bytes (`yuv444p`)
 
 The AVC/NALFF packet-input tests mechanically convert those Annex B fixtures to
 big-endian length-prefixed NAL units while preserving each raw NAL payload. The
@@ -146,12 +154,14 @@ values 2, 3, and 4. The configured AVC tests additionally build FFmpeg-style
 `avcC` extradata from SPS/PPS NAL units, remove those parameter sets from the
 packet payload, and prove the separated-config CAVLC ref-list, CABAC IDR/P,
 High 4:2:0 32x32 8x8-DCT CAVLC/CABAC, High 4:2:2 CAVLC/CABAC,
-High 4:4:4 Predictive CAVLC/CABAC, monochrome CAVLC/CABAC, and qp=0
-lossless CAVLC/CABAC packets against the same frame MD5s
+High 4:4:4 Predictive CAVLC/CABAC, true High 10 4:2:0 deblock-disabled
+CAVLC/CABAC IDR/I, monochrome CAVLC/CABAC, and qp=0 lossless CAVLC/CABAC
+packets against the same frame MD5s
 both as bundled packets and as successive single-frame sample packets that
 require DPB reference state to survive across public decoder calls. Native
 FFmpeg framemd5 oracle checks cover the 32x32 High 4:2:0 8x8-DCT fixtures in
-addition to the 16x16/32x32 families listed below. The
+addition to the true High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/I fixtures
+and the 16x16/32x32 families listed below. The
 configured B-frame sample tests additionally decode one access unit per call and
 then use the public delayed-frame flush to drain retained future P pictures,
 covering FFmpeg's `last_pocs`/`has_b_frames` reorder inference and signaled VUI
@@ -294,6 +304,9 @@ Included:
 - Decoded frame SEI side data for the translated subset, including registered ITU-T T.35 ATSC AFD/A53 captions, registered VNOVA LCEVC bytes, stereo3D, display matrix, mastering-display validity, content light, ambient viewing environment, and H.274 film grain characteristics
 - Internal uint16 frame storage for high-bit-depth frames and public raw helper
   methods for value-preserving sample output when a high frame is available
+- Public High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/I decode through the
+  high raw helper surface, covered by Annex B, AVC/NALFF, configured AVC, and
+  FFmpeg rawvideo MD5 oracle tests
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:
@@ -303,5 +316,6 @@ Excluded unless directly required by decoder parity:
 - FFmpeg muxer/demuxer/filter frontends
 - Hardware acceleration backends
 - Non-H.264 codecs
-- Actual public high-bit-depth H.264 bitstream decode/output remains explicitly
-  unsupported until high slice integration and FFmpeg rawvideo MD5 fixtures land
+- Public high-bit-depth decode beyond the proved High 10 deblock-disabled I
+  subset remains explicitly unsupported until high P/B, high deblocking, and
+  additional depth/chroma fixtures land
