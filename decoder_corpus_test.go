@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +18,7 @@ import (
 )
 
 const defaultH264CorpusManifest = "testdata/h264/corpus/manifest.jsonl"
+const defaultH264RealVectorManifest = "testdata/h264/realvectors/manifest.jsonl"
 
 func h264CorpusManifestPaths() []string {
 	if manifests := os.Getenv("GOH264_CORPUS_MANIFESTS"); manifests != "" {
@@ -38,6 +41,7 @@ func h264CorpusManifestPaths() []string {
 type h264CorpusEntry struct {
 	ID            string   `json:"id"`
 	Path          string   `json:"path"`
+	URL           string   `json:"url,omitempty"`
 	Format        string   `json:"format"`
 	Expect        string   `json:"expect"`
 	ExpectedError string   `json:"expected_error,omitempty"`
@@ -49,6 +53,8 @@ type h264CorpusEntry struct {
 	FrameMD5      []string `json:"frame_md5,omitempty"`
 	Surfaces      []string `json:"surfaces,omitempty"`
 	GuardTags     []string `json:"guard_tags,omitempty"`
+	FeatureTags   []string `json:"feature_tags,omitempty"`
+	Source        string   `json:"source,omitempty"`
 }
 
 func TestH264CorpusManifest(t *testing.T) {
@@ -60,21 +66,24 @@ func TestH264CorpusManifest(t *testing.T) {
 	}
 }
 
+func TestH264RealVectorManifest(t *testing.T) {
+	if os.Getenv("GOH264_REAL_VECTORS") != "1" {
+		t.Skip("set GOH264_REAL_VECTORS=1 to run external public H.264 vectors")
+	}
+	testH264CorpusManifest(t, defaultH264RealVectorManifest)
+}
+
 func testH264CorpusManifest(t *testing.T, manifest string) {
 	entries := readH264CorpusManifest(t, manifest)
 	if len(entries) == 0 {
 		t.Fatalf("%s: no corpus entries", manifest)
 	}
 
-	baseDir := filepath.Dir(manifest)
 	for _, entry := range entries {
 		entry := entry
 		t.Run(entry.ID, func(t *testing.T) {
 			validateH264CorpusEntry(t, entry)
-			path := entry.Path
-			if !filepath.IsAbs(path) {
-				path = filepath.Join(baseDir, path)
-			}
+			path := materializeH264CorpusEntry(t, manifest, entry)
 			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatalf("read %s: %v", path, err)
@@ -116,6 +125,23 @@ func TestH264CorpusManifestPaths(t *testing.T) {
 	}
 }
 
+func TestValidateH264CorpusEntryAllowsURLBackedDecodeOK(t *testing.T) {
+	validateH264CorpusEntry(t, h264CorpusEntry{
+		ID:           "external",
+		URL:          "https://example.invalid/sample.264",
+		Format:       "annexb",
+		Expect:       "decode-ok",
+		PixFmt:       "yuv420p",
+		FrameCount:   2,
+		FrameSize:    16,
+		BitstreamMD5: "00112233445566778899aabbccddeeff",
+		RawVideoMD5:  "ffeeddccbbaa99887766554433221100",
+		Surfaces:     []string{"annexb"},
+		FeatureTags:  []string{"external"},
+		Source:       "test",
+	})
+}
+
 func readH264CorpusManifest(t *testing.T, path string) []h264CorpusEntry {
 	t.Helper()
 	f, err := os.Open(path)
@@ -145,8 +171,8 @@ func readH264CorpusManifest(t *testing.T, path string) []h264CorpusEntry {
 
 func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 	t.Helper()
-	if entry.ID == "" || entry.Path == "" {
-		t.Fatalf("entry id/path must be set: %+v", entry)
+	if entry.ID == "" || entry.Path == "" && entry.URL == "" {
+		t.Fatalf("entry id and path or url must be set: %+v", entry)
 	}
 	if entry.Format != "annexb" {
 		t.Fatalf("%s: format = %q, want annexb", entry.ID, entry.Format)
@@ -166,8 +192,11 @@ func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 		if entry.BitstreamMD5 == "" || entry.RawVideoMD5 == "" || entry.PixFmt == "" {
 			t.Fatalf("%s: decode-ok entries need bitstream_md5, rawvideo_md5, and pix_fmt", entry.ID)
 		}
-		if entry.FrameCount <= 0 || entry.FrameSize <= 0 || len(entry.FrameMD5) != entry.FrameCount {
-			t.Fatalf("%s: frame_count/frame_size/frame_md5 mismatch", entry.ID)
+		if entry.FrameCount <= 0 || entry.FrameSize <= 0 {
+			t.Fatalf("%s: frame_count/frame_size must be positive", entry.ID)
+		}
+		if len(entry.FrameMD5) != 0 && len(entry.FrameMD5) != entry.FrameCount {
+			t.Fatalf("%s: frame_md5 count = %d, want 0 or %d", entry.ID, len(entry.FrameMD5), entry.FrameCount)
 		}
 	case "unsupported":
 		if len(entry.GuardTags) == 0 {
@@ -178,6 +207,86 @@ func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 		}
 	default:
 		t.Fatalf("%s: expect = %q, want decode-ok or unsupported", entry.ID, entry.Expect)
+	}
+}
+
+func materializeH264CorpusEntry(t *testing.T, manifest string, entry h264CorpusEntry) string {
+	t.Helper()
+	baseDir := filepath.Dir(manifest)
+	if entry.Path != "" {
+		path := entry.Path
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(baseDir, path)
+		}
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+		if entry.URL == "" {
+			return path
+		}
+	}
+	if entry.URL == "" {
+		t.Fatalf("%s: no path or url", entry.ID)
+	}
+	rel := entry.Path
+	if rel == "" {
+		rel = filepath.Base(entry.URL)
+	}
+	rel = cleanRelativeH264CorpusPath(t, entry.ID, rel)
+	cacheRoot := os.Getenv("GOH264_CORPUS_CACHE")
+	if cacheRoot == "" {
+		cacheRoot = filepath.Join(baseDir, "cache")
+	}
+	path := filepath.Join(cacheRoot, rel)
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	if os.Getenv("GOH264_CORPUS_FETCH") != "1" {
+		t.Fatalf("%s: missing %s; set GOH264_CORPUS_FETCH=1 to download %s", entry.ID, path, entry.URL)
+	}
+	downloadH264CorpusEntry(t, entry, path)
+	return path
+}
+
+func cleanRelativeH264CorpusPath(t *testing.T, id string, path string) string {
+	t.Helper()
+	clean := filepath.Clean(path)
+	if clean == "." || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
+		t.Fatalf("%s: unsafe corpus path %q", id, path)
+	}
+	return clean
+}
+
+func downloadH264CorpusEntry(t *testing.T, entry h264CorpusEntry, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("%s: create corpus cache dir: %v", entry.ID, err)
+	}
+	resp, err := http.Get(entry.URL)
+	if err != nil {
+		t.Fatalf("%s: download %s: %v", entry.ID, entry.URL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("%s: download %s: status %s", entry.ID, entry.URL, resp.Status)
+	}
+	tmp := path + ".tmp"
+	f, err := os.Create(tmp)
+	if err != nil {
+		t.Fatalf("%s: create %s: %v", entry.ID, tmp, err)
+	}
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		t.Fatalf("%s: write %s: %v", entry.ID, tmp, err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		t.Fatalf("%s: close %s: %v", entry.ID, tmp, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		t.Fatalf("%s: install %s: %v", entry.ID, path, err)
 	}
 }
 
@@ -318,8 +427,10 @@ func assertH264CorpusFrames(t *testing.T, entry h264CorpusEntry, frames []*Frame
 			t.Fatalf("%s frame[%d] raw size = %d, want %d", entry.ID, i, len(raw), entry.FrameSize)
 		}
 		sum := md5.Sum(raw)
-		if got := hex.EncodeToString(sum[:]); got != entry.FrameMD5[i] {
-			t.Fatalf("%s frame[%d] md5 = %s, want %s", entry.ID, i, got, entry.FrameMD5[i])
+		if len(entry.FrameMD5) != 0 {
+			if got := hex.EncodeToString(sum[:]); got != entry.FrameMD5[i] {
+				t.Fatalf("%s frame[%d] md5 = %s, want %s", entry.ID, i, got, entry.FrameMD5[i])
+			}
 		}
 		if _, err := rawHash.Write(raw); err != nil {
 			t.Fatalf("%s frame[%d] raw hash: %v", entry.ID, i, err)

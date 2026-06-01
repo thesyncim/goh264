@@ -56,6 +56,8 @@ func TestReadBenchCorpusManifestAndValidate(t *testing.T) {
 # comment
 {"id":"ok","path":"sample.h264","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":2,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","frame_md5":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],"surfaces":["annexb"]}
 
+{"id":"url-ok","url":"https://example.invalid/sample.264","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":2,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","surfaces":["annexb"],"feature_tags":["external"],"source":"test"}
+
 {"id":"unsupported","path":"later.h264","format":"annexb","expect":"unsupported","guard_tags":["future"]}
 `
 	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
@@ -66,13 +68,16 @@ func TestReadBenchCorpusManifestAndValidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("entries = %d, want 2", len(entries))
+	if len(entries) != 3 {
+		t.Fatalf("entries = %d, want 3", len(entries))
 	}
 	if err := validateBenchCorpusEntry(entries[0]); err != nil {
 		t.Fatalf("validate decode-ok: %v", err)
 	}
-	if err := validateBenchCorpusEntry(entries[1]); err == nil || !strings.Contains(err.Error(), "decode-ok") {
+	if err := validateBenchCorpusEntry(entries[1]); err != nil {
+		t.Fatalf("validate url decode-ok: %v", err)
+	}
+	if err := validateBenchCorpusEntry(entries[2]); err == nil || !strings.Contains(err.Error(), "decode-ok") {
 		t.Fatalf("validate unsupported err = %v, want decode-ok rejection", err)
 	}
 }

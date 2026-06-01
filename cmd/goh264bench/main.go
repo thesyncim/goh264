@@ -13,6 +13,7 @@ import (
 	"hash"
 	"io"
 	"math"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -117,6 +118,7 @@ type benchOptions struct {
 type benchCorpusEntry struct {
 	ID           string   `json:"id"`
 	Path         string   `json:"path"`
+	URL          string   `json:"url,omitempty"`
 	Format       string   `json:"format"`
 	Expect       string   `json:"expect"`
 	PixFmt       string   `json:"pix_fmt,omitempty"`
@@ -127,6 +129,8 @@ type benchCorpusEntry struct {
 	FrameMD5     []string `json:"frame_md5,omitempty"`
 	Surfaces     []string `json:"surfaces,omitempty"`
 	GuardTags    []string `json:"guard_tags,omitempty"`
+	FeatureTags  []string `json:"feature_tags,omitempty"`
+	Source       string   `json:"source,omitempty"`
 }
 
 func main() {
@@ -273,9 +277,9 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		if err := validateBenchCorpusEntry(entry); err != nil {
 			return benchReport{}, err
 		}
-		inputPath := entry.Path
-		if !filepath.IsAbs(inputPath) {
-			inputPath = filepath.Join(baseDir, inputPath)
+		inputPath, err := resolveBenchCorpusPath(baseDir, entry)
+		if err != nil {
+			return benchReport{}, err
 		}
 		data, err := os.ReadFile(inputPath)
 		if err != nil {
@@ -339,8 +343,8 @@ func readBenchCorpusManifest(path string) ([]benchCorpusEntry, error) {
 }
 
 func validateBenchCorpusEntry(entry benchCorpusEntry) error {
-	if entry.ID == "" || entry.Path == "" {
-		return fmt.Errorf("manifest entry id/path must be set: %+v", entry)
+	if entry.ID == "" || entry.Path == "" && entry.URL == "" {
+		return fmt.Errorf("manifest entry id and path or url must be set: %+v", entry)
 	}
 	if entry.Format != "annexb" {
 		return fmt.Errorf("%s: format = %q, want annexb", entry.ID, entry.Format)
@@ -351,8 +355,93 @@ func validateBenchCorpusEntry(entry benchCorpusEntry) error {
 	if entry.BitstreamMD5 == "" || entry.RawVideoMD5 == "" || entry.PixFmt == "" {
 		return fmt.Errorf("%s: decode-ok entries need bitstream_md5, rawvideo_md5, and pix_fmt", entry.ID)
 	}
-	if entry.FrameCount <= 0 || entry.FrameSize <= 0 || len(entry.FrameMD5) != entry.FrameCount {
-		return fmt.Errorf("%s: frame_count/frame_size/frame_md5 mismatch", entry.ID)
+	if entry.FrameCount <= 0 || entry.FrameSize <= 0 {
+		return fmt.Errorf("%s: frame_count/frame_size must be positive", entry.ID)
+	}
+	if len(entry.FrameMD5) != 0 && len(entry.FrameMD5) != entry.FrameCount {
+		return fmt.Errorf("%s: frame_md5 count = %d, want 0 or %d", entry.ID, len(entry.FrameMD5), entry.FrameCount)
+	}
+	return nil
+}
+
+func resolveBenchCorpusPath(baseDir string, entry benchCorpusEntry) (string, error) {
+	if entry.Path != "" {
+		path := entry.Path
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(baseDir, path)
+		}
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+		if entry.URL == "" {
+			return path, nil
+		}
+	}
+	if entry.URL == "" {
+		return "", fmt.Errorf("%s: no path or url", entry.ID)
+	}
+	rel := entry.Path
+	if rel == "" {
+		rel = filepath.Base(entry.URL)
+	}
+	rel, err := cleanRelativeBenchCorpusPath(entry.ID, rel)
+	if err != nil {
+		return "", err
+	}
+	cacheRoot := os.Getenv("GOH264_CORPUS_CACHE")
+	if cacheRoot == "" {
+		cacheRoot = filepath.Join(baseDir, "cache")
+	}
+	path := filepath.Join(cacheRoot, rel)
+	if _, err := os.Stat(path); err == nil {
+		return path, nil
+	}
+	if os.Getenv("GOH264_CORPUS_FETCH") != "1" {
+		return "", fmt.Errorf("%s: missing %s; set GOH264_CORPUS_FETCH=1 to download %s", entry.ID, path, entry.URL)
+	}
+	if err := downloadBenchCorpusEntry(entry, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func cleanRelativeBenchCorpusPath(id string, path string) (string, error) {
+	clean := filepath.Clean(path)
+	if clean == "." || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
+		return "", fmt.Errorf("%s: unsafe corpus path %q", id, path)
+	}
+	return clean, nil
+}
+
+func downloadBenchCorpusEntry(entry benchCorpusEntry, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("%s: create corpus cache dir: %w", entry.ID, err)
+	}
+	resp, err := http.Get(entry.URL)
+	if err != nil {
+		return fmt.Errorf("%s: download %s: %w", entry.ID, entry.URL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s: download %s: status %s", entry.ID, entry.URL, resp.Status)
+	}
+	tmp := path + ".tmp"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return fmt.Errorf("%s: create %s: %w", entry.ID, tmp, err)
+	}
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("%s: write %s: %w", entry.ID, tmp, err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("%s: close %s: %w", entry.ID, tmp, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("%s: install %s: %w", entry.ID, path, err)
 	}
 	return nil
 }

@@ -5,8 +5,11 @@ This tracks proof/reporting work, not decoder widening.
 ## Corpus
 
 Seed manifest: `testdata/h264/corpus/manifest.jsonl`.
+Real-vector seed: `testdata/h264/realvectors/manifest.jsonl` (gated).
 
 ```sh
+GOH264_REAL_VECTORS=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorManifest
+go run ./cmd/goh264bench -manifest testdata/h264/realvectors/manifest.jsonl -iters 1 -repeats 1 -warmup 0 -ffmpeg -json
 GOH264_CORPUS_MANIFEST=/corpora/h264/jvt-avc/manifest.jsonl go test . -run TestH264CorpusManifest
 GOH264_CORPUS_MANIFESTS="/corpora/h264/jvt-avc/manifest.jsonl:/corpora/h264/fate-h264/manifest.jsonl" go test . -run TestH264CorpusManifest
 ```
@@ -16,7 +19,6 @@ External manifests to add:
 | Path | Purpose |
 | --- | --- |
 | `/corpora/h264/jvt-avc/manifest.jsonl` | ITU/JVT conformance |
-| `/corpora/h264/ffmpeg-fate-h264/manifest.jsonl` | FFmpeg FATE through pinned oracle |
 | `/corpora/h264/bench-large/manifest.jsonl` | larger decode-ok performance clips |
 
 Decode-ok rows need path, pixel format, frame count/size, bitstream MD5,
