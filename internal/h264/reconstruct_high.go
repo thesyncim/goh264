@@ -53,7 +53,7 @@ func h264HLDecodeFrameMacroblockHigh(dst *h264PicturePlanesHigh, in h264FrameMBR
 	if dst == nil || in.MBX < 0 || in.MBY < 0 || in.QScale < 0 || in.QScale > h264MaxQPForBitDepth(in.BitDepth) {
 		return ErrInvalidData
 	}
-	if in.DeblockingFilter || in.ConstrainedIntra444 {
+	if in.ConstrainedIntra444 {
 		return ErrUnsupported
 	}
 	if err := dst.validate(); err != nil {

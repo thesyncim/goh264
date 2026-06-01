@@ -338,6 +338,9 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 					PredWeight:    &sh.PredWeightTable,
 					MotionScratch: motionScratchHigh,
 				})
+				if err == nil && result.EndOfFrame {
+					err = tables.filterFrameHigh(&pic, loopFilterSlices)
+				}
 			}
 			if err != nil {
 				return nil, err

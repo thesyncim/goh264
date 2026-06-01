@@ -83,15 +83,16 @@ expose high ref-list views over those uint16 planes, and
 `decodeSimpleNALUnitsWithState` dispatches high CAVLC/CABAC slices only for the
 proved High 10 4:2:0 deblock-disabled I subset, the proved High 10 4:2:0
 deblock-disabled P-skip/P16x16 no-residual subset, the proved High 10 4:2:0
-frame-only deblock-disabled exact P16x16 L0 residual subset, and explicit
-weighted P over those P-skip/P16x16 L0 lanes. The exact High 10 4:2:0
+frame-only deblock-disabled exact P16x16 L0 residual subset, explicit weighted
+P over those P-skip/P16x16 L0 lanes, and the first High 10 4:2:0
+deblock-enabled 32x32 IDR/P subset. The exact High 10 4:2:0
 frame-only deblock-disabled non-direct B16x16 bidirectional lane, top-level
 temporal/spatial B_Direct lane resolving to B16x16, and temporal/spatial
 B-skip lane are now the only B-slice lanes opened, with neutral B weighting
 only, proved by the CAVLC/CABAC rawvideo hashes below. Partitioned P, P intra
 macroblocks, B 8x8/direct-sub, implicit weighted B, partitioned B,
-high deblocking, unproved depth/chroma combinations, and MBAFF remain outside
-the supported boundary.
+broader high deblocking, unproved depth/chroma combinations, and MBAFF remain
+outside the supported boundary.
 
 The public high-depth raw output helper surface follows FFmpeg rawvideo byte
 layout. `decoder.go` `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`,
@@ -211,6 +212,13 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
   `4ae312697d364153195deec6da9a1973` (spatial CAVLC),
   `74a9b632842600c57c0e20c03800c772` (temporal CABAC), and
   `961a79bdc2278420951d4662a1a2c2f3` (spatial CABAC)
+- true High 10 4:2:0 deblock-enabled 32x32 IDR/P rawvideo frame MD5s
+  for CAVLC/CABAC:
+  `ba8f5dc7f864b5cd854ee7d30e89fde1`,
+  `108cc5e767fced5c958a56f4e65a2278`; concatenated rawvideo MD5
+  `b635135b4e7db55894f75c390cf194c2`; stripped Annex B MD5s
+  `9b221dc5e9937f2a4e9e95c06e00eb3f` (CAVLC) and
+  `3d38082a580bf4945f6c7e6edfea81b3` (CABAC)
 - 16x16 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `4296e3dc95829cc27071a8685a428494`, `36f5a9b9064709ee891652e8f4e06992`, `aa778b981f96d21489196f6a0faa0959`
 - 16x16 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `fef9831ddd54882d715ceb50c382efde`, `4b6a7f1c59198ae9b8e31ef4de333e42`
 - 16x16 temporal-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `dca1bb7607ebcd45d700a7b7f9feb2f6`, `6248c3284f9d89ac6346701f8f226ba8`, `0e1be965e4fb7e790038cda9d21845cf`
@@ -358,8 +366,8 @@ disabled. x264 reports P skip 100% and B skip 100%. They prove CAVLC
 temporal/spatial direct motion, high ref-list consumption, delayed output,
 Annex B, AVC/NALFF, configured AVC, sample-by-sample decode, public flush, and
 FFmpeg `yuv420p10le` rawvideo MD5 parity. The fixtures keep direct-sub,
-implicit weighted B, partitioned B, high deblocking, and broader chroma/depth
-outside the supported boundary.
+implicit weighted B, partitioned B, broader high deblocking, and broader
+chroma/depth outside the supported boundary.
 
 The CAVLC and CABAC B 8x8 direct-sub fixtures are committed as 64x64 Annex B
 bitstreams under `testdata/h264/`; they cover both spatial and temporal direct
@@ -445,6 +453,9 @@ Included:
 - Public High 10 4:2:0 deblock-disabled CAVLC/CABAC temporal/spatial B-skip
   decode through the high raw helper surface, with Annex B, AVC, configured
   AVC, sample-by-sample flush, and FFmpeg rawvideo oracle proof.
+- Public High 10 4:2:0 deblock-enabled CAVLC/CABAC 32x32 IDR/P decode
+  through the high raw helper surface, covered by Annex B, AVC/NALFF,
+  configured AVC, and FFmpeg rawvideo oracle proof.
 - Manifest-driven H.264 corpus runner `decoder_corpus_test.go`, with default
   JSONL entries in `testdata/h264/corpus/manifest.jsonl` and external corpus
   override through `GOH264_CORPUS_MANIFEST`. Decode-ok rows require bitstream,
@@ -466,11 +477,11 @@ Excluded unless directly required by decoder parity:
 - Non-H.264 codecs
 - Public high-bit-depth decode beyond the proved High 10 deblock-disabled I,
   P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P,
-  exact non-direct plus temporal/spatial direct B16x16, and temporal/spatial
-  B-skip subsets remains explicitly unsupported. P intra macroblocks,
-  B 8x8/direct-sub,
-  implicit weighted B, partitioned B, partitioned P, high deblocking,
-  additional depth/chroma fixtures, and MBAFF remain later lanes.
+  exact non-direct plus temporal/spatial direct B16x16, temporal/spatial
+  B-skip, and deblock-enabled 32x32 IDR/P subsets remains explicitly
+  unsupported. P intra macroblocks, B 8x8/direct-sub, implicit weighted B,
+  partitioned B, partitioned P, broader high deblocking, additional
+  depth/chroma fixtures, and MBAFF remain later lanes.
 - Full conformance/testvector corpus passing and production benchmark claims
   remain pending until curated external corpora are added and benchmark corpus
   mode or an equivalent suite runner reports stable larger-clip results.

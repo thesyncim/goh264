@@ -325,8 +325,8 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	default:
 		return ErrUnsupported
 	}
-	if sh.DeblockingFilter != 0 {
-		return ErrUnsupported
+	if sh.DeblockingFilter < 0 || sh.DeblockingFilter > 2 {
+		return ErrInvalidData
 	}
 	if sh.QScale > uint32(h264MaxQPForBitDepth(int(sh.SPS.BitDepthLuma))) {
 		return ErrInvalidData

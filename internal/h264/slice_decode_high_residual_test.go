@@ -87,20 +87,6 @@ func TestHighP16x16ResidualHandoffReconstructsExactLuma(t *testing.T) {
 }
 
 func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
-	t.Run("deblock enabled", func(t *testing.T) {
-		m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, true, PictureTypeP)
-		sh.RefCount = [2]uint32{1, 0}
-		gb := newBitReader([]byte{0xff})
-
-		_, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 43})
-		if err != ErrUnsupported {
-			t.Fatalf("deblock high P decode err = %v, want ErrUnsupported", err)
-		}
-		if gb.bitPos != 0 {
-			t.Fatalf("deblock high P consumed %d bits, want 0", gb.bitPos)
-		}
-	})
-
 	t.Run("b direct 16x16 macroblock", func(t *testing.T) {
 		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
 		mbType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2

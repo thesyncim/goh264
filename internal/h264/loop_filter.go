@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Source-shaped simple 8-bit frame-picture loop-filter integration from
+// Source-shaped simple frame-picture loop-filter integration from
 // FFmpeg n8.0.1 libavcodec/h264_loopfilter.c ff_h264_filter_mb,
 // filter_mb_dir, filter_mb_edge{v,h}, and fill_filter_caches.
 
@@ -123,7 +123,13 @@ func (p h264LoopFilterSliceParams) validate() error {
 	if p.PPS == nil || p.PPS.SPS == nil {
 		return ErrInvalidData
 	}
-	if p.PPS.SPS.BitDepthLuma != 8 || p.PPS.SPS.MBAFF != 0 || p.PPS.SPS.FrameMBSOnlyFlag == 0 {
+	if p.PPS.SPS.MBAFF != 0 || p.PPS.SPS.FrameMBSOnlyFlag == 0 {
+		return ErrUnsupported
+	}
+	if err := checkH264LoopFilterBitDepth(int(p.PPS.SPS.BitDepthLuma)); err != nil {
+		return err
+	}
+	if p.PPS.SPS.BitDepthLuma != p.PPS.SPS.BitDepthChroma {
 		return ErrUnsupported
 	}
 	return nil
@@ -158,6 +164,42 @@ func (m *macroblockTables) filterFrame(dst *h264PicturePlanes, params []h264Loop
 				return err
 			}
 			if err := m.filterFrameMacroblock(dst, mbX, mbY, p, &ctx); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (m *macroblockTables) filterFrameHigh(dst *h264PicturePlanesHigh, params []h264LoopFilterSliceParams) error {
+	if m == nil || dst == nil {
+		return ErrInvalidData
+	}
+	if err := dst.validate(); err != nil {
+		return err
+	}
+	if m.MBWidth != dst.MBWidth || m.MBHeight != dst.MBHeight || m.ChromaFormatIDC != dst.ChromaFormatIDC {
+		return ErrInvalidData
+	}
+	for mbY := 0; mbY < m.MBHeight; mbY++ {
+		for mbX := 0; mbX < m.MBWidth; mbX++ {
+			mbXY := mbX + mbY*m.MBStride
+			sliceNum := m.SliceTable[mbXY]
+			if sliceNum == ^uint16(0) || int(sliceNum) >= len(params) {
+				return ErrInvalidData
+			}
+			p := params[sliceNum]
+			if err := p.validate(); err != nil {
+				return err
+			}
+			if p.DeblockingFilter == 0 {
+				continue
+			}
+			ctx, err := m.fillLoopFilterCachesFrame(mbXY, sliceNum, p)
+			if err != nil {
+				return err
+			}
+			if err := m.filterFrameMacroblockHigh(dst, mbX, mbY, p, &ctx); err != nil {
 				return err
 			}
 		}
@@ -397,6 +439,20 @@ func (m *macroblockTables) filterFrameMacroblock(dst *h264PicturePlanes, mbX int
 	return m.filterFrameMacroblockDir(dst, dstY, dstCb, dstCr, p, ctx, 1)
 }
 
+func (m *macroblockTables) filterFrameMacroblockHigh(dst *h264PicturePlanesHigh, mbX int, mbY int, p h264LoopFilterSliceParams, ctx *h264LoopFilterContext) error {
+	if ctx == nil || dst == nil {
+		return ErrInvalidData
+	}
+	dstY, dstCb, dstCr, err := h264MBDestPartOffsetsHigh(dst, mbX, mbY, 0, 0)
+	if err != nil {
+		return err
+	}
+	if err := m.filterFrameMacroblockDirHigh(dst, dstY, dstCb, dstCr, p, ctx, 0); err != nil {
+		return err
+	}
+	return m.filterFrameMacroblockDirHigh(dst, dstY, dstCb, dstCr, p, ctx, 1)
+}
+
 func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, p h264LoopFilterSliceParams, ctx *h264LoopFilterContext, dir int) error {
 	if dir < 0 || dir > 1 {
 		return ErrInvalidData
@@ -466,6 +522,85 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 			filterChroma = false
 		}
 		if err := h264ApplyLoopFilterEdge(dst, dstY, dstCb, dstCr, dir, edge, bS, qp, chromaQP, p, false, filterLuma, filterChroma); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *macroblockTables) filterFrameMacroblockDirHigh(dst *h264PicturePlanesHigh, dstY int, dstCb int, dstCr int, p h264LoopFilterSliceParams, ctx *h264LoopFilterContext, dir int) error {
+	if dir < 0 || dir > 1 {
+		return ErrInvalidData
+	}
+	if p.PPS == nil || p.PPS.SPS == nil {
+		return ErrInvalidData
+	}
+	bitDepth := int(p.PPS.SPS.BitDepthLuma)
+	mbType := m.MacroblockTyp[ctx.MBXY]
+	mbmXY := ctx.LeftMBXY
+	mbmType := ctx.LeftType
+	if dir != 0 {
+		mbmXY = ctx.TopMBXY
+		mbmType = ctx.TopType
+	}
+
+	maskEdgeTab := [2][8]int{
+		{0, 3, 3, 3, 1, 1, 1, 1},
+		{0, 3, 1, 1, 3, 3, 3, 3},
+	}
+	maskEdge := maskEdgeTab[dir][(mbType>>3)&7]
+	edges := 4
+	if maskEdge == 3 && ctx.CBP&15 == 0 {
+		edges = 1
+	}
+	maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> uint(dir)))
+	mvyLimit := 4
+
+	if mbmType != 0 {
+		bS, err := m.loopFilterBoundaryStrength(ctx, mbType, mbmType, dir, maskPar0, p.ListCount, mvyLimit)
+		if err != nil {
+			return err
+		}
+		if h264LoopFilterBSSum(bS) != 0 {
+			qp := (int(m.QScaleTable[ctx.MBXY]) + int(m.QScaleTable[mbmXY]) + 1) >> 1
+			chromaQP := [2]int{
+				(int(p.PPS.ChromaQPTable[0][m.QScaleTable[ctx.MBXY]]) + int(p.PPS.ChromaQPTable[0][m.QScaleTable[mbmXY]]) + 1) >> 1,
+				(int(p.PPS.ChromaQPTable[1][m.QScaleTable[ctx.MBXY]]) + int(p.PPS.ChromaQPTable[1][m.QScaleTable[mbmXY]]) + 1) >> 1,
+			}
+			if err := h264ApplyLoopFilterEdgeHigh(dst, dstY, dstCb, dstCr, dir, 0, bS, qp, chromaQP, p, true, true, true, bitDepth); err != nil {
+				return err
+			}
+		}
+	}
+
+	for edge := 1; edge < edges; edge++ {
+		deblockEdge := !is8x8DCT(mbType & (uint32(edge) << 24))
+		if !deblockEdge && (dst.ChromaFormatIDC != 2 || dir == 0) {
+			continue
+		}
+
+		bS, err := m.loopFilterInternalStrength(ctx, mbType, dir, edge, maskEdge, maskPar0, p.ListCount, mvyLimit)
+		if err != nil {
+			return err
+		}
+		if h264LoopFilterBSSum(bS) == 0 {
+			continue
+		}
+
+		qp := int(m.QScaleTable[ctx.MBXY])
+		chromaQP := [2]int{
+			int(p.PPS.ChromaQPTable[0][m.QScaleTable[ctx.MBXY]]),
+			int(p.PPS.ChromaQPTable[1][m.QScaleTable[ctx.MBXY]]),
+		}
+		filterLuma := deblockEdge
+		filterChroma := true
+		if dir == 0 && dst.ChromaFormatIDC != 3 && edge&1 != 0 {
+			filterChroma = false
+		}
+		if dir == 1 && dst.ChromaFormatIDC == 1 && edge&1 != 0 {
+			filterChroma = false
+		}
+		if err := h264ApplyLoopFilterEdgeHigh(dst, dstY, dstCb, dstCr, dir, edge, bS, qp, chromaQP, p, false, filterLuma, filterChroma, bitDepth); err != nil {
 			return err
 		}
 	}
@@ -675,6 +810,67 @@ func h264ApplyLoopFilterEdge(dst *h264PicturePlanes, dstY int, dstCb int, dstCr 
 	}
 }
 
+func h264ApplyLoopFilterEdgeHigh(dst *h264PicturePlanesHigh, dstY int, dstCb int, dstCr int, dir int, edge int, bS [4]int16, qp int, chromaQP [2]int, p h264LoopFilterSliceParams, intra bool, filterLuma bool, filterChroma bool, bitDepth int) error {
+	if dst == nil || edge < 0 || edge > 3 {
+		return ErrInvalidData
+	}
+	if filterLuma {
+		if dir == 0 {
+			if err := h264FilterMBEdgeVLumaHigh(dst.Y, dstY+4*edge, dst.LumaStride, bS, qp, int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth); err != nil {
+				return err
+			}
+		} else if err := h264FilterMBEdgeHLumaHigh(dst.Y, dstY+4*edge*dst.LumaStride, dst.LumaStride, bS, qp, int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth); err != nil {
+			return err
+		}
+	}
+	if !filterChroma || dst.ChromaFormatIDC == 0 {
+		return nil
+	}
+	switch dst.ChromaFormatIDC {
+	case 1:
+		if edge&1 != 0 {
+			return nil
+		}
+		if dir == 0 {
+			if err := h264FilterMBEdgeVChromaHigh(dst.Cb, dstCb+2*edge, dst.ChromaStride, bS, chromaQP[0], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, dst.ChromaFormatIDC, bitDepth); err != nil {
+				return err
+			}
+			return h264FilterMBEdgeVChromaHigh(dst.Cr, dstCr+2*edge, dst.ChromaStride, bS, chromaQP[1], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, dst.ChromaFormatIDC, bitDepth)
+		}
+		if err := h264FilterMBEdgeHChromaHigh(dst.Cb, dstCb+2*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[0], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth); err != nil {
+			return err
+		}
+		return h264FilterMBEdgeHChromaHigh(dst.Cr, dstCr+2*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[1], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth)
+	case 2:
+		if dir == 0 {
+			if edge&1 != 0 {
+				return nil
+			}
+			if err := h264FilterMBEdgeVChromaHigh(dst.Cb, dstCb+2*edge, dst.ChromaStride, bS, chromaQP[0], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, dst.ChromaFormatIDC, bitDepth); err != nil {
+				return err
+			}
+			return h264FilterMBEdgeVChromaHigh(dst.Cr, dstCr+2*edge, dst.ChromaStride, bS, chromaQP[1], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, dst.ChromaFormatIDC, bitDepth)
+		}
+		if err := h264FilterMBEdgeHChromaHigh(dst.Cb, dstCb+4*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[0], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth); err != nil {
+			return err
+		}
+		return h264FilterMBEdgeHChromaHigh(dst.Cr, dstCr+4*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[1], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth)
+	case 3:
+		if dir == 0 {
+			if err := h264FilterMBEdgeVLumaHigh(dst.Cb, dstCb+4*edge, dst.ChromaStride, bS, chromaQP[0], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth); err != nil {
+				return err
+			}
+			return h264FilterMBEdgeVLumaHigh(dst.Cr, dstCr+4*edge, dst.ChromaStride, bS, chromaQP[1], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth)
+		}
+		if err := h264FilterMBEdgeHLumaHigh(dst.Cb, dstCb+4*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[0], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth); err != nil {
+			return err
+		}
+		return h264FilterMBEdgeHLumaHigh(dst.Cr, dstCr+4*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[1], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra, bitDepth)
+	default:
+		return ErrUnsupported
+	}
+}
+
 func h264FilterMBEdgeVLuma(pix []uint8, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool) error {
 	alpha, beta, indexA, err := h264LoopFilterThresholds(qp, alphaOffset, betaOffset)
 	if err != nil || alpha == 0 || beta == 0 {
@@ -690,6 +886,21 @@ func h264FilterMBEdgeVLuma(pix []uint8, offset int, stride int, bS [4]int16, qp 
 	return h264HLoopFilterLumaIntra(pix, offset, stride, alpha, beta)
 }
 
+func h264FilterMBEdgeVLumaHigh(pix []uint16, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool, bitDepth int) error {
+	alpha, beta, indexA, err := h264LoopFilterThresholdsForBitDepth(qp, alphaOffset, betaOffset, bitDepth)
+	if err != nil || alpha == 0 || beta == 0 {
+		return err
+	}
+	if bS[0] < 4 || !intra {
+		tc, err := h264LoopFilterTC(indexA, bS, 0)
+		if err != nil {
+			return err
+		}
+		return h264HLoopFilterLumaHigh(pix, offset, stride, alpha, beta, &tc, bitDepth)
+	}
+	return h264HLoopFilterLumaIntraHigh(pix, offset, stride, alpha, beta, bitDepth)
+}
+
 func h264FilterMBEdgeHLuma(pix []uint8, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool) error {
 	alpha, beta, indexA, err := h264LoopFilterThresholds(qp, alphaOffset, betaOffset)
 	if err != nil || alpha == 0 || beta == 0 {
@@ -703,6 +914,21 @@ func h264FilterMBEdgeHLuma(pix []uint8, offset int, stride int, bS [4]int16, qp 
 		return h264VLoopFilterLuma(pix, offset, stride, alpha, beta, &tc)
 	}
 	return h264VLoopFilterLumaIntra(pix, offset, stride, alpha, beta)
+}
+
+func h264FilterMBEdgeHLumaHigh(pix []uint16, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool, bitDepth int) error {
+	alpha, beta, indexA, err := h264LoopFilterThresholdsForBitDepth(qp, alphaOffset, betaOffset, bitDepth)
+	if err != nil || alpha == 0 || beta == 0 {
+		return err
+	}
+	if bS[0] < 4 || !intra {
+		tc, err := h264LoopFilterTC(indexA, bS, 0)
+		if err != nil {
+			return err
+		}
+		return h264VLoopFilterLumaHigh(pix, offset, stride, alpha, beta, &tc, bitDepth)
+	}
+	return h264VLoopFilterLumaIntraHigh(pix, offset, stride, alpha, beta, bitDepth)
 }
 
 func h264FilterMBEdgeVChroma(pix []uint8, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool, chromaFormatIDC int) error {
@@ -726,6 +952,27 @@ func h264FilterMBEdgeVChroma(pix []uint8, offset int, stride int, bS [4]int16, q
 	return h264HLoopFilterChromaIntra(pix, offset, stride, alpha, beta)
 }
 
+func h264FilterMBEdgeVChromaHigh(pix []uint16, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool, chromaFormatIDC int, bitDepth int) error {
+	alpha, beta, indexA, err := h264LoopFilterThresholdsForBitDepth(qp, alphaOffset, betaOffset, bitDepth)
+	if err != nil || alpha == 0 || beta == 0 {
+		return err
+	}
+	if bS[0] < 4 || !intra {
+		tc, err := h264LoopFilterTC(indexA, bS, 1)
+		if err != nil {
+			return err
+		}
+		if chromaFormatIDC == 2 {
+			return h264HLoopFilterChroma422High(pix, offset, stride, alpha, beta, &tc, bitDepth)
+		}
+		return h264HLoopFilterChromaHigh(pix, offset, stride, alpha, beta, &tc, bitDepth)
+	}
+	if chromaFormatIDC == 2 {
+		return h264HLoopFilterChroma422IntraHigh(pix, offset, stride, alpha, beta, bitDepth)
+	}
+	return h264HLoopFilterChromaIntraHigh(pix, offset, stride, alpha, beta, bitDepth)
+}
+
 func h264FilterMBEdgeHChroma(pix []uint8, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool) error {
 	alpha, beta, indexA, err := h264LoopFilterThresholds(qp, alphaOffset, betaOffset)
 	if err != nil || alpha == 0 || beta == 0 {
@@ -741,13 +988,46 @@ func h264FilterMBEdgeHChroma(pix []uint8, offset int, stride int, bS [4]int16, q
 	return h264VLoopFilterChromaIntra(pix, offset, stride, alpha, beta)
 }
 
+func h264FilterMBEdgeHChromaHigh(pix []uint16, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool, bitDepth int) error {
+	alpha, beta, indexA, err := h264LoopFilterThresholdsForBitDepth(qp, alphaOffset, betaOffset, bitDepth)
+	if err != nil || alpha == 0 || beta == 0 {
+		return err
+	}
+	if bS[0] < 4 || !intra {
+		tc, err := h264LoopFilterTC(indexA, bS, 1)
+		if err != nil {
+			return err
+		}
+		return h264VLoopFilterChromaHigh(pix, offset, stride, alpha, beta, &tc, bitDepth)
+	}
+	return h264VLoopFilterChromaIntraHigh(pix, offset, stride, alpha, beta, bitDepth)
+}
+
 func h264LoopFilterThresholds(qp int, alphaOffset int, betaOffset int) (int, int, int, error) {
-	if qp < 0 || qp > 51 {
+	return h264LoopFilterThresholdsForBitDepth(qp, alphaOffset, betaOffset, 8)
+}
+
+func h264LoopFilterThresholdsForBitDepth(qp int, alphaOffset int, betaOffset int, bitDepth int) (int, int, int, error) {
+	if err := checkH264LoopFilterBitDepth(bitDepth); err != nil {
+		return 0, 0, 0, err
+	}
+	maxQP := h264MaxQPForBitDepth(bitDepth)
+	if qp < 0 || qp > maxQP {
 		return 0, 0, 0, ErrInvalidData
 	}
-	indexA := clipInt(qp+alphaOffset, 0, 51)
-	indexB := clipInt(qp+betaOffset, 0, 51)
+	qpBDOffset := 6 * (bitDepth - 8)
+	indexA := clipInt(qp-qpBDOffset+alphaOffset, 0, 51)
+	indexB := clipInt(qp-qpBDOffset+betaOffset, 0, 51)
 	return int(h264LoopFilterAlphaTable[indexA]), int(h264LoopFilterBetaTable[indexB]), indexA, nil
+}
+
+func checkH264LoopFilterBitDepth(bitDepth int) error {
+	switch bitDepth {
+	case 8, 9, 10, 12, 14:
+		return nil
+	default:
+		return ErrUnsupported
+	}
 }
 
 func h264LoopFilterTC(indexA int, bS [4]int16, plus int8) ([4]int8, error) {
