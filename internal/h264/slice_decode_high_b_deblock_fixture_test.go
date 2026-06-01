@@ -10,12 +10,18 @@ import (
 
 func TestHigh10BDeblockFixtureMacroblockSyntax(t *testing.T) {
 	for _, tt := range []struct {
-		name  string
-		file  string
-		cabac int32
+		name          string
+		file          string
+		cabac         int32
+		directSpatial bool
+		wantDirect    bool
 	}{
 		{name: "cavlc-b16x16", file: "high10_b_deblock_cavlc.h264"},
 		{name: "cabac-b16x16", file: "high10_b_deblock_cabac.h264", cabac: 1},
+		{name: "cavlc-temporal-direct", file: "high10_direct_b_deblock_temporal_cavlc.h264", wantDirect: true},
+		{name: "cabac-temporal-direct", file: "high10_direct_b_deblock_temporal_cabac.h264", cabac: 1, wantDirect: true},
+		{name: "cavlc-spatial-direct", file: "high10_direct_b_deblock_spatial_cavlc.h264", directSpatial: true, wantDirect: true},
+		{name: "cabac-spatial-direct", file: "high10_direct_b_deblock_spatial_cabac.h264", cabac: 1, directSpatial: true, wantDirect: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "h264", tt.file))
@@ -51,12 +57,33 @@ func TestHigh10BDeblockFixtureMacroblockSyntax(t *testing.T) {
 					if sh.SliceTypeNoS != PictureTypeB {
 						continue
 					}
-					if sh.DeblockingFilter != 1 || sh.PPS == nil || sh.PPS.CABAC != tt.cabac || isHighBImplicitWeighted(sh) {
-						t.Fatalf("B slice deblock/cabac/implicit = %d/%v/%t, want cabac=%d deblock-enabled neutral B",
-							sh.DeblockingFilter, sh.PPS, isHighBImplicitWeighted(sh), tt.cabac)
+					if sh.DeblockingFilter != 1 || sh.PPS == nil || sh.PPS.CABAC != tt.cabac ||
+						isHighBImplicitWeighted(sh) || (sh.DirectSpatialMVPred != 0) != tt.directSpatial {
+						t.Fatalf("B slice deblock/cabac/implicit/direct = %d/%v/%t/%d, want cabac=%d deblock-enabled neutral direct=%t",
+							sh.DeblockingFilter, sh.PPS, isHighBImplicitWeighted(sh), sh.DirectSpatialMVPred, tt.cabac, tt.directSpatial)
 					}
 
-					got := decodeHigh10BDeblockFixtureMacroblock(t, sh, &payload, tt.cabac != 0)
+					if tt.wantDirect {
+						got := decodeHigh10BDeblockFixtureMacroblocks(t, sh, &payload, tt.cabac != 0, 2, tt.directSpatial)
+						var sawExplicit, sawDirect bool
+						for _, mb := range got {
+							if isHighB16x16ExplicitMacroblock(mb.MBType) {
+								sawExplicit = true
+							}
+							if isHighB16x16DirectMacroblock(mb.MBType) {
+								sawDirect = true
+							}
+							if mb.MBType&(MBTypeSkip|MBType16x8|MBType8x16|MBType8x8|MBTypeIntra4x4|MBTypeIntra16x16|MBTypeIntraPCM) != 0 {
+								t.Fatalf("B macroblock type = %#x, want top-level B16x16 explicit/direct only", mb.MBType)
+							}
+						}
+						if !sawExplicit || !sawDirect {
+							t.Fatalf("B macroblock types = %#x/%#x, want one explicit B16x16 and one direct B16x16", got[0].MBType, got[1].MBType)
+						}
+						return
+					}
+
+					got := decodeHigh10BDeblockFixtureMacroblocks(t, sh, &payload, tt.cabac != 0, 1, false)[0]
 					wantType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
 					if got.MBType != wantType || got.MBType&(MBTypeDirect2|MBTypeSkip|MBType16x8|MBType8x16|MBType8x8) != 0 {
 						t.Fatalf("B macroblock type = %#x, want non-direct B16x16 bidirectional", got.MBType)
@@ -74,11 +101,18 @@ func TestHigh10BDeblockFixtureMacroblockSyntax(t *testing.T) {
 
 func decodeHigh10BDeblockFixtureMacroblock(t *testing.T, sh *SliceHeader, payload *bitReader, cabac bool) cavlcFrameMacroblockResult {
 	t.Helper()
+	return decodeHigh10BDeblockFixtureMacroblocks(t, sh, payload, cabac, 1, false)[0]
+}
 
-	m, err := newMacroblockTables(1, 1, 1)
+func decodeHigh10BDeblockFixtureMacroblocks(t *testing.T, sh *SliceHeader, payload *bitReader, cabac bool, mbWidth int, directSpatial bool) []cavlcFrameMacroblockResult {
+	t.Helper()
+
+	m, err := newMacroblockTables(mbWidth, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
+	direct := high10BDeblockDirectMotionContext(t, mbWidth, directSpatial)
+	got := make([]cavlcFrameMacroblockResult, 0, mbWidth)
 	var work frameMacroblockDecodeWork
 	if cabac {
 		dec, err := initCABACFrameSliceDecoder(payload, sh)
@@ -86,21 +120,65 @@ func decodeHigh10BDeblockFixtureMacroblock(t *testing.T, sh *SliceHeader, payloa
 			t.Fatal(err)
 		}
 		state := cabacFrameSliceState{QScale: int(sh.QScale)}
-		got, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuard(dec.source(), sh, &state, 0, 81, h264DirectMotionContext{}, &work, true)
-		if err != nil {
-			t.Fatalf("decode fixture CABAC B macroblock: %v", err)
+		for mbXY := 0; mbXY < mbWidth; mbXY++ {
+			mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuard(dec.source(), sh, &state, mbXY, 81, direct, &work, true)
+			if err != nil {
+				t.Fatalf("decode fixture CABAC B macroblock[%d]: %v", mbXY, err)
+			}
+			got = append(got, cavlcFrameMacroblockResult{
+				MBType:   mb.MBType,
+				CBP:      mb.CBP,
+				CBPTable: mb.CBPTable,
+				Inter:    mb.Inter,
+			})
 		}
-		return cavlcFrameMacroblockResult{
-			MBType:   got.MBType,
-			CBP:      got.CBP,
-			CBPTable: got.CBPTable,
-			Inter:    got.Inter,
-		}
+		return got
 	}
 	state := newCAVLCFrameSliceState(int(sh.QScale))
-	got, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(payload, sh, &state, 0, 81, h264DirectMotionContext{}, &work, true)
-	if err != nil {
-		t.Fatalf("decode fixture CAVLC B macroblock: %v", err)
+	for mbXY := 0; mbXY < mbWidth; mbXY++ {
+		mb, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(payload, sh, &state, mbXY, 81, direct, &work, true)
+		if err != nil {
+			t.Fatalf("decode fixture CAVLC B macroblock[%d]: %v", mbXY, err)
+		}
+		got = append(got, mb)
 	}
 	return got
+}
+
+func high10BDeblockDirectMotionContext(t *testing.T, mbWidth int, directSpatial bool) h264DirectMotionContext {
+	t.Helper()
+
+	past := makeH264SliceDecodePictureHigh(mbWidth, 1, 1)
+	future := makeH264SliceDecodePictureHigh(mbWidth, 1, 1)
+	fillH264HighResidualPlane(past.Y, 277)
+	fillH264HighResidualPlane(past.Cb, 311)
+	fillH264HighResidualPlane(past.Cr, 353)
+	fillH264HighResidualPlane(future.Y, 277)
+	fillH264HighResidualPlane(future.Cb, 311)
+	fillH264HighResidualPlane(future.Cr, 353)
+
+	colTables, err := newMacroblockTables(mbWidth, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for mbXY := 0; mbXY < mbWidth; mbXY++ {
+		colTables.MacroblockTyp[mbXY] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+		for i := 0; i < 4; i++ {
+			colTables.RefIndex[0][4*mbXY+i] = 0
+		}
+	}
+	pastFrame := decodedFrameFromHighPlanes(past, 0, nil)
+	futureFrame := decodedFrameFromHighPlanes(future, 4, colTables)
+	futureFrame.refEntries = [2][]simpleRefEntry{{{frame: pastFrame}}}
+
+	return h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: pastFrame}},
+			{{frame: futureFrame}},
+		},
+		CurPOC:              2,
+		DirectSpatialMVPred: directSpatial,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	}
 }

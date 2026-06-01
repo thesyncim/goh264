@@ -407,7 +407,7 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32)
 	}
 	if sh.DeblockingFilter == 1 &&
 		!isHighBImplicitWeighted(sh) &&
-		mbType == MBType16x16|MBTypeP0L0|MBTypeP0L1 {
+		(isHighB16x16ExplicitMacroblock(mbType) || isHighB16x16DirectMacroblock(mbType)) {
 		return nil
 	}
 	return ErrUnsupported
@@ -457,7 +457,7 @@ func validateHighFrameSliceBaseMacroblockForDecode(sliceTypeNoS int32, mbType ui
 	if sliceTypeNoS != PictureTypeB {
 		return nil
 	}
-	if mbType == MBType16x16|MBTypeP0L0|MBTypeP0L1 {
+	if isHighB16x16ExplicitMacroblock(mbType) {
 		return nil
 	}
 	if mbType == MBTypeDirect2|MBTypeL0L1 {
@@ -507,7 +507,7 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 			}
 			return ErrUnsupported
 		}
-		if mbType == MBType16x16|MBTypeP0L0|MBTypeP0L1 {
+		if isHighB16x16ExplicitMacroblock(mbType) {
 			return nil
 		}
 		if isHighB16x16DirectMacroblock(mbType) {
@@ -602,6 +602,16 @@ func isHighBExplicitPartitionedMacroblock(mbType uint32, subMBType *[4]uint32) b
 
 func isHighBImplicitWeighted(sh *SliceHeader) bool {
 	return sh != nil && sh.PPS != nil && sh.PPS.WeightedBipredIDC == 2
+}
+
+func isHighB16x16ExplicitMacroblock(mbType uint32) bool {
+	switch mbType {
+	case MBType16x16 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1:
+		return true
+	default:
+		return false
+	}
 }
 
 func isHighB16x8Or8x16ExplicitMacroblock(mbType uint32) bool {

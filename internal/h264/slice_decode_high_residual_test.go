@@ -169,7 +169,7 @@ func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.
 	}{
 		{name: "skip", bits: "010"},
 		{name: "direct without refs", bits: "111"},
-		{name: "l1 only", bits: "1011"},
+		{name: "l0 only", bits: "1010"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
@@ -192,7 +192,7 @@ func TestDecodeCABACFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.
 	}{
 		{name: "skip", bits: []int{1}},
 		{name: "direct", bits: []int{0, 0}},
-		{name: "l1 only", bits: []int{0, 1, 0, 1}},
+		{name: "l0 only", bits: []int{0, 1, 0, 0}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
