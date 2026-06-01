@@ -3,6 +3,7 @@
 package goh264
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -203,6 +204,53 @@ func TestDecodeConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	var frames []*Frame
+	for i, sample := range samples {
+		out, err := dec.DecodePacketFrames(Packet{
+			Data: sample,
+			SideData: []PacketSideData{{
+				Type: PacketSideDataA53ClosedCaptions,
+				Data: []byte{byte(i + 1)},
+			}},
+		})
+		if err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+		frames = append(frames, out...)
+	}
+	out, err := dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	frames = append(frames, out...)
+	assertFrameMD5Strings(t, frames, []string{
+		"4296e3dc95829cc27071a8685a428494",
+		"36f5a9b9064709ee891652e8f4e06992",
+		"aa778b981f96d21489196f6a0faa0959",
+	})
+
+	want := [][]byte{{0x01}, {0x03}, {0x02}}
+	if len(frames) != len(want) {
+		t.Fatalf("frames = %d, want %d", len(frames), len(want))
+	}
+	for i, frame := range frames {
+		if got := frame.SideData.A53ClosedCaptions; !bytes.Equal(got, want[i]) {
+			t.Fatalf("frame[%d] packet a53 = %x, want %x", i, got, want[i])
+		}
 	}
 }
 

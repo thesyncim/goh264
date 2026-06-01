@@ -55,6 +55,7 @@ type DecodedFrameSideData struct {
 	A53ClosedCaptions    []uint8
 	X264Build            int32
 	PictureTiming        H264SEIPictureTiming
+	S12MTimecodes        []uint32
 	RecoveryPoint        H264SEIRecoveryPoint
 	BufferingPeriod      H264SEIBufferingPeriod
 	GreenMetadata        H264SEIGreenMetadata
@@ -106,8 +107,15 @@ func (d *SimpleDecoder) DecodeNALUnits(nals []NALUnit) ([]*DecodedFrame, error) 
 	if d == nil {
 		return nil, ErrInvalidData
 	}
+	return d.DecodeNALUnitsWithSideData(nals, DecodedFrameSideData{})
+}
+
+func (d *SimpleDecoder) DecodeNALUnitsWithSideData(nals []NALUnit, packetSideData DecodedFrameSideData) ([]*DecodedFrame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
 	d.sei.Reset()
-	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, false)
+	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, packetSideData, false)
 }
 
 func (d *SimpleDecoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*DecodedFrame, error) {
@@ -137,7 +145,7 @@ func (d *SimpleDecoder) DecodeAVCFramesWithConfig(data []byte, cfg AVCDecoderCon
 		return nil, err
 	}
 	d.sei.Reset()
-	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, true)
+	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, DecodedFrameSideData{}, true)
 }
 
 func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
@@ -189,10 +197,10 @@ func DecodeSimpleNALUnitsWithParamSets(nals []NALUnit, spsList [maxSPSCount]*SPS
 	var sei H264SEIContext
 	dpb.reset()
 	sei.Reset()
-	return decodeSimpleNALUnitsWithState(nals, &spsList, &ppsList, &dpb, &sei, true)
+	return decodeSimpleNALUnitsWithState(nals, &spsList, &ppsList, &dpb, &sei, DecodedFrameSideData{}, true)
 }
 
-func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS, dpb *simpleFrameDPB, sei *H264SEIContext, flushOutput bool) ([]*DecodedFrame, error) {
+func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS, dpb *simpleFrameDPB, sei *H264SEIContext, packetSideData DecodedFrameSideData, flushOutput bool) ([]*DecodedFrame, error) {
 	if spsList == nil || ppsList == nil || dpb == nil || sei == nil {
 		return nil, ErrInvalidData
 	}
@@ -268,6 +276,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 					return nil, err
 				}
 				frame.SideData = decodedFrameSideDataFromSEI(sei)
+				mergePacketSideDataIntoDecodedFrame(&frame.SideData, packetSideData)
 				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
@@ -362,6 +371,21 @@ func decodedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
 		FilmGrain:            sei.Common.FilmGrain,
 		MasteringDisplay:     sei.Common.MasteringDisplay,
 		ContentLight:         sei.Common.ContentLight,
+	}
+}
+
+func mergePacketSideDataIntoDecodedFrame(dst *DecodedFrameSideData, src DecodedFrameSideData) {
+	if dst == nil {
+		return
+	}
+	if len(src.A53ClosedCaptions) != 0 {
+		dst.A53ClosedCaptions = append([]uint8(nil), src.A53ClosedCaptions...)
+	}
+	if src.AFD.Present != 0 {
+		dst.AFD = src.AFD
+	}
+	if len(src.S12MTimecodes) != 0 && dst.PictureTiming.TimecodeCount == 0 {
+		dst.S12MTimecodes = append([]uint32(nil), src.S12MTimecodes...)
 	}
 }
 

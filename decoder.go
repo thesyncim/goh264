@@ -3,6 +3,7 @@
 package goh264
 
 import (
+	"encoding/binary"
 	"math"
 
 	"github.com/thesyncim/goh264/internal/h264"
@@ -55,7 +56,10 @@ type AVCDecoderConfiguration struct {
 type PacketSideDataType uint8
 
 const (
-	PacketSideDataNewExtradata PacketSideDataType = 1
+	PacketSideDataNewExtradata      PacketSideDataType = 1
+	PacketSideDataA53ClosedCaptions PacketSideDataType = 23
+	PacketSideDataActiveFormat      PacketSideDataType = 26
+	PacketSideDataS12MTimecode      PacketSideDataType = 30
 )
 
 type PacketSideData struct {
@@ -270,6 +274,10 @@ func (d *Decoder) Decode(data []byte) (*Frame, error) {
 }
 
 func (d *Decoder) DecodeFrames(data []byte) ([]*Frame, error) {
+	return d.decodeFrames(data, h264.DecodedFrameSideData{})
+}
+
+func (d *Decoder) decodeFrames(data []byte, packetSideData h264.DecodedFrameSideData) ([]*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
 	}
@@ -288,7 +296,7 @@ func (d *Decoder) DecodeFrames(data []byte) ([]*Frame, error) {
 	if err != nil {
 		return nil, err
 	}
-	frames, err := d.simple.DecodeNALUnits(nals)
+	frames, err := d.simple.DecodeNALUnitsWithSideData(nals, packetSideData)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +329,7 @@ func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
 			return nil, err
 		}
 	}
-	return d.DecodeFrames(pkt.Data)
+	return d.decodeFrames(pkt.Data, packetFrameSideDataFromPacket(pkt.SideData))
 }
 
 func (d *Decoder) DecodeAnnexB(data []byte) (*Frame, error) {
@@ -603,6 +611,48 @@ func (d *Decoder) storeAnnexBParameterSets(nals []h264.NALUnit) error {
 	return d.simple.UpdateParamSets(d.sps, d.pps)
 }
 
+func packetSideDataGet(sideData []PacketSideData, typ PacketSideDataType) (PacketSideData, bool) {
+	for _, side := range sideData {
+		if side.Type == typ {
+			return side, true
+		}
+	}
+	return PacketSideData{}, false
+}
+
+func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameSideData {
+	var out h264.DecodedFrameSideData
+	if side, ok := packetSideDataGet(sideData, PacketSideDataA53ClosedCaptions); ok {
+		out.A53ClosedCaptions = append([]uint8(nil), side.Data...)
+	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataActiveFormat); ok && len(side.Data) > 0 {
+		out.AFD = h264.H2645SEIAFD{
+			Present:                 1,
+			ActiveFormatDescription: side.Data[0],
+		}
+	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataS12MTimecode); ok {
+		out.S12MTimecodes = s12mTimecodesFromPacketSideData(side.Data)
+	}
+	return out
+}
+
+func s12mTimecodesFromPacketSideData(data []byte) []uint32 {
+	if len(data) < 4 {
+		return nil
+	}
+	count := int(binary.LittleEndian.Uint32(data[:4]))
+	if count < 1 || count > 3 || len(data) < 4*(1+count) {
+		return nil
+	}
+	out := make([]uint32, count)
+	for i := 0; i < count; i++ {
+		off := 4 * (i + 1)
+		out[i] = binary.LittleEndian.Uint32(data[off : off+4])
+	}
+	return out
+}
+
 func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
 		return dst, ErrInvalidData
@@ -690,6 +740,7 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 		UserDataUnregistered: cloneByteSlices(src.UserDataUnregistered),
 		A53ClosedCaptions:    append([]byte(nil), src.A53ClosedCaptions...),
 		X264Build:            int(src.X264Build),
+		S12MTimecodes:        append([]uint32(nil), src.S12MTimecodes...),
 	}
 	if src.PictureTiming.Present != 0 {
 		pt := PictureTiming{
@@ -714,7 +765,9 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 			})
 		}
 		out.PictureTiming = &pt
-		out.S12MTimecodes = s12mTimecodesFromPictureTiming(src.PictureTiming, timeScale, numUnitsInTick, src.X264Build)
+		if src.PictureTiming.TimecodeCount != 0 {
+			out.S12MTimecodes = s12mTimecodesFromPictureTiming(src.PictureTiming, timeScale, numUnitsInTick, src.X264Build)
+		}
 	}
 	if src.RecoveryPoint.RecoveryFrameCount >= 0 {
 		out.RecoveryPoint = &RecoveryPoint{RecoveryFrameCount: src.RecoveryPoint.RecoveryFrameCount}

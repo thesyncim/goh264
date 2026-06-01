@@ -230,7 +230,7 @@ func TestDecodeSimpleNALUnitsParsesLeadingSEI(t *testing.T) {
 	_, err := decodeSimpleNALUnitsWithState([]NALUnit{{
 		Type: NALSEI,
 		RBSP: buildSEIRBSP(seiTestMessage{typ: seiTypeUserDataUnregistered, payload: seiUnregisteredPayload()}),
-	}}, &spsList, &ppsList, &dpb, &sei, false)
+	}}, &spsList, &ppsList, &dpb, &sei, DecodedFrameSideData{}, false)
 	if err != ErrInvalidData {
 		t.Fatalf("err = %v, want ErrInvalidData for packet without slices", err)
 	}

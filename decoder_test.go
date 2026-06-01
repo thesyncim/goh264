@@ -535,6 +535,73 @@ func TestDecodePacketFramesNewExtradataAnnexB(t *testing.T) {
 	}
 }
 
+func TestDecodePacketFramesPacketSideDataMapsToFrame(t *testing.T) {
+	captions := []byte{0x01, 0x02, 0x03}
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{
+			{Type: PacketSideDataA53ClosedCaptions, Data: captions},
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0xff}},
+			{Type: PacketSideDataActiveFormat, Data: []byte{0x0a}},
+			{Type: PacketSideDataS12MTimecode, Data: []byte{
+				0x02, 0x00, 0x00, 0x00,
+				0x44, 0x33, 0x22, 0x11,
+				0x88, 0x77, 0x66, 0x55,
+				0x00, 0x00, 0x00, 0x00,
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	captions[0] = 0xee
+	if got, want := frame.SideData.A53ClosedCaptions, []byte{0x01, 0x02, 0x03}; !bytes.Equal(got, want) {
+		t.Fatalf("packet a53 captions = %x, want %x", got, want)
+	}
+	if frame.SideData.ActiveFormat == nil || frame.SideData.ActiveFormat.Description != 0x0a {
+		t.Fatalf("packet active format = %+v", frame.SideData.ActiveFormat)
+	}
+	if got, want := frame.SideData.S12MTimecodes, []uint32{0x11223344, 0x55667788}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("packet s12m timecodes = %08x, want %08x", got, want)
+	}
+}
+
+func TestDecodePacketFramesPacketSideDataMergesWithSEIInFFmpegOrder(t *testing.T) {
+	base := replaceAnnexBSPS(t, decodeHexFixture(t, black16AnnexBHex), decoderSPSNALWithPicStructVUI())
+	data := prependAnnexBNAL(base, decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0e)},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x04, 0x05, 0x06})},
+		decoderSEITestMessage{typ: decoderSEITypePicTiming, payload: decoderSEIPictureTimingTimecodePayload()},
+	))
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: data,
+		SideData: []PacketSideData{
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0xaa}},
+			{Type: PacketSideDataActiveFormat, Data: []byte{0x01}},
+			{Type: PacketSideDataS12MTimecode, Data: []byte{
+				0x01, 0x00, 0x00, 0x00,
+				0xef, 0xbe, 0xad, 0xde,
+				0x00, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00,
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if got, want := frame.SideData.A53ClosedCaptions, []byte{0xaa}; !bytes.Equal(got, want) {
+		t.Fatalf("frame a53 captions = %x, want %x", got, want)
+	}
+	if frame.SideData.ActiveFormat == nil || frame.SideData.ActiveFormat.Description != 0x01 {
+		t.Fatalf("frame active format = %+v", frame.SideData.ActiveFormat)
+	}
+	if got, want := frame.SideData.S12MTimecodes, []uint32{0x40345607}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("frame s12m timecodes = %08x, want %08x", got, want)
+	}
+}
+
 func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
 		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0e)},
