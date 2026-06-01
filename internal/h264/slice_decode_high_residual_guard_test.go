@@ -136,16 +136,25 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsBPartitionedExplici
 	}
 }
 
-func TestValidateHighFrameSliceMacroblockForReconstructAllowsCAVLCB16x16Deblocking(t *testing.T) {
-	sh := &SliceHeader{
-		SliceTypeNoS:     PictureTypeB,
-		DeblockingFilter: 1,
-		PPS:              &PPS{},
-	}
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsB16x16Deblocking(t *testing.T) {
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
-
-	if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0x31, 0xf031); err != nil {
-		t.Fatalf("validate high CAVLC B16x16 deblock err = %v, want nil", err)
+	for _, tt := range []struct {
+		name string
+		pps  *PPS
+	}{
+		{name: "cavlc", pps: &PPS{}},
+		{name: "cabac", pps: &PPS{CABAC: 1}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sh := &SliceHeader{
+				SliceTypeNoS:     PictureTypeB,
+				DeblockingFilter: 1,
+				PPS:              tt.pps,
+			}
+			if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0x31, 0xf031); err != nil {
+				t.Fatalf("validate high B16x16 deblock err = %v, want nil", err)
+			}
+		})
 	}
 }
 
@@ -220,7 +229,7 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b deblock direct remains guarded", sh: bDeblockSlice, mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2, want: ErrUnsupported},
 		{name: "b deblock skip remains guarded", sh: bDeblockSlice, mbType: bSkip, want: ErrUnsupported},
 		{name: "b deblock partitioned remains guarded", sh: bDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
-		{name: "b deblock cabac remains guarded", sh: bCABACDeblockSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, want: ErrUnsupported},
+		{name: "b deblock cabac partitioned remains guarded", sh: bCABACDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
 		{name: "b deblock implicit weighted remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, want: ErrUnsupported},
 	}
 	for _, tt := range tests {

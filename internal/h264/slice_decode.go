@@ -406,7 +406,6 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32)
 		return ErrInvalidData
 	}
 	if sh.DeblockingFilter == 1 &&
-		sh.PPS.CABAC == 0 &&
 		!isHighBImplicitWeighted(sh) &&
 		mbType == MBType16x16|MBTypeP0L0|MBTypeP0L1 {
 		return nil

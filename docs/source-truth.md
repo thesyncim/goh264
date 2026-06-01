@@ -92,12 +92,12 @@ frame-only deblock-disabled non-direct B16x16 bidirectional lane, top-level
 temporal/spatial B_Direct lane resolving to B16x16, temporal/spatial B-skip
 lane, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub lane with CBP zero, implicit
 weighted B16x16 lane, explicit partitioned B16x8/B8x16/B8x8 lane, the narrow
-CAVLC B16x16 deblock-enabled lane, mixed-P
+CAVLC/CABAC B16x16 deblock-enabled lane, mixed-P
 Intra4x4/Intra16x16 lane, CAVLC/CABAC partitioned P16x8/P8x16/P8x8 lane,
 and High 4:4:4 Predictive-compatible yuv420p12le CAVLC IDR/I IntraPCM lane
 are opened for the proved surfaces below. P IntraPCM, P 8x8-DCT intra,
 weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub
-B, partitioned implicit weighted B, CABAC/partitioned/direct high B deblocking,
+B, partitioned implicit weighted B, partitioned/direct high B deblocking,
 CABAC/chroma/B-slice public high slice-boundary mode, broader 12-bit and all
 14-bit public high bitstreams, and MBAFF remain outside the supported boundary.
 
@@ -315,13 +315,18 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
   `2395db9c9fd32c34e3705708c566177e`; concatenated rawvideo MD5
   `fc65b48f2855bd3a33b1f3cc1a6e9e16`; stripped Annex B MD5
   `c929a27027d7d3e77041ac3ed79e13a1`
-- true High 10 4:2:0 CAVLC non-direct B16x16 deblock-enabled rawvideo
-  frame MD5s:
+- true High 10 4:2:0 CAVLC/CABAC non-direct B16x16 deblock-enabled rawvideo
+  frame MD5s for CAVLC:
   `95893f95fdce0f45e7593f4eca8bd834`,
   `6be70b93adcb7bb8f78d667776b774dc`,
   `b7edf8a2678e03b0495ba6a6efebc063`; concatenated rawvideo MD5
   `35a2a24c460551f2c43e759dde953583`; stripped Annex B MD5
-  `b8c45671afd9b919b7f391e09f9eced0`
+  `b8c45671afd9b919b7f391e09f9eced0`. CABAC frame MD5s:
+  `b43174bc46328c029e698e5b27960dcd`,
+  `1246d5f5c2fe36f2e658491be7309b5d`,
+  `53eebcc181d70b4c0a0d0bf5dd4a5778`; concatenated rawvideo MD5
+  `6200d3c83441e33c2cb1aac56d6882b3`; stripped Annex B MD5
+  `0681332c3a5e40b6b6f2ad387e534432`
 - true High 10 4:2:2/4:4:4 deblock-enabled 32x32 IDR/P rawvideo
   frame MD5s for CAVLC/CABAC:
   `754ac4c117c705808e87230f2d39a521`,
@@ -385,9 +390,9 @@ P16x16 anchors, the High 10 explicit partitioned B16x8/B8x16/B8x8 fixtures
 open non-direct partitioned B, the High10 mixed-P fixtures open P
 Intra4x4/Intra16x16, and the CAVLC/CABAC partitioned-P fixtures open
 P16x8/P8x16/P8x8 without opening P IntraPCM, P 8x8-DCT intra, or weighted
-partitioned P. The narrow High 10 CAVLC B16x16 deblock fixture opens only
-non-direct B16x16 high loop filtering with neutral weighting and keeps CABAC,
-partitioned, and direct high B deblocking guarded.
+partitioned P. The narrow High 10 CAVLC/CABAC B16x16 deblock fixtures open only
+non-direct B16x16 high loop filtering with neutral weighting and keep
+partitioned and direct high B deblocking guarded.
 Configured B-frame sample
 tests additionally decode one access unit per call and
 then use the public delayed-frame flush to drain retained future P pictures,
@@ -530,7 +535,7 @@ consumption, uint16 motion compensation, delayed output, Annex B, AVC/NALFF,
 configured AVC, sample-by-sample decode, public flush, corpus manifest rows,
 and FFmpeg `yuv420p10le` rawvideo MD5 parity for explicit non-direct
 partitioned B without opening mixed direct/explicit B8x8, residual-bearing
-direct-sub, partitioned implicit weighted B, or CABAC/partitioned/direct high B
+direct-sub, partitioned implicit weighted B, or partitioned/direct high B
 deblocking.
 
 The CAVLC and CABAC B 8x8 direct-sub fixtures are committed as 64x64 Annex B
@@ -631,7 +636,7 @@ Included:
   CAVLC-only 32x32 IDR/P decode through the high raw helper surface, covered by
   Annex B, AVC/NALFF, configured AVC, access-unit sample flush, corpus manifest,
   and FFmpeg rawvideo oracle proof.
-- Public High 10 4:2:0 deblock-enabled CAVLC B16x16 decode through the high
+- Public High 10 4:2:0 deblock-enabled CAVLC/CABAC B16x16 decode through the high
   raw helper surface, covered by Annex B, AVC/NALFF, configured AVC,
   sample-by-sample flush, corpus manifest, and FFmpeg rawvideo oracle proof.
 - Public High 10 4:2:2/4:4:4 deblock-enabled CAVLC/CABAC 32x32 IDR/P decode
@@ -648,7 +653,7 @@ Included:
   residual P16x16, explicit weighted P16x16, CAVLC/CABAC partitioned P16x8/P8x16/P8x8,
   non-direct B16x16,
   temporal/spatial direct B16x16, temporal/spatial B-skip, CAVLC/CABAC
-  B 8x8/B_SUB_4x4 direct-sub, implicit weighted B16x16, the narrow CAVLC
+  B 8x8/B_SUB_4x4 direct-sub, implicit weighted B16x16, the narrow CAVLC/CABAC
   B16x16 deblock row, and deblock-enabled 32x32 IDR/P vectors including the
   narrow High 10 4:2:2/4:4:4 rows, plus the CAVLC-only High10 slice-boundary
   row and the High 4:4:4 Predictive-compatible yuv420p12le CAVLC IDR/I
@@ -678,14 +683,14 @@ Excluded unless directly required by decoder parity:
   exact non-direct plus temporal/spatial direct B16x16, temporal/spatial
   B-skip, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, explicit partitioned
   B16x8/B8x16/B8x8, implicit weighted B16x16, mixed-P Intra4x4/Intra16x16,
-  CAVLC/CABAC partitioned P16x8/P8x16/P8x8, CAVLC B16x16 high deblocking,
+  CAVLC/CABAC partitioned P16x8/P8x16/P8x8, CAVLC/CABAC B16x16 high deblocking,
   deblock-enabled 4:2:0 32x32 IDR/P, CAVLC-only High10 4:2:0
   slice-boundary deblocking IDR/P, High 4:4:4 Predictive-compatible
   yuv420p12le CAVLC IDR/I IntraPCM, and deblock-enabled 4:2:2/4:4:4 32x32 IDR/P subsets
   remains explicitly unsupported. In particular, P IntraPCM,
   P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8,
   residual-bearing direct-sub B,
-  partitioned implicit weighted B, CABAC/partitioned/direct high B deblocking,
+  partitioned implicit weighted B, partitioned/direct high B deblocking,
   CABAC/chroma/B-slice public high slice-boundary mode, broader 12-bit and all
   14-bit public high bitstreams, and MBAFF remain later lanes.
 - Full conformance/testvector corpus passing and production benchmark claims
