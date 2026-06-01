@@ -269,7 +269,7 @@ func validateSimpleFrameSliceDecodeInputs(m *macroblockTables, dst *h264PictureP
 	if sliceNum == ^uint16(0) {
 		return ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
+	if sh.PictureStructure != PictureFrame {
 		return ErrUnsupported
 	}
 	if !h264SimpleFrameSliceDecodeSupportsBitDepth(sh.SPS.BitDepthLuma) {
@@ -297,14 +297,16 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	if sh == nil || sh.SPS == nil {
 		return ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
+	if sh.PictureStructure != PictureFrame {
 		return ErrUnsupported
 	}
 	if !isPublicHighFrameBitDepthCandidate(sh.SPS.BitDepthLuma) {
 		return ErrUnsupported
 	}
-	if err := checkH264DSPHighBitDepth(int(sh.SPS.BitDepthLuma)); err != nil {
-		return err
+	if sh.SPS.BitDepthLuma != 8 {
+		if err := checkH264DSPHighBitDepth(int(sh.SPS.BitDepthLuma)); err != nil {
+			return err
+		}
 	}
 	if sh.SPS.BitDepthChroma != sh.SPS.BitDepthLuma {
 		return ErrUnsupported
@@ -360,7 +362,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 
 func isPublicHighFrameBitDepthCandidate(bitDepth int32) bool {
 	switch bitDepth {
-	case 10, 12:
+	case 8, 10, 12:
 		return true
 	default:
 		return false
@@ -372,6 +374,11 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 		return false
 	}
 	switch sh.SPS.BitDepthLuma {
+	case 8:
+		return sh.SPS.FrameMBSOnlyFlag == 0 &&
+			sh.SPS.MBAFF != 0 &&
+			sh.PictureStructure == PictureFrame &&
+			sh.SPS.ChromaFormatIDC == 1
 	case 10:
 		return true
 	case 12:

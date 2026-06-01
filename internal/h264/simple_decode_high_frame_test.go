@@ -80,14 +80,32 @@ func TestNewSimpleDecodedFrameRejectsUnsupportedHighBitDepths(t *testing.T) {
 	}
 }
 
-func TestNewSimpleDecodedFrameRejectsFieldAndMBAFFPictures(t *testing.T) {
+func TestNewSimpleDecodedFrameAllowsFrameMBAFFStorage(t *testing.T) {
+	sps := simpleDecodeFrameStorageTestSPS(8, 8, 1)
+	sps.FrameMBSOnlyFlag = 0
+	sps.MBAFF = 1
+
+	frame, tables, err := newSimpleDecodedFrame(sps)
+	if err != nil {
+		t.Fatalf("new frame-MBAFF frame failed: %v", err)
+	}
+	if frame.MBWidth != int(sps.MBWidth) || frame.MBHeight != int(sps.MBHeight) || tables.MBHeight != int(sps.MBHeight) {
+		t.Fatalf("MBAFF geometry frame=%dx%d tables=%dx%d want %dx%d",
+			frame.MBWidth, frame.MBHeight, tables.MBWidth, tables.MBHeight, sps.MBWidth, sps.MBHeight)
+	}
+	if len(frame.Y) != frame.LumaStride*frame.MBHeight*16 {
+		t.Fatalf("MBAFF Y len = %d, want %d", len(frame.Y), frame.LumaStride*frame.MBHeight*16)
+	}
+}
+
+func TestNewSimpleDecodedFrameRejectsFieldAndInvalidMBAFFPictures(t *testing.T) {
 	for _, tt := range []struct {
 		name             string
 		frameMBSOnlyFlag int32
 		mbaff            int32
 	}{
-		{name: "field", frameMBSOnlyFlag: 0},
-		{name: "mbaff", frameMBSOnlyFlag: 1, mbaff: 1},
+		{name: "pic-aff-field-capable", frameMBSOnlyFlag: 0},
+		{name: "invalid-frame-only-mbaff", frameMBSOnlyFlag: 1, mbaff: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			sps := simpleDecodeFrameStorageTestSPS(10, 10, 1)

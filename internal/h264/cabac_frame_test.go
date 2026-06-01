@@ -467,6 +467,53 @@ func TestDecodeCABACFrameBDirectUnsupportedBeforeWriteback(t *testing.T) {
 	wantIndexes(t, src, []int{27})
 }
 
+func TestDecodeCABACFieldDecodingFlagContexts(t *testing.T) {
+	m, err := newMacroblockTables(3, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sliceNum = uint16(9)
+	mbXY := 1 + 2*m.MBStride
+	topPairXY := mbXY - 2*m.MBStride
+	m.SliceTable[topPairXY] = sliceNum
+	m.MacroblockTyp[topPairXY] = MBTypeIntra4x4 | MBTypeInterlaced
+
+	tests := []struct {
+		name        string
+		mbX         int
+		prevField   bool
+		topSame     bool
+		topType     uint32
+		wantContext int
+		wantFlag    int32
+	}{
+		{name: "none", mbX: 0, topSame: false, wantContext: 70, wantFlag: 0},
+		{name: "left", mbX: 1, prevField: true, topSame: false, wantContext: 71, wantFlag: 1},
+		{name: "top", mbX: 0, topSame: true, topType: MBTypeIntra4x4 | MBTypeInterlaced, wantContext: 71, wantFlag: 1},
+		{name: "left-top", mbX: 1, prevField: true, topSame: true, topType: MBTypeIntra4x4 | MBTypeInterlaced, wantContext: 72, wantFlag: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m.SliceTable[topPairXY] = ^uint16(0)
+			m.MacroblockTyp[topPairXY] = 0
+			if tt.topSame {
+				m.SliceTable[topPairXY] = sliceNum
+				m.MacroblockTyp[topPairXY] = tt.topType
+			}
+			src := &scriptedCABACSource{bits: []int{int(tt.wantFlag)}}
+
+			got, err := m.decodeCABACFieldDecodingFlag(src, mbXY, tt.mbX, sliceNum, tt.prevField)
+			if err != nil {
+				t.Fatalf("decode field flag failed: %v", err)
+			}
+			if got != tt.wantFlag {
+				t.Fatalf("field flag = %d, want %d", got, tt.wantFlag)
+			}
+			wantIndexes(t, src, []int{tt.wantContext})
+		})
+	}
+}
+
 func repeatCABACBits(count int, bit int) []int {
 	out := make([]int, count)
 	for i := range out {

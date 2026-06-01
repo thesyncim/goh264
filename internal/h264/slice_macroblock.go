@@ -7,12 +7,13 @@
 package h264
 
 type sliceMacroblockCursor struct {
-	MBWidth  int
-	MBHeight int
-	MBStride int
-	MBX      int
-	MBY      int
-	MBXY     int
+	MBWidth      int
+	MBHeight     int
+	MBStride     int
+	FieldOrMBAFF bool
+	MBX          int
+	MBY          int
+	MBXY         int
 }
 
 type frameMacroblockDecodeWork struct {
@@ -26,18 +27,24 @@ func newSliceMacroblockCursor(m *macroblockTables, sh *SliceHeader) (sliceMacrob
 	if m == nil || sh == nil || sh.SPS == nil || sh.PPS == nil {
 		return cur, ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
+	if sh.PictureStructure != PictureFrame {
 		return cur, ErrUnsupported
 	}
 	first := int(sh.FirstMBAddr)
-	if first < 0 || first >= m.MBWidth*m.MBHeight {
+	mbNum := m.MBWidth * m.MBHeight
+	fieldOrMBAFF := sh.SPS.MBAFF != 0
+	if first < 0 || first >= mbNum || (fieldOrMBAFF && first<<1 >= mbNum) {
 		return cur, ErrInvalidData
 	}
 	cur.MBWidth = m.MBWidth
 	cur.MBHeight = m.MBHeight
 	cur.MBStride = m.MBStride
+	cur.FieldOrMBAFF = fieldOrMBAFF
 	cur.MBX = first % m.MBWidth
 	cur.MBY = first / m.MBWidth
+	if cur.FieldOrMBAFF {
+		cur.MBY <<= 1
+	}
 	cur.MBXY = cur.MBX + cur.MBY*m.MBStride
 	return cur, nil
 }
@@ -50,6 +57,9 @@ func (c *sliceMacroblockCursor) advanceFrameMB() bool {
 	if c.MBX >= c.MBWidth {
 		c.MBX = 0
 		c.MBY++
+		if c.FieldOrMBAFF {
+			c.MBY++
+		}
 	}
 	if c.MBY >= c.MBHeight {
 		c.MBXY = c.MBStride * c.MBHeight

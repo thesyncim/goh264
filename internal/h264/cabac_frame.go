@@ -222,6 +222,29 @@ func (m *macroblockTables) decodeCABACMBSkip(src cabacSyntaxSource, mbXY int, sl
 	return src.get(11+ctx) != 0, nil
 }
 
+func (m *macroblockTables) decodeCABACFieldDecodingFlag(src cabacSyntaxSource, mbXY int, mbX int, sliceNum uint16, prevMBField bool) (int32, error) {
+	if m == nil || src == nil || mbX < 0 {
+		return 0, ErrInvalidData
+	}
+	if err := m.checkCodedMBXY(mbXY); err != nil {
+		return 0, err
+	}
+	if sliceNum == ^uint16(0) {
+		return 0, ErrInvalidData
+	}
+	ctx := 0
+	if prevMBField && mbX != 0 {
+		ctx++
+	}
+	mbbXY := mbXY - 2*m.MBStride
+	if mbbXY >= 0 && mbbXY < len(m.MacroblockTyp) &&
+		m.SliceTable[mbbXY] == sliceNum &&
+		m.MacroblockTyp[mbbXY]&MBTypeInterlaced != 0 {
+		ctx++
+	}
+	return int32(src.get(70 + ctx)), nil
+}
+
 func (m *macroblockTables) writeBackCABACFrameSkipMacroblock(sh *SliceHeader, mbXY int, sliceNum uint16) (cabacFrameMacroblockResult, error) {
 	var work frameMacroblockDecodeWork
 	if sh == nil {

@@ -118,6 +118,22 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10B420NoWeight(t *testing.T
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsFrameMBAFFGeometry(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 8, 1, 1, false, PictureTypeI)
+	sh.SPS.FrameMBSOnlyFlag = 0
+	sh.SPS.MBAFF = 1
+	sh.PictureStructure = PictureFrame
+
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+		t.Fatalf("frame-MBAFF validation err = %v, want nil", err)
+	}
+
+	sh.PictureStructure = PictureTopField
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+		t.Fatalf("field validation err = %v, want ErrUnsupported", err)
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T) {
 	tests := []struct {
 		name     string

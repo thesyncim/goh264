@@ -37,6 +37,39 @@ func TestSliceMacroblockCursorFrameMappingAndAdvance(t *testing.T) {
 	}
 }
 
+func TestSliceMacroblockCursorFrameMBAFFMappingAndAdvance(t *testing.T) {
+	m, err := newMacroblockTables(3, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+	pps := &PPS{SPS: sps}
+	sh := &SliceHeader{
+		FirstMBAddr:      4,
+		PictureStructure: PictureFrame,
+		SPS:              sps,
+		PPS:              pps,
+	}
+	cur, err := newSliceMacroblockCursor(m, sh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cur.FieldOrMBAFF || cur.MBX != 1 || cur.MBY != 2 || cur.MBXY != 9 {
+		t.Fatalf("MBAFF cursor = fieldOrMBAFF %v x%d y%d xy%d, want true x1 y2 xy9", cur.FieldOrMBAFF, cur.MBX, cur.MBY, cur.MBXY)
+	}
+	if !cur.advanceFrameMB() || cur.MBX != 2 || cur.MBY != 2 || cur.MBXY != 10 {
+		t.Fatalf("MBAFF advance once = x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
+	}
+	if cur.advanceFrameMB() {
+		t.Fatalf("MBAFF advance past final pair row reported more work: x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
+	}
+
+	sh.FirstMBAddr = 6
+	if _, err := newSliceMacroblockCursor(m, sh); err != ErrInvalidData {
+		t.Fatalf("MBAFF first_mb overflow err = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestFillDecodeNeighborsFrameSliceBoundaries(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {
