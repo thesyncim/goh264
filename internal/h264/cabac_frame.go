@@ -439,7 +439,7 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	mb.ChromaQP = chromaQP
 	mb.CBPTable = cbpTable
 	if in.RejectUnsupportedHighB {
-		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(&SliceHeader{SliceTypeNoS: in.SliceTypeNoS}, mb.MBType, &mb.SubMBType, mb.CBP, mb.CBPTable); err != nil {
+		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(&SliceHeader{SliceTypeNoS: in.SliceTypeNoS, PPS: in.PPS}, mb.MBType, &mb.SubMBType, mb.CBP, mb.CBPTable); err != nil {
 			return result, err
 		}
 	}

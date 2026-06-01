@@ -300,7 +300,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
 		return ErrUnsupported
 	}
-	if sh.SPS.BitDepthLuma != 10 {
+	if !isPublicHighFrameBitDepthCandidate(sh.SPS.BitDepthLuma) {
 		return ErrUnsupported
 	}
 	if err := checkH264DSPHighBitDepth(int(sh.SPS.BitDepthLuma)); err != nil {
@@ -314,6 +314,9 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	}
 	if sh.DeblockingFilter < 0 || sh.DeblockingFilter > 2 {
 		return ErrInvalidData
+	}
+	if !isPublicHighFrameBitDepthScope(sh) {
+		return ErrUnsupported
 	}
 	if err := validateHighFrameSliceDeblockingScope(sh); err != nil {
 		return err
@@ -355,15 +358,65 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	return nil
 }
 
+func isPublicHighFrameBitDepthCandidate(bitDepth int32) bool {
+	switch bitDepth {
+	case 10, 12:
+		return true
+	default:
+		return false
+	}
+}
+
+func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil {
+		return false
+	}
+	switch sh.SPS.BitDepthLuma {
+	case 10:
+		return true
+	case 12:
+		return sh.SPS.ChromaFormatIDC == 1 &&
+			sh.SliceTypeNoS == PictureTypeI &&
+			sh.DeblockingFilter == 0
+	default:
+		return false
+	}
+}
+
 func validateHighFrameSliceDeblockingScope(sh *SliceHeader) error {
 	if sh == nil {
 		return ErrInvalidData
 	}
 	if sh.DeblockingFilter == 2 {
-		return ErrUnsupported
+		if sh.SliceTypeNoS == PictureTypeB {
+			return ErrUnsupported
+		}
+		if sh.PPS != nil && sh.PPS.CABAC != 0 {
+			return ErrUnsupported
+		}
 	}
-	if sh.DeblockingFilter != 0 && sh.SliceTypeNoS == PictureTypeB {
-		return ErrUnsupported
+	return nil
+}
+
+func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32) error {
+	if sh == nil || sh.SliceTypeNoS != PictureTypeB || sh.DeblockingFilter == 0 {
+		return nil
+	}
+	if sh.PPS == nil {
+		return ErrInvalidData
+	}
+	if sh.DeblockingFilter == 1 &&
+		sh.PPS.CABAC == 0 &&
+		!isHighBImplicitWeighted(sh) &&
+		mbType == MBType16x16|MBTypeP0L0|MBTypeP0L1 {
+		return nil
+	}
+	return ErrUnsupported
+}
+
+func validateHighFrameSliceBMacroblockScope(sh *SliceHeader, mbType uint32) error {
+	if err := validateHighFrameSliceBDeblockingMacroblock(sh, mbType); err != nil {
+		return err
 	}
 	return nil
 }
@@ -427,6 +480,9 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 	}
 	switch sh.SliceTypeNoS {
 	case PictureTypeI:
+		if sh.SPS != nil && sh.SPS.BitDepthLuma != 10 && mbType != MBTypeIntraPCM {
+			return ErrUnsupported
+		}
 		return nil
 	case PictureTypeP:
 	case PictureTypeB:
@@ -443,6 +499,9 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 		return ErrUnsupported
 	}
 	if sh.SliceTypeNoS == PictureTypeB {
+		if err := validateHighFrameSliceBMacroblockScope(sh, mbType); err != nil {
+			return err
+		}
 		if isSkip(mbType) {
 			if isHighB16x16DirectSkipMacroblock(mbType) && cbp == 0 && cbpTable == 0 {
 				return nil

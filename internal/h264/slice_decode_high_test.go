@@ -89,6 +89,14 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Intra420(t *testing.T) {
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12Intra420SliceScope(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixture(t, 12, 1, false, PictureTypeI)
+
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+		t.Fatalf("high12 validation err = %v, want nil", err)
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10P420NoWeight(t *testing.T) {
 	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeP)
 	sh.RefCount = [2]uint32{1, 0}
@@ -118,7 +126,8 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 	}{
 		{name: "8-bit", bitDepth: 8, chroma: 8, format: 1, slice: PictureTypeI},
 		{name: "9-bit", bitDepth: 9, chroma: 9, format: 1, slice: PictureTypeI},
-		{name: "12-bit", bitDepth: 12, chroma: 12, format: 1, slice: PictureTypeI},
+		{name: "12-bit-p", bitDepth: 12, chroma: 12, format: 1, slice: PictureTypeP},
+		{name: "12-bit-deblock", bitDepth: 12, chroma: 12, format: 1, deblock: true, slice: PictureTypeI},
 		{name: "14-bit", bitDepth: 14, chroma: 14, format: 1, slice: PictureTypeI},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeI},
 		{name: "monochrome", bitDepth: 10, chroma: 10, format: 0, slice: PictureTypeI},
@@ -152,6 +161,31 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Deblocking(t *testing.T) 
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10BDeblockingAtSliceLevel(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, true, PictureTypeB)
+	sh.RefCount = [2]uint32{1, 1}
+
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+		t.Fatalf("high B deblock slice validation err = %v, want nil", err)
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10SliceBoundaryDeblocking(t *testing.T) {
+	for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+		t.Run(pictureTypeName(sliceType), func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 2, true, sliceType)
+			sh.DeblockingFilter = 2
+			if sliceType == PictureTypeP {
+				sh.RefCount = [2]uint32{1, 0}
+			}
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high slice-boundary deblock validation err = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaDeblocking(t *testing.T) {
 	for _, chromaFormatIDC := range []int{2, 3} {
 		for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
@@ -175,17 +209,18 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *tes
 		run  func(*SliceHeader)
 	}{
 		{
-			name: "b-deblock-enabled",
+			name: "b-slice-boundary-mode",
 			run: func(sh *SliceHeader) {
 				sh.SliceType = PictureTypeB
 				sh.SliceTypeNoS = PictureTypeB
 				sh.RefCount = [2]uint32{1, 1}
-				sh.DeblockingFilter = 1
+				sh.DeblockingFilter = 2
 			},
 		},
 		{
-			name: "slice-boundary-mode",
+			name: "cabac-slice-boundary-mode",
 			run: func(sh *SliceHeader) {
+				sh.PPS.CABAC = 1
 				sh.DeblockingFilter = 2
 			},
 		},
@@ -194,6 +229,13 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *tes
 			run: func(sh *SliceHeader) {
 				sh.SPS.ChromaFormatIDC = 2
 				sh.DeblockingFilter = 0
+			},
+		},
+		{
+			name: "chroma-slice-boundary-mode",
+			run: func(sh *SliceHeader) {
+				sh.SPS.ChromaFormatIDC = 2
+				sh.DeblockingFilter = 2
 			},
 		},
 	} {
@@ -315,6 +357,17 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 				t.Fatalf("weighted high validation err = %v, want ErrUnsupported", err)
 			}
 		})
+	}
+}
+
+func TestValidateHighFrameSliceReconstructKeepsHigh12NarrowToIntraPCM(t *testing.T) {
+	_, _, sh := highFrameSliceDecodeFixture(t, 12, 1, false, PictureTypeI)
+
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntraPCM, nil, 0, 0); err != nil {
+		t.Fatalf("high12 IntraPCM reconstruct validation err = %v, want nil", err)
+	}
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0); err != ErrUnsupported {
+		t.Fatalf("high12 Intra16x16 reconstruct validation err = %v, want ErrUnsupported", err)
 	}
 }
 
@@ -635,7 +688,7 @@ func TestDecodeCABACFrameSliceHighReconstructsP16x16NoResidual(t *testing.T) {
 }
 
 func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBeforeEntropy(t *testing.T) {
-	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 1, true, PictureTypeI)
+	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 2, true, PictureTypeI)
 	sh.DeblockingFilter = 2
 	gb := newBitReader(cavlcIntraPCMBytes(h264ReconstructIntraPCMHigh(1, 10, 5)))
 

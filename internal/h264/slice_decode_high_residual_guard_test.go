@@ -136,10 +136,26 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsBPartitionedExplici
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsCAVLCB16x16Deblocking(t *testing.T) {
+	sh := &SliceHeader{
+		SliceTypeNoS:     PictureTypeB,
+		DeblockingFilter: 1,
+		PPS:              &PPS{},
+	}
+	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+
+	if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0x31, 0xf031); err != nil {
+		t.Fatalf("validate high CAVLC B16x16 deblock err = %v, want nil", err)
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoundaries(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
 	bSlice := &SliceHeader{SliceTypeNoS: PictureTypeB}
 	bImplicitWeightedSlice := &SliceHeader{SliceTypeNoS: PictureTypeB, PPS: &PPS{WeightedBipredIDC: 2}}
+	bDeblockSlice := &SliceHeader{SliceTypeNoS: PictureTypeB, DeblockingFilter: 1, PPS: &PPS{}}
+	bCABACDeblockSlice := &SliceHeader{SliceTypeNoS: PictureTypeB, DeblockingFilter: 1, PPS: &PPS{CABAC: 1}}
+	bImplicitDeblockSlice := &SliceHeader{SliceTypeNoS: PictureTypeB, DeblockingFilter: 1, PPS: &PPS{WeightedBipredIDC: 2}}
 	pSkip := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
 	bSkip := MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
 	bDirectSubCarrier := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
@@ -163,7 +179,6 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		MBType16x16 | MBTypeP0L0,
 		MBType16x16 | MBTypeP0L0,
 	}
-
 	tests := []struct {
 		name     string
 		sh       *SliceHeader
@@ -202,6 +217,11 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b explicit 16x8 missing partition direction", sh: bSlice, mbType: MBType16x8 | MBTypeP0L0, want: ErrUnsupported},
 		{name: "b explicit 16x8 implicit weighted remains guarded", sh: bImplicitWeightedSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
 		{name: "b explicit 8x8 implicit weighted remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bExplicitSub, want: ErrUnsupported},
+		{name: "b deblock direct remains guarded", sh: bDeblockSlice, mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2, want: ErrUnsupported},
+		{name: "b deblock skip remains guarded", sh: bDeblockSlice, mbType: bSkip, want: ErrUnsupported},
+		{name: "b deblock partitioned remains guarded", sh: bDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
+		{name: "b deblock cabac remains guarded", sh: bCABACDeblockSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, want: ErrUnsupported},
+		{name: "b deblock implicit weighted remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, want: ErrUnsupported},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
