@@ -22,6 +22,13 @@ func fillIntra4x4PredModeCacheFromSyntax(cache *[h264IntraPredModeCacheSize]int8
 }
 
 func (m *macroblockTables) writeBackCAVLCIntraMacroblock(mbXY int, mb *cavlcMacroblockSyntax, c *cavlcResidualContext, sliceNum uint16) error {
+	if mb == nil {
+		return ErrInvalidData
+	}
+	return m.writeBackCAVLCIntraMacroblockWithChromaPred(mbXY, mb, c, int8(mb.ChromaPredMode), sliceNum)
+}
+
+func (m *macroblockTables) writeBackCAVLCIntraMacroblockWithChromaPred(mbXY int, mb *cavlcMacroblockSyntax, c *cavlcResidualContext, chromaPred int8, sliceNum uint16) error {
 	if mb == nil || c == nil || !isIntra(mb.MBType) {
 		return ErrInvalidData
 	}
@@ -40,7 +47,7 @@ func (m *macroblockTables) writeBackCAVLCIntraMacroblock(mbXY int, mb *cavlcMacr
 	if err := m.writeBackMacroblockTables(mbXY, mb.MBType, mb.CBPTable, mb.QScale, sliceNum); err != nil {
 		return err
 	}
-	m.ChromaPred[mbXY] = int8(mb.ChromaPredMode)
+	m.ChromaPred[mbXY] = chromaPred
 	return m.writeBackNonZeroCount(mbXY, &c.NonZeroCountCache)
 }
 
@@ -67,6 +74,13 @@ func (m *macroblockTables) writeBackCABACIntraPCMMacroblock(mbXY int, sliceNum u
 }
 
 func (m *macroblockTables) writeBackCABACIntraMacroblock(mbXY int, mb *cavlcMacroblockSyntax, c *cavlcResidualContext, intraCache *[h264IntraPredModeCacheSize]int8, sliceNum uint16) error {
+	if mb == nil {
+		return ErrInvalidData
+	}
+	return m.writeBackCABACIntraMacroblockWithChromaPred(mbXY, mb, c, intraCache, int8(mb.ChromaPredMode), sliceNum)
+}
+
+func (m *macroblockTables) writeBackCABACIntraMacroblockWithChromaPred(mbXY int, mb *cavlcMacroblockSyntax, c *cavlcResidualContext, intraCache *[h264IntraPredModeCacheSize]int8, chromaPred int8, sliceNum uint16) error {
 	if mb == nil || c == nil || !isIntra(mb.MBType) {
 		return ErrInvalidData
 	}
@@ -84,7 +98,7 @@ func (m *macroblockTables) writeBackCABACIntraMacroblock(mbXY int, mb *cavlcMacr
 	if err := m.writeBackMacroblockTables(mbXY, mb.MBType, mb.CBPTable, mb.QScale, sliceNum); err != nil {
 		return err
 	}
-	m.ChromaPred[mbXY] = int8(mb.ChromaPredMode)
+	m.ChromaPred[mbXY] = chromaPred
 	return m.writeBackNonZeroCount(mbXY, &c.NonZeroCountCache)
 }
 

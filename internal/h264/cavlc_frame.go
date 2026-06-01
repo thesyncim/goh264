@@ -42,10 +42,11 @@ const cavlcMBSkipRunUnset int32 = -1
 
 type cavlcFrameSliceState struct {
 	MBSkipRun int32
+	QScale    int
 }
 
-func newCAVLCFrameSliceState() cavlcFrameSliceState {
-	return cavlcFrameSliceState{MBSkipRun: cavlcMBSkipRunUnset}
+func newCAVLCFrameSliceState(qscale int) cavlcFrameSliceState {
+	return cavlcFrameSliceState{MBSkipRun: cavlcMBSkipRunUnset, QScale: qscale}
 }
 
 func (m *macroblockTables) decodeCAVLCFrameSliceMacroblock(gb *bitReader, sh *SliceHeader, state *cavlcFrameSliceState, mbXY int, sliceNum uint16) (cavlcFrameMacroblockResult, error) {
@@ -61,7 +62,7 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithWork(gb *bitReader
 	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
 		return result, ErrUnsupported
 	}
-	if sh.QScale > qpMaxNum || state.MBSkipRun < cavlcMBSkipRunUnset {
+	if sh.QScale > qpMaxNum || state.MBSkipRun < cavlcMBSkipRunUnset || state.QScale < 0 || state.QScale > qpMaxNum {
 		return result, ErrInvalidData
 	}
 
@@ -78,23 +79,30 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithWork(gb *bitReader
 		}
 		if state.MBSkipRun > 0 {
 			state.MBSkipRun--
-			return m.writeBackCAVLCFrameSkipMacroblockWithWork(sh, mbXY, sliceNum, work)
+			return m.writeBackCAVLCFrameSkipMacroblockWithWork(sh, state.QScale, mbXY, sliceNum, work)
 		}
 		state.MBSkipRun = cavlcMBSkipRunUnset
 	}
 
-	return m.decodeCAVLCFrameMacroblockWithWork(gb, cavlcFrameMacroblockInput{
+	result, err := m.decodeCAVLCFrameMacroblockWithWork(gb, cavlcFrameMacroblockInput{
 		MBXY:                mbXY,
 		SliceNum:            sliceNum,
 		SliceType:           sh.SliceType,
 		SliceTypeNoS:        sh.SliceTypeNoS,
-		QScale:              int(sh.QScale),
+		QScale:              state.QScale,
 		RefCount:            sh.RefCount,
 		DCT8x8Allowed:       sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred: sh.DirectSpatialMVPred != 0,
 		PPS:                 sh.PPS,
 		SPS:                 sh.SPS,
 	}, work)
+	if err != nil {
+		return result, err
+	}
+	if result.MBType&MBTypeIntraPCM == 0 {
+		state.QScale = result.QScale
+	}
+	return result, nil
 }
 
 func (m *macroblockTables) decodeCAVLCFrameMacroblock(gb *bitReader, in cavlcFrameMacroblockInput) (cavlcFrameMacroblockResult, error) {
@@ -169,16 +177,22 @@ func (m *macroblockTables) decodeCAVLCFrameIntraPCMMacroblock(gb *bitReader, in 
 
 func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblock(sh *SliceHeader, mbXY int, sliceNum uint16) (cavlcFrameMacroblockResult, error) {
 	var work frameMacroblockDecodeWork
-	return m.writeBackCAVLCFrameSkipMacroblockWithWork(sh, mbXY, sliceNum, &work)
+	if sh == nil {
+		return cavlcFrameMacroblockResult{}, ErrInvalidData
+	}
+	return m.writeBackCAVLCFrameSkipMacroblockWithWork(sh, int(sh.QScale), mbXY, sliceNum, &work)
 }
 
-func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithWork(sh *SliceHeader, mbXY int, sliceNum uint16, work *frameMacroblockDecodeWork) (cavlcFrameMacroblockResult, error) {
+func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithWork(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, work *frameMacroblockDecodeWork) (cavlcFrameMacroblockResult, error) {
 	var result cavlcFrameMacroblockResult
 	if sh == nil || work == nil {
 		return result, ErrInvalidData
 	}
 	if sh.SliceTypeNoS != PictureTypeP {
 		return result, ErrUnsupported
+	}
+	if qscale < 0 || qscale > qpMaxNum {
+		return result, ErrInvalidData
 	}
 
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
@@ -187,14 +201,14 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithWork(sh *SliceHe
 		return result, err
 	}
 	*work = frameMacroblockDecodeWork{}
-	if err := m.writeBackPskipMacroblockWithMotion(mbXY, int(sh.QScale), neighbors.motionNeighbors(mbType, 1, PictureTypeP, false, false), sliceNum, &work.Motion); err != nil {
+	if err := m.writeBackPskipMacroblockWithMotion(mbXY, qscale, neighbors.motionNeighbors(mbType, 1, PictureTypeP, false, false), sliceNum, &work.Motion); err != nil {
 		return result, err
 	}
 
 	result.MBType = mbType
 	result.CBP = 0
 	result.CBPTable = 0
-	result.QScale = int(sh.QScale)
+	result.QScale = qscale
 	result.Neighbors = neighbors
 	result.IsInter = true
 	result.Skipped = true
@@ -206,10 +220,14 @@ func (m *macroblockTables) decodeCAVLCFrameIntraMacroblock(gb *bitReader, in cav
 	if err != nil {
 		return result, err
 	}
+	rawChromaPred := int32(0)
+	if in.SPS.ChromaFormatIDC == 1 || in.SPS.ChromaFormatIDC == 2 {
+		rawChromaPred = mb.ChromaPredMode
+	}
 	if err := validateCAVLCFrameIntraPredModes(&mb, in.SPS, intraCache, cacheResult.Intra); err != nil {
 		return result, err
 	}
-	if err := m.writeBackCAVLCIntraMacroblock(in.MBXY, &mb, residual, in.SliceNum); err != nil {
+	if err := m.writeBackCAVLCIntraMacroblockWithChromaPred(in.MBXY, &mb, residual, int8(rawChromaPred), in.SliceNum); err != nil {
 		return result, err
 	}
 

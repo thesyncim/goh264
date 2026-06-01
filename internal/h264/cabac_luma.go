@@ -23,9 +23,11 @@ func (c *cavlcResidualContext) decodeCABACLumaResidual(src cabacSyntaxSource, pp
 		for i := range c.MBLumaDC[p] {
 			c.MBLumaDC[p][i] = 0
 		}
-		if _, err := c.decodeCABACResidualDC(src, c.MBLumaDC[p][:], cabacResidualContextCategory[0][p], lumaDCBlockIndex+p, scan, 16, leftCBP, topCBP, mbField, false); err != nil {
+		dc, err := c.decodeCABACResidualDC(src, c.MBLumaDC[p][:], cabacResidualContextCategory[0][p], lumaDCBlockIndex+p, scan, 16, leftCBP, topCBP, mbField, false)
+		if err != nil {
 			return 0, err
 		}
+		cbpTableBits := dc.CBPTableBits
 
 		if cbp&15 != 0 {
 			qmul := pps.Dequant4Buffer[p][qscale][:]
@@ -36,18 +38,17 @@ func (c *cavlcResidualContext) decodeCABACLumaResidual(src cabacSyntaxSource, pp
 					return 0, err
 				}
 			}
-			return 0x0f, nil
+			return cbpTableBits, nil
 		}
 
 		fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[16*p]), 4, 4, 8, 0)
-		return 0, nil
+		return cbpTableBits, nil
 	}
 
 	cqm := p
 	if !isIntra(mbType) {
 		cqm += 3
 	}
-	newCBP := 0
 	for i8x8 := 0; i8x8 < 4; i8x8++ {
 		if cbp&(1<<i8x8) != 0 {
 			if is8x8DCT(mbType) {
@@ -57,10 +58,6 @@ func (c *cavlcResidualContext) decodeCABACLumaResidual(src cabacSyntaxSource, pp
 				if _, err := c.decodeCABACResidualNonDC(src, block, cabacResidualContextCategory[3][p], index, scan8x8, pps.Dequant8Buffer[cqm][qscale][:], 64, leftCBP, topCBP, mbField, chroma444); err != nil {
 					return 0, err
 				}
-				nnz := int(h264Scan8[4*i8x8+16*p])
-				if c.NonZeroCountCache[nnz] != 0 {
-					newCBP |= 1 << i8x8
-				}
 			} else {
 				qmul := pps.Dequant4Buffer[cqm][qscale][:]
 				for i4x4 := 0; i4x4 < 4; i4x4++ {
@@ -69,12 +66,11 @@ func (c *cavlcResidualContext) decodeCABACLumaResidual(src cabacSyntaxSource, pp
 					if _, err := c.decodeCABACResidualNonDC(src, block, cabacResidualContextCategory[2][p], index, scan, qmul, 16, leftCBP, topCBP, mbField, chroma444); err != nil {
 						return 0, err
 					}
-					newCBP |= int(c.NonZeroCountCache[h264Scan8[index]]) << i8x8
 				}
 			}
 		} else {
 			fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[4*i8x8+16*p]), 2, 2, 8, 0)
 		}
 	}
-	return newCBP, nil
+	return 0, nil
 }

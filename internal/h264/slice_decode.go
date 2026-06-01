@@ -82,7 +82,7 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 		return result, err
 	}
 
-	state := newCAVLCFrameSliceState()
+	state := newCAVLCFrameSliceState(int(sh.QScale))
 	for {
 		var work frameMacroblockDecodeWork
 		mb, err := m.decodeCAVLCFrameSliceMacroblockWithWork(gb, sh, &state, cur.MBXY, in.SliceNum, &work)
@@ -120,7 +120,7 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 		return result, err
 	}
 
-	state := cabacFrameSliceState{}
+	state := cabacFrameSliceState{QScale: int(sh.QScale)}
 	for {
 		var work frameMacroblockDecodeWork
 		mb, err := m.decodeCABACFrameSliceMacroblockWithWork(src, sh, &state, cur.MBXY, in.SliceNum, &work)

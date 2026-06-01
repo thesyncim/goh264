@@ -12,9 +12,12 @@ func TestDecodeCABACChromaResidual420DC(t *testing.T) {
 		signs: []int32{1},
 	}
 
-	err := ctx.decodeCABACChromaResidual(src, pps, h264ZigzagScanCAVLC[:], MBTypeIntra4x4, 0x10, 1, [2]uint8{0, 0}, 0, 0, false)
+	ret, err := ctx.decodeCABACChromaResidual(src, pps, h264ZigzagScanCAVLC[:], MBTypeIntra4x4, 0x10, 1, [2]uint8{0, 0}, 0, 0, false)
 	if err != nil {
 		t.Fatalf("decode chroma residual failed: %v", err)
+	}
+	if ret != 0x40 {
+		t.Fatalf("ret cbp table bits = %#x, want 0x40", ret)
 	}
 	if ctx.MB[256] != 1 {
 		t.Fatalf("chroma dc coeff = %d, want 1", ctx.MB[256])
@@ -36,8 +39,10 @@ func TestDecodeCABACChromaResidualClearsSkippedChroma(t *testing.T) {
 	}
 	src := &scriptedCABACSource{}
 
-	if err := ctx.decodeCABACChromaResidual(src, pps, h264ZigzagScanCAVLC[:], MBTypeIntra4x4, 0, 1, [2]uint8{0, 0}, 0, 0, false); err != nil {
+	if ret, err := ctx.decodeCABACChromaResidual(src, pps, h264ZigzagScanCAVLC[:], MBTypeIntra4x4, 0, 1, [2]uint8{0, 0}, 0, 0, false); err != nil {
 		t.Fatalf("decode skipped chroma residual failed: %v", err)
+	} else if ret != 0 {
+		t.Fatalf("ret cbp table bits = %#x, want 0", ret)
 	}
 	for _, n := range []int{16, 17, 18, 19, 32, 33, 34, 35} {
 		if ctx.NonZeroCountCache[h264Scan8[n]] != 0 {

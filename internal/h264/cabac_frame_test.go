@@ -41,8 +41,8 @@ func TestDecodeCABACFrameIntra4x4MacroblockWritesState(t *testing.T) {
 	if m.MacroblockTyp[0] != MBTypeIntra4x4 || m.CBPTable[0] != 0 || m.QScaleTable[0] != 20 || m.SliceTable[0] != 2 {
 		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
 	}
-	if m.ChromaPred[0] != intraPredDC1288x8 || got.ChromaPred != intraPredDC1288x8 {
-		t.Fatalf("chroma pred table/result = %d/%d, want dc128", m.ChromaPred[0], got.ChromaPred)
+	if m.ChromaPred[0] != 0 || got.ChromaPred != intraPredDC1288x8 {
+		t.Fatalf("chroma pred table/result = %d/%d, want raw 0/result dc128", m.ChromaPred[0], got.ChromaPred)
 	}
 	dst := int(m.MB2BRXY[0])
 	if m.Intra4x4Pred[dst] != intraPredDC || m.Intra4x4Pred[dst+6] != intraPredDC {
@@ -78,7 +78,7 @@ func TestDecodeCABACFrameIntraPCMMacroblockWritesState(t *testing.T) {
 		SPS:              sps,
 		QScale:           23,
 	}
-	state := &cabacFrameSliceState{LastQScaleDiff: -2}
+	state := &cabacFrameSliceState{QScale: int(sh.QScale), LastQScaleDiff: -2}
 
 	got, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, 0, 6)
 	if err != nil {
@@ -313,7 +313,7 @@ func TestDecodeCABACFrameSlicePskipWritesCABACSkipState(t *testing.T) {
 		QScale:           24,
 		RefCount:         [2]uint32{1, 0},
 	}
-	state := &cabacFrameSliceState{LastQScaleDiff: 3}
+	state := &cabacFrameSliceState{QScale: int(sh.QScale), LastQScaleDiff: 3}
 	src := &scriptedCABACSource{bits: []int{1}}
 
 	got, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, mbXY, sliceNum)

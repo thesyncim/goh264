@@ -5,14 +5,14 @@
 
 package h264
 
-func (c *cavlcResidualContext) decodeCABACChromaResidual(src cabacSyntaxSource, pps *PPS, scan []uint8, mbType uint32, cbp int, chromaFormatIDC int32, chromaQP [2]uint8, leftCBP int, topCBP int, mbField bool) error {
+func (c *cavlcResidualContext) decodeCABACChromaResidual(src cabacSyntaxSource, pps *PPS, scan []uint8, mbType uint32, cbp int, chromaFormatIDC int32, chromaQP [2]uint8, leftCBP int, topCBP int, mbField bool) (int, error) {
 	if pps == nil {
-		return ErrInvalidData
+		return 0, ErrInvalidData
 	}
 	if chromaFormatIDC != 1 && chromaFormatIDC != 2 {
 		fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[16]), 4, 4, 8, 0)
 		fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[32]), 4, 4, 8, 0)
-		return nil
+		return 0, nil
 	}
 
 	numC8x8 := int(chromaFormatIDC)
@@ -22,12 +22,15 @@ func (c *cavlcResidualContext) decodeCABACChromaResidual(src cabacSyntaxSource, 
 		dcScan = h264Chroma422DCScan[:]
 	}
 
+	cbpTableBits := 0
 	if cbp&0x30 != 0 {
 		for chromaIdx := 0; chromaIdx < 2; chromaIdx++ {
 			offset := 256 + 16*16*chromaIdx
-			if _, err := c.decodeCABACResidualDC(src, c.MB[offset:], 3, chromaDCBlockIndex+chromaIdx, dcScan, 4*numC8x8, leftCBP, topCBP, mbField, chroma422); err != nil {
-				return err
+			dc, err := c.decodeCABACResidualDC(src, c.MB[offset:], 3, chromaDCBlockIndex+chromaIdx, dcScan, 4*numC8x8, leftCBP, topCBP, mbField, chroma422)
+			if err != nil {
+				return 0, err
 			}
+			cbpTableBits |= dc.CBPTableBits
 		}
 	}
 
@@ -39,7 +42,7 @@ func (c *cavlcResidualContext) decodeCABACChromaResidual(src cabacSyntaxSource, 
 			}
 			qp := int(chromaQP[chromaIdx])
 			if qp > qpMaxNum {
-				return ErrInvalidData
+				return 0, ErrInvalidData
 			}
 			qmul := pps.Dequant4Buffer[cqm][qp][:]
 			mbOffset := 16 * (16 + 16*chromaIdx)
@@ -48,7 +51,7 @@ func (c *cavlcResidualContext) decodeCABACChromaResidual(src cabacSyntaxSource, 
 					index := 16 + 16*chromaIdx + 8*i8x8 + i4x4
 					block := c.MB[mbOffset : mbOffset+16]
 					if _, err := c.decodeCABACResidualNonDC(src, block, 4, index, scan[1:], qmul, 15, leftCBP, topCBP, mbField, false); err != nil {
-						return err
+						return 0, err
 					}
 					mbOffset += 16
 				}
@@ -59,5 +62,5 @@ func (c *cavlcResidualContext) decodeCABACChromaResidual(src cabacSyntaxSource, 
 		fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[32]), 4, 4, 8, 0)
 	}
 
-	return nil
+	return cbpTableBits, nil
 }

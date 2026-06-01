@@ -41,6 +41,7 @@ type cabacFrameMacroblockResult struct {
 }
 
 type cabacFrameSliceState struct {
+	QScale         int
 	LastQScaleDiff int
 	PrevMBSkipped  bool
 }
@@ -58,7 +59,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithWork(src cabacSynt
 	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
 		return result, ErrUnsupported
 	}
-	if sh.QScale > qpMaxNum {
+	if sh.QScale > qpMaxNum || state.QScale < 0 || state.QScale > qpMaxNum {
 		return result, ErrInvalidData
 	}
 
@@ -70,7 +71,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithWork(src cabacSynt
 		if skip {
 			state.PrevMBSkipped = true
 			state.LastQScaleDiff = 0
-			return m.writeBackCABACFrameSkipMacroblockWithWork(sh, mbXY, sliceNum, work)
+			return m.writeBackCABACFrameSkipMacroblockWithWork(sh, state.QScale, mbXY, sliceNum, work)
 		}
 	}
 	state.PrevMBSkipped = false
@@ -80,7 +81,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithWork(src cabacSynt
 		SliceNum:            sliceNum,
 		SliceType:           sh.SliceType,
 		SliceTypeNoS:        sh.SliceTypeNoS,
-		QScale:              int(sh.QScale),
+		QScale:              state.QScale,
 		LastQScaleDiff:      state.LastQScaleDiff,
 		RefCount:            sh.RefCount,
 		DCT8x8Allowed:       sh.PPS.Transform8x8Mode != 0,
@@ -92,6 +93,9 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithWork(src cabacSynt
 		return result, err
 	}
 	state.LastQScaleDiff = result.LastQScaleDiff
+	if result.MBType&MBTypeIntraPCM == 0 {
+		state.QScale = result.QScale
+	}
 	return result, nil
 }
 
@@ -201,16 +205,22 @@ func (m *macroblockTables) decodeCABACMBSkip(src cabacSyntaxSource, mbXY int, sl
 
 func (m *macroblockTables) writeBackCABACFrameSkipMacroblock(sh *SliceHeader, mbXY int, sliceNum uint16) (cabacFrameMacroblockResult, error) {
 	var work frameMacroblockDecodeWork
-	return m.writeBackCABACFrameSkipMacroblockWithWork(sh, mbXY, sliceNum, &work)
+	if sh == nil {
+		return cabacFrameMacroblockResult{}, ErrInvalidData
+	}
+	return m.writeBackCABACFrameSkipMacroblockWithWork(sh, int(sh.QScale), mbXY, sliceNum, &work)
 }
 
-func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithWork(sh *SliceHeader, mbXY int, sliceNum uint16, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
+func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithWork(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	if sh == nil || work == nil {
 		return result, ErrInvalidData
 	}
 	if sh.SliceTypeNoS != PictureTypeP {
 		return result, ErrUnsupported
+	}
+	if qscale < 0 || qscale > qpMaxNum {
+		return result, ErrInvalidData
 	}
 
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
@@ -219,14 +229,14 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithWork(sh *SliceHe
 		return result, err
 	}
 	*work = frameMacroblockDecodeWork{}
-	if err := m.writeBackCABACPskipMacroblockWithMotion(mbXY, int(sh.QScale), neighbors.motionNeighbors(mbType, 1, PictureTypeP, true, false), sliceNum, &work.Motion); err != nil {
+	if err := m.writeBackCABACPskipMacroblockWithMotion(mbXY, qscale, neighbors.motionNeighbors(mbType, 1, PictureTypeP, true, false), sliceNum, &work.Motion); err != nil {
 		return result, err
 	}
 
 	result.MBType = mbType
 	result.CBP = 0
 	result.CBPTable = 0
-	result.QScale = int(sh.QScale)
+	result.QScale = qscale
 	result.LastQScaleDiff = 0
 	result.Neighbors = neighbors
 	result.IsInter = true
@@ -274,8 +284,10 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 		mb.Intra16x16PredMode = int8(mode)
 	}
 
+	rawChromaPred := int32(0)
 	if in.SPS.ChromaFormatIDC == 1 || in.SPS.ChromaFormatIDC == 2 {
 		raw := m.decodeCABACMBChromaPredMode(src, cacheResult.Neighbors)
+		rawChromaPred = int32(raw)
 		mode, err := checkIntraPredMode(raw, cacheResult.Intra.TopSamplesAvailable, cacheResult.Intra.LeftSamplesAvailable, true)
 		if err != nil {
 			return result, err
@@ -301,7 +313,7 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 	mb.QScale = qscale
 	mb.ChromaQP = chromaQP
 	mb.CBPTable = cbpTable
-	if err := m.writeBackCABACIntraMacroblock(in.MBXY, &mb, residual, &writeBackIntraCache, in.SliceNum); err != nil {
+	if err := m.writeBackCABACIntraMacroblockWithChromaPred(in.MBXY, &mb, residual, &writeBackIntraCache, int8(rawChromaPred), in.SliceNum); err != nil {
 		return result, err
 	}
 
@@ -630,16 +642,24 @@ func (c *cavlcResidualContext) decodeCABACResidualPayload(src cabacSyntaxSource,
 		if err != nil {
 			return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 		}
-		cbpTable |= ret << 12
+		cbpTable |= ret
 		if sps.ChromaFormatIDC == 3 {
-			if _, err := c.decodeCABACLumaResidual(src, pps, h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:], mbType, cbp, 1, int(chromaQP[0]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true); err != nil {
+			ret, err := c.decodeCABACLumaResidual(src, pps, h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:], mbType, cbp, 1, int(chromaQP[0]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true)
+			if err != nil {
 				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 			}
-			if _, err := c.decodeCABACLumaResidual(src, pps, h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:], mbType, cbp, 2, int(chromaQP[1]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true); err != nil {
+			cbpTable |= ret
+			ret, err = c.decodeCABACLumaResidual(src, pps, h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:], mbType, cbp, 2, int(chromaQP[1]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true)
+			if err != nil {
 				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 			}
-		} else if err := c.decodeCABACChromaResidual(src, pps, h264ZigzagScanCAVLC[:], mbType, cbp, int32(sps.ChromaFormatIDC), chromaQP, cacheResult.LeftCBP, cacheResult.TopCBP, false); err != nil {
-			return qscale, chromaQP, cbpTable, lastQScaleDiff, err
+			cbpTable |= ret
+		} else {
+			ret, err := c.decodeCABACChromaResidual(src, pps, h264ZigzagScanCAVLC[:], mbType, cbp, int32(sps.ChromaFormatIDC), chromaQP, cacheResult.LeftCBP, cacheResult.TopCBP, false)
+			if err != nil {
+				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
+			}
+			cbpTable |= ret
 		}
 		return qscale, chromaQP, cbpTable, lastQScaleDiff, nil
 	}

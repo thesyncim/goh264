@@ -35,8 +35,8 @@ func TestDecodeCAVLCFrameIntra4x4MacroblockWritesState(t *testing.T) {
 	if m.MacroblockTyp[0] != MBTypeIntra4x4 || m.CBPTable[0] != 0 || m.QScaleTable[0] != 20 || m.SliceTable[0] != 2 {
 		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
 	}
-	if m.ChromaPred[0] != intraPredDC1288x8 || got.ChromaPred != intraPredDC1288x8 {
-		t.Fatalf("chroma pred table/result = %d/%d, want dc128", m.ChromaPred[0], got.ChromaPred)
+	if m.ChromaPred[0] != 0 || got.ChromaPred != intraPredDC1288x8 {
+		t.Fatalf("chroma pred table/result = %d/%d, want raw 0/result dc128", m.ChromaPred[0], got.ChromaPred)
 	}
 	for i, v := range m.NonZeroCount[0] {
 		if v != 0 {
@@ -192,7 +192,7 @@ func TestDecodeCAVLCFrameSlicePskipRunWritesSkipState(t *testing.T) {
 		QScale:           24,
 		RefCount:         [2]uint32{1, 0},
 	}
-	state := newCAVLCFrameSliceState()
+	state := newCAVLCFrameSliceState(int(sh.QScale))
 	gb := newBitReader(cavlcBitString("010"))
 
 	got, err := m.decodeCAVLCFrameSliceMacroblock(&gb, sh, &state, mbXY, sliceNum)
@@ -235,7 +235,7 @@ func TestDecodeCAVLCFrameSliceRunZeroFallsThroughToMacroblock(t *testing.T) {
 		QScale:           24,
 		RefCount:         [2]uint32{1, 0},
 	}
-	state := newCAVLCFrameSliceState()
+	state := newCAVLCFrameSliceState(int(sh.QScale))
 	gb := newBitReader(cavlcBitString("11111"))
 
 	got, err := m.decodeCAVLCFrameSliceMacroblock(&gb, sh, &state, 0, 4)

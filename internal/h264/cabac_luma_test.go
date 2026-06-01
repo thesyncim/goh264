@@ -16,8 +16,8 @@ func TestDecodeCABACLumaResidualInter4x4(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode luma residual failed: %v", err)
 	}
-	if ret != 1 {
-		t.Fatalf("ret cbp = %d, want 1", ret)
+	if ret != 0 {
+		t.Fatalf("ret cbp table bits = %#x, want 0", ret)
 	}
 	if ctx.MB[0] != 1 {
 		t.Fatalf("mb[0] = %d, want 1", ctx.MB[0])
@@ -45,8 +45,8 @@ func TestDecodeCABACLumaResidualIntra16x16DC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode intra16 luma residual failed: %v", err)
 	}
-	if ret != 0 {
-		t.Fatalf("ret cbp = %d, want 0", ret)
+	if ret != 0x100 {
+		t.Fatalf("ret cbp table bits = %#x, want 0x100", ret)
 	}
 	if ctx.MBLumaDC[0][0] != 1 {
 		t.Fatalf("luma dc[0] = %d, want 1", ctx.MBLumaDC[0][0])
@@ -75,7 +75,7 @@ func TestDecodeCABACLumaResidualClearsSkipped8x8(t *testing.T) {
 		t.Fatalf("decode skipped luma residual failed: %v", err)
 	}
 	if ret != 0 {
-		t.Fatalf("ret cbp = %d, want 0", ret)
+		t.Fatalf("ret cbp table bits = %#x, want 0", ret)
 	}
 	for _, n := range []int{0, 1, 2, 3} {
 		if ctx.NonZeroCountCache[h264Scan8[n]] != 0 {
