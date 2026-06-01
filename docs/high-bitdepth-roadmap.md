@@ -27,9 +27,10 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
   subset, deblock-enabled 32x32 IDR/P subsets for 4:2:0/4:2:2/4:4:4, and the
   proved non-direct, temporal/spatial direct B16x16, temporal/spatial B-skip,
   CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, explicit partitioned
-  B16x8/B8x16/B8x8, implicit weighted B16x16, narrow CAVLC/CABAC B16x16
-  deblock-enabled, CAVLC-only High10 4:2:0 slice-boundary, and narrow
-  yuv420p12le CAVLC IDR/I IntraPCM subsets.
+  B16x8/B8x16/B8x8, implicit weighted B16x16, partitioned implicit weighted
+  B16x8/B8x16/B8x8, narrow CAVLC/CABAC B16x16 deblock-enabled, CAVLC-only
+  High10 4:2:0 slice-boundary, and narrow yuv420p12le CAVLC IDR/I IntraPCM
+  subsets.
 - `internal/h264/simple_decode.go` now represents decoded frames with either
   byte planes (`DecodedFrame.Y/Cb/Cr`) or uint16 planes
   (`DecodedFrame.Y16/Cb16/Cr16`). `newSimpleDecodedFrame` allocates high planes
@@ -47,7 +48,8 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
   proved for exact non-direct B16x16 bidirectional pictures, top-level
   temporal/spatial B_Direct 16x16 pictures, temporal/spatial B-skip, and
   CAVLC/CABAC temporal/spatial direct-sub, explicit non-direct
-  B16x8/B8x16/B8x8 partitioned motion, and B16x16 implicit weighting.
+  B16x8/B8x16/B8x8 partitioned motion, B16x16 implicit weighting, and the
+  proved partitioned implicit weighted B16x8/B8x16/B8x8 subset.
 - `decoder.go` exposes public `Frame.Y16/Cb16/Cr16`, `BytesPerSample`,
   `RawPixelFormat`, `RawYUVSize`, `AppendRawYUV16`, and
   `AppendRawYUVBytesLE` alongside the existing 8-bit `Frame.Y/Cb/Cr` and
@@ -56,8 +58,9 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
   fixtures without downconverting samples, and are the oracle surface for the
   proved non-direct, temporal/spatial direct B16x16, temporal/spatial B-skip,
   CAVLC/CABAC direct-sub B, CAVLC/CABAC partitioned P, explicit partitioned B,
-  implicit weighted B16x16, CAVLC/CABAC B16x16 deblock, CAVLC-only slice-boundary,
-  and narrow yuv420p12le IntraPCM lanes.
+  implicit weighted B16x16, partitioned implicit weighted B16x8/B8x16/B8x8,
+  CAVLC/CABAC B16x16 deblock, CAVLC-only slice-boundary, and narrow yuv420p12le
+  IntraPCM lanes.
 - Entropy/state layers are farther along than output: CAVLC and CABAC frame-MB
   paths already size and hand off high-bit-depth IntraPCM payloads, carry high
   QP values, and persist residual/motion/direct state in bit-depth-neutral table
@@ -70,11 +73,11 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
   explicit L0/L1 references plus top-level temporal/spatial B_Direct 16x16
   motion plus temporal/spatial B-skip direct motion, plus CAVLC/CABAC
   B 8x8/B_SUB_4x4 direct-sub no-residual motion, explicit non-direct
-  B16x8/B8x16/B8x8 partitions, implicit weighted B16x16, and narrow
-  CAVLC/CABAC B16x16 deblock-enabled streams. Mixed
-  direct/explicit B8x8, residual-bearing direct-sub, partitioned implicit
-  weighted B, and partitioned/direct high B deblocking remain separate
-  oracle lanes.
+  B16x8/B8x16/B8x8 partitions, implicit weighted B16x16, the proved
+  partitioned implicit weighted B16x8/B8x16/B8x8 subset, and narrow
+  CAVLC/CABAC B16x16 deblock-enabled streams. Mixed direct/explicit B8x8,
+  residual-bearing direct-sub, broader partitioned implicit weighted B, and
+  partitioned/direct high B deblocking remain separate oracle lanes.
 - `internal/h264/reconstruct_high.go` has a separate `h264PicturePlanesHigh`
   surface and internal high-bit-depth IntraPCM/intra/inter reconstruction
   helpers for 4:2:0, 4:2:2, and 4:4:4. The public simple slice loop now calls
@@ -107,12 +110,13 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
   yuv420p12le CAVLC IDR/I IntraPCM. The High 10 B lane now proves both
   standard bidirectional averaging with explicit L0/L1 references,
   pre-resolved direct motion, B-skip direct motion, CAVLC/CABAC direct-sub
-  motion, CAVLC/CABAC partitioned P motion, explicit partitioned B16x8/B8x16/B8x8 motion, and B16x16 implicit
-  weighting over uint16 refs, with high deblocking admitted only for the proved
+  motion, CAVLC/CABAC partitioned P motion, explicit partitioned B16x8/B8x16/B8x8 motion,
+  B16x16 implicit weighting, and partitioned implicit weighted B16x8/B8x16/B8x8
+  motion over uint16 refs, with high deblocking admitted only for the proved
   CAVLC/CABAC B16x16 streams. The P-intra lane admits only Intra4x4/Intra16x16
   macroblocks under High10 4:2:0 oracle proof. P IntraPCM, P 8x8-DCT intra,
   weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub B,
-  partitioned implicit weighted B, partitioned/direct high deblocking,
+  broader partitioned implicit weighted B, partitioned/direct high deblocking,
   other chroma/depth combinations, and MBAFF remain guarded.
 - `internal/h264/loop_filter.go` ports the generic frame-picture loop-filter
   strength and call-site wiring for 8-bit planes and High10 4:2:0/4:2:2/4:4:4
@@ -207,13 +211,13 @@ MD5 parity checks before timing results are reported.
 | Area | Current state | Remaining high-bit-depth work |
 | --- | --- | --- |
 | SPS/PPS/slice metadata | High bit depths parse; PPS/dequant tables cover 9/10/12/14; slice QP uses bit-depth max. | Preserve this behavior while removing simple-path high-bit-depth rejects only when the matching high decode path exists. |
-| Entropy-to-state | CAVLC/CABAC frame-MB handoff, residuals, motion caches, direct motion, and high IntraPCM payload sizing exist; high CAVLC/CABAC slice loops now carry deblock-disabled I pictures plus proved High 10 P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P16x16, mixed-P Intra4x4/Intra16x16 macroblocks, CAVLC/CABAC partitioned P16x8/P8x16/P8x8 macroblocks, exact non-direct B16x16 bidirectional, top-level temporal/spatial direct B16x16, temporal/spatial B-skip, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, explicit partitioned B16x8/B8x16/B8x8, implicit weighted B16x16, narrow CAVLC/CABAC B16x16 deblock-enabled macroblocks, deblock-enabled 32x32 IDR/P subsets, CAVLC-only High10 4:2:0 slice-boundary IDR/P subsets, and narrow yuv420p12le CAVLC IDR/I IntraPCM through reconstruction. | Add high-specific regression cases where QP exceeds 51 only with matching public proof. P IntraPCM, P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub B, and partitioned/direct high loop filtering stay guarded. |
+| Entropy-to-state | CAVLC/CABAC frame-MB handoff, residuals, motion caches, direct motion, and high IntraPCM payload sizing exist; high CAVLC/CABAC slice loops now carry deblock-disabled I pictures plus proved High 10 P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P16x16, mixed-P Intra4x4/Intra16x16 macroblocks, CAVLC/CABAC partitioned P16x8/P8x16/P8x8 macroblocks, exact non-direct B16x16 bidirectional, top-level temporal/spatial direct B16x16, temporal/spatial B-skip, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, explicit partitioned B16x8/B8x16/B8x8, implicit weighted B16x16, partitioned implicit weighted B16x8/B8x16/B8x8, narrow CAVLC/CABAC B16x16 deblock-enabled macroblocks, deblock-enabled 32x32 IDR/P subsets, CAVLC-only High10 4:2:0 slice-boundary IDR/P subsets, and narrow yuv420p12le CAVLC IDR/I IntraPCM through reconstruction. | Add high-specific regression cases where QP exceeds 51 only with matching public proof. P IntraPCM, P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub B, broader partitioned implicit B, and partitioned/direct high loop filtering stay guarded. |
 | Internal frame storage | `DecodedFrame` now has uint16 high planes, `newSimpleDecodedFrame` allocates them for 9/10/12/14-bit SPS values, `picturePlanesHigh()` validates them, the simple DPB can expose `RefsHigh`, public `Frame` can carry `Y16/Cb16/Cr16`, and public frame planes are cloned on export so caller mutation cannot corrupt decoder-owned refs. | Keep mixed direct/explicit B8x8, residual-bearing direct-sub B, partitioned/direct high B deblocking, GBR, and unproved depth/chroma combinations guarded until matching bitstream oracles land. |
 | Intra reconstruction | Internal high IntraPCM/intra16x16/intra4x4/intra8x8 call sites exist and are oracle-covered; the simple high slice path now decodes deblock-disabled High 10 4:2:0 CAVLC/CABAC IDR/I fixtures, mixed-P Intra4x4/Intra16x16 public output, and a High 4:4:4 Predictive-compatible yuv420p12le CAVLC IDR/I IntraPCM fixture. | Broaden public intra coverage to P IntraPCM, P 8x8-DCT intra, 14-bit, broader 12-bit, 4:2:2/4:4:4, lossless variants, and mixed B streams only after matching oracles land. |
-| Inter/motion reconstruction | 8-bit `hl_motion` is integrated for P/B, weighted P, implicit B, direct B, and 4:4:4 planes. High `h264HLMotionFrame*` is now ported for internal MB-level 4:2:0/4:2:2/4:4:4 motion, explicit/implicit weighting, and edge emulation; High 10 P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P16x16, mixed-P Intra4x4/Intra16x16, CAVLC/CABAC partitioned P16x8/P8x16/P8x8, exact non-direct B16x16 standard bidirectional avg, top-level temporal/spatial direct B16x16, temporal/spatial B-skip, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, explicit partitioned B16x8/B8x16/B8x8, implicit weighted B16x16, narrow CAVLC/CABAC B16x16 high deblocking, and deblock-enabled IDR/P outputs are now wired through public slice/frame output. | P IntraPCM, P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub B, partitioned/direct high B deblocking, other chroma/depth, and MBAFF stay guarded until each gets bitstream/oracle proof. |
+| Inter/motion reconstruction | 8-bit `hl_motion` is integrated for P/B, weighted P, implicit B, direct B, and 4:4:4 planes. High `h264HLMotionFrame*` is now ported for internal MB-level 4:2:0/4:2:2/4:4:4 motion, explicit/implicit weighting, and edge emulation; High 10 P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P16x16, mixed-P Intra4x4/Intra16x16, CAVLC/CABAC partitioned P16x8/P8x16/P8x8, exact non-direct B16x16 standard bidirectional avg, top-level temporal/spatial direct B16x16, temporal/spatial B-skip, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, explicit partitioned B16x8/B8x16/B8x8, implicit weighted B16x16, partitioned implicit weighted B16x8/B8x16/B8x8, narrow CAVLC/CABAC B16x16 high deblocking, and deblock-enabled IDR/P outputs are now wired through public slice/frame output. | P IntraPCM, P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub B, broader partitioned implicit B, partitioned/direct high B deblocking, other chroma/depth, and MBAFF stay guarded until each gets bitstream/oracle proof. |
 | Loop filter integration | 8-bit frame-picture strength/call-site integration works post-frame for the simple path; high deblock kernels are wired for High10 4:2:0/4:2:2/4:4:4 frame pictures with source-shaped `qp_bd_offset` threshold indexing, internal high 4:2:2/4:4:4 edge-dispatch tests, public CAVLC/CABAC 32x32 deblock-enabled IDR/P fixtures, narrow CAVLC/CABAC B16x16 deblock-enabled fixtures, and a CAVLC-only High10 4:2:0 `disable_deblocking_filter_idc == 2` slice-boundary fixture. | Add CABAC/chroma/B-slice public high slice-boundary proof, partitioned/direct high B-deblock proof, broader 12-bit/all 14-bit fixtures, and row-threaded/border-exchange scheduling before broadening the public contract. |
-| Public output | Public `Frame` exposes cloned `Y/Cb/Cr` and `Y16/Cb16/Cr16` planes plus `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`, `AppendRawYUV16`, and `AppendRawYUVBytesLE`; `AppendRawYUV` remains 8-bit-only; High 10 deblock-disabled I output, no-residual P-skip/P16x16 output, exact P16x16 L0 residual output, explicit weighted P16x16 output, mixed-P Intra4x4/Intra16x16 output, CAVLC/CABAC partitioned P16x8/P8x16/P8x8 output, exact non-direct B16x16 output, temporal/spatial direct B16x16 output, temporal/spatial B-skip output, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub output, explicit partitioned B16x8/B8x16/B8x8 output, implicit weighted B16x16 output, CAVLC/CABAC B16x16 high-deblock output, deblock-enabled 4:2:0/4:2:2/4:4:4 IDR/P output, CAVLC-only High10 4:2:0 slice-boundary deblocking IDR/P output, and High 4:4:4 Predictive-compatible yuv420p12le CAVLC IDR/I IntraPCM output are proved against FFmpeg rawvideo MD5s. | Keep P IntraPCM, P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub B, partitioned/direct high B deblocking, CABAC/chroma/B-slice public high slice-boundary mode, GBR, MBAFF, broader 12-bit, and all 14-bit public high bitstreams guarded. |
-| Oracle fixtures | Kernel oracles cover high primitives; public frame-MD5 fixtures cover 8-bit High-profile streams, true High 10 CAVLC/CABAC deblock-disabled IDR/I fixtures, true High 10 IDR/P P-skip/P16x16 no-residual fixtures, true High 10 exact P16x16 L0 residual fixtures, true High 10 explicit weighted P16x16 fixtures, true High 10 mixed-P Intra16x16 fixtures with internal Intra4x4 guard/reconstruction proof, true High 10 CAVLC/CABAC partitioned P16x8/P8x16/P8x8 fixtures, true High 10 non-direct B16x16 fixtures, true High 10 temporal/spatial direct B16x16 fixtures, true High 10 temporal/spatial B-skip fixtures, true High 10 CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub fixtures, true High 10 CAVLC/CABAC explicit partitioned B16x8/B8x16/B8x8 fixtures, true High 10 implicit weighted B16x16 fixtures, true High 10 CAVLC/CABAC B16x16 deblock-enabled fixtures, true High 10 deblock-enabled CAVLC/CABAC 32x32 IDR/P fixtures for 4:2:0/4:2:2/4:4:4, true High 10 CAVLC-only 4:2:0 slice-boundary IDR/P fixture, and a High 4:4:4 Predictive-compatible yuv420p12le CAVLC IDR/I IntraPCM fixture across Annex B/AVC/configured surfaces. The same proved classes are now promoted into the file-backed corpus manifest for repeatable testvector and benchmark runs. | Build later oracle targets for P IntraPCM, P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub B, partitioned/direct high B deblocking, CABAC/chroma/B-slice public slice-boundary mode, broader 12-bit, and 14-bit deblocking without widening this guard. |
+| Public output | Public `Frame` exposes cloned `Y/Cb/Cr` and `Y16/Cb16/Cr16` planes plus `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`, `AppendRawYUV16`, and `AppendRawYUVBytesLE`; `AppendRawYUV` remains 8-bit-only; High 10 deblock-disabled I output, no-residual P-skip/P16x16 output, exact P16x16 L0 residual output, explicit weighted P16x16 output, mixed-P Intra4x4/Intra16x16 output, CAVLC/CABAC partitioned P16x8/P8x16/P8x8 output, exact non-direct B16x16 output, temporal/spatial direct B16x16 output, temporal/spatial B-skip output, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub output, explicit partitioned B16x8/B8x16/B8x8 output, implicit weighted B16x16 output, partitioned implicit weighted B16x8/B8x16/B8x8 output, CAVLC/CABAC B16x16 high-deblock output, deblock-enabled 4:2:0/4:2:2/4:4:4 IDR/P output, CAVLC-only High10 4:2:0 slice-boundary deblocking IDR/P output, and High 4:4:4 Predictive-compatible yuv420p12le CAVLC IDR/I IntraPCM output are proved against FFmpeg rawvideo MD5s. | Keep P IntraPCM, P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub B, broader partitioned implicit B, partitioned/direct high B deblocking, CABAC/chroma/B-slice public high slice-boundary mode, GBR, MBAFF, broader 12-bit, and all 14-bit public high bitstreams guarded. |
+| Oracle fixtures | Kernel oracles cover high primitives; public frame-MD5 fixtures cover 8-bit High-profile streams, true High 10 CAVLC/CABAC deblock-disabled IDR/I fixtures, true High 10 IDR/P P-skip/P16x16 no-residual fixtures, true High 10 exact P16x16 L0 residual fixtures, true High 10 explicit weighted P16x16 fixtures, true High 10 mixed-P Intra16x16 fixtures with internal Intra4x4 guard/reconstruction proof, true High 10 CAVLC/CABAC partitioned P16x8/P8x16/P8x8 fixtures, true High 10 non-direct B16x16 fixtures, true High 10 temporal/spatial direct B16x16 fixtures, true High 10 temporal/spatial B-skip fixtures, true High 10 CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub fixtures, true High 10 CAVLC/CABAC explicit partitioned B16x8/B8x16/B8x8 fixtures, true High 10 implicit weighted B16x16 fixtures, true High 10 CAVLC/CABAC partitioned implicit weighted B16x8/B8x16/B8x8 fixtures, true High 10 CAVLC/CABAC B16x16 deblock-enabled fixtures, true High 10 deblock-enabled CAVLC/CABAC 32x32 IDR/P fixtures for 4:2:0/4:2:2/4:4:4, true High 10 CAVLC-only 4:2:0 slice-boundary IDR/P fixture, and a High 4:4:4 Predictive-compatible yuv420p12le CAVLC IDR/I IntraPCM fixture across Annex B/AVC/configured surfaces. The same proved classes are now promoted into the file-backed corpus manifest for repeatable testvector and benchmark runs. | Build later oracle targets for P IntraPCM, P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub B, broader partitioned implicit B, partitioned/direct high B deblocking, CABAC/chroma/B-slice public slice-boundary mode, broader 12-bit, and 14-bit deblocking without widening this guard. |
 
 ## Internal Frame And Plane Work
 
@@ -403,6 +407,11 @@ Suggested safe-point order:
    non-direct subpartitions, public Annex B, AVC, configured AVC,
    sample-by-sample decode, delayed flush, corpus manifest, fixture syntax
    assertions, and FFmpeg rawvideo proof.
+10. High partitioned implicit weighted B. Done for High 10 4:2:0 frame-only,
+    deblock-disabled CAVLC/CABAC B16x8, B8x16, and B8x8 streams with
+    `weighted_bipred_idc == 2`, public Annex B, AVC, configured AVC,
+    sample-by-sample decode, delayed flush, corpus manifest, fixture syntax
+    assertions, and FFmpeg rawvideo proof.
 
 The High B safe points are intentionally not a general B unlock.
 Acceptance criteria:
@@ -414,11 +423,13 @@ Acceptance criteria:
 - Macroblocks stay inside one proved family: B16x16 non-direct with explicit
   L0/L1 refs, top-level temporal/spatial B_Direct resolving to B16x16,
   temporal/spatial B-skip, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub with CBP
-  zero, or explicit non-direct B16x8/B8x16/B8x8 partitions. Mixed
-  direct/explicit B8x8 and residual-bearing direct-sub stay guarded.
+  zero, explicit non-direct B16x8/B8x16/B8x8 partitions, or the proved
+  partitioned implicit weighted B16x8/B8x16/B8x8 subset. Mixed
+  direct/explicit B8x8, residual-bearing direct-sub, and broader partitioned
+  implicit B stay guarded.
 - PPS weighted bipred remains neutral (`weighted_bipred_idc == 0`) for
-  direct-sub and explicit-partition fixtures; implicit weighted B remains
-  limited to proved B16x16 streams.
+  direct-sub and explicit-partition fixtures; implicit weighted B is limited to
+  proved B16x16 and partitioned B16x8/B8x16/B8x8 streams.
 - Public checks cover rawvideo MD5, configured sample-by-sample decode, delayed
   output, and explicit flush before this lane is marked done.
 
@@ -556,8 +567,10 @@ Minimum fixture ladder:
 10. High-depth explicit partitioned B16x8/B8x16/B8x8. Done for CAVLC and
     CABAC; mixed direct/explicit sub-MBs and residual-bearing direct-sub remain
     future oracle lanes.
-11. High-depth deblocking enabled for 4:2:0, 4:2:2, and 4:4:4.
-12. Annex B, explicit AVC/NALFF, configured AVC, sample-by-sample configured
+11. High-depth partitioned implicit weighted B16x8/B8x16/B8x8. Done for CAVLC
+    and CABAC; broader partitioned implicit B remains a future oracle lane.
+12. High-depth deblocking enabled for 4:2:0, 4:2:2, and 4:4:4.
+13. Annex B, explicit AVC/NALFF, configured AVC, sample-by-sample configured
    decode, generic packet intake, and delayed flush coverage after each public
    high fixture family is stable.
 
@@ -641,13 +654,15 @@ surface.
 9. **Wire High B Motion**
    - Done for exact non-direct B16x16 standard bidirectional avg, top-level
      temporal/spatial B_Direct resolving to B16x16, temporal/spatial B-skip,
-     CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, implicit weighted B16x16, and
-     explicit partitioned B16x8/B8x16/B8x8. Separate narrow CAVLC/CABAC B16x16
+     CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, implicit weighted B16x16,
+     explicit partitioned B16x8/B8x16/B8x8, and partitioned implicit weighted
+     B16x8/B8x16/B8x8. Separate narrow CAVLC/CABAC B16x16
      deblock-enabled streams prove high B deblocking only for that macroblock
      shape.
    - Tests: non-direct, direct B16x16, B-skip, CAVLC/CABAC direct-sub,
-     implicit weighted B, and explicit partitioned B rawvideo MD5, configured
-     sample-by-sample decode, delayed output and flush.
+     implicit weighted B, explicit partitioned B, and partitioned implicit
+     weighted B rawvideo MD5, configured sample-by-sample decode, delayed output
+     and flush.
 
 10. **Wire High Loop Filter**
    - Done for High10 4:2:0/4:2:2/4:4:4 frame-picture post-frame filtering with

@@ -18,13 +18,16 @@ import (
 const high10PartitionedBFrameRawSize = 768
 
 type high10PartitionedBFixture struct {
-	name        string
-	file        string
-	cabac       int32
-	annexBSize  int
-	annexBMD5   string
-	frameMD5    []string
-	rawVideoMD5 string
+	name              string
+	file              string
+	cabac             int32
+	weightedBipredIDC uint32
+	refCount          [2]uint32
+	wantSlices        []int32
+	annexBSize        int
+	annexBMD5         string
+	frameMD5          []string
+	rawVideoMD5       string
 }
 
 func TestHigh10PartitionedBFixtureSyntax(t *testing.T) {
@@ -292,6 +295,111 @@ func high10PartitionedBFixtures() []high10PartitionedBFixture {
 			},
 			rawVideoMD5: "63bbee01f26a0382dd58777ccb6c05e3",
 		},
+		{
+			name:              "implicit-cavlc-b16x8",
+			file:              "high10_partitioned_implicit_weight_b16x8_cavlc.h264",
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        828,
+			annexBMD5:         "f7a8b5d2e8e06a91f9e2b3a011fb2c9f",
+			frameMD5: []string{
+				"271857125d16f1e579ab8775ff8824e4",
+				"4a991c090da8499717e6d8baefc4d99f",
+				"45971f69242128a678232982b08bc214",
+				"6ce9090764f79f041a6d8e7c8721a071",
+				"1eb7b379666ef9c75e9a94137d6234ba",
+			},
+			rawVideoMD5: "b85b69946077d6e700034f18e03afa02",
+		},
+		{
+			name:              "implicit-cabac-b16x8",
+			file:              "high10_partitioned_implicit_weight_b16x8_cabac.h264",
+			cabac:             1,
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        829,
+			annexBMD5:         "aa7076b8e6ffe06af2af84cdf381cb52",
+			frameMD5: []string{
+				"0f82b9127b0e6bb9dc711a9458d44b52",
+				"b7a8173d25add7d9cd50f026223ae634",
+				"0a57a13b2e24dbb4874639eca6a5944f",
+				"39cf654fa801077ea9ad0d8ba3325d11",
+				"0482be2ceecc0f9610cac239bfe667fe",
+			},
+			rawVideoMD5: "5954cb46ad68184de947dbb604748924",
+		},
+		{
+			name:              "implicit-cavlc-b8x16",
+			file:              "high10_partitioned_implicit_weight_b8x16_cavlc.h264",
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        828,
+			annexBMD5:         "34cdb3fd5c7a9e3346acd2187d918c03",
+			frameMD5: []string{
+				"29d5d2aaed62b66c44d057ba080ad9c2",
+				"c974f45970b7fbc4ef7655d273b474b2",
+				"ed427f5e7039649fb8b4ffe2205a494a",
+				"77808f4a4031f282e052e4af18e2bdc2",
+				"d6cffa2c14b584600417d507cb8ebdde",
+			},
+			rawVideoMD5: "0b5de5fe0388cb1f75b2a462f8b9252a",
+		},
+		{
+			name:              "implicit-cabac-b8x16",
+			file:              "high10_partitioned_implicit_weight_b8x16_cabac.h264",
+			cabac:             1,
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        825,
+			annexBMD5:         "161bcc46653e699e834eff53c0e4df9d",
+			frameMD5: []string{
+				"966450d2d5db913c02fe419ff4a1071f",
+				"366dcdfb255eed2b6573e22f90164815",
+				"caaafb37d7c69c4ce4348b7891b2d006",
+				"7d4897420172ede22d049bb9d610fc15",
+				"5281cb998560a53391d609f50b4b4041",
+			},
+			rawVideoMD5: "8d8aca4b4693bee11d56c99cf139007f",
+		},
+		{
+			name:              "implicit-cavlc-b8x8",
+			file:              "high10_partitioned_implicit_weight_b8x8_cavlc.h264",
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        1001,
+			annexBMD5:         "cf2cc71caf7d42bfac77844b6e3c80cf",
+			frameMD5: []string{
+				"8cbdcb50cd5f5d9131e77984a2bab067",
+				"c7346aa3da7874825c8ca3b5d2b95047",
+				"98ce911bc3f1729b9539bb139315df53",
+				"6b1aa1eb773a8526faded165280930e4",
+				"8525deb01886a349e26bd9c6c2ad35d7",
+			},
+			rawVideoMD5: "d9feb695639d1c22e395c150e8f7f99f",
+		},
+		{
+			name:              "implicit-cabac-b8x8",
+			file:              "high10_partitioned_implicit_weight_b8x8_cabac.h264",
+			cabac:             1,
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        898,
+			annexBMD5:         "558e36221572460fdd1d77b44aaa691a",
+			frameMD5: []string{
+				"8cbdcb50cd5f5d9131e77984a2bab067",
+				"c7346aa3da7874825c8ca3b5d2b95047",
+				"5a2212faff41302837ae9faa389f054d",
+				"6b1aa1eb773a8526faded165280930e4",
+				"8525deb01886a349e26bd9c6c2ad35d7",
+			},
+			rawVideoMD5: "2306e0d4cd6e403f86776208ccd87c3f",
+		},
 	}
 }
 
@@ -371,10 +479,13 @@ func assertHigh10PartitionedBFixtureSyntax(t *testing.T, data []byte, tt high10P
 			if err != nil {
 				t.Fatal(err)
 			}
+			wantRefCount := tt.ppsRefCount()
 			if pps.CABAC != tt.cabac || pps.Transform8x8Mode != 0 || pps.WeightedPred != 0 ||
-				pps.WeightedBipredIDC != 0 || pps.RefCount[0] != 2 || pps.RefCount[1] != 1 {
-				t.Fatalf("PPS cabac/8x8/weights/refs = %d/%d/%d/%d/%d/%d, want cabac=%d no-8x8 unweighted refs=2/1",
-					pps.CABAC, pps.Transform8x8Mode, pps.WeightedPred, pps.WeightedBipredIDC, pps.RefCount[0], pps.RefCount[1], tt.cabac)
+				pps.WeightedBipredIDC != tt.weightedBipredIDC ||
+				pps.RefCount[0] != wantRefCount[0] || pps.RefCount[1] != wantRefCount[1] {
+				t.Fatalf("PPS cabac/8x8/weights/refs = %d/%d/%d/%d/%d/%d, want cabac=%d no-8x8 weighted_bipred_idc=%d refs=%d/%d",
+					pps.CABAC, pps.Transform8x8Mode, pps.WeightedPred, pps.WeightedBipredIDC, pps.RefCount[0], pps.RefCount[1],
+					tt.cabac, tt.weightedBipredIDC, wantRefCount[0], wantRefCount[1])
 			}
 			ppsList[pps.PPSID] = pps
 		case h264.NALIDRSlice, h264.NALSlice:
@@ -402,6 +513,9 @@ func assertHigh10PartitionedBFixtureSyntax(t *testing.T, data []byte, tt high10P
 					t.Fatalf("B slice lists/refs/weights = %d/%v/%d/%d, want L0/L1 refs=1/1 unweighted",
 						sh.ListCount, sh.RefCount, sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma)
 				}
+				if tt.weightedBipredIDC == 2 && sh.DirectSpatialMVPred != 0 {
+					t.Fatalf("B slice direct_spatial_mv_pred_flag = %d, want temporal implicit-weight fixture", sh.DirectSpatialMVPred)
+				}
 			default:
 				t.Fatalf("unexpected slice type %d", sh.SliceTypeNoS)
 			}
@@ -411,7 +525,7 @@ func assertHigh10PartitionedBFixtureSyntax(t *testing.T, data []byte, tt high10P
 			t.Fatalf("unexpected NAL type %d", nal.Type)
 		}
 	}
-	wantSlices := []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB}
+	wantSlices := tt.sliceTypes()
 	if len(gotSlices) != len(wantSlices) {
 		t.Fatalf("slice count = %d, want %d", len(gotSlices), len(wantSlices))
 	}
@@ -420,4 +534,18 @@ func assertHigh10PartitionedBFixtureSyntax(t *testing.T, data []byte, tt high10P
 			t.Fatalf("slice[%d] type = %d, want %d", i, gotSlices[i], want)
 		}
 	}
+}
+
+func (tt high10PartitionedBFixture) ppsRefCount() [2]uint32 {
+	if tt.refCount != [2]uint32{} {
+		return tt.refCount
+	}
+	return [2]uint32{2, 1}
+}
+
+func (tt high10PartitionedBFixture) sliceTypes() []int32 {
+	if len(tt.wantSlices) != 0 {
+		return tt.wantSlices
+	}
+	return []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB}
 }

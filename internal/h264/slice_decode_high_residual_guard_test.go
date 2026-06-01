@@ -95,7 +95,8 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsB8x8DirectSubNoResi
 }
 
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsBPartitionedExplicit(t *testing.T) {
-	sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+	unweighted := &SliceHeader{SliceTypeNoS: PictureTypeB}
+	implicitWeighted := &SliceHeader{SliceTypeNoS: PictureTypeB, PPS: &PPS{WeightedBipredIDC: 2}}
 	b8x8 := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
 	allL0 := [4]uint32{
 		MBType16x16 | MBTypeP0L0,
@@ -112,24 +113,29 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsBPartitionedExplici
 
 	tests := []struct {
 		name     string
+		sh       *SliceHeader
 		mbType   uint32
 		sub      *[4]uint32
 		cbp      int
 		cbpTable int
 	}{
-		{name: "b16x8 l0 l0", mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0},
-		{name: "b16x8 l0 l1 residual", mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1, cbp: 1, cbpTable: 1},
-		{name: "b8x16 l1 l1", mbType: MBType8x16 | MBTypeP0L1 | MBTypeP1L1},
-		{name: "b8x16 bidirectional residual", mbType: MBType8x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, cbp: 3, cbpTable: 3},
-		{name: "b8x8 explicit all l0", mbType: b8x8, sub: &allL0},
-		{name: "b8x8 explicit mixed subpartitions residual", mbType: b8x8, sub: &mixedSubPartitions, cbp: 2, cbpTable: 2},
+		{name: "b16x8 l0 l0", sh: unweighted, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0},
+		{name: "b16x8 l0 l1 residual", sh: unweighted, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1, cbp: 1, cbpTable: 1},
+		{name: "b8x16 l1 l1", sh: unweighted, mbType: MBType8x16 | MBTypeP0L1 | MBTypeP1L1},
+		{name: "b8x16 bidirectional residual", sh: unweighted, mbType: MBType8x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, cbp: 3, cbpTable: 3},
+		{name: "b8x8 explicit all l0", sh: unweighted, mbType: b8x8, sub: &allL0},
+		{name: "b8x8 explicit mixed subpartitions residual", sh: unweighted, mbType: b8x8, sub: &mixedSubPartitions, cbp: 2, cbpTable: 2},
+		{name: "implicit weighted b16x8 l0 l0", sh: implicitWeighted, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0},
+		{name: "implicit weighted b8x16 l1 l1", sh: implicitWeighted, mbType: MBType8x16 | MBTypeP0L1 | MBTypeP1L1},
+		{name: "implicit weighted b8x8 explicit all l0", sh: implicitWeighted, mbType: b8x8, sub: &allL0},
+		{name: "implicit weighted b8x8 explicit mixed subpartitions residual", sh: implicitWeighted, mbType: b8x8, sub: &mixedSubPartitions, cbp: 2, cbpTable: 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := validateHighFrameSliceBaseMacroblockForDecode(PictureTypeB, tt.mbType); err != nil {
 				t.Fatalf("validate high B partitioned base err = %v, want nil", err)
 			}
-			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, tt.mbType, tt.sub, tt.cbp, tt.cbpTable); err != nil {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(tt.sh, tt.mbType, tt.sub, tt.cbp, tt.cbpTable); err != nil {
 				t.Fatalf("validate high B partitioned reconstruct err = %v, want nil", err)
 			}
 		})
@@ -224,12 +230,17 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b explicit 16x8 direct flag remains guarded", sh: bSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeDirect2, want: ErrUnsupported},
 		{name: "b explicit 16x8 skip remains guarded", sh: bSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip, want: ErrUnsupported},
 		{name: "b explicit 16x8 missing partition direction", sh: bSlice, mbType: MBType16x8 | MBTypeP0L0, want: ErrUnsupported},
-		{name: "b explicit 16x8 implicit weighted remains guarded", sh: bImplicitWeightedSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
-		{name: "b explicit 8x8 implicit weighted remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bExplicitSub, want: ErrUnsupported},
+		{name: "b implicit weighted b16x8 residual remains guarded", sh: bImplicitWeightedSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1, cbp: 1, cbpTable: 1, want: ErrUnsupported},
+		{name: "b implicit weighted b8x16 residual remains guarded", sh: bImplicitWeightedSlice, mbType: MBType8x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, cbp: 3, cbpTable: 3, want: ErrUnsupported},
+		{name: "b implicit weighted direct sub cbp remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1, want: ErrUnsupported},
+		{name: "b implicit weighted explicit direct sub mix remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bMixedExplicitDirectSub, want: ErrUnsupported},
+		{name: "b implicit weighted direct explicit sub mix remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bMixedDirectSub, want: ErrUnsupported},
+		{name: "b implicit weighted top-level direct 8x8 remains guarded", sh: bImplicitWeightedSlice, mbType: MBType8x8 | MBTypeL0L1 | MBTypeDirect2, sub: &bExplicitSub, want: ErrUnsupported},
 		{name: "b deblock direct remains guarded", sh: bDeblockSlice, mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2, want: ErrUnsupported},
 		{name: "b deblock skip remains guarded", sh: bDeblockSlice, mbType: bSkip, want: ErrUnsupported},
 		{name: "b deblock partitioned remains guarded", sh: bDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
 		{name: "b deblock cabac partitioned remains guarded", sh: bCABACDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
+		{name: "b deblock implicit weighted partitioned remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
 		{name: "b deblock implicit weighted remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, want: ErrUnsupported},
 	}
 	for _, tt := range tests {
