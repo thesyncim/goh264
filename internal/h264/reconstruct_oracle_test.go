@@ -3,6 +3,7 @@
 package h264
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -380,6 +381,173 @@ static void run_intra_pcm_422(void)
     print_mb("intra_pcm_422", &dst, mb_x, mb_y);
 }
 
+typedef struct PicHigh {
+    uint16_t y[LUMA_STRIDE * MB_HEIGHT * 16];
+    uint16_t cb[LUMA_STRIDE * MB_HEIGHT * 16];
+    uint16_t cr[LUMA_STRIDE * MB_HEIGHT * 16];
+    int chroma_idc;
+    int chroma_stride;
+} PicHigh;
+
+static void fill_plane_high(uint16_t *p, int n, int seed)
+{
+    for (int i = 0; i < n; i++)
+        p[i] = (uint16_t)((seed + i * 13 + (i >> 4) * 7) & 0x3fff);
+}
+
+static void init_pic_high(PicHigh *p, int chroma_idc, int seed)
+{
+    memset(p, 0, sizeof(*p));
+    p->chroma_idc = chroma_idc;
+    p->chroma_stride = LUMA_STRIDE;
+    fill_plane_high(p->y, LUMA_STRIDE * MB_HEIGHT * 16, seed);
+    fill_plane_high(p->cb, LUMA_STRIDE * MB_HEIGHT * 16, seed + 29);
+    fill_plane_high(p->cr, LUMA_STRIDE * MB_HEIGHT * 16, seed + 71);
+}
+
+static uint16_t *pic_high_y(PicHigh *p, int mb_x, int mb_y)
+{
+    return p->y + mb_y * 16 * LUMA_STRIDE + mb_x * 16;
+}
+
+static uint16_t *pic_high_cb(PicHigh *p, int mb_x, int mb_y)
+{
+    if (p->chroma_idc == 1)
+        return p->cb + mb_y * 8 * p->chroma_stride + mb_x * 8;
+    if (p->chroma_idc == 2)
+        return p->cb + mb_y * 16 * p->chroma_stride + mb_x * 8;
+    return p->cb + mb_y * 16 * p->chroma_stride + mb_x * 16;
+}
+
+static uint16_t *pic_high_cr(PicHigh *p, int mb_x, int mb_y)
+{
+    if (p->chroma_idc == 1)
+        return p->cr + mb_y * 8 * p->chroma_stride + mb_x * 8;
+    if (p->chroma_idc == 2)
+        return p->cr + mb_y * 16 * p->chroma_stride + mb_x * 8;
+    return p->cr + mb_y * 16 * p->chroma_stride + mb_x * 16;
+}
+
+static void put_bit_high(uint8_t *buf, int *bit_pos, int bit)
+{
+    if (bit)
+        buf[*bit_pos >> 3] |= 1U << (7 - (*bit_pos & 7));
+    (*bit_pos)++;
+}
+
+static void init_intra_pcm_high(uint8_t *pcm, int sample_count, int bit_depth,
+                                int seed)
+{
+    const int max = (1 << bit_depth) - 1;
+    int bit_pos = 0;
+    memset(pcm, 0, (sample_count * bit_depth + 7) >> 3);
+    for (int i = 0; i < sample_count; i++) {
+        int sample = (seed + 17 * i + (i >> 3) + 3 * (i >> 6)) & max;
+        for (int bit = bit_depth - 1; bit >= 0; bit--)
+            put_bit_high(pcm, &bit_pos, (sample >> bit) & 1);
+    }
+}
+
+static unsigned get_bits_high(const uint8_t *buf, int *bit_pos, int n)
+{
+    unsigned v = 0;
+    for (int i = 0; i < n; i++) {
+        v = (v << 1) | ((buf[*bit_pos >> 3] >> (7 - (*bit_pos & 7))) & 1);
+        (*bit_pos)++;
+    }
+    return v;
+}
+
+static void decode_high_plane(const uint8_t *pcm, int *bit_pos, uint16_t *dst,
+                              int stride, int width, int height, int bit_depth)
+{
+    for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+            dst[y * stride + x] = get_bits_high(pcm, bit_pos, bit_depth);
+}
+
+static void decode_intra_pcm_high(PicHigh *dst, const uint8_t *pcm, int mb_x,
+                                  int mb_y, int bit_depth)
+{
+    int bit_pos = 0;
+    int chroma_w = 8;
+    int chroma_h = 8;
+    decode_high_plane(pcm, &bit_pos, pic_high_y(dst, mb_x, mb_y),
+                      LUMA_STRIDE, 16, 16, bit_depth);
+    if (!dst->chroma_idc)
+        return;
+    if (dst->chroma_idc == 2) {
+        chroma_h = 16;
+    } else if (dst->chroma_idc == 3) {
+        chroma_w = 16;
+        chroma_h = 16;
+    }
+    decode_high_plane(pcm, &bit_pos, pic_high_cb(dst, mb_x, mb_y),
+                      dst->chroma_stride, chroma_w, chroma_h, bit_depth);
+    decode_high_plane(pcm, &bit_pos, pic_high_cr(dst, mb_x, mb_y),
+                      dst->chroma_stride, chroma_w, chroma_h, bit_depth);
+}
+
+static void print_mb_high(const char *label, PicHigh *p, int mb_x, int mb_y)
+{
+    uint16_t *y = pic_high_y(p, mb_x, mb_y);
+    uint16_t *cb = pic_high_cb(p, mb_x, mb_y);
+    uint16_t *cr = pic_high_cr(p, mb_x, mb_y);
+    int cw = p->chroma_idc == 3 ? 16 : 8;
+    int ch = p->chroma_idc == 1 ? 8 : 16;
+
+    printf("%s y", label);
+    for (int yy = 0; yy < 16; yy++)
+        for (int x = 0; x < 16; x++)
+            printf(" %u", y[yy * LUMA_STRIDE + x]);
+    printf("\n");
+
+    printf("%s cb", label);
+    for (int yy = 0; yy < ch; yy++)
+        for (int x = 0; x < cw; x++)
+            printf(" %u", cb[yy * p->chroma_stride + x]);
+    printf("\n");
+
+    printf("%s cr", label);
+    for (int yy = 0; yy < ch; yy++)
+        for (int x = 0; x < cw; x++)
+            printf(" %u", cr[yy * p->chroma_stride + x]);
+    printf("\n");
+}
+
+static void run_intra_pcm_high_420_10(void)
+{
+    PicHigh dst;
+    uint8_t pcm[480];
+    const int mb_x = 1, mb_y = 1;
+    init_pic_high(&dst, 1, 17);
+    init_intra_pcm_high(pcm, 384, 10, 33);
+    decode_intra_pcm_high(&dst, pcm, mb_x, mb_y, 10);
+    print_mb_high("intra_pcm_high_420_10", &dst, mb_x, mb_y);
+}
+
+static void run_intra_pcm_high_422_12(void)
+{
+    PicHigh dst;
+    uint8_t pcm[768];
+    const int mb_x = 1, mb_y = 1;
+    init_pic_high(&dst, 2, 21);
+    init_intra_pcm_high(pcm, 512, 12, 49);
+    decode_intra_pcm_high(&dst, pcm, mb_x, mb_y, 12);
+    print_mb_high("intra_pcm_high_422_12", &dst, mb_x, mb_y);
+}
+
+static void run_intra_pcm_high_444_14(void)
+{
+    PicHigh dst;
+    uint8_t pcm[1344];
+    const int mb_x = 1, mb_y = 1;
+    init_pic_high(&dst, 3, 23);
+    init_intra_pcm_high(pcm, 768, 14, 57);
+    decode_intra_pcm_high(&dst, pcm, mb_x, mb_y, 14);
+    print_mb_high("intra_pcm_high_444_14", &dst, mb_x, mb_y);
+}
+
 static void run_intra4x4_420(void)
 {
     Pic dst;
@@ -478,6 +646,9 @@ int main(void)
     run_intra16x16_422();
     run_intra_pcm_420();
     run_intra_pcm_422();
+    run_intra_pcm_high_420_10();
+    run_intra_pcm_high_422_12();
+    run_intra_pcm_high_444_14();
     run_intra4x4_420();
     run_intra8x8_422();
     return 0;
@@ -604,6 +775,9 @@ func h264ReconstructOracleWant(t *testing.T) string {
 	appendH264ReconstructOracleIntra16x16(t, &b, "intra16x16_422", 2, 31, int32(intraPred8x8Vertical), int8(intraPred8x8DC), h264ReconstructResidual422())
 	appendH264ReconstructOracleIntraPCM(t, &b, "intra_pcm_420", 1, 17, h264ReconstructIntraPCM(1, 33))
 	appendH264ReconstructOracleIntraPCM(t, &b, "intra_pcm_422", 2, 21, h264ReconstructIntraPCM(2, 49))
+	appendH264ReconstructOracleIntraPCMHigh(t, &b, "intra_pcm_high_420_10", 1, 10, 17, h264ReconstructIntraPCMHigh(1, 10, 33))
+	appendH264ReconstructOracleIntraPCMHigh(t, &b, "intra_pcm_high_422_12", 2, 12, 21, h264ReconstructIntraPCMHigh(2, 12, 49))
+	appendH264ReconstructOracleIntraPCMHigh(t, &b, "intra_pcm_high_444_14", 3, 14, 23, h264ReconstructIntraPCMHigh(3, 14, 57))
 	appendH264ReconstructOracleIntra4x4(t, &b, "intra4x4_420", 1, 17, int32(intraPred8x8DC), 0xffff, 0xeeff, h264ReconstructResidualIntra4x4())
 	appendH264ReconstructOracleIntra8x8(t, &b, "intra8x8_422", 2, 31, int32(intraPred8x8Plane), 0xffff, 0xffff, h264ReconstructResidualIntra8x8())
 	return b.String()
@@ -639,6 +813,18 @@ func appendH264ReconstructOracleIntraPCM(t *testing.T, b *strings.Builder, label
 		t.Fatal(err)
 	}
 	printH264MotionCompMB(b, label, dst, 1, 1)
+}
+
+func appendH264ReconstructOracleIntraPCMHigh(t *testing.T, b *strings.Builder, label string, chromaFormatIDC int, bitDepth int, seed int, pcm []byte) {
+	dst := makeH264ReconstructHighPicture(chromaFormatIDC, seed)
+	yOff, cbOff, crOff, err := h264MBDestPartOffsetsHigh(dst, 1, 1, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h264HLDecodeFrameIntraPCMHigh(dst, yOff, cbOff, crOff, pcm, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+	printH264MotionCompMBHigh(b, label, dst, 1, 1)
 }
 
 func appendH264ReconstructOracleIntra4x4(t *testing.T, b *strings.Builder, label string, chromaFormatIDC int, seed int, chromaPred int32, topLeftAvailable uint16, topRightAvailable uint16, residual cavlcResidualContext) {
@@ -683,4 +869,39 @@ func appendH264ReconstructOracleIntra8x8(t *testing.T, b *strings.Builder, label
 		t.Fatal(err)
 	}
 	printH264MotionCompMB(b, label, dst, 1, 1)
+}
+
+func printH264MotionCompMBHigh(b *strings.Builder, label string, p *h264PicturePlanesHigh, mbX int, mbY int) {
+	yOff := mbY*16*p.LumaStride + mbX*16
+	fmt.Fprintf(b, "%s y", label)
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			fmt.Fprintf(b, " %d", p.Y[yOff+y*p.LumaStride+x])
+		}
+	}
+	b.WriteByte('\n')
+
+	cw, ch := 16, 16
+	cOff := mbY*16*p.ChromaStride + mbX*16
+	if p.ChromaFormatIDC == 1 {
+		cw, ch = 8, 8
+		cOff = mbY*8*p.ChromaStride + mbX*8
+	} else if p.ChromaFormatIDC == 2 {
+		cw, ch = 8, 16
+		cOff = mbY*16*p.ChromaStride + mbX*8
+	}
+	fmt.Fprintf(b, "%s cb", label)
+	for y := 0; y < ch; y++ {
+		for x := 0; x < cw; x++ {
+			fmt.Fprintf(b, " %d", p.Cb[cOff+y*p.ChromaStride+x])
+		}
+	}
+	b.WriteByte('\n')
+	fmt.Fprintf(b, "%s cr", label)
+	for y := 0; y < ch; y++ {
+		for x := 0; x < cw; x++ {
+			fmt.Fprintf(b, " %d", p.Cr[cOff+y*p.ChromaStride+x])
+		}
+	}
+	b.WriteByte('\n')
 }

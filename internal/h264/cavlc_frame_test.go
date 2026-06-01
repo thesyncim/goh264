@@ -91,6 +91,40 @@ func TestDecodeCAVLCFrameIntraPCMMacroblockAlignsAndWritesState(t *testing.T) {
 	}
 }
 
+func TestDecodeCAVLCFrameHighIntraPCMMacroblockReadsBitDepthPayload(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 10, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	pcm := h264ReconstructIntraPCMHigh(1, 10, 71)
+	buf := append([]byte{0x0d, 0x00}, pcm...)
+	gb := newBitReader(buf)
+
+	got, err := m.decodeCAVLCFrameMacroblock(&gb, cavlcFrameMacroblockInput{
+		MBXY:         0,
+		SliceNum:     7,
+		SliceType:    PictureTypeI,
+		SliceTypeNoS: PictureTypeI,
+		QScale:       20,
+		PPS:          pps,
+		SPS:          sps,
+	})
+	if err != nil {
+		t.Fatalf("decode high frame intra pcm failed: %v", err)
+	}
+	if len(got.IntraPCM) != len(pcm) || got.IntraPCM[0] != pcm[0] || got.IntraPCM[len(pcm)-1] != pcm[len(pcm)-1] {
+		t.Fatalf("high pcm length/endpoints = %d/%d/%d, want %d/%d/%d",
+			len(got.IntraPCM), got.IntraPCM[0], got.IntraPCM[len(got.IntraPCM)-1],
+			len(pcm), pcm[0], pcm[len(pcm)-1])
+	}
+	if gb.bitPos != uint32(16+len(pcm)*8) {
+		t.Fatalf("consumed high pcm %d bits, want %d", gb.bitPos, 16+len(pcm)*8)
+	}
+}
+
 func TestDecodeCAVLCFrameP16x16MacroblockAppliesNeighborMotion(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {

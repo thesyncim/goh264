@@ -114,6 +114,49 @@ func TestH264HLDecodeFrameMacroblockIntraPCMReconstructs422(t *testing.T) {
 	assertH264Rows(t, "pcm cr", dst.Cr, crOff, dst.ChromaStride, 8, 16, pcm[256+16*8:], 8)
 }
 
+func TestH264HLDecodeFrameIntraPCMHighReconstructs420(t *testing.T) {
+	const bitDepth = 10
+	dst := makeH264ReconstructHighPicture(1, 17)
+	pcm := h264ReconstructIntraPCMHigh(1, bitDepth, 33)
+	samples := h264ReconstructIntraPCMSamples(1, bitDepth, 33)
+	mbX, mbY := 1, 1
+	yOff, cbOff, crOff, err := h264MBDestPartOffsetsHigh(dst, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h264HLDecodeFrameIntraPCMHigh(dst, yOff, cbOff, crOff, pcm, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+
+	assertH264RowsHigh(t, "high pcm y", dst.Y, yOff, dst.LumaStride, 16, 16, samples, 16)
+	assertH264RowsHigh(t, "high pcm cb", dst.Cb, cbOff, dst.ChromaStride, 8, 8, samples[256:], 8)
+	assertH264RowsHigh(t, "high pcm cr", dst.Cr, crOff, dst.ChromaStride, 8, 8, samples[256+8*8:], 8)
+}
+
+func TestH264HLDecodeFrameIntraPCMHighReconstructs444(t *testing.T) {
+	const bitDepth = 14
+	dst := makeH264ReconstructHighPicture(3, 23)
+	pcm := h264ReconstructIntraPCMHigh(3, bitDepth, 57)
+	samples := h264ReconstructIntraPCMSamples(3, bitDepth, 57)
+	mbX, mbY := 1, 1
+	yOff, cbOff, crOff, err := h264MBDestPartOffsetsHigh(dst, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h264HLDecodeFrameIntraPCMHigh(dst, yOff, cbOff, crOff, pcm, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+
+	assertH264RowsHigh(t, "high pcm444 y", dst.Y, yOff, dst.LumaStride, 16, 16, samples, 16)
+	assertH264RowsHigh(t, "high pcm444 cb", dst.Cb, cbOff, dst.ChromaStride, 16, 16, samples[256:], 16)
+	assertH264RowsHigh(t, "high pcm444 cr", dst.Cr, crOff, dst.ChromaStride, 16, 16, samples[512:], 16)
+	if err := h264HLDecodeFrameIntraPCMHigh(dst, yOff, cbOff, crOff, pcm[:len(pcm)-1], bitDepth); err != ErrInvalidData {
+		t.Fatalf("truncated high pcm error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestH264HLDecodeFrameMacroblockIntra16x16Reconstructs444PaddedChromaStride(t *testing.T) {
 	dst := makeH264MotionCompPicture(3, 23)
 	_, chromaHeight := h264ChromaFrameSize(dst.MBWidth, dst.MBHeight, dst.ChromaFormatIDC)
@@ -283,7 +326,79 @@ func h264ReconstructIntraPCM(chromaFormatIDC int, seed int) []byte {
 	return pcm
 }
 
+func h264ReconstructIntraPCMSamples(chromaFormatIDC int, bitDepth int, seed int) []uint16 {
+	n := h264IntraPCMSampleCount[chromaFormatIDC]
+	max := (1 << uint(bitDepth)) - 1
+	samples := make([]uint16, n)
+	for i := range samples {
+		samples[i] = uint16((seed + 17*i + (i >> 3) + 3*(i>>6)) & max)
+	}
+	return samples
+}
+
+func h264ReconstructIntraPCMHigh(chromaFormatIDC int, bitDepth int, seed int) []byte {
+	return h264PackIntraPCMHigh(h264ReconstructIntraPCMSamples(chromaFormatIDC, bitDepth, seed), bitDepth)
+}
+
+func h264PackIntraPCMHigh(samples []uint16, bitDepth int) []byte {
+	out := make([]byte, (len(samples)*bitDepth+7)>>3)
+	bitPos := 0
+	for _, sample := range samples {
+		for bit := bitDepth - 1; bit >= 0; bit-- {
+			if (sample>>uint(bit))&1 != 0 {
+				out[bitPos>>3] |= 1 << uint(7-(bitPos&7))
+			}
+			bitPos++
+		}
+	}
+	return out
+}
+
+func makeH264ReconstructHighPicture(chromaFormatIDC int, seed int) *h264PicturePlanesHigh {
+	const mbWidth = 4
+	const mbHeight = 4
+	p := &h264PicturePlanesHigh{
+		Y:               make([]uint16, 80*mbHeight*16),
+		LumaStride:      80,
+		MBWidth:         mbWidth,
+		MBHeight:        mbHeight,
+		ChromaFormatIDC: chromaFormatIDC,
+	}
+	fillH264ReconstructHighPlane(p.Y, seed)
+	if chromaFormatIDC != 0 {
+		chromaWidth, chromaHeight := h264ChromaFrameSize(mbWidth, mbHeight, chromaFormatIDC)
+		p.ChromaStride = 48
+		if p.ChromaStride < chromaWidth {
+			p.ChromaStride = 80
+		}
+		p.Cb = make([]uint16, p.ChromaStride*chromaHeight)
+		p.Cr = make([]uint16, p.ChromaStride*chromaHeight)
+		fillH264ReconstructHighPlane(p.Cb, seed+29)
+		fillH264ReconstructHighPlane(p.Cr, seed+71)
+	}
+	return p
+}
+
+func fillH264ReconstructHighPlane(p []uint16, seed int) {
+	for i := range p {
+		p[i] = uint16((seed + i*13 + (i>>4)*7) & 0x3fff)
+	}
+}
+
 func assertH264Rows(t *testing.T, label string, dst []uint8, offset int, stride int, width int, height int, src []byte, srcStride int) {
+	t.Helper()
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			got := dst[offset+y*stride+x]
+			want := src[y*srcStride+x]
+			if got != want {
+				t.Fatalf("%s[%d,%d] = %d, want %d", label, x, y, got, want)
+			}
+		}
+	}
+}
+
+func assertH264RowsHigh(t *testing.T, label string, dst []uint16, offset int, stride int, width int, height int, src []uint16, srcStride int) {
 	t.Helper()
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {

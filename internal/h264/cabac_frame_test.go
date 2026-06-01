@@ -113,6 +113,42 @@ func TestDecodeCABACFrameIntraPCMMacroblockWritesState(t *testing.T) {
 	wantIndexes(t, src, []int{3})
 }
 
+func TestDecodeCABACFrameHighIntraPCMMacroblockReadsBitDepthPayload(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 12, ChromaFormatIDC: 2, FrameMBSOnlyFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	pcm := h264ReconstructIntraPCMHigh(2, 12, 83)
+	src := &scriptedCABACSource{
+		bits:  []int{1},
+		terms: []int{1},
+		pcm:   append([]byte(nil), pcm...),
+	}
+	sh := &SliceHeader{
+		SliceType:        PictureTypeI,
+		SliceTypeNoS:     PictureTypeI,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           23,
+	}
+	state := &cabacFrameSliceState{QScale: int(sh.QScale)}
+
+	got, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, 0, 8)
+	if err != nil {
+		t.Fatalf("decode high cabac frame intra pcm failed: %v", err)
+	}
+	if len(got.IntraPCM) != len(pcm) || len(src.pcmReadSizes) != 1 || src.pcmReadSizes[0] != len(pcm) {
+		t.Fatalf("high cabac pcm lengths/read sizes = %d/%v, want %d", len(got.IntraPCM), src.pcmReadSizes, len(pcm))
+	}
+	if got.IntraPCM[0] != pcm[0] || got.IntraPCM[len(pcm)-1] != pcm[len(pcm)-1] {
+		t.Fatalf("high cabac pcm endpoints = %d/%d, want %d/%d", got.IntraPCM[0], got.IntraPCM[len(pcm)-1], pcm[0], pcm[len(pcm)-1])
+	}
+}
+
 func TestDecodeCABACFrameP16x16MacroblockAppliesNeighborMotion(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {

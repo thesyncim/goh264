@@ -453,14 +453,15 @@ func readCABACIntraPCMBytes(src cabacSyntaxSource, sps *SPS) ([]byte, error) {
 	if src == nil || sps == nil || sps.ChromaFormatIDC >= uint32(len(h264IntraPCMSampleCount)) {
 		return nil, ErrInvalidData
 	}
-	if sps.BitDepthLuma != 8 {
-		return nil, ErrUnsupported
+	n, err := h264IntraPCMByteCount(int(sps.ChromaFormatIDC), int(sps.BitDepthLuma))
+	if err != nil {
+		return nil, err
 	}
 	pcmSrc, ok := src.(cabacIntraPCMSource)
 	if !ok {
 		return nil, ErrUnsupported
 	}
-	return pcmSrc.intraPCMBytes(h264IntraPCMSampleCount[sps.ChromaFormatIDC])
+	return pcmSrc.intraPCMBytes(n)
 }
 
 func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, mb *cavlcInterMacroblockSyntax, motion *macroblockMotionCache, mbXY int, sliceTypeNoS int32, listCount int, refCount [2]uint32, direct h264DirectMotionContext) error {

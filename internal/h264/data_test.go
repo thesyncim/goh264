@@ -35,6 +35,18 @@ func TestIntraPCMSampleCounts(t *testing.T) {
 	if h264IntraPCMSampleCount != ([4]int{256, 384, 512, 768}) {
 		t.Fatalf("intra pcm sizes = %v", h264IntraPCMSampleCount)
 	}
+	if got, err := h264IntraPCMByteCount(1, 10); err != nil || got != 480 {
+		t.Fatalf("10-bit 4:2:0 pcm byte count = %d/%v, want 480/nil", got, err)
+	}
+	if got, err := h264IntraPCMByteCount(3, 14); err != nil || got != 1344 {
+		t.Fatalf("14-bit 4:4:4 pcm byte count = %d/%v, want 1344/nil", got, err)
+	}
+	if _, err := h264IntraPCMByteCount(1, 11); err != ErrUnsupported {
+		t.Fatalf("11-bit pcm byte count error = %v, want ErrUnsupported", err)
+	}
+	if _, err := h264IntraPCMByteCount(4, 10); err != ErrInvalidData {
+		t.Fatalf("bad chroma pcm byte count error = %v, want ErrInvalidData", err)
+	}
 }
 
 func TestChromaQPTableShape(t *testing.T) {

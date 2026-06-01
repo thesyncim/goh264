@@ -53,6 +53,11 @@ compares 8-bit transform/dequant fixtures plus 9/10/12/14-bit 4x4/8x8 inverse
 transform add, DC-only add, luma DC dequant IDCT, and 4:2:0/4:2:2 chroma DC
 dequant IDCT fixtures.
 
+The H.264 reconstruction oracle compiles pinned prediction and IDCT templates
+and compares source-shaped macroblock reconstruction fixtures, including
+10-bit 4:2:0, 12-bit 4:2:2, and 14-bit 4:4:4 high-bit-depth IntraPCM payload
+unpacking into uint16 planes.
+
 The H.264 chroma MC and qpel oracles compile the pinned
 `libavcodec/h264chroma_template.c` and `libavcodec/h264qpel_template.c`,
 comparing 8-bit fixtures plus 9/10/12/14-bit high-bit-depth put/avg variants

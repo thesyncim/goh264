@@ -366,10 +366,11 @@ func readCAVLCIntraPCMBytes(gb *bitReader, sps *SPS) ([]byte, error) {
 	if gb == nil || sps == nil || sps.ChromaFormatIDC >= uint32(len(h264IntraPCMSampleCount)) {
 		return nil, ErrInvalidData
 	}
-	if sps.BitDepthLuma != 8 {
-		return nil, ErrUnsupported
+	n, err := h264IntraPCMByteCount(int(sps.ChromaFormatIDC), int(sps.BitDepthLuma))
+	if err != nil {
+		return nil, err
 	}
-	return gb.readAlignedBytes(h264IntraPCMSampleCount[sps.ChromaFormatIDC])
+	return gb.readAlignedBytes(n)
 }
 
 func cavlcFrameListCount(sliceTypeNoS int32) (int, error) {
