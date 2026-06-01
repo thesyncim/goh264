@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -36,9 +37,13 @@ type benchMetadata struct {
 	InputBytes     int64  `json:"input_bytes"`
 	InputMD5       string `json:"input_md5"`
 	CorpusManifest string `json:"corpus_manifest,omitempty"`
+	FailureLedger  string `json:"failure_ledger,omitempty"`
 	CorpusFilter   string `json:"corpus_filter,omitempty"`
 	CorpusEntries  int    `json:"corpus_entries,omitempty"`
 	CorpusDecodeOK int    `json:"corpus_decode_ok_entries,omitempty"`
+	CorpusBench    int    `json:"corpus_benchmarked_entries,omitempty"`
+	CorpusKnownRed int    `json:"corpus_known_red_entries,omitempty"`
+	CorpusSkipped  int    `json:"corpus_skipped_entries,omitempty"`
 	FairnessPolicy string `json:"fairness_policy,omitempty"`
 	GoVersion      string `json:"go_version"`
 	GOOS           string `json:"goos"`
@@ -54,43 +59,49 @@ type benchMetadata struct {
 }
 
 type benchResult struct {
-	Name            string        `json:"name"`
-	EntryID         string        `json:"entry_id,omitempty"`
-	Input           string        `json:"input"`
-	Iterations      int           `json:"iterations"`
-	Repeats         int           `json:"repeats"`
-	Warmup          int           `json:"warmup"`
-	RawOutput       bool          `json:"raw_output"`
-	RawPixelFormat  string        `json:"raw_pixel_format,omitempty"`
-	FFmpegPixelFmt  string        `json:"ffmpeg_pixel_format,omitempty"`
-	FramesPerIter   int           `json:"frames_per_iter,omitempty"`
-	BytesPerIter    int64         `json:"bytes_per_iter,omitempty"`
-	TotalFrames     int           `json:"total_frames,omitempty"`
-	TotalBytes      int64         `json:"total_bytes,omitempty"`
-	ElapsedMS       float64       `json:"elapsed_ms"`
-	MeanElapsedMS   float64       `json:"mean_elapsed_ms,omitempty"`
-	MedianElapsedMS float64       `json:"median_elapsed_ms,omitempty"`
-	MinElapsedMS    float64       `json:"min_elapsed_ms,omitempty"`
-	MaxElapsedMS    float64       `json:"max_elapsed_ms,omitempty"`
-	StddevElapsedMS float64       `json:"stddev_elapsed_ms,omitempty"`
-	CVElapsed       float64       `json:"cv_elapsed,omitempty"`
-	FPS             float64       `json:"fps,omitempty"`
-	MiBPerSec       float64       `json:"mib_per_sec,omitempty"`
-	AllocBytes      uint64        `json:"alloc_bytes,omitempty"`
-	Allocs          uint64        `json:"allocs,omitempty"`
-	RawMD5          string        `json:"raw_md5,omitempty"`
-	ExpectedRawMD5  string        `json:"expected_raw_md5,omitempty"`
-	ExpectedPixFmt  string        `json:"expected_raw_pixel_format,omitempty"`
-	ExpectedFrames  int           `json:"expected_frames_per_iter,omitempty"`
-	ExpectedBytes   int64         `json:"expected_bytes_per_iter,omitempty"`
-	ParityStatus    string        `json:"parity_status,omitempty"`
-	Command         string        `json:"command,omitempty"`
-	ProcessPerIter  bool          `json:"process_per_iter"`
-	InputReadTimed  bool          `json:"input_read_timed"`
-	StdoutPipeTimed bool          `json:"stdout_pipe_timed"`
-	BaselineKind    string        `json:"baseline_kind"`
-	Notes           []string      `json:"notes,omitempty"`
-	Samples         []benchSample `json:"samples,omitempty"`
+	Name              string        `json:"name"`
+	EntryID           string        `json:"entry_id,omitempty"`
+	Input             string        `json:"input"`
+	Iterations        int           `json:"iterations"`
+	Repeats           int           `json:"repeats"`
+	Warmup            int           `json:"warmup"`
+	RawOutput         bool          `json:"raw_output"`
+	RawPixelFormat    string        `json:"raw_pixel_format,omitempty"`
+	FFmpegPixelFmt    string        `json:"ffmpeg_pixel_format,omitempty"`
+	FramesPerIter     int           `json:"frames_per_iter,omitempty"`
+	InputBytesPerIter int64         `json:"input_bytes_per_iter,omitempty"`
+	BytesPerIter      int64         `json:"bytes_per_iter,omitempty"`
+	TotalFrames       int           `json:"total_frames,omitempty"`
+	TotalBytes        int64         `json:"total_bytes,omitempty"`
+	ElapsedMS         float64       `json:"elapsed_ms"`
+	MeanElapsedMS     float64       `json:"mean_elapsed_ms,omitempty"`
+	MedianElapsedMS   float64       `json:"median_elapsed_ms,omitempty"`
+	MinElapsedMS      float64       `json:"min_elapsed_ms,omitempty"`
+	MaxElapsedMS      float64       `json:"max_elapsed_ms,omitempty"`
+	StddevElapsedMS   float64       `json:"stddev_elapsed_ms,omitempty"`
+	CVElapsed         float64       `json:"cv_elapsed,omitempty"`
+	FPS               float64       `json:"fps,omitempty"`
+	MiBPerSec         float64       `json:"mib_per_sec,omitempty"`
+	NSPerFrame        float64       `json:"ns_per_frame,omitempty"`
+	NSPerInputByte    float64       `json:"ns_per_input_byte,omitempty"`
+	NSPerRawByte      float64       `json:"ns_per_raw_byte,omitempty"`
+	AllocBytes        uint64        `json:"alloc_bytes,omitempty"`
+	Allocs            uint64        `json:"allocs,omitempty"`
+	RawMD5            string        `json:"raw_md5,omitempty"`
+	ExpectedRawMD5    string        `json:"expected_raw_md5,omitempty"`
+	ExpectedPixFmt    string        `json:"expected_raw_pixel_format,omitempty"`
+	ExpectedFrames    int           `json:"expected_frames_per_iter,omitempty"`
+	ExpectedBytes     int64         `json:"expected_bytes_per_iter,omitempty"`
+	ParityStatus      string        `json:"parity_status,omitempty"`
+	Command           string        `json:"command,omitempty"`
+	ProcessPerIter    bool          `json:"process_per_iter"`
+	InputReadTimed    bool          `json:"input_read_timed"`
+	StdoutPipeTimed   bool          `json:"stdout_pipe_timed"`
+	BaselineKind      string        `json:"baseline_kind"`
+	Skipped           bool          `json:"skipped,omitempty"`
+	Error             string        `json:"error,omitempty"`
+	Notes             []string      `json:"notes,omitempty"`
+	Samples           []benchSample `json:"samples,omitempty"`
 }
 
 type benchSample struct {
@@ -115,6 +126,7 @@ type benchOptions struct {
 	ffmpegPixFmt  string
 	strictPixFmt  bool
 	corpusFilter  string
+	failureLedger string
 	annexBInput   bool
 }
 
@@ -141,6 +153,7 @@ func main() {
 	manifest := flag.String("manifest", "", "JSONL H.264 corpus manifest; benchmarks decode-ok entries after oracle parity validation")
 	maxEntries := flag.Int("max-entries", 0, "maximum decode-ok manifest entries to benchmark; 0 means all")
 	corpusFilter := flag.String("filter", os.Getenv("GOH264_CORPUS_FILTER"), "comma/space-separated manifest entry filter; defaults to GOH264_CORPUS_FILTER")
+	failureLedger := flag.String("failure-ledger", "auto", "manifest known-red ledger: auto uses failures.jsonl next to the manifest when present, off disables it, otherwise pass a JSONL path")
 	iters := flag.Int("iters", 5, "measured iterations")
 	repeats := flag.Int("repeats", 1, "measured repeat samples; each sample runs -iters decodes")
 	warmup := flag.Int("warmup", 1, "warmup iterations")
@@ -168,6 +181,7 @@ func main() {
 		ffmpegPixFmt:  *ffmpegPixFmt,
 		strictPixFmt:  *strictPixFmt,
 		corpusFilter:  *corpusFilter,
+		failureLedger: *failureLedger,
 	}
 	report, err := buildBenchReport(*input, *manifest, *maxEntries, opts)
 	if err != nil {
@@ -184,6 +198,23 @@ func main() {
 	}
 	fmt.Printf("input: %s, %d bytes, md5 %s\n", report.Metadata.Input, report.Metadata.InputBytes, report.Metadata.InputMD5)
 	for _, r := range report.Results {
+		if r.Skipped {
+			fmt.Printf("%s: skipped", r.Name)
+			if r.EntryID != "" {
+				fmt.Printf(", entry %s", r.EntryID)
+			}
+			if r.ParityStatus != "" {
+				fmt.Printf(", parity %s", r.ParityStatus)
+			}
+			if r.Error != "" {
+				fmt.Printf(", error %s", r.Error)
+			}
+			for _, note := range r.Notes {
+				fmt.Printf("\n  note: %s", note)
+			}
+			fmt.Println()
+			continue
+		}
 		fmt.Printf("%s: %.2f ms over %d repeat(s) x %d iter", r.Name, r.ElapsedMS, r.Repeats, r.Iterations)
 		if r.EntryID != "" {
 			fmt.Printf(", entry %s", r.EntryID)
@@ -196,6 +227,12 @@ func main() {
 		}
 		if r.BytesPerIter > 0 {
 			fmt.Printf(", %d bytes/iter, %.2f MiB/s", r.BytesPerIter, r.MiBPerSec)
+		}
+		if r.NSPerInputByte > 0 {
+			fmt.Printf(", %.2f ns/input-byte", r.NSPerInputByte)
+		}
+		if r.NSPerRawByte > 0 {
+			fmt.Printf(", %.2f ns/raw-byte", r.NSPerRawByte)
 		}
 		if r.Allocs > 0 || r.AllocBytes > 0 {
 			fmt.Printf(", %.2f allocs/iter, %.2f MiB alloc/iter",
@@ -247,7 +284,7 @@ func benchOneInput(input string, data []byte, opts benchOptions) ([]benchResult,
 		return nil, fmt.Errorf("-ffmpeg-pix-fmt %q does not match Go raw pixel format %q", opts.ffmpegPixFmt, goResult.RawPixelFormat)
 	}
 	if opts.runFFmpeg {
-		ffmpegResult, err := benchFFmpeg(input, opts.iters, opts.repeats, opts.warmup, opts.rawOutput, opts.ffmpegBin, opts.ffmpegThreads, opts.ffmpegPixFmt, goResult.RawPixelFormat)
+		ffmpegResult, err := benchFFmpeg(input, int64(len(data)), opts.iters, opts.repeats, opts.warmup, opts.rawOutput, opts.ffmpegBin, opts.ffmpegThreads, opts.ffmpegPixFmt, goResult.RawPixelFormat)
 		if err != nil {
 			return nil, fmt.Errorf("ffmpeg: %w", err)
 		}
@@ -268,6 +305,10 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 	if err != nil {
 		return benchReport{}, err
 	}
+	failureLedger, failureLedgerPath, err := readBenchFailureLedger(path, opts.failureLedger, entries)
+	if err != nil {
+		return benchReport{}, err
+	}
 	if filter := benchCorpusFilterTokens(opts.corpusFilter); len(filter) != 0 {
 		entries = filterBenchCorpusEntries(entries, filter)
 		if len(entries) == 0 {
@@ -277,12 +318,16 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 
 	baseDir := filepath.Dir(path)
 	var results []benchResult
-	var decoded int
+	var benchmarked int
+	var knownRed int
+	var skipped int
 	for _, entry := range entries {
 		if entry.Expect != "decode-ok" {
+			results = append(results, skippedBenchResult(entry, "manifest row is not a decode-ok oracle row and is not a timing sample"))
+			skipped++
 			continue
 		}
-		if maxEntries > 0 && decoded >= maxEntries {
+		if maxEntries > 0 && benchmarked >= maxEntries {
 			break
 		}
 		if err := validateBenchCorpusEntry(entry); err != nil {
@@ -290,17 +335,35 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		}
 		inputPath, err := resolveBenchCorpusPath(baseDir, entry)
 		if err != nil {
+			if _, ok := failureLedger[entry.ID]; ok {
+				results = append(results, knownRedBenchResult(entry, "", nil, err, failureLedgerPath))
+				knownRed++
+				continue
+			}
 			return benchReport{}, err
 		}
 		data, err := os.ReadFile(inputPath)
 		if err != nil {
+			if _, ok := failureLedger[entry.ID]; ok {
+				results = append(results, knownRedBenchResult(entry, inputPath, nil, err, failureLedgerPath))
+				knownRed++
+				continue
+			}
 			return benchReport{}, fmt.Errorf("%s: read input: %w", entry.ID, err)
 		}
 		if err := validateBenchBitstreamMD5(entry, data); err != nil {
 			return benchReport{}, err
 		}
+		staleLedger := false
 		if err := preflightBenchGoOracle(inputPath, data, entry); err != nil {
+			if _, ok := failureLedger[entry.ID]; ok {
+				results = append(results, knownRedBenchResult(entry, inputPath, data, err, failureLedgerPath))
+				knownRed++
+				continue
+			}
 			return benchReport{}, fmt.Errorf("%s: goh264 oracle preflight: %w", entry.ID, err)
+		} else if _, ok := failureLedger[entry.ID]; ok {
+			staleLedger = true
 		}
 		if opts.runFFmpeg {
 			if err := preflightBenchFFmpegOracle(inputPath, entry, opts); err != nil {
@@ -317,25 +380,89 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 			if err := annotateBenchResultWithOracle(&entryResults[i], entry); err != nil {
 				return benchReport{}, err
 			}
+			if staleLedger {
+				entryResults[i].ParityStatus = "rawvideo-md5-ok-failure-ledger-stale"
+				entryResults[i].Notes = append(entryResults[i].Notes,
+					fmt.Sprintf("entry is still listed in %s but passed Go oracle preflight; update the failure ledger before using this as a green benchmark lane", failureLedgerPath),
+				)
+			}
 		}
 		results = append(results, entryResults...)
-		decoded++
+		benchmarked++
 	}
-	if decoded == 0 {
-		return benchReport{}, fmt.Errorf("%s: no decode-ok manifest entries selected", path)
+	if len(results) == 0 {
+		return benchReport{}, fmt.Errorf("%s: no manifest entries selected", path)
 	}
 
 	meta := benchmarkMetadata(path, manifestData, opts.runFFmpeg, opts.ffmpegBin)
 	meta.CorpusManifest = path
+	meta.FailureLedger = failureLedgerPath
 	meta.CorpusFilter = opts.corpusFilter
 	meta.CorpusEntries = len(entries)
-	meta.CorpusDecodeOK = decoded
+	meta.CorpusDecodeOK = benchmarked
+	meta.CorpusBench = benchmarked
+	meta.CorpusKnownRed = knownRed
+	meta.CorpusSkipped = skipped
 	meta.ComparisonKind = "manifest-goh264-in-process"
 	if opts.runFFmpeg {
 		meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli"
 	}
-	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run. FFmpeg timing remains a process-per-iteration CLI baseline."
+	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows that do not pass Go oracle preflight are emitted as skipped results with the exact error and are not timing samples. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run. FFmpeg timing remains a process-per-iteration CLI baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
+}
+
+func readBenchFailureLedger(manifestPath string, mode string, manifestEntries []benchCorpusEntry) (map[string]benchCorpusEntry, string, error) {
+	path, err := benchFailureLedgerPath(manifestPath, mode)
+	if err != nil {
+		return nil, "", err
+	}
+	if path == "" {
+		return nil, "", nil
+	}
+	entries, err := readBenchCorpusManifest(path)
+	if err != nil {
+		return nil, "", err
+	}
+	manifestByID := make(map[string]benchCorpusEntry, len(manifestEntries))
+	for _, entry := range manifestEntries {
+		manifestByID[entry.ID] = entry
+	}
+	failures := make(map[string]benchCorpusEntry, len(entries))
+	for _, failure := range entries {
+		if err := validateBenchCorpusEntry(failure); err != nil {
+			return nil, "", fmt.Errorf("%s: failure-ledger row: %w", failure.ID, err)
+		}
+		if _, ok := failures[failure.ID]; ok {
+			return nil, "", fmt.Errorf("%s: duplicate failure-ledger id in %s", failure.ID, path)
+		}
+		manifestEntry, ok := manifestByID[failure.ID]
+		if !ok {
+			return nil, "", fmt.Errorf("%s: failure-ledger row missing from %s", failure.ID, manifestPath)
+		}
+		if !reflect.DeepEqual(failure, manifestEntry) {
+			return nil, "", fmt.Errorf("%s: failure-ledger row drifted from %s", failure.ID, manifestPath)
+		}
+		failures[failure.ID] = failure
+	}
+	return failures, path, nil
+}
+
+func benchFailureLedgerPath(manifestPath string, mode string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "auto":
+		path := filepath.Join(filepath.Dir(manifestPath), "failures.jsonl")
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		} else if os.IsNotExist(err) {
+			return "", nil
+		} else {
+			return "", err
+		}
+	case "off", "none", "false", "0":
+		return "", nil
+	default:
+		return mode, nil
+	}
 }
 
 func benchCorpusFilterTokens(filter string) []string {
@@ -554,6 +681,45 @@ func annotateBenchResultWithOracle(result *benchResult, entry benchCorpusEntry) 
 	return nil
 }
 
+func skippedBenchResult(entry benchCorpusEntry, reason string) benchResult {
+	result := benchResult{
+		Name:            "goh264",
+		EntryID:         entry.ID,
+		Input:           entry.Path,
+		RawOutput:       true,
+		RawPixelFormat:  entry.PixFmt,
+		ExpectedRawMD5:  entry.RawVideoMD5,
+		ExpectedPixFmt:  entry.PixFmt,
+		ExpectedFrames:  entry.FrameCount,
+		ExpectedBytes:   int64(entry.FrameCount * entry.FrameSize),
+		ParityStatus:    entry.Expect,
+		BaselineKind:    "manifest-skipped",
+		ProcessPerIter:  false,
+		InputReadTimed:  false,
+		StdoutPipeTimed: false,
+		Skipped:         true,
+	}
+	if reason != "" {
+		result.Notes = append(result.Notes, reason)
+	}
+	return result
+}
+
+func knownRedBenchResult(entry benchCorpusEntry, input string, data []byte, err error, ledgerPath string) benchResult {
+	result := skippedBenchResult(entry, "listed in the known-red failure ledger and not included in timing aggregates")
+	result.Input = input
+	result.InputBytesPerIter = int64(len(data))
+	result.ParityStatus = "known-red"
+	result.BaselineKind = "oracle-known-red"
+	if ledgerPath != "" {
+		result.Notes = append(result.Notes, "failure ledger: "+ledgerPath)
+	}
+	if err != nil {
+		result.Error = err.Error()
+	}
+	return result
+}
+
 func preflightBenchGoOracle(input string, data []byte, entry benchCorpusEntry) error {
 	run, err := decodeGoOnceForFormat(data, true, entry.Format == "annexb")
 	if err != nil {
@@ -631,10 +797,12 @@ func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawO
 
 	result := resultFromSamples("goh264", input, iters, repeats, warmup, rawOutput, framesPerIter, bytesPerIter, samples, rawMD5, "")
 	result.RawPixelFormat = pixFmt
+	result.InputBytesPerIter = int64(len(data))
 	result.BaselineKind = "in-process-go"
 	result.ProcessPerIter = false
 	result.InputReadTimed = false
 	result.StdoutPipeTimed = false
+	annotateBenchRates(&result)
 	return result, nil
 }
 
@@ -739,7 +907,7 @@ func summarizeGoFrames(frames []*goh264.Frame, rawOutput bool) (decodeGoRun, err
 	return decodeGoRun{frames: len(frames), bytes: total, md5: hashString(h), pixFmt: pixFmt}, nil
 }
 
-func benchFFmpeg(input string, iters int, repeats int, warmup int, rawOutput bool, bin string, threads string, pixFmt string, goPixFmt string) (benchResult, error) {
+func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup int, rawOutput bool, bin string, threads string, pixFmt string, goPixFmt string) (benchResult, error) {
 	effectivePixFmt := pixFmt
 	autoPixFmt := false
 	if rawOutput && effectivePixFmt == "" && goPixFmt != "" {
@@ -777,6 +945,7 @@ func benchFFmpeg(input string, iters int, repeats int, warmup int, rawOutput boo
 	result := resultFromSamples("ffmpeg", input, iters, repeats, warmup, rawOutput, 0, bytesPerIter, samples, rawMD5, bin+" "+joinArgs(args))
 	result.RawPixelFormat = goPixFmt
 	result.FFmpegPixelFmt = effectivePixFmt
+	result.InputBytesPerIter = inputBytes
 	result.BaselineKind = "ffmpeg-cli"
 	result.ProcessPerIter = true
 	result.InputReadTimed = true
@@ -787,6 +956,7 @@ func benchFFmpeg(input string, iters int, repeats int, warmup int, rawOutput boo
 	if autoPixFmt {
 		result.Notes = append(result.Notes, "FFmpeg -pix_fmt was auto-selected from the Go raw pixel format for raw-MD5 parity.")
 	}
+	annotateBenchRates(&result)
 	return result, nil
 }
 
@@ -897,7 +1067,7 @@ func resultFromSamples(name string, input string, iters int, repeats int, warmup
 	if elapsedMS > 0 && totalBytes > 0 {
 		mibPerSec = float64(totalBytes) / (1024 * 1024) / (elapsedMS / 1000)
 	}
-	return benchResult{
+	result := benchResult{
 		Name:            name,
 		Input:           input,
 		Iterations:      iters,
@@ -922,6 +1092,27 @@ func resultFromSamples(name string, input string, iters int, repeats int, warmup
 		RawMD5:          rawMD5,
 		Command:         command,
 		Samples:         samples,
+	}
+	annotateBenchRates(&result)
+	return result
+}
+
+func annotateBenchRates(result *benchResult) {
+	if result == nil || result.ElapsedMS <= 0 {
+		return
+	}
+	elapsedNS := result.ElapsedMS * 1e6
+	if result.TotalFrames > 0 {
+		result.NSPerFrame = elapsedNS / float64(result.TotalFrames)
+	}
+	if result.InputBytesPerIter > 0 && result.Iterations > 0 && result.Repeats > 0 {
+		totalInputBytes := result.InputBytesPerIter * int64(result.Iterations*result.Repeats)
+		if totalInputBytes > 0 {
+			result.NSPerInputByte = elapsedNS / float64(totalInputBytes)
+		}
+	}
+	if result.TotalBytes > 0 {
+		result.NSPerRawByte = elapsedNS / float64(result.TotalBytes)
 	}
 }
 

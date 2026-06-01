@@ -47,6 +47,27 @@ func TestResultFromSamplesAggregatesRepeats(t *testing.T) {
 		t.Fatalf("elapsed summary = total %v mean %v median %v, want 30/15/15",
 			result.ElapsedMS, result.MeanElapsedMS, result.MedianElapsedMS)
 	}
+	if result.NSPerFrame == 0 || result.NSPerRawByte == 0 {
+		t.Fatalf("derived rates = ns/frame %v ns/raw-byte %v, want non-zero", result.NSPerFrame, result.NSPerRawByte)
+	}
+}
+
+func TestAnnotateBenchRatesReportsInputAndRawByteCosts(t *testing.T) {
+	result := resultFromSamples("goh264", "in.h264", 2, 2, 1, true, 3, 10, []benchSample{
+		{ElapsedMS: 10, TotalFrames: 6, TotalBytes: 20},
+		{ElapsedMS: 10, TotalFrames: 6, TotalBytes: 20},
+	}, "", "")
+	result.InputBytesPerIter = 5
+	annotateBenchRates(&result)
+	if result.NSPerFrame != 20000000.0/12.0 {
+		t.Fatalf("ns/frame = %v, want %v", result.NSPerFrame, 20000000.0/12.0)
+	}
+	if result.NSPerRawByte != 500000 {
+		t.Fatalf("ns/raw-byte = %v, want 500000", result.NSPerRawByte)
+	}
+	if result.NSPerInputByte != 1000000 {
+		t.Fatalf("ns/input-byte = %v, want 1000000", result.NSPerInputByte)
+	}
 }
 
 func TestReadBenchCorpusManifestAndValidate(t *testing.T) {
@@ -79,6 +100,88 @@ func TestReadBenchCorpusManifestAndValidate(t *testing.T) {
 	}
 	if err := validateBenchCorpusEntry(entries[2]); err == nil || !strings.Contains(err.Error(), "decode-ok") {
 		t.Fatalf("validate unsupported err = %v, want decode-ok rejection", err)
+	}
+}
+
+func TestReadBenchFailureLedgerAutoValidatesManifestSubset(t *testing.T) {
+	dir := t.TempDir()
+	row := `{"id":"fate/h264-conformance/frext-hcamff1-hhi","path":"HCAMFF1_HHI.264","url":"https://example.invalid/HCAMFF1_HHI.264","source":"FFmpeg FATE h264-conformance/FRext","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":10,"frame_size":152064,"bitstream_md5":"0dd0819dd9a276101a25259c0774c02c","rawvideo_md5":"2973f5376378cde879649160d4a46a98","surfaces":["annexb"],"feature_tags":["high","mbaff","field"]}`
+	manifestPath := filepath.Join(dir, "manifest.jsonl")
+	failurePath := filepath.Join(dir, "failures.jsonl")
+	if err := os.WriteFile(manifestPath, []byte(row+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(failurePath, []byte(row+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := readBenchCorpusManifest(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failures, gotPath, err := readBenchFailureLedger(manifestPath, "auto", entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != failurePath {
+		t.Fatalf("failure ledger path = %s, want %s", gotPath, failurePath)
+	}
+	if _, ok := failures["fate/h264-conformance/frext-hcamff1-hhi"]; !ok || len(failures) != 1 {
+		t.Fatalf("failures = %+v, want hcamff1 only", failures)
+	}
+}
+
+func TestBenchManifestReportsKnownRedRowsWithoutBenchmarking(t *testing.T) {
+	dir := t.TempDir()
+	row := `{"id":"known-red","path":"missing.264","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":1,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","surfaces":["annexb"],"feature_tags":["unsupported"]}`
+	manifestPath := filepath.Join(dir, "manifest.jsonl")
+	failurePath := filepath.Join(dir, "failures.jsonl")
+	if err := os.WriteFile(manifestPath, []byte(row+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(failurePath, []byte(row+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report, err := benchManifest(manifestPath, 0, benchOptions{
+		iters:         1,
+		repeats:       1,
+		rawOutput:     true,
+		failureLedger: "auto",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Metadata.CorpusKnownRed != 1 || report.Metadata.CorpusBench != 0 || report.Metadata.FailureLedger != failurePath {
+		t.Fatalf("metadata = %+v, want known-red only with %s", report.Metadata, failurePath)
+	}
+	if len(report.Results) != 1 || !report.Results[0].Skipped || report.Results[0].ParityStatus != "known-red" {
+		t.Fatalf("result = %+v, want visible known-red skipped row", report.Results)
+	}
+	if report.Results[0].Error == "" || !strings.Contains(report.Results[0].Error, "missing.264") {
+		t.Fatalf("known-red error = %q, want missing input detail", report.Results[0].Error)
+	}
+}
+
+func TestBenchManifestReportsUnsupportedRowsAsSkipped(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "manifest.jsonl")
+	row := `{"id":"future","path":"future.264","format":"annexb","expect":"unsupported","pix_fmt":"yuv420p","frame_count":1,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","surfaces":["annexb"],"guard_tags":["future"]}`
+	if err := os.WriteFile(manifestPath, []byte(row+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report, err := benchManifest(manifestPath, 0, benchOptions{
+		iters:         1,
+		repeats:       1,
+		rawOutput:     true,
+		failureLedger: "off",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Metadata.CorpusSkipped != 1 || report.Metadata.CorpusBench != 0 {
+		t.Fatalf("metadata = %+v, want one skipped row", report.Metadata)
+	}
+	if len(report.Results) != 1 || !report.Results[0].Skipped || report.Results[0].ParityStatus != "unsupported" {
+		t.Fatalf("result = %+v, want unsupported skipped row", report.Results)
 	}
 }
 
