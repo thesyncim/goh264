@@ -52,6 +52,11 @@ compares 8-bit transform/dequant fixtures plus 9/10/12/14-bit 4x4/8x8 inverse
 transform add, DC-only add, luma DC dequant IDCT, and 4:2:0/4:2:2 chroma DC
 dequant IDCT fixtures.
 
+The H.264 chroma MC and qpel oracles compile the pinned
+`libavcodec/h264chroma_template.c` and `libavcodec/h264qpel_template.c`,
+comparing 8-bit fixtures plus 9/10/12/14-bit high-bit-depth put/avg variants
+across supported widths and fractional-pel positions.
+
 The `ffprobe` header oracle now compares public `StreamInfo` SPS VUI sample
 aspect ratio and timing rate for the black16 stream in addition to profile,
 level, dimensions, and pixel format.

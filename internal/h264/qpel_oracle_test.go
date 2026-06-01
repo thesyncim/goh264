@@ -21,41 +21,62 @@ const qpelOracleC = `
 #define BIT_DEPTH 8
 #include "h264qpel_template.c"
 #undef BIT_DEPTH
+#define BIT_DEPTH 9
+#include "h264qpel_template.c"
+#undef BIT_DEPTH
+#define BIT_DEPTH 10
+#include "h264qpel_template.c"
+#undef BIT_DEPTH
+#undef pixeltmp
+#define pixeltmp int32_t
+#define BIT_DEPTH 12
+#include "h264qpel_template.c"
+#undef BIT_DEPTH
+#define BIT_DEPTH 14
+#include "h264qpel_template.c"
+#undef BIT_DEPTH
 #undef pixeltmp
 
 typedef void (*qpel_fn)(uint8_t *dst, const uint8_t *src, ptrdiff_t stride);
 
-#define QPEL_FN(prefix, size, suffix) prefix ## size ## _mc ## suffix ## _8_c
-#define QPEL_LIST(prefix, size) { \
-    QPEL_FN(prefix, size, 00), QPEL_FN(prefix, size, 10), \
-    QPEL_FN(prefix, size, 20), QPEL_FN(prefix, size, 30), \
-    QPEL_FN(prefix, size, 01), QPEL_FN(prefix, size, 11), \
-    QPEL_FN(prefix, size, 21), QPEL_FN(prefix, size, 31), \
-    QPEL_FN(prefix, size, 02), QPEL_FN(prefix, size, 12), \
-    QPEL_FN(prefix, size, 22), QPEL_FN(prefix, size, 32), \
-    QPEL_FN(prefix, size, 03), QPEL_FN(prefix, size, 13), \
-    QPEL_FN(prefix, size, 23), QPEL_FN(prefix, size, 33) \
+#define QPEL_FN(prefix, size, suffix, depth) prefix ## size ## _mc ## suffix ## _ ## depth ## _c
+#define QPEL_LIST(prefix, size, depth) { \
+    QPEL_FN(prefix, size, 00, depth), QPEL_FN(prefix, size, 10, depth), \
+    QPEL_FN(prefix, size, 20, depth), QPEL_FN(prefix, size, 30, depth), \
+    QPEL_FN(prefix, size, 01, depth), QPEL_FN(prefix, size, 11, depth), \
+    QPEL_FN(prefix, size, 21, depth), QPEL_FN(prefix, size, 31, depth), \
+    QPEL_FN(prefix, size, 02, depth), QPEL_FN(prefix, size, 12, depth), \
+    QPEL_FN(prefix, size, 22, depth), QPEL_FN(prefix, size, 32, depth), \
+    QPEL_FN(prefix, size, 03, depth), QPEL_FN(prefix, size, 13, depth), \
+    QPEL_FN(prefix, size, 23, depth), QPEL_FN(prefix, size, 33, depth) \
 }
 
-static qpel_fn put2[16] = QPEL_LIST(put_h264_qpel, 2);
-static qpel_fn put4[16] = QPEL_LIST(put_h264_qpel, 4);
-static qpel_fn put8[16] = QPEL_LIST(put_h264_qpel, 8);
-static qpel_fn put16[16] = QPEL_LIST(put_h264_qpel, 16);
-static qpel_fn avg4[16] = QPEL_LIST(avg_h264_qpel, 4);
-static qpel_fn avg8[16] = QPEL_LIST(avg_h264_qpel, 8);
-static qpel_fn avg16[16] = QPEL_LIST(avg_h264_qpel, 16);
+#define DECL_QPEL_TABLES(depth) \
+static qpel_fn put2_ ## depth[16] = QPEL_LIST(put_h264_qpel, 2, depth); \
+static qpel_fn put4_ ## depth[16] = QPEL_LIST(put_h264_qpel, 4, depth); \
+static qpel_fn put8_ ## depth[16] = QPEL_LIST(put_h264_qpel, 8, depth); \
+static qpel_fn put16_ ## depth[16] = QPEL_LIST(put_h264_qpel, 16, depth); \
+static qpel_fn avg4_ ## depth[16] = QPEL_LIST(avg_h264_qpel, 4, depth); \
+static qpel_fn avg8_ ## depth[16] = QPEL_LIST(avg_h264_qpel, 8, depth); \
+static qpel_fn avg16_ ## depth[16] = QPEL_LIST(avg_h264_qpel, 16, depth)
+
+DECL_QPEL_TABLES(8);
+DECL_QPEL_TABLES(9);
+DECL_QPEL_TABLES(10);
+DECL_QPEL_TABLES(12);
+DECL_QPEL_TABLES(14);
 
 static qpel_fn qpel_put_fn(int size, int idx)
 {
     switch (size) {
     case 2:
-        return put2[idx];
+        return put2_8[idx];
     case 4:
-        return put4[idx];
+        return put4_8[idx];
     case 8:
-        return put8[idx];
+        return put8_8[idx];
     case 16:
-        return put16[idx];
+        return put16_8[idx];
     }
     return 0;
 }
@@ -64,12 +85,69 @@ static qpel_fn qpel_avg_fn(int size, int idx)
 {
     switch (size) {
     case 4:
-        return avg4[idx];
+        return avg4_8[idx];
     case 8:
-        return avg8[idx];
+        return avg8_8[idx];
     case 16:
-        return avg16[idx];
+        return avg16_8[idx];
     }
+    return 0;
+}
+
+static qpel_fn qpel_put_fn_high(int size, int idx, int bit_depth)
+{
+#define RETURN_PUT(depth) \
+    do { \
+        switch (size) { \
+        case 2: return put2_ ## depth[idx]; \
+        case 4: return put4_ ## depth[idx]; \
+        case 8: return put8_ ## depth[idx]; \
+        case 16: return put16_ ## depth[idx]; \
+        } \
+    } while (0)
+    switch (bit_depth) {
+    case 9:
+        RETURN_PUT(9);
+        break;
+    case 10:
+        RETURN_PUT(10);
+        break;
+    case 12:
+        RETURN_PUT(12);
+        break;
+    case 14:
+        RETURN_PUT(14);
+        break;
+    }
+#undef RETURN_PUT
+    return 0;
+}
+
+static qpel_fn qpel_avg_fn_high(int size, int idx, int bit_depth)
+{
+#define RETURN_AVG(depth) \
+    do { \
+        switch (size) { \
+        case 4: return avg4_ ## depth[idx]; \
+        case 8: return avg8_ ## depth[idx]; \
+        case 16: return avg16_ ## depth[idx]; \
+        } \
+    } while (0)
+    switch (bit_depth) {
+    case 9:
+        RETURN_AVG(9);
+        break;
+    case 10:
+        RETURN_AVG(10);
+        break;
+    case 12:
+        RETURN_AVG(12);
+        break;
+    case 14:
+        RETURN_AVG(14);
+        break;
+    }
+#undef RETURN_AVG
     return 0;
 }
 
@@ -98,6 +176,33 @@ static void print_qpel_case(const char *label, qpel_fn fn, int size)
     printf("\n");
 }
 
+static void init_qpel_fixture_high(uint16_t *dst, uint16_t *src, int n, int bit_depth)
+{
+    int max = (1 << bit_depth) - 1;
+    for (int i = 0; i < n; i++) {
+        dst[i] = (uint16_t)((20 + i * 37) & max);
+        src[i] = (uint16_t)((10 + i * 29) & max);
+    }
+}
+
+static void print_qpel_case_high(const char *label, qpel_fn fn, int size, int bit_depth)
+{
+    const int stride = 48;
+    const int offset = 6 * stride + 6;
+    uint16_t dst[48 * 48];
+    uint16_t src[48 * 48];
+
+    init_qpel_fixture_high(dst, src, 48 * 48, bit_depth);
+    fn((uint8_t *)(dst + offset), (const uint8_t *)(src + offset),
+       stride * (ptrdiff_t)sizeof(uint16_t));
+
+    printf("%s", label);
+    for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+            printf(" %u", dst[offset + y * stride + x]);
+    printf("\n");
+}
+
 int main(void)
 {
     static const char *suffix[16] = {
@@ -106,6 +211,7 @@ int main(void)
     };
     const int put_sizes[4] = { 2, 4, 8, 16 };
     const int avg_sizes[3] = { 4, 8, 16 };
+    const int high_depths[4] = { 9, 10, 12, 14 };
     char label[64];
 
     for (int s = 0; s < 4; s++) {
@@ -118,6 +224,21 @@ int main(void)
         for (int idx = 0; idx < 16; idx++) {
             snprintf(label, sizeof(label), "avgqpel%d_%s", avg_sizes[s], suffix[idx]);
             print_qpel_case(label, qpel_avg_fn(avg_sizes[s], idx), avg_sizes[s]);
+        }
+    }
+    for (int d = 0; d < 4; d++) {
+        int depth = high_depths[d];
+        for (int s = 0; s < 4; s++) {
+            for (int idx = 0; idx < 16; idx++) {
+                snprintf(label, sizeof(label), "putqpel%d_%d_%s", depth, put_sizes[s], suffix[idx]);
+                print_qpel_case_high(label, qpel_put_fn_high(put_sizes[s], idx, depth), put_sizes[s], depth);
+            }
+        }
+        for (int s = 0; s < 3; s++) {
+            for (int idx = 0; idx < 16; idx++) {
+                snprintf(label, sizeof(label), "avgqpel%d_%d_%s", depth, avg_sizes[s], suffix[idx]);
+                print_qpel_case_high(label, qpel_avg_fn_high(avg_sizes[s], idx, depth), avg_sizes[s], depth);
+            }
         }
     }
     return 0;
@@ -168,6 +289,25 @@ static inline uint32_t AV_RN32(const void *p)
            ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
 }
 
+static inline uint64_t AV_RN64(const void *p)
+{
+    const uint8_t *b = (const uint8_t *)p;
+    return (uint64_t)b[0] | ((uint64_t)b[1] << 8) |
+           ((uint64_t)b[2] << 16) | ((uint64_t)b[3] << 24) |
+           ((uint64_t)b[4] << 32) | ((uint64_t)b[5] << 40) |
+           ((uint64_t)b[6] << 48) | ((uint64_t)b[7] << 56);
+}
+
+static inline uint32_t AV_RN32A(const void *p)
+{
+    return AV_RN32(p);
+}
+
+static inline uint64_t AV_RN64A(const void *p)
+{
+    return AV_RN64(p);
+}
+
 static inline void AV_WN16(void *p, uint16_t v)
 {
     uint8_t *b = (uint8_t *)p;
@@ -182,6 +322,29 @@ static inline void AV_WN32(void *p, uint32_t v)
     b[1] = v >> 8;
     b[2] = v >> 16;
     b[3] = v >> 24;
+}
+
+static inline void AV_WN64(void *p, uint64_t v)
+{
+    uint8_t *b = (uint8_t *)p;
+    b[0] = v;
+    b[1] = v >> 8;
+    b[2] = v >> 16;
+    b[3] = v >> 24;
+    b[4] = v >> 32;
+    b[5] = v >> 40;
+    b[6] = v >> 48;
+    b[7] = v >> 56;
+}
+
+static inline void AV_WN32A(void *p, uint32_t v)
+{
+    AV_WN32(p, v);
+}
+
+static inline void AV_WN64A(void *p, uint64_t v)
+{
+    AV_WN64(p, v);
 }
 #endif
 `
@@ -268,6 +431,18 @@ func h264QpelOracleWant(t *testing.T) string {
 			printQpelOracleWant(t, &b, fmt.Sprintf("avgqpel%d_%s", size, suffix), size, idx, true)
 		}
 	}
+	for _, bitDepth := range []int{9, 10, 12, 14} {
+		for _, size := range []int{2, 4, 8, 16} {
+			for idx, suffix := range h264QpelOracleSuffixes {
+				printQpelOracleWantHigh(t, &b, fmt.Sprintf("putqpel%d_%d_%s", bitDepth, size, suffix), size, idx, false, bitDepth)
+			}
+		}
+		for _, size := range []int{4, 8, 16} {
+			for idx, suffix := range h264QpelOracleSuffixes {
+				printQpelOracleWantHigh(t, &b, fmt.Sprintf("avgqpel%d_%d_%s", bitDepth, size, suffix), size, idx, true, bitDepth)
+			}
+		}
+	}
 	return b.String()
 }
 
@@ -302,12 +477,47 @@ func printQpelOracleWant(t *testing.T, b *strings.Builder, label string, size in
 	fmt.Fprint(b, "\n")
 }
 
+func printQpelOracleWantHigh(t *testing.T, b *strings.Builder, label string, size int, idx int, avg bool, bitDepth int) {
+	t.Helper()
+	const stride = 48
+	const offset = 6*stride + 6
+	dst, src := makeQpelOracleFixtureHigh(stride, 48, bitDepth)
+	mx, my := idx%4, idx/4
+	var err error
+	if avg {
+		err = h264AvgH264QpelMCHigh(dst, offset, src, offset, stride, size, mx, my, bitDepth)
+	} else {
+		err = h264PutH264QpelMCHigh(dst, offset, src, offset, stride, size, mx, my, bitDepth)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprint(b, label)
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			fmt.Fprintf(b, " %d", dst[offset+y*stride+x])
+		}
+	}
+	fmt.Fprint(b, "\n")
+}
+
 func makeQpelOracleFixture(stride int, rows int) ([]uint8, []uint8) {
 	dst := make([]uint8, stride*rows)
 	src := make([]uint8, stride*rows)
 	for i := range dst {
 		dst[i] = uint8((20 + i*11) & 255)
 		src[i] = uint8((10 + i*9) & 255)
+	}
+	return dst, src
+}
+
+func makeQpelOracleFixtureHigh(stride int, rows int, bitDepth int) ([]uint16, []uint16) {
+	dst := make([]uint16, stride*rows)
+	src := make([]uint16, stride*rows)
+	max := (1 << uint(bitDepth)) - 1
+	for i := range dst {
+		dst[i] = uint16((20 + i*37) & max)
+		src[i] = uint16((10 + i*29) & max)
 	}
 	return dst, src
 }

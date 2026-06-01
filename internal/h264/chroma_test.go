@@ -53,6 +53,39 @@ func TestH264ChromaMCAvgBilinear(t *testing.T) {
 	}
 }
 
+func TestH264ChromaMCHighBilinearAndAvg(t *testing.T) {
+	const stride = 12
+	dst := make([]uint16, stride*6)
+	src := make([]uint16, stride*7)
+	for i := range dst {
+		dst[i] = 1
+		src[i] = 1023
+	}
+
+	if err := h264PutH264ChromaMC4High(dst, src, stride, 3, 3, 5, 10); err != nil {
+		t.Fatal(err)
+	}
+	if dst[0] != 1023 || dst[3] != 1023 || dst[2*stride+3] != 1023 {
+		t.Fatalf("high put samples = %d/%d/%d, want 1023", dst[0], dst[3], dst[2*stride+3])
+	}
+
+	for i := range dst {
+		dst[i] = 1
+	}
+	if err := h264AvgH264ChromaMC2High(dst, src, stride, 3, 3, 5, 10); err != nil {
+		t.Fatal(err)
+	}
+	if dst[0] != 512 || dst[1] != 512 || dst[2*stride+1] != 512 {
+		t.Fatalf("high avg samples = %d/%d/%d, want 512", dst[0], dst[1], dst[2*stride+1])
+	}
+	if dst[2] != 1 {
+		t.Fatalf("high padding sample changed to %d, want 1", dst[2])
+	}
+	if err := h264PutH264ChromaMC4High(dst, src, stride, 3, 3, 5, 11); err != ErrUnsupported {
+		t.Fatalf("unsupported high chroma bit depth err = %v, want ErrUnsupported", err)
+	}
+}
+
 func TestH264ChromaMCValidatesGeometry(t *testing.T) {
 	if err := h264PutH264ChromaMC8(make([]uint8, 8), make([]uint8, 8), 8, 1, 8, 0); err != ErrInvalidData {
 		t.Fatalf("invalid x error = %v, want ErrInvalidData", err)
@@ -65,6 +98,9 @@ func TestH264ChromaMCValidatesGeometry(t *testing.T) {
 	}
 	if err := h264ChromaMC(make([]uint8, 8), make([]uint8, 16), 8, 1, 0, 0, 3, false); err != ErrInvalidData {
 		t.Fatalf("invalid width error = %v, want ErrInvalidData", err)
+	}
+	if err := h264PutH264ChromaMC8High(make([]uint16, 8), make([]uint16, 8), 8, 1, 1, 1, 10); err != ErrInvalidData {
+		t.Fatalf("short high bilinear source error = %v, want ErrInvalidData", err)
 	}
 }
 
