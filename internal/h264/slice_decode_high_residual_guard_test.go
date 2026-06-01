@@ -403,12 +403,34 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b deblock cabac partitioned residual remains guarded", sh: bCABACDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1, want: ErrUnsupported},
 		{name: "b deblock implicit weighted partitioned residual remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1, want: ErrUnsupported},
 		{name: "b deblock implicit weighted direct sub remains guarded", sh: bImplicitDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, want: ErrUnsupported},
-		{name: "b deblock implicit weighted remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, want: ErrUnsupported},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(tt.sh, tt.mbType, tt.sub, tt.cbp, tt.cbpTable); err != tt.want {
 				t.Fatalf("validate err = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsImplicitWeightedB16x16Deblock(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		pps      *PPS
+		cbpTable int
+	}{
+		{name: "cavlc", pps: &PPS{WeightedBipredIDC: 2}, cbpTable: 0xf00f},
+		{name: "cabac", pps: &PPS{CABAC: 1, WeightedBipredIDC: 2}, cbpTable: 0xf},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sh := &SliceHeader{
+				SliceTypeNoS:     PictureTypeB,
+				DeblockingFilter: 1,
+				PPS:              tt.pps,
+			}
+			mbType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, nil, 0xf, tt.cbpTable); err != nil {
+				t.Fatalf("validate implicit weighted B16x16 deblock err = %v, want nil", err)
 			}
 		})
 	}

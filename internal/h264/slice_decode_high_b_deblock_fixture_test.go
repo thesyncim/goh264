@@ -99,6 +99,91 @@ func TestHigh10BDeblockFixtureMacroblockSyntax(t *testing.T) {
 	}
 }
 
+func TestHigh10ImplicitWeightedB16x16DeblockFixtureMacroblockSyntax(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		file     string
+		cabac    int32
+		cbpTable int
+	}{
+		{name: "cavlc", file: "high10_implicit_weight_b_deblock_cavlc.h264", cbpTable: 0xf00f},
+		{name: "cabac", file: "high10_implicit_weight_b_deblock_cabac.h264", cabac: 1, cbpTable: 0xf},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "h264", tt.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			nals, err := SplitAnnexB(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var spsList [maxSPSCount]*SPS
+			var ppsList [maxPPSCount]*PPS
+			var gotB int
+			for _, nal := range nals {
+				switch nal.Type {
+				case NALSPS:
+					sps, err := DecodeSPS(nal.RBSP)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if sps.Width != 32 || sps.Height != 16 || sps.ProfileIDC != 110 ||
+						sps.BitDepthLuma != 10 || sps.BitDepthChroma != 10 {
+						t.Fatalf("SPS profile/size/depth = %d %dx%d %d/%d, want High10 32x16 10-bit",
+							sps.ProfileIDC, sps.Width, sps.Height, sps.BitDepthLuma, sps.BitDepthChroma)
+					}
+					spsList[sps.SPSID] = sps
+				case NALPPS:
+					pps, err := DecodePPS(nal.RBSP, &spsList)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if pps.CABAC != tt.cabac || pps.WeightedBipredIDC != 2 ||
+						pps.WeightedPred != 0 || pps.RefCount[0] != 1 || pps.RefCount[1] != 1 ||
+						pps.Transform8x8Mode != 0 || pps.DeblockingFilterParametersPresent != 1 {
+						t.Fatalf("PPS cabac/weights/refs/8x8/deblock = %d/%d/%d/%d/%d/%d/%d, want cabac=%d implicit-B refs=1/1 deblock params",
+							pps.CABAC, pps.WeightedBipredIDC, pps.WeightedPred, pps.RefCount[0], pps.RefCount[1],
+							pps.Transform8x8Mode, pps.DeblockingFilterParametersPresent, tt.cabac)
+					}
+					ppsList[pps.PPSID] = pps
+				case NALSlice:
+					sh, payload, err := parseSliceHeaderWithPayload(nal, &ppsList)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if sh.SliceTypeNoS != PictureTypeB {
+						continue
+					}
+					gotB++
+					if sh.DeblockingFilter != 1 || sh.PPS == nil || sh.PPS.CABAC != tt.cabac ||
+						!isHighBImplicitWeighted(sh) || sh.DirectSpatialMVPred != 0 ||
+						sh.ListCount != 2 || sh.RefCount[0] != 1 || sh.RefCount[1] != 1 ||
+						sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
+						t.Fatalf("B slice deblock/cabac/implicit/direct/lists/refs/weights = %d/%v/%t/%d/%d/%v/%d/%d, want deblock implicit temporal refs=1/1 no serialized weights",
+							sh.DeblockingFilter, sh.PPS, isHighBImplicitWeighted(sh), sh.DirectSpatialMVPred, sh.ListCount,
+							sh.RefCount, sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma)
+					}
+					got := decodeHigh10BDeblockFixtureMacroblocks(t, sh, &payload, tt.cabac != 0, 2, false)
+					for i, mb := range got {
+						wantType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+						if mb.MBType != wantType || mb.MBType&(MBTypeDirect2|MBTypeSkip|MBType16x8|MBType8x16|MBType8x8) != 0 {
+							t.Fatalf("B macroblock[%d] type = %#x, want implicit weighted B16x16 bidirectional", i, mb.MBType)
+						}
+						if mb.CBP != 0xf || mb.CBPTable != tt.cbpTable {
+							t.Fatalf("B macroblock[%d] CBP/CBPTable = %#x/%#x, want 0xf/%#x", i, mb.CBP, mb.CBPTable, tt.cbpTable)
+						}
+					}
+				}
+			}
+			if gotB != 2 {
+				t.Fatalf("B slices = %d, want 2", gotB)
+			}
+		})
+	}
+}
+
 func TestHigh10PartitionedBDeblockFixtureMacroblockSyntax(t *testing.T) {
 	for _, tt := range []struct {
 		name              string
