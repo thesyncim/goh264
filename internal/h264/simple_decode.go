@@ -32,6 +32,7 @@ type SimpleDecoder struct {
 	sps [maxSPSCount]*SPS
 	pps [maxPPSCount]*PPS
 	dpb simpleFrameDPB
+	sei H264SEIContext
 }
 
 func (d *SimpleDecoder) StoreAVCDecoderConfiguration(cfg AVCDecoderConfigurationRecord) error {
@@ -41,6 +42,7 @@ func (d *SimpleDecoder) StoreAVCDecoderConfiguration(cfg AVCDecoderConfiguration
 	d.sps = cfg.SPS
 	d.pps = cfg.PPS
 	d.dpb.reset()
+	d.sei.Reset()
 	return nil
 }
 
@@ -48,7 +50,8 @@ func (d *SimpleDecoder) DecodeNALUnits(nals []NALUnit) ([]*DecodedFrame, error) 
 	if d == nil {
 		return nil, ErrInvalidData
 	}
-	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, false)
+	d.sei.Reset()
+	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, false)
 }
 
 func (d *SimpleDecoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*DecodedFrame, error) {
@@ -77,7 +80,8 @@ func (d *SimpleDecoder) DecodeAVCFramesWithConfig(data []byte, cfg AVCDecoderCon
 	if err != nil {
 		return nil, err
 	}
-	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, true)
+	d.sei.Reset()
+	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, true)
 }
 
 func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
@@ -126,12 +130,14 @@ func DecodeSimpleNALUnits(nals []NALUnit) ([]*DecodedFrame, error) {
 
 func DecodeSimpleNALUnitsWithParamSets(nals []NALUnit, spsList [maxSPSCount]*SPS, ppsList [maxPPSCount]*PPS) ([]*DecodedFrame, error) {
 	var dpb simpleFrameDPB
+	var sei H264SEIContext
 	dpb.reset()
-	return decodeSimpleNALUnitsWithState(nals, &spsList, &ppsList, &dpb, true)
+	sei.Reset()
+	return decodeSimpleNALUnitsWithState(nals, &spsList, &ppsList, &dpb, &sei, true)
 }
 
-func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS, dpb *simpleFrameDPB, flushOutput bool) ([]*DecodedFrame, error) {
-	if spsList == nil || ppsList == nil || dpb == nil {
+func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS, dpb *simpleFrameDPB, sei *H264SEIContext, flushOutput bool) ([]*DecodedFrame, error) {
+	if spsList == nil || ppsList == nil || dpb == nil || sei == nil {
 		return nil, ErrInvalidData
 	}
 	var frame *DecodedFrame
@@ -158,6 +164,12 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				return nil, err
 			}
 			ppsList[pps.PPSID] = pps
+		case NALSEI:
+			if haveSlice {
+				continue
+			}
+			// FFmpeg keeps SEI parse failures non-fatal unless AV_EF_EXPLODE is set.
+			_ = sei.Decode(nal.RBSP, spsList)
 		case NALSlice, NALIDRSlice:
 			sh, payload, err := parseSliceHeaderWithPayload(nal, ppsList)
 			if err != nil {

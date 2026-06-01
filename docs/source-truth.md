@@ -124,6 +124,16 @@ state, pic-struct signaling, bitstream restriction, invalid HRD CPB counts,
 invalid `num_reorder_frames`, and FFmpeg's derived reorder fallback when no
 bitstream restriction is present.
 
+SEI unit coverage includes FFmpeg-shaped SEI payload type/size accumulation,
+extended type/size headers, strict truncated-payload rejection, non-fatal
+buffering-period missing-SPS master errors, picture-timing HRD/pic-struct
+timecode processing, buffering-period CPB delay extraction, recovery point,
+green metadata, x264 unregistered user data, display orientation, frame
+packing, alternative transfer, mastering display, and content light messages.
+The simple decoder now parses leading SEI NALs into decoder state while keeping
+SEI parser failures non-fatal, matching FFmpeg's default behavior without
+`AV_EF_EXPLODE`.
+
 ## Decoder Boundary
 
 Included:
