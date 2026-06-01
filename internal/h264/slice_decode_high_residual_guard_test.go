@@ -25,10 +25,23 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsP16x16Residual(t *t
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsBDirectSkip(t *testing.T) {
+	sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+	for _, mbType := range []uint32{
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip,
+		MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip,
+	} {
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != nil {
+			t.Fatalf("validate high B direct skip %#x err = %v, want nil", mbType, err)
+		}
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoundaries(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
 	bSlice := &SliceHeader{SliceTypeNoS: PictureTypeB}
 	pSkip := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	bSkip := MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
 
 	tests := []struct {
 		name     string
@@ -57,6 +70,10 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b direct missing l1", sh: bSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeDirect2, want: ErrUnsupported},
 		{name: "b direct partial temporal flags", sh: bSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeDirect2, want: ErrUnsupported},
 		{name: "b direct partition", sh: bSlice, mbType: MBType16x16 | MBType16x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2, want: ErrUnsupported},
+		{name: "b direct skip cbp", sh: bSlice, mbType: bSkip, cbp: 1, want: ErrUnsupported},
+		{name: "b direct skip cbp table", sh: bSlice, mbType: bSkip, cbpTable: 1, want: ErrUnsupported},
+		{name: "b direct skip unresolved", sh: bSlice, mbType: MBTypeDirect2 | MBTypeL0L1 | MBTypeSkip, want: ErrUnsupported},
+		{name: "b direct skip partition", sh: bSlice, mbType: MBType8x8 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip, want: ErrUnsupported},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

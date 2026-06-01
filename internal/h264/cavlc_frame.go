@@ -88,11 +88,8 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb
 			state.MBSkipRun = int32(run)
 		}
 		if state.MBSkipRun > 0 {
-			if rejectUnsupportedHighB && sh.SliceTypeNoS == PictureTypeB {
-				return result, ErrUnsupported
-			}
 			state.MBSkipRun--
-			return m.writeBackCAVLCFrameSkipMacroblockWithDirectWork(sh, state.QScale, mbXY, sliceNum, direct, work)
+			return m.writeBackCAVLCFrameSkipMacroblockWithDirectWorkGuard(sh, state.QScale, mbXY, sliceNum, direct, work, rejectUnsupportedHighB)
 		}
 		state.MBSkipRun = cavlcMBSkipRunUnset
 	}
@@ -208,6 +205,10 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithWork(sh *SliceHe
 }
 
 func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithDirectWork(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork) (cavlcFrameMacroblockResult, error) {
+	return m.writeBackCAVLCFrameSkipMacroblockWithDirectWorkGuard(sh, qscale, mbXY, sliceNum, direct, work, false)
+}
+
+func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithDirectWorkGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cavlcFrameMacroblockResult, error) {
 	var result cavlcFrameMacroblockResult
 	if sh == nil || work == nil {
 		return result, ErrInvalidData
@@ -216,7 +217,7 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithDirectWork(sh *S
 		return result, ErrInvalidData
 	}
 	if sh.SliceTypeNoS == PictureTypeB {
-		return m.writeBackCAVLCFrameBSkipMacroblockWithDirectWork(sh, qscale, mbXY, sliceNum, direct, work)
+		return m.writeBackCAVLCFrameBSkipMacroblockWithDirectWorkGuard(sh, qscale, mbXY, sliceNum, direct, work, rejectUnsupportedHighB)
 	}
 	if sh.SliceTypeNoS != PictureTypeP {
 		return result, ErrUnsupported
@@ -243,6 +244,10 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithDirectWork(sh *S
 }
 
 func (m *macroblockTables) writeBackCAVLCFrameBSkipMacroblockWithDirectWork(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork) (cavlcFrameMacroblockResult, error) {
+	return m.writeBackCAVLCFrameBSkipMacroblockWithDirectWorkGuard(sh, qscale, mbXY, sliceNum, direct, work, false)
+}
+
+func (m *macroblockTables) writeBackCAVLCFrameBSkipMacroblockWithDirectWorkGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cavlcFrameMacroblockResult, error) {
 	var result cavlcFrameMacroblockResult
 	mbType := MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
 	neighbors, err := m.fillDecodeNeighborsFrame(mbXY, sliceNum, mbType)
@@ -258,6 +263,11 @@ func (m *macroblockTables) writeBackCAVLCFrameBSkipMacroblockWithDirectWork(sh *
 	var subMBType [4]uint32
 	if err := m.predDirectMotionFrame(&work.Motion, mbXY, &mbType, &subMBType, direct); err != nil {
 		return result, err
+	}
+	if rejectUnsupportedHighB {
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != nil {
+			return result, err
+		}
 	}
 	if err := m.writeBackBskipMacroblockWithMotion(mbXY, qscale, mbType, false, &subMBType, sliceNum, &work.Motion); err != nil {
 		return result, err

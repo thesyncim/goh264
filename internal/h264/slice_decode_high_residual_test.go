@@ -209,11 +209,165 @@ func TestDecodeCABACFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.
 	}
 }
 
+func TestDecodeFrameSliceHighReconstructsBSkipFromDirectRefs(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		directSpatial bool
+		cabac         bool
+	}{
+		{name: "cavlc-temporal"},
+		{name: "cavlc-spatial", directSpatial: true},
+		{name: "cabac-temporal", cabac: true},
+		{name: "cabac-spatial", directSpatial: true, cabac: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+			sh.QScale = 22
+			sh.RefCount = [2]uint32{1, 1}
+			if tt.cabac {
+				sh.PPS.CABAC = 1
+			}
+			refs, direct := highBSkipDirectRefsHigh(t, tt.directSpatial)
+			in := h264FrameSliceDecodeInputHigh{
+				SliceNum:      61,
+				Refs:          refs,
+				Direct:        direct,
+				MotionScratch: makeH264MotionCompScratchHigh(dst),
+			}
+
+			var got h264FrameSliceDecodeResult
+			var err error
+			if tt.cabac {
+				src := &scriptedCABACSource{bits: []int{1}, terms: []int{1}}
+				got, err = m.decodeCABACFrameSliceHigh(src, dst, sh, in)
+				if err == nil {
+					wantIndexes(t, src, []int{24})
+				}
+			} else {
+				gb := newBitReader(cavlcBitString("010"))
+				got, err = m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, in)
+				if err == nil && gb.bitPos != 3 {
+					t.Fatalf("CAVLC B-skip consumed %d bits, want 3", gb.bitPos)
+				}
+			}
+			if err != nil {
+				t.Fatalf("decode high B-skip failed: %v", err)
+			}
+			if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+				t.Fatalf("slice result = %+v, want one skipped B MB frame end", got)
+			}
+			if !isHighB16x16DirectSkipMacroblock(m.MacroblockTyp[0]) || m.CBPTable[0] != 0 || m.QScaleTable[0] != 22 || m.SliceTable[0] != 61 {
+				t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+			}
+			assertH264RowsHigh(t, tt.name+" high bskip y", dst.Y, 0, dst.LumaStride, 16, 16, refs[0][0].Y, refs[0][0].LumaStride)
+			assertH264RowsHigh(t, tt.name+" high bskip cb", dst.Cb, 0, dst.ChromaStride, 8, 8, refs[0][0].Cb, refs[0][0].ChromaStride)
+			assertH264RowsHigh(t, tt.name+" high bskip cr", dst.Cr, 0, dst.ChromaStride, 8, 8, refs[0][0].Cr, refs[0][0].ChromaStride)
+		})
+	}
+}
+
+func TestDecodeFrameSliceHighRejectsPartitionedBSkipBeforeWriteback(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		cabac bool
+	}{
+		{name: "cavlc"},
+		{name: "cabac", cabac: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+			sh.RefCount = [2]uint32{1, 1}
+			if tt.cabac {
+				sh.PPS.CABAC = 1
+			}
+			refs, direct := highBSkipDirectRefsHigh(t, false)
+			direct.RefEntries[1][0].frame.tables.MacroblockTyp[0] = MBType8x8 | MBTypeP0L0
+			direct.Direct8x8Inference = false
+			in := h264FrameSliceDecodeInputHigh{
+				SliceNum:      63,
+				Refs:          refs,
+				Direct:        direct,
+				MotionScratch: makeH264MotionCompScratchHigh(dst),
+			}
+
+			var err error
+			if tt.cabac {
+				_, err = m.decodeCABACFrameSliceHigh(&scriptedCABACSource{bits: []int{1}}, dst, sh, in)
+			} else {
+				gb := newBitReader(cavlcBitString("010"))
+				_, err = m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, in)
+			}
+			if err != ErrUnsupported {
+				t.Fatalf("partitioned B-skip decode err = %v, want ErrUnsupported", err)
+			}
+			assertHighBRejectUntouched(t, m)
+		})
+	}
+}
+
 func assertHighBRejectUntouched(t *testing.T, m *macroblockTables) {
 	t.Helper()
 	if m.MacroblockTyp[0] != 0 || m.CBPTable[0] != 0 || m.QScaleTable[0] != 0 || m.SliceTable[0] != ^uint16(0) {
 		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%#x, want untouched",
 			m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+}
+
+func highBSkipDirectRefsHigh(t *testing.T, directSpatial bool) ([2][]*h264PicturePlanesHigh, h264DirectMotionContext) {
+	t.Helper()
+
+	past := makeH264SliceDecodePictureHigh(1, 1, 1)
+	future := makeH264SliceDecodePictureHigh(1, 1, 1)
+	fillH264HighResidualPlane(past.Y, 277)
+	fillH264HighResidualPlane(past.Cb, 311)
+	fillH264HighResidualPlane(past.Cr, 353)
+	fillH264HighResidualPlane(future.Y, 277)
+	fillH264HighResidualPlane(future.Cb, 311)
+	fillH264HighResidualPlane(future.Cr, 353)
+
+	colTables, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables.MacroblockTyp[0] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	for i := 0; i < 4; i++ {
+		colTables.RefIndex[0][i] = 0
+	}
+	pastFrame := decodedFrameFromHighPlanes(past, 0, nil)
+	futureFrame := decodedFrameFromHighPlanes(future, 4, colTables)
+	futureFrame.refEntries = [2][]simpleRefEntry{{{frame: pastFrame}}}
+
+	return [2][]*h264PicturePlanesHigh{{past}, {future}}, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: pastFrame}},
+			{{frame: futureFrame}},
+		},
+		CurPOC:              2,
+		DirectSpatialMVPred: directSpatial,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	}
+}
+
+func decodedFrameFromHighPlanes(p *h264PicturePlanesHigh, poc int32, tables *macroblockTables) *DecodedFrame {
+	if p == nil {
+		return &DecodedFrame{}
+	}
+	return &DecodedFrame{
+		Y16:             p.Y,
+		Cb16:            p.Cb,
+		Cr16:            p.Cr,
+		LumaStride:      p.LumaStride,
+		ChromaStride:    p.ChromaStride,
+		Width:           p.MBWidth * 16,
+		Height:          p.MBHeight * 16,
+		MBWidth:         p.MBWidth,
+		MBHeight:        p.MBHeight,
+		ChromaFormatIDC: p.ChromaFormatIDC,
+		BitDepthLuma:    10,
+		BitDepthChroma:  10,
+		poc:             poc,
+		tables:          tables,
 	}
 }
 
