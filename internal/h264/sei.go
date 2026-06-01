@@ -69,6 +69,7 @@ type H264SEIBufferingPeriod struct {
 }
 
 type H264SEIGreenMetadata struct {
+	Present                             int32
 	GreenMetadataType                   uint8
 	PeriodType                          uint8
 	NumSeconds                          uint16
@@ -144,6 +145,7 @@ func (h *H264SEIContext) Reset() {
 	h.PictureTiming.Present = 0
 	h.PictureTiming.TimecodeCount = 0
 	h.BufferingPeriod.Present = 0
+	h.GreenMetadata.Present = 0
 	h.Common.FramePacking.Present = 0
 	h.Common.DisplayOrientation.Present = 0
 	h.Common.MasteringDisplay.Present = 0
@@ -445,6 +447,7 @@ func (h *H264SEIGreenMetadata) decodeGreenMetadata(payload []byte) error {
 	if len(payload) < 1 {
 		return ErrInvalidData
 	}
+	h.Present = 1
 	h.GreenMetadataType = payload[0]
 	pos := 1
 	if h.GreenMetadataType == 0 {

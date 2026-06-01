@@ -68,7 +68,7 @@ func TestDecodeSEIMessages(t *testing.T) {
 	if ctx.RecoveryPoint.RecoveryFrameCount != 4 {
 		t.Fatalf("recovery frame count = %d", ctx.RecoveryPoint.RecoveryFrameCount)
 	}
-	if ctx.GreenMetadata.GreenMetadataType != 0 || ctx.GreenMetadata.PeriodType != 2 || ctx.GreenMetadata.NumSeconds != 0x0123 ||
+	if ctx.GreenMetadata.Present != 1 || ctx.GreenMetadata.GreenMetadataType != 0 || ctx.GreenMetadata.PeriodType != 2 || ctx.GreenMetadata.NumSeconds != 0x0123 ||
 		ctx.GreenMetadata.PercentNonZeroMacroblocks != 1 || ctx.GreenMetadata.PercentIntraCodedMacroblocks != 2 ||
 		ctx.GreenMetadata.PercentSixTapFiltering != 3 || ctx.GreenMetadata.PercentAlphaPointDeblockingInstance != 4 {
 		t.Fatalf("green metadata = %+v", ctx.GreenMetadata)
@@ -159,6 +159,28 @@ func TestDecodeSimpleNALUnitsParsesLeadingSEI(t *testing.T) {
 	}
 	if sei.Common.Unregistered.X264Build != 165 {
 		t.Fatalf("simple decoder SEI x264 build = %d", sei.Common.Unregistered.X264Build)
+	}
+}
+
+func TestDecodedFrameSideDataFromSEICopiesUserData(t *testing.T) {
+	ctx, err := DecodeSEI(buildSEIRBSP(
+		seiTestMessage{typ: seiTypeUserDataUnregistered, payload: seiUnregisteredPayload()},
+		seiTestMessage{typ: seiTypeContentLightLevelInfo, payload: []byte{0x03, 0xe8, 0x00, 0xfa}},
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side := decodedFrameSideDataFromSEI(ctx)
+	if side.X264Build != 165 || len(side.UserDataUnregistered) != 1 {
+		t.Fatalf("side unregistered = build %d count %d", side.X264Build, len(side.UserDataUnregistered))
+	}
+	ctx.Common.Unregistered.Data[0][0] ^= 0xff
+	if side.UserDataUnregistered[0][0] == ctx.Common.Unregistered.Data[0][0] {
+		t.Fatal("side data aliases SEI context user data")
+	}
+	if side.ContentLight.Present != 2 || side.ContentLight.MaxContentLightLevel != 1000 ||
+		side.ContentLight.MaxPicAverageLightLevel != 250 {
+		t.Fatalf("content light side data = %+v", side.ContentLight)
 	}
 }
 

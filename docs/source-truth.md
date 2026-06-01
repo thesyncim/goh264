@@ -92,7 +92,16 @@ covering FFmpeg's `last_pocs`/`has_b_frames` reorder inference and signaled VUI
 reorder-depth handling. The generic public `DecodeFrames` tests exercise Annex B
 and AVC4 auto-detection, packet-level `avcC` configuration storage, FFmpeg's
 configured 4-byte AVC/Annex B sniffing heuristic, and empty-packet delayed flush
-over the B-frame configured-sample fixtures. Monochrome
+over the B-frame configured-sample fixtures. Packet side-data tests mirror
+FFmpeg's `AV_PKT_DATA_NEW_EXTRADATA` ordering by applying non-empty side data
+before packet NAL splitting, covering both `avcC` and Annex B parameter-set
+extradata and repeated side data across sample-by-sample P-frame decode without
+resetting DPB reference state. Public frame side-data tests prepend synthetic
+leading SEI to the black16 fixture and prove the decoded frame retains x264
+user-data, recovery point, green metadata, display orientation, frame packing,
+alternative transfer,
+mastering display, and content-light metadata while preserving the rawvideo MD5.
+Monochrome
 native FFmpeg oracle checks
 request `-pix_fmt gray` so the frame-MD5 surface compares only the luma plane
 represented by `chroma_format_idc == 0`. The 16x16 High 4:4:4 Predictive
@@ -161,6 +170,7 @@ Included:
 
 - H.264 Annex B byte-stream parsing
 - H.264 AVC/NALFF length-prefixed packet parsing when the caller supplies `nal_length_size`
+- H.264 packet side-data handling for `AV_PKT_DATA_NEW_EXTRADATA`-style parameter-set updates
 - H.264 NAL headers and RBSP handling
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 

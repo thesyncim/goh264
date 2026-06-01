@@ -21,6 +21,7 @@ type DecodedFrame struct {
 	ChromaFormatIDC int
 	BitDepthLuma    int
 	BitDepthChroma  int
+	SideData        DecodedFrameSideData
 	frameNum        uint32
 	fieldPOC        [2]int32
 	poc             int32
@@ -28,6 +29,20 @@ type DecodedFrame struct {
 	mmcoReset       bool
 	tables          *macroblockTables
 	refEntries      [2][]simpleRefEntry
+}
+
+type DecodedFrameSideData struct {
+	UserDataUnregistered [][]uint8
+	X264Build            int32
+	PictureTiming        H264SEIPictureTiming
+	RecoveryPoint        H264SEIRecoveryPoint
+	BufferingPeriod      H264SEIBufferingPeriod
+	GreenMetadata        H264SEIGreenMetadata
+	FramePacking         H2645SEIFramePacking
+	DisplayOrientation   H2645SEIDisplayOrientation
+	AlternativeTransfer  H2645SEIAlternativeTransfer
+	MasteringDisplay     H2645SEIMasteringDisplay
+	ContentLight         H2645SEIContentLight
 }
 
 type SimpleDecoder struct {
@@ -41,10 +56,26 @@ func (d *SimpleDecoder) StoreAVCDecoderConfiguration(cfg AVCDecoderConfiguration
 	if d == nil || cfg.NALLengthSize < 1 || cfg.NALLengthSize > 4 {
 		return ErrInvalidData
 	}
-	d.sps = cfg.SPS
-	d.pps = cfg.PPS
+	return d.StoreParamSets(cfg.SPS, cfg.PPS)
+}
+
+func (d *SimpleDecoder) StoreParamSets(sps [maxSPSCount]*SPS, pps [maxPPSCount]*PPS) error {
+	if d == nil {
+		return ErrInvalidData
+	}
+	d.sps = sps
+	d.pps = pps
 	d.dpb.reset()
 	d.sei.Reset()
+	return nil
+}
+
+func (d *SimpleDecoder) UpdateParamSets(sps [maxSPSCount]*SPS, pps [maxPPSCount]*PPS) error {
+	if d == nil {
+		return ErrInvalidData
+	}
+	d.sps = sps
+	d.pps = pps
 	return nil
 }
 
@@ -202,10 +233,18 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				return nil, ErrInvalidData
 			}
 			if frame == nil {
+				if sei.PictureTiming.Present != 0 {
+					if err := sei.PictureTiming.Process(sh.SPS); err != nil {
+						// FFmpeg drops malformed picture-timing SEI without AV_EF_EXPLODE.
+						sei.PictureTiming.Present = 0
+						sei.PictureTiming.TimecodeCount = 0
+					}
+				}
 				frame, tables, err = newSimpleDecodedFrame(sh.SPS)
 				if err != nil {
 					return nil, err
 				}
+				frame.SideData = decodedFrameSideDataFromSEI(sei)
 				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
@@ -276,6 +315,36 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 		return nil, ErrInvalidData
 	}
 	return frames, nil
+}
+
+func decodedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
+	if sei == nil {
+		return DecodedFrameSideData{}
+	}
+	return DecodedFrameSideData{
+		UserDataUnregistered: cloneByteSlices(sei.Common.Unregistered.Data),
+		X264Build:            sei.Common.Unregistered.X264Build,
+		PictureTiming:        sei.PictureTiming,
+		RecoveryPoint:        sei.RecoveryPoint,
+		BufferingPeriod:      sei.BufferingPeriod,
+		GreenMetadata:        sei.GreenMetadata,
+		FramePacking:         sei.Common.FramePacking,
+		DisplayOrientation:   sei.Common.DisplayOrientation,
+		AlternativeTransfer:  sei.Common.AlternativeTransfer,
+		MasteringDisplay:     sei.Common.MasteringDisplay,
+		ContentLight:         sei.Common.ContentLight,
+	}
+}
+
+func cloneByteSlices(src [][]uint8) [][]uint8 {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([][]uint8, len(src))
+	for i := range src {
+		out[i] = append([]uint8(nil), src[i]...)
+	}
+	return out
 }
 
 func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {

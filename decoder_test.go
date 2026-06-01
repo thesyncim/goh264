@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/bits"
 	"os"
 	"os/exec"
 	"strings"
@@ -444,6 +445,120 @@ func TestDecodeAutoConfiguredLength4SwitchesToAnnexB(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodePacketFramesNewExtradataAVC(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	config, packet := annexBToAVCConfigAndPacket(t, data, 4)
+	dec := NewDecoder()
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data: packet,
+		SideData: []PacketSideData{
+			{Type: PacketSideDataType(99), Data: []byte("ignored")},
+			{Type: PacketSideDataNewExtradata, Data: config},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if dec.avcNALLengthSize != 4 {
+		t.Fatalf("nal length size = %d, want 4", dec.avcNALLengthSize)
+	}
+}
+
+func TestDecodePacketFramesRepeatedNewExtradataDoesNotResetDPB(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	dec := NewDecoder()
+	var frames []*Frame
+	for i, sample := range samples {
+		out, err := dec.DecodePacketFrames(Packet{
+			Data:     sample,
+			SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+		})
+		if err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+		frames = append(frames, out...)
+	}
+	assertFrameMD5Strings(t, frames, []string{
+		"8aaefe0adcea094cfb5161a060bab4e2",
+		"8aaefe0adcea094cfb5161a060bab4e2",
+	})
+}
+
+func TestDecodePacketFramesNewExtradataAnnexB(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	extradata, packet := annexBParameterSetsAndPacket(t, data)
+	dec := NewDecoder()
+	frame, err := dec.DecodePacket(Packet{
+		Data:     packet,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if dec.avcNALLengthSize != 0 {
+		t.Fatalf("nal length size = %d, want Annex B", dec.avcNALLengthSize)
+	}
+}
+
+func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
+	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeRecoveryPoint, payload: decoderSEIRecoveryPointPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeGreenMetadata, payload: []byte{0, 2, 0x01, 0x23, 1, 2, 3, 4}},
+		decoderSEITestMessage{typ: decoderSEITypeDisplayOrientation, payload: decoderSEIDisplayOrientationPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeFramePackingArrangement, payload: decoderSEIFramePackingPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeAlternativeTransfer, payload: []byte{16}},
+		decoderSEITestMessage{typ: decoderSEITypeMasteringDisplayColourVolume, payload: []byte{
+			0, 1, 0, 2,
+			0, 3, 0, 4,
+			0, 5, 0, 6,
+			0, 7, 0, 8,
+			0x01, 0x02, 0x03, 0x04,
+			0x05, 0x06, 0x07, 0x08,
+		}},
+		decoderSEITestMessage{typ: decoderSEITypeContentLightLevelInfo, payload: []byte{0x03, 0xe8, 0x00, 0xfa}},
+	))
+	frame, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	side := frame.SideData
+	if side.X264Build != 165 || len(side.UserDataUnregistered) != 1 {
+		t.Fatalf("unregistered side data = build %d count %d", side.X264Build, len(side.UserDataUnregistered))
+	}
+	if side.RecoveryPoint == nil || side.RecoveryPoint.RecoveryFrameCount != 4 {
+		t.Fatalf("recovery point = %+v", side.RecoveryPoint)
+	}
+	if side.GreenMetadata == nil || side.GreenMetadata.NumSeconds != 0x0123 ||
+		side.GreenMetadata.PercentIntraCodedMacroblocks != 2 {
+		t.Fatalf("green metadata = %+v", side.GreenMetadata)
+	}
+	if side.DisplayOrientation == nil || !side.DisplayOrientation.HFlip ||
+		side.DisplayOrientation.VFlip || side.DisplayOrientation.AnticlockwiseRotation != 90 {
+		t.Fatalf("display orientation = %+v", side.DisplayOrientation)
+	}
+	if side.FramePacking == nil || side.FramePacking.ArrangementID != 2 ||
+		side.FramePacking.ArrangementType != 3 || !side.FramePacking.CurrentFrameIsFrame0Flag {
+		t.Fatalf("frame packing = %+v", side.FramePacking)
+	}
+	if side.AlternativeTransfer == nil || side.AlternativeTransfer.PreferredTransferCharacteristics != 16 {
+		t.Fatalf("alternative transfer = %+v", side.AlternativeTransfer)
+	}
+	if side.MasteringDisplay == nil || side.MasteringDisplay.DisplayPrimaries[2][1] != 6 ||
+		side.MasteringDisplay.WhitePoint != [2]uint16{7, 8} ||
+		side.MasteringDisplay.MaxLuminance != 0x01020304 ||
+		side.MasteringDisplay.MinLuminance != 0x05060708 {
+		t.Fatalf("mastering display = %+v", side.MasteringDisplay)
+	}
+	if side.ContentLight == nil || side.ContentLight.MaxContentLightLevel != 1000 ||
+		side.ContentLight.MaxPicAverageLightLevel != 250 {
+		t.Fatalf("content light = %+v", side.ContentLight)
+	}
 }
 
 func TestDecodeAnnexBBlack16IPFrames(t *testing.T) {
@@ -1403,6 +1518,115 @@ func TestFFmpegFrameMD5OracleTestsrc16High422(t *testing.T) {
 	}
 }
 
+const (
+	decoderSEITypeRecoveryPoint                = 6
+	decoderSEITypeGreenMetadata                = 56
+	decoderSEITypeFramePackingArrangement      = 45
+	decoderSEITypeDisplayOrientation           = 47
+	decoderSEITypeMasteringDisplayColourVolume = 137
+	decoderSEITypeContentLightLevelInfo        = 144
+	decoderSEITypeAlternativeTransfer          = 147
+)
+
+type decoderSEITestMessage struct {
+	typ     int
+	payload []byte
+}
+
+func decoderTestSEINAL(messages ...decoderSEITestMessage) []byte {
+	return append([]byte{byte(h264.NALSEI)}, decoderTestSEIRBSP(messages...)...)
+}
+
+func decoderTestSEIRBSP(messages ...decoderSEITestMessage) []byte {
+	var out []byte
+	for _, msg := range messages {
+		out = appendDecoderSEIHeaderValue(out, msg.typ)
+		out = appendDecoderSEIHeaderValue(out, len(msg.payload))
+		out = append(out, msg.payload...)
+	}
+	return append(out, 0x80)
+}
+
+func appendDecoderSEIHeaderValue(out []byte, value int) []byte {
+	for value >= 255 {
+		out = append(out, 255)
+		value -= 255
+	}
+	return append(out, uint8(value))
+}
+
+func decoderSEIRecoveryPointPayload() []byte {
+	var b decoderSEIBitBuilder
+	b.writeUE(4)
+	b.writeBit(1)
+	b.writeBit(0)
+	b.writeBits(2, 2)
+	return b.bytes()
+}
+
+func decoderSEIDisplayOrientationPayload() []byte {
+	var b decoderSEIBitBuilder
+	b.writeBit(0)
+	b.writeBit(1)
+	b.writeBit(0)
+	b.writeBits(90, 16)
+	return b.bytes()
+}
+
+func decoderSEIFramePackingPayload() []byte {
+	var b decoderSEIBitBuilder
+	b.writeUE(2)
+	b.writeBit(0)
+	b.writeBits(3, 7)
+	b.writeBit(0)
+	b.writeBits(2, 6)
+	b.writeBits(0, 3)
+	b.writeBit(1)
+	b.writeBits(0, 2)
+	b.writeBits(0x1234, 16)
+	b.writeBits(0, 8)
+	b.writeUE(5)
+	b.writeBit(0)
+	return b.bytes()
+}
+
+type decoderSEIBitBuilder struct {
+	bits []byte
+}
+
+func (b *decoderSEIBitBuilder) writeBit(v uint32) {
+	if v&1 != 0 {
+		b.bits = append(b.bits, 1)
+	} else {
+		b.bits = append(b.bits, 0)
+	}
+}
+
+func (b *decoderSEIBitBuilder) writeBits(v uint32, n uint32) {
+	for i := int(n) - 1; i >= 0; i-- {
+		b.writeBit(v >> uint(i))
+	}
+}
+
+func (b *decoderSEIBitBuilder) writeUE(v uint32) {
+	codeNum := v + 1
+	bitLen := 32 - bits.LeadingZeros32(codeNum)
+	for i := 0; i < bitLen-1; i++ {
+		b.writeBit(0)
+	}
+	b.writeBits(codeNum, uint32(bitLen))
+}
+
+func (b *decoderSEIBitBuilder) bytes() []byte {
+	out := make([]byte, (len(b.bits)+7)/8)
+	for i, bit := range b.bits {
+		if bit != 0 {
+			out[i/8] |= 1 << uint(7-i%8)
+		}
+	}
+	return out
+}
+
 func decodeHexFixture(t *testing.T, s string) []byte {
 	t.Helper()
 	clean := strings.NewReplacer("\n", "", "\t", "", " ", "").Replace(s)
@@ -1436,6 +1660,38 @@ func annexBToAVC(t *testing.T, data []byte, nalLengthSize int) []byte {
 		out = append(out, nal.Raw...)
 	}
 	return out
+}
+
+func prependAnnexBNAL(data []byte, raw []byte) []byte {
+	out := appendAnnexBNAL(nil, raw)
+	return append(out, data...)
+}
+
+func appendAnnexBNAL(dst []byte, raw []byte) []byte {
+	dst = append(dst, 0x00, 0x00, 0x00, 0x01)
+	return append(dst, raw...)
+}
+
+func annexBParameterSetsAndPacket(t *testing.T, data []byte) ([]byte, []byte) {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var extradata []byte
+	var packet []byte
+	for _, nal := range nals {
+		switch nal.Type {
+		case h264.NALSPS, h264.NALPPS:
+			extradata = appendAnnexBNAL(extradata, nal.Raw)
+		default:
+			packet = appendAnnexBNAL(packet, nal.Raw)
+		}
+	}
+	if len(extradata) == 0 || len(packet) == 0 {
+		t.Fatalf("annexb split produced extradata=%d packet=%d", len(extradata), len(packet))
+	}
+	return extradata, packet
 }
 
 func annexBToAVCConfigAndPacket(t *testing.T, data []byte, nalLengthSize int) ([]byte, []byte) {

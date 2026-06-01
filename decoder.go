@@ -34,6 +34,106 @@ type AVCDecoderConfiguration struct {
 	StreamInfo    StreamInfo
 }
 
+type PacketSideDataType uint8
+
+const (
+	PacketSideDataNewExtradata PacketSideDataType = 1
+)
+
+type PacketSideData struct {
+	Type PacketSideDataType
+	Data []byte
+}
+
+type Packet struct {
+	Data     []byte
+	SideData []PacketSideData
+}
+
+type FrameSideData struct {
+	UserDataUnregistered [][]byte
+	X264Build            int
+	PictureTiming        *PictureTiming
+	RecoveryPoint        *RecoveryPoint
+	BufferingPeriod      *BufferingPeriod
+	GreenMetadata        *GreenMetadata
+	FramePacking         *FramePackingArrangement
+	DisplayOrientation   *DisplayOrientation
+	AlternativeTransfer  *AlternativeTransfer
+	MasteringDisplay     *MasteringDisplay
+	ContentLight         *ContentLight
+}
+
+type PictureTiming struct {
+	PicStruct       int32
+	CTType          int32
+	DPBOutputDelay  int32
+	CPBRemovalDelay int32
+	Timecode        []Timecode
+}
+
+type Timecode struct {
+	Full      bool
+	Frame     int32
+	Seconds   int32
+	Minutes   int32
+	Hours     int32
+	DropFrame bool
+}
+
+type RecoveryPoint struct {
+	RecoveryFrameCount int32
+}
+
+type BufferingPeriod struct {
+	InitialCPBRemovalDelay [32]int32
+}
+
+type GreenMetadata struct {
+	GreenMetadataType                   uint8
+	PeriodType                          uint8
+	NumSeconds                          uint16
+	NumPictures                         uint16
+	PercentNonZeroMacroblocks           uint8
+	PercentIntraCodedMacroblocks        uint8
+	PercentSixTapFiltering              uint8
+	PercentAlphaPointDeblockingInstance uint8
+	XSDMetricType                       uint8
+	XSDMetricValue                      uint16
+}
+
+type FramePackingArrangement struct {
+	ArrangementID               uint32
+	ArrangementCancelFlag       bool
+	ArrangementType             int32
+	ArrangementRepetitionPeriod uint32
+	ContentInterpretationType   int32
+	QuincunxSamplingFlag        bool
+	CurrentFrameIsFrame0Flag    bool
+}
+
+type DisplayOrientation struct {
+	AnticlockwiseRotation int32
+	HFlip                 bool
+	VFlip                 bool
+}
+
+type AlternativeTransfer struct {
+	PreferredTransferCharacteristics int32
+}
+
+type MasteringDisplay struct {
+	DisplayPrimaries [3][2]uint16
+	WhitePoint       [2]uint16
+	MaxLuminance     uint32
+	MinLuminance     uint32
+}
+
+type ContentLight struct {
+	MaxContentLightLevel    uint16
+	MaxPicAverageLightLevel uint16
+}
+
 type Frame struct {
 	Width           int
 	Height          int
@@ -47,6 +147,7 @@ type Frame struct {
 	Y               []byte
 	Cb              []byte
 	Cr              []byte
+	SideData        FrameSideData
 }
 
 func NewDecoder() *Decoder {
@@ -76,7 +177,7 @@ func (d *Decoder) DecodeFrames(data []byte) ([]*Frame, error) {
 		if err != nil {
 			return nil, err
 		}
-		d.storeAVCDecoderConfiguration(cfg)
+		d.updateAVCDecoderConfiguration(cfg)
 		return nil, nil
 	}
 	nals, _, err := h264.SplitAutoPacket(data, d.avcNALLengthSize)
@@ -88,6 +189,35 @@ func (d *Decoder) DecodeFrames(data []byte) ([]*Frame, error) {
 		return nil, err
 	}
 	return framesFromH264(frames), nil
+}
+
+func (d *Decoder) DecodePacket(pkt Packet) (*Frame, error) {
+	frames, err := d.DecodePacketFrames(pkt)
+	if err != nil {
+		return nil, err
+	}
+	if len(frames) != 1 {
+		return nil, ErrUnsupported
+	}
+	return frames[0], nil
+}
+
+func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	if len(pkt.Data) == 0 {
+		return d.FlushDelayedFrames()
+	}
+	for _, side := range pkt.SideData {
+		if side.Type != PacketSideDataNewExtradata {
+			continue
+		}
+		if err := d.decodeNewExtradata(side.Data); err != nil {
+			return nil, err
+		}
+	}
+	return d.DecodeFrames(pkt.Data)
 }
 
 func (d *Decoder) DecodeAnnexB(data []byte) (*Frame, error) {
@@ -301,6 +431,74 @@ func (d *Decoder) storeAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationR
 	_ = d.simple.StoreAVCDecoderConfiguration(cfg)
 }
 
+func (d *Decoder) updateAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationRecord) {
+	d.sps = cfg.SPS
+	d.pps = cfg.PPS
+	d.avcNALLengthSize = cfg.NALLengthSize
+	_ = d.simple.UpdateParamSets(d.sps, d.pps)
+}
+
+func (d *Decoder) decodeNewExtradata(data []byte) error {
+	if d == nil || len(data) == 0 {
+		return ErrInvalidData
+	}
+	if data[0] == 1 {
+		cfg, err := h264.DecodeAVCDecoderConfigurationRecord(data)
+		if err != nil {
+			return err
+		}
+		d.updateAVCDecoderConfiguration(cfg)
+		return nil
+	}
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		return err
+	}
+	return d.storeAnnexBParameterSets(nals)
+}
+
+func (d *Decoder) storeAnnexBParameterSets(nals []h264.NALUnit) error {
+	if d == nil {
+		return ErrInvalidData
+	}
+	spsList := d.sps
+	ppsList := d.pps
+	havePS := false
+	for _, nal := range nals {
+		switch nal.Type {
+		case h264.NALSPS:
+			sps, err := h264.DecodeSPS(nal.RBSP)
+			if err != nil {
+				return err
+			}
+			if sps.SPSID >= uint32(len(spsList)) {
+				return ErrInvalidData
+			}
+			spsList[sps.SPSID] = sps
+			havePS = true
+		case h264.NALPPS:
+			pps, err := h264.DecodePPS(nal.RBSP, &spsList)
+			if err != nil {
+				return err
+			}
+			if pps.PPSID >= uint32(len(ppsList)) {
+				return ErrInvalidData
+			}
+			ppsList[pps.PPSID] = pps
+			havePS = true
+		default:
+			continue
+		}
+	}
+	if !havePS {
+		return ErrInvalidData
+	}
+	d.sps = spsList
+	d.pps = ppsList
+	d.avcNALLengthSize = 0
+	return d.simple.UpdateParamSets(d.sps, d.pps)
+}
+
 func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
 		return dst, ErrInvalidData
@@ -361,7 +559,108 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 		Y:               src.Y,
 		Cb:              src.Cb,
 		Cr:              src.Cr,
+		SideData:        frameSideDataFromH264(src.SideData),
 	}
+}
+
+func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
+	out := FrameSideData{
+		UserDataUnregistered: cloneByteSlices(src.UserDataUnregistered),
+		X264Build:            int(src.X264Build),
+	}
+	if src.PictureTiming.Present != 0 {
+		pt := PictureTiming{
+			PicStruct:       src.PictureTiming.PicStruct,
+			CTType:          src.PictureTiming.CTType,
+			DPBOutputDelay:  src.PictureTiming.DPBOutputDelay,
+			CPBRemovalDelay: src.PictureTiming.CPBRemovalDelay,
+		}
+		count := int(src.PictureTiming.TimecodeCount)
+		if count > len(src.PictureTiming.Timecode) {
+			count = len(src.PictureTiming.Timecode)
+		}
+		for i := 0; i < count; i++ {
+			tc := src.PictureTiming.Timecode[i]
+			pt.Timecode = append(pt.Timecode, Timecode{
+				Full:      tc.Full != 0,
+				Frame:     tc.Frame,
+				Seconds:   tc.Seconds,
+				Minutes:   tc.Minutes,
+				Hours:     tc.Hours,
+				DropFrame: tc.DropFrame != 0,
+			})
+		}
+		out.PictureTiming = &pt
+	}
+	if src.RecoveryPoint.RecoveryFrameCount >= 0 {
+		out.RecoveryPoint = &RecoveryPoint{RecoveryFrameCount: src.RecoveryPoint.RecoveryFrameCount}
+	}
+	if src.BufferingPeriod.Present != 0 {
+		out.BufferingPeriod = &BufferingPeriod{InitialCPBRemovalDelay: src.BufferingPeriod.InitialCPBRemovalDelay}
+	}
+	if src.GreenMetadata.Present != 0 {
+		out.GreenMetadata = &GreenMetadata{
+			GreenMetadataType:                   src.GreenMetadata.GreenMetadataType,
+			PeriodType:                          src.GreenMetadata.PeriodType,
+			NumSeconds:                          src.GreenMetadata.NumSeconds,
+			NumPictures:                         src.GreenMetadata.NumPictures,
+			PercentNonZeroMacroblocks:           src.GreenMetadata.PercentNonZeroMacroblocks,
+			PercentIntraCodedMacroblocks:        src.GreenMetadata.PercentIntraCodedMacroblocks,
+			PercentSixTapFiltering:              src.GreenMetadata.PercentSixTapFiltering,
+			PercentAlphaPointDeblockingInstance: src.GreenMetadata.PercentAlphaPointDeblockingInstance,
+			XSDMetricType:                       src.GreenMetadata.XSDMetricType,
+			XSDMetricValue:                      src.GreenMetadata.XSDMetricValue,
+		}
+	}
+	if src.FramePacking.Present != 0 {
+		out.FramePacking = &FramePackingArrangement{
+			ArrangementID:               src.FramePacking.ArrangementID,
+			ArrangementCancelFlag:       src.FramePacking.ArrangementCancelFlag != 0,
+			ArrangementType:             src.FramePacking.ArrangementType,
+			ArrangementRepetitionPeriod: src.FramePacking.ArrangementRepetitionPeriod,
+			ContentInterpretationType:   src.FramePacking.ContentInterpretationType,
+			QuincunxSamplingFlag:        src.FramePacking.QuincunxSamplingFlag != 0,
+			CurrentFrameIsFrame0Flag:    src.FramePacking.CurrentFrameIsFrame0Flag != 0,
+		}
+	}
+	if src.DisplayOrientation.Present != 0 {
+		out.DisplayOrientation = &DisplayOrientation{
+			AnticlockwiseRotation: src.DisplayOrientation.AnticlockwiseRotation,
+			HFlip:                 src.DisplayOrientation.HFlip != 0,
+			VFlip:                 src.DisplayOrientation.VFlip != 0,
+		}
+	}
+	if src.AlternativeTransfer.Present != 0 {
+		out.AlternativeTransfer = &AlternativeTransfer{
+			PreferredTransferCharacteristics: src.AlternativeTransfer.PreferredTransferCharacteristics,
+		}
+	}
+	if src.MasteringDisplay.Present != 0 {
+		out.MasteringDisplay = &MasteringDisplay{
+			DisplayPrimaries: src.MasteringDisplay.DisplayPrimaries,
+			WhitePoint:       src.MasteringDisplay.WhitePoint,
+			MaxLuminance:     src.MasteringDisplay.MaxLuminance,
+			MinLuminance:     src.MasteringDisplay.MinLuminance,
+		}
+	}
+	if src.ContentLight.Present != 0 {
+		out.ContentLight = &ContentLight{
+			MaxContentLightLevel:    src.ContentLight.MaxContentLightLevel,
+			MaxPicAverageLightLevel: src.ContentLight.MaxPicAverageLightLevel,
+		}
+	}
+	return out
+}
+
+func cloneByteSlices(src [][]byte) [][]byte {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([][]byte, len(src))
+	for i := range src {
+		out[i] = append([]byte(nil), src[i]...)
+	}
+	return out
 }
 
 func frameChromaSize(width int, height int, chromaFormatIDC uint32) (int, int, error) {
