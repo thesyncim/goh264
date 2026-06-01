@@ -113,17 +113,21 @@ func TestDecodeConfiguredAVCHigh10NonDirectBFramesAcrossSamplesFlush(t *testing.
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame
+				var frameCounts []int
 				for i, sample := range samples {
 					out, err := dec.DecodeConfiguredAVCFrames(sample)
 					if err != nil {
 						t.Fatalf("nalLengthSize=%d sample[%d]: DecodeConfiguredAVCFrames: %v", nalLengthSize, i, err)
 					}
+					frameCounts = append(frameCounts, len(out))
 					frames = append(frames, out...)
 				}
 				out, err := dec.FlushDelayedFrames()
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d flush: %v", nalLengthSize, err)
 				}
+				frameCounts = append(frameCounts, len(out))
+				assertHigh10NonDirectBConfiguredSampleCounts(t, tt.name, nalLengthSize, frameCounts)
 				frames = append(frames, out...)
 				assertHigh10NonDirectBFrames(t, frames, tt.frameMD5)
 
@@ -136,6 +140,19 @@ func TestDecodeConfiguredAVCHigh10NonDirectBFramesAcrossSamplesFlush(t *testing.
 				}
 			}
 		})
+	}
+}
+
+func assertHigh10NonDirectBConfiguredSampleCounts(t *testing.T, name string, nalLengthSize int, got []int) {
+	t.Helper()
+	want := []int{0, 1, 1, 1}
+	if len(got) != len(want) {
+		t.Fatalf("%s nalLengthSize=%d configured sample/flush counts = %v, want %v", name, nalLengthSize, got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("%s nalLengthSize=%d configured sample/flush counts = %v, want %v", name, nalLengthSize, got, want)
+		}
 	}
 }
 

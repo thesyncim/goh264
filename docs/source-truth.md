@@ -15,7 +15,7 @@ decoder path is in scope.
 - Public High10/High12: only manifest-backed lanes. Latest addition is High10
   CAVLC temporal B8x8 direct-sub with visible luma residual.
 - External FATE vectors: URL-backed, gated by `GOH264_REAL_VECTORS=1`; first
-  passing canary is `CANL4_SVA_B.264`, with remaining rows left as failures.
+  passing canary is `CANL4_SVA_B.264` across all public surfaces.
 
 Canonical fixture detail lives in `testdata/h264/corpus/manifest.jsonl`, not in
 Markdown.

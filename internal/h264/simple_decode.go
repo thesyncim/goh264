@@ -354,13 +354,11 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				if err := dpb.holdOutputFrame(frame, sh); err != nil {
 					return nil, err
 				}
-				if !flushOutput {
-					out, err := dpb.drainOutputFrames(false)
-					if err != nil {
-						return nil, err
-					}
-					frames = append(frames, out...)
+				out, err := dpb.drainOutputFrames(false)
+				if err != nil {
+					return nil, err
 				}
+				frames = append(frames, out...)
 			}
 			haveSlice = true
 		default:
