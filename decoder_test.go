@@ -690,6 +690,39 @@ func TestDecodeFrameOneShotSEISideDataIsNotRepeated(t *testing.T) {
 	}
 }
 
+func TestDecodeFrameKeyFrameFlags(t *testing.T) {
+	frames, err := NewDecoder().DecodeAnnexBFrames(decodeHexFixture(t, black16IPAnnexBHex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("frames = %d, want 2", len(frames))
+	}
+	if !frames[0].KeyFrame || frames[1].KeyFrame {
+		t.Fatalf("key frames = %t/%t, want true/false", frames[0].KeyFrame, frames[1].KeyFrame)
+	}
+}
+
+func TestDecodeFrameRecoveryPointZeroMarksKeyFrame(t *testing.T) {
+	frames := decodeConfiguredIPWithRecoveryPoint(t, 0)
+	if !frames[0].KeyFrame || !frames[1].KeyFrame {
+		t.Fatalf("key frames = %t/%t, want true/true", frames[0].KeyFrame, frames[1].KeyFrame)
+	}
+	if frames[1].SideData.RecoveryPoint == nil || frames[1].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("second recovery point = %+v", frames[1].SideData.RecoveryPoint)
+	}
+}
+
+func TestDecodeFrameRecoveryPointNonZeroDoesNotMarkImmediateKeyFrame(t *testing.T) {
+	frames := decodeConfiguredIPWithRecoveryPoint(t, 4)
+	if !frames[0].KeyFrame || frames[1].KeyFrame {
+		t.Fatalf("key frames = %t/%t, want true/false", frames[0].KeyFrame, frames[1].KeyFrame)
+	}
+	if frames[1].SideData.RecoveryPoint == nil || frames[1].SideData.RecoveryPoint.RecoveryFrameCount != 4 {
+		t.Fatalf("second recovery point = %+v", frames[1].SideData.RecoveryPoint)
+	}
+}
+
 func TestDecodeFrameTimingFromPictureTimingSEI(t *testing.T) {
 	base := replaceAnnexBSPS(t, decodeHexFixture(t, black16AnnexBHex), decoderSPSNALWithPicStructVUI())
 	for _, tt := range []struct {
@@ -1513,6 +1546,51 @@ func TestFFprobeOracleBlack16(t *testing.T) {
 	}
 }
 
+func TestFFprobeOracleRecoveryPointKeyFrame(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffprobe oracle")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not available")
+	}
+
+	data := insertAnnexBNALBeforeVCL(t, decodeHexFixture(t, black16IPAnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeRecoveryPoint, payload: decoderSEIRecoveryPointPayloadWith(0)},
+	), 1)
+	path := writeTempH264(t, data)
+
+	cmd := exec.Command("ffprobe",
+		"-v", "error",
+		"-select_streams", "v:0",
+		"-show_entries", "frame=key_frame",
+		"-of", "json",
+		path,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffprobe: %v", err)
+	}
+	var probe struct {
+		Frames []struct {
+			KeyFrame int `json:"key_frame"`
+		} `json:"frames"`
+	}
+	if err := json.Unmarshal(out, &probe); err != nil {
+		t.Fatal(err)
+	}
+
+	frames := decodeConfiguredIPWithRecoveryPoint(t, 0)
+	if len(probe.Frames) != len(frames) {
+		t.Fatalf("oracle frames = %d, go = %d", len(probe.Frames), len(frames))
+	}
+	for i := range frames {
+		want := probe.Frames[i].KeyFrame != 0
+		if frames[i].KeyFrame != want {
+			t.Fatalf("frame[%d] key = %t, oracle %t", i, frames[i].KeyFrame, want)
+		}
+	}
+}
+
 func TestFFprobeOracleHigh422(t *testing.T) {
 	if os.Getenv("GOH264_ORACLE") != "1" {
 		t.Skip("set GOH264_ORACLE=1 to run native ffprobe oracle")
@@ -2042,8 +2120,12 @@ func decoderSEIRegisteredAFDPayload(description uint8) []byte {
 }
 
 func decoderSEIRecoveryPointPayload() []byte {
+	return decoderSEIRecoveryPointPayloadWith(4)
+}
+
+func decoderSEIRecoveryPointPayloadWith(frameCount uint32) []byte {
 	var b decoderSEIBitBuilder
-	b.writeUE(4)
+	b.writeUE(frameCount)
 	b.writeBit(1)
 	b.writeBit(0)
 	b.writeBits(2, 2)
@@ -2271,6 +2353,32 @@ func appendAnnexBNAL(dst []byte, raw []byte) []byte {
 	return append(dst, raw...)
 }
 
+func insertAnnexBNALBeforeVCL(t *testing.T, data []byte, raw []byte, vclIndex int) []byte {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []byte
+	seenVCL := 0
+	inserted := false
+	for _, nal := range nals {
+		isVCL := nal.Type == h264.NALSlice || nal.Type == h264.NALIDRSlice
+		if isVCL && seenVCL == vclIndex {
+			out = appendAnnexBNAL(out, raw)
+			inserted = true
+		}
+		out = appendAnnexBNAL(out, nal.Raw)
+		if isVCL {
+			seenVCL++
+		}
+	}
+	if !inserted {
+		t.Fatalf("VCL index %d not found", vclIndex)
+	}
+	return out
+}
+
 func replaceAnnexBSPS(t *testing.T, data []byte, sps []byte) []byte {
 	t.Helper()
 	nals, err := h264.SplitAnnexB(data)
@@ -2447,6 +2555,38 @@ func assertHigh422FrameMD5Strings(t *testing.T, frames []*Frame, want []string) 
 			t.Fatalf("frame[%d] md5 = %x, want %s", i, got, want[i])
 		}
 	}
+}
+
+func decodeConfiguredIPWithRecoveryPoint(t *testing.T, recoveryFrameCount uint32) []*Frame {
+	t.Helper()
+	config, samples := annexBToAVCConfigAndSamples(t, decodeHexFixture(t, black16IPAnnexBHex), 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	sei := decoderTestSEINAL(decoderSEITestMessage{
+		typ:     decoderSEITypeRecoveryPoint,
+		payload: decoderSEIRecoveryPointPayloadWith(recoveryFrameCount),
+	})
+	samples[1] = append(appendAVCNALUnit(t, nil, sei, 4), samples[1]...)
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	first, err := dec.DecodeConfiguredAVC(samples[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := dec.DecodeConfiguredAVC(samples[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	frames := []*Frame{first, second}
+	assertFrameMD5Strings(t, frames, []string{
+		"8aaefe0adcea094cfb5161a060bab4e2",
+		"8aaefe0adcea094cfb5161a060bab4e2",
+	})
+	return frames
 }
 
 func writeTempH264(t *testing.T, data []byte) string {

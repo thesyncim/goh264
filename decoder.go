@@ -245,6 +245,7 @@ type Frame struct {
 	RepeatPict                     int
 	InterlacedFrame                bool
 	TopFieldFirst                  bool
+	KeyFrame                       bool
 	YStride                        int
 	CStride                        int
 	Y                              []byte
@@ -674,6 +675,7 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 		RepeatPict:                     src.RepeatPict,
 		InterlacedFrame:                src.InterlacedFrame,
 		TopFieldFirst:                  src.TopFieldFirst,
+		KeyFrame:                       src.KeyFrame,
 		YStride:                        src.LumaStride,
 		CStride:                        src.ChromaStride,
 		Y:                              src.Y,

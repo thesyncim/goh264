@@ -13,18 +13,26 @@ import "math"
 const simpleMaxShortRefs = 16
 const simpleMaxLongRefs = 16
 
+const (
+	simpleFrameRecoveredIDR uint8 = 1 << iota
+	simpleFrameRecoveredSEI
+)
+
 type simpleFrameDPB struct {
-	short             []*DecodedFrame
-	long              [simpleMaxLongRefs]*DecodedFrame
-	poc               simplePOCContext
-	delayed           []*DecodedFrame
-	hasBFrames        int
-	lastPOCs          [h264MaxDPBFrames]int32
-	lastPOCsInit      bool
-	nextOutputedPOC   int32
-	nextOutputedValid bool
-	prevInterlaced    bool
-	prevInterlacedSet bool
+	short              []*DecodedFrame
+	long               [simpleMaxLongRefs]*DecodedFrame
+	poc                simplePOCContext
+	delayed            []*DecodedFrame
+	hasBFrames         int
+	lastPOCs           [h264MaxDPBFrames]int32
+	lastPOCsInit       bool
+	nextOutputedPOC    int32
+	nextOutputedValid  bool
+	prevInterlaced     bool
+	prevInterlacedSet  bool
+	validRecoveryPoint bool
+	recoveryFrame      int32
+	frameRecovered     uint8
 }
 
 type simpleRefEntry struct {
@@ -62,6 +70,9 @@ func (d *simpleFrameDPB) reset() {
 		d.nextOutputedValid = false
 		d.prevInterlaced = true
 		d.prevInterlacedSet = true
+		d.validRecoveryPoint = false
+		d.recoveryFrame = -1
+		d.frameRecovered = 0
 	}
 }
 
@@ -82,6 +93,57 @@ func (d *simpleFrameDPB) setPreviousInterlacedFrame(v bool) {
 	}
 	d.prevInterlaced = v
 	d.prevInterlacedSet = true
+}
+
+// applySimpleRecoveryPoint mirrors the frame-picture portion of FFmpeg n8.0.1
+// libavcodec/h264_slice.c around recovery_frame tracking and IDR recovery
+// marks. The public key flag additionally mirrors h264dec.c output_frame's
+// recovery_frame_cnt == 0 promotion.
+func (d *simpleFrameDPB) applySimpleRecoveryPoint(frame *DecodedFrame, sh *SliceHeader, nalRefIDC uint8, sei *H264SEIContext) {
+	if d == nil || frame == nil || sh == nil || sh.SPS == nil {
+		return
+	}
+	recoveryFrameCount := int32(-1)
+	if sei != nil {
+		recoveryFrameCount = sei.RecoveryPoint.RecoveryFrameCount
+	}
+	if recoveryFrameCount >= 0 {
+		if int32(sh.FrameNum) != recoveryFrameCount || sh.SliceTypeNoS != PictureTypeI {
+			d.validRecoveryPoint = true
+		}
+		if d.recoveryFrame < 0 ||
+			avZeroExtendSimple(d.recoveryFrame-int32(sh.FrameNum), sh.SPS.Log2MaxFrameNum) > uint32(recoveryFrameCount) {
+			d.recoveryFrame = int32(avZeroExtendSimple(int32(sh.FrameNum)+recoveryFrameCount, sh.SPS.Log2MaxFrameNum))
+			if !d.validRecoveryPoint {
+				d.recoveryFrame = int32(sh.FrameNum)
+			}
+		}
+		if recoveryFrameCount == 0 {
+			frame.KeyFrame = true
+		}
+	}
+
+	if sh.NALType == NALIDRSlice {
+		frame.KeyFrame = true
+		frame.idrKeyFrame = true
+		frame.recovered |= simpleFrameRecoveredIDR
+		d.frameRecovered |= simpleFrameRecoveredIDR
+	}
+	if d.recoveryFrame == int32(sh.FrameNum) && nalRefIDC != 0 {
+		d.recoveryFrame = -1
+		frame.recovered |= simpleFrameRecoveredSEI
+	}
+	frame.recovered |= d.frameRecovered
+}
+
+func avZeroExtendSimple(v int32, bits int32) uint32 {
+	if bits <= 0 {
+		return 0
+	}
+	if bits >= 32 {
+		return uint32(v)
+	}
+	return uint32(v) & ((uint32(1) << uint32(bits)) - 1)
 }
 
 func (d *simpleFrameDPB) resetRefs() {
@@ -807,7 +869,7 @@ func (d *simpleFrameDPB) drainOutputFrames(flush bool) ([]*DecodedFrame, error) 
 			return nil, ErrInvalidData
 		}
 		frame := d.delayed[outIdx]
-		if d.hasBFrames == 0 && len(d.delayed) != 0 && (d.delayed[0].keyFrame || d.delayed[0].mmcoReset) {
+		if d.hasBFrames == 0 && len(d.delayed) != 0 && (d.delayed[0].idrKeyFrame || d.delayed[0].mmcoReset) {
 			d.nextOutputedValid = false
 		}
 		outOfOrder := d.nextOutputedValid && frame.poc < d.nextOutputedPOC
@@ -829,7 +891,7 @@ func (d *simpleFrameDPB) drainOutputFrames(flush bool) ([]*DecodedFrame, error) 
 
 func (d *simpleFrameDPB) nextOutputFrameIndex() int {
 	outIdx := 0
-	for i := 1; i < len(d.delayed) && !d.delayed[i].keyFrame && !d.delayed[i].mmcoReset; i++ {
+	for i := 1; i < len(d.delayed) && !d.delayed[i].idrKeyFrame && !d.delayed[i].mmcoReset; i++ {
 		if d.delayed[i].poc < d.delayed[outIdx].poc {
 			outIdx = i
 		}

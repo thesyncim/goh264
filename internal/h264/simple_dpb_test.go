@@ -131,6 +131,55 @@ func TestSimplePOCType0FrameOrder(t *testing.T) {
 	}
 }
 
+func TestSimpleRecoveryPointMarksImmediateRecoveryKeyFrame(t *testing.T) {
+	sps := simpleDPBTestSPS(1)
+	sps.Log2MaxFrameNum = 4
+	frame := simpleDPBTestFrame(sps, 3)
+	sh := simpleDPBTestPHeader(sps, 3, 1)
+	sh.NALType = NALSlice
+	sei := &H264SEIContext{}
+	sei.Reset()
+	sei.RecoveryPoint.RecoveryFrameCount = 0
+
+	var dpb simpleFrameDPB
+	dpb.reset()
+	dpb.applySimpleRecoveryPoint(frame, sh, 1, sei)
+	if !frame.KeyFrame || frame.recovered&simpleFrameRecoveredSEI == 0 || dpb.recoveryFrame != -1 {
+		t.Fatalf("recovery state = key %v recovered %#x recoveryFrame %d",
+			frame.KeyFrame, frame.recovered, dpb.recoveryFrame)
+	}
+}
+
+func TestSimpleRecoveryPointTracksModuloFrameNum(t *testing.T) {
+	sps := simpleDPBTestSPS(1)
+	sps.Log2MaxFrameNum = 4
+	start := simpleDPBTestFrame(sps, 14)
+	startHeader := simpleDPBTestPHeader(sps, 14, 1)
+	startHeader.NALType = NALSlice
+	sei := &H264SEIContext{}
+	sei.Reset()
+	sei.RecoveryPoint.RecoveryFrameCount = 3
+
+	var dpb simpleFrameDPB
+	dpb.reset()
+	dpb.applySimpleRecoveryPoint(start, startHeader, 1, sei)
+	if start.KeyFrame || start.recovered&simpleFrameRecoveredSEI != 0 || dpb.recoveryFrame != 1 {
+		t.Fatalf("start recovery state = key %v recovered %#x recoveryFrame %d",
+			start.KeyFrame, start.recovered, dpb.recoveryFrame)
+	}
+
+	next := simpleDPBTestFrame(sps, 1)
+	nextHeader := simpleDPBTestPHeader(sps, 1, 1)
+	nextHeader.NALType = NALSlice
+	emptySEI := &H264SEIContext{}
+	emptySEI.Reset()
+	dpb.applySimpleRecoveryPoint(next, nextHeader, 1, emptySEI)
+	if next.KeyFrame || next.recovered&simpleFrameRecoveredSEI == 0 || dpb.recoveryFrame != -1 {
+		t.Fatalf("target recovery state = key %v recovered %#x recoveryFrame %d",
+			next.KeyFrame, next.recovered, dpb.recoveryFrame)
+	}
+}
+
 func TestSimpleFrameDPBBuildsDefaultBListsAroundCurrentPOC(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	past := simpleDPBTestFrame(sps, 0)
@@ -234,7 +283,7 @@ func TestSimpleFrameDPBDelaysBOutputUntilFlush(t *testing.T) {
 	dpb.reset()
 	idr := simpleDPBTestFrame(sps, 0)
 	idr.poc = 0
-	idr.keyFrame = true
+	idr.idrKeyFrame = true
 	p := simpleDPBTestFrame(sps, 1)
 	p.poc = 4
 	b := simpleDPBTestFrame(sps, 2)
@@ -288,7 +337,7 @@ func TestSimpleFrameDPBInfersReorderDelayFromPOCGap(t *testing.T) {
 	dpb.reset()
 	idr := simpleDPBTestFrame(sps, 0)
 	idr.poc = 0
-	idr.keyFrame = true
+	idr.idrKeyFrame = true
 	p := simpleDPBTestFrame(sps, 1)
 	p.poc = 4
 	b := simpleDPBTestFrame(sps, 2)

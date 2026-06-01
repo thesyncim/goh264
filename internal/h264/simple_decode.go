@@ -38,12 +38,14 @@ type DecodedFrame struct {
 	RepeatPict                     int
 	InterlacedFrame                bool
 	TopFieldFirst                  bool
+	KeyFrame                       bool
 	SideData                       DecodedFrameSideData
 	frameNum                       uint32
 	fieldPOC                       [2]int32
 	poc                            int32
-	keyFrame                       bool
+	idrKeyFrame                    bool
 	mmcoReset                      bool
+	recovered                      uint8
 	tables                         *macroblockTables
 	refEntries                     [2][]simpleRefEntry
 }
@@ -270,8 +272,8 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 					return nil, err
 				}
 				applySimpleFrameTimingProps(frame, sh.SPS, sei, dpb)
+				dpb.applySimpleRecoveryPoint(frame, sh, nal.RefIDC, sei)
 				consumeFrameSideDataFromSEI(sei)
-				frame.keyFrame = nal.Type == NALIDRSlice
 				motionScratch = newH264MotionCompScratchForFrame(frame)
 			} else if err := frame.matchesSPS(sh.SPS); err != nil {
 				return nil, err
@@ -375,6 +377,7 @@ func consumeFrameSideDataFromSEI(sei *H264SEIContext) {
 	}
 	sei.PictureTiming.Present = 0
 	sei.PictureTiming.TimecodeCount = 0
+	sei.RecoveryPoint.RecoveryFrameCount = -1
 }
 
 func cloneByteSlices(src [][]uint8) [][]uint8 {

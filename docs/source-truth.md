@@ -115,8 +115,11 @@ SEI to prove decoded `Frame` exposes FFmpeg-shaped `repeat_pict`, interlaced,
 top-field-first metadata, and SMPTE 12M timecode words while preserving the
 rawvideo MD5. A native opt-in C oracle compiles the pinned
 `av_timecode_get_smpte` packing branch and compares the Go helper for 29.97,
-50, and 60 fps cases. Public rich-VUI tests synthesize a valid SPS and prove
-`StreamInfo` exposes FFmpeg-normalized
+50, and 60 fps cases. Recovery-point tests prove public key-frame flags for
+IDR frames, non-IDR frames carrying `recovery_frame_cnt == 0`, and non-zero
+recovery points, with an opt-in ffprobe frame-key oracle for the zero-count
+promotion. Public rich-VUI tests synthesize a valid SPS and prove `StreamInfo`
+exposes FFmpeg-normalized
 SAR, video full-range signaling, color primaries/transfer/matrix, chroma
 location, and timing fields.
 Monochrome
@@ -188,7 +191,10 @@ decoder now parses leading SEI NALs into decoder state while keeping SEI parser
 failures non-fatal, matching FFmpeg's default behavior without `AV_EF_EXPLODE`,
 consumes one-shot frame side data after export, and applies the simple
 frame-picture portion of FFmpeg `h264_export_frame_props` for picture-timing
-frame flags.
+frame flags. The simple DPB now keeps FFmpeg-shaped IDR and SEI recovery marks
+separate from the public output `KeyFrame` flag, including modulo
+`recovery_frame` tracking and the `output_frame` rule that promotes
+`recovery_frame_cnt == 0` frames to key frames.
 
 ## Decoder Boundary
 
@@ -199,7 +205,7 @@ Included:
 - H.264 packet side-data handling for `AV_PKT_DATA_NEW_EXTRADATA`-style parameter-set updates
 - H.264 NAL headers and RBSP handling
 - SPS VUI public metadata for SAR, video range/format, colorimetry, chroma location, and timing
-- Picture-timing-derived `repeat_pict`, interlaced, top-field-first, and SMPTE 12M timecode public frame metadata for the simple frame-picture path
+- Picture-timing-derived `repeat_pict`, interlaced, top-field-first, SMPTE 12M timecode, and key-frame public frame metadata for the simple frame-picture path
 - Decoded frame SEI side data for the translated subset, including registered ITU-T T.35 ATSC AFD/A53 captions, stereo3D, display matrix, mastering-display validity, ambient viewing environment, and H.274 film grain characteristics
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
