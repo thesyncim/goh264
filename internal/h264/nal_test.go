@@ -63,6 +63,54 @@ func TestSplitAVCC(t *testing.T) {
 	}
 }
 
+func TestSplitAutoPacket(t *testing.T) {
+	annexB := []byte{
+		0x00, 0x00, 0x00, 0x01, 0x67, 0xaa, 0x00, 0x00, 0x03, 0x01,
+		0x00, 0x00, 0x01, 0x68, 0xbb,
+	}
+	avc := []byte{
+		0x00, 0x00, 0x00, 0x06, 0x67, 0xaa, 0x00, 0x00, 0x03, 0x01,
+		0x00, 0x00, 0x00, 0x02, 0x68, 0xbb,
+	}
+
+	nals, format, err := SplitAutoPacket(annexB, 4)
+	if err != nil {
+		t.Fatalf("annexb configured length4: %v", err)
+	}
+	if format != H264PacketFormatAnnexB || len(nals) != 2 || nals[0].Type != NALSPS || nals[1].Type != NALPPS {
+		t.Fatalf("annexb format/nals = %d/%v", format, nals)
+	}
+
+	nals, format, err = SplitAutoPacket(avc, 4)
+	if err != nil {
+		t.Fatalf("avc configured length4: %v", err)
+	}
+	if format != H264PacketFormatAVC || len(nals) != 2 || nals[0].Type != NALSPS || nals[1].Type != NALPPS {
+		t.Fatalf("avc format/nals = %d/%v", format, nals)
+	}
+
+	nals, format, err = SplitAutoPacket(avc, 0)
+	if err != nil {
+		t.Fatalf("avc auto length4: %v", err)
+	}
+	if format != H264PacketFormatAVC || len(nals) != 2 {
+		t.Fatalf("auto avc format/nals = %d/%d", format, len(nals))
+	}
+
+	avc2 := []byte{0x00, 0x02, 0x67, 0xaa, 0x00, 0x02, 0x68, 0xbb}
+	nals, format, err = SplitAutoPacket(avc2, 2)
+	if err != nil {
+		t.Fatalf("avc configured length2: %v", err)
+	}
+	if format != H264PacketFormatAVC || len(nals) != 2 {
+		t.Fatalf("configured avc2 format/nals = %d/%d", format, len(nals))
+	}
+
+	if _, _, err := SplitAutoPacket(avc2, 5); err == nil {
+		t.Fatal("expected invalid configured length")
+	}
+}
+
 func TestSplitAVCCRejectsInvalidSize(t *testing.T) {
 	for _, tt := range []struct {
 		name          string

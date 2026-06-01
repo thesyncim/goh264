@@ -27,6 +27,36 @@ func TestDecodeAVCDecoderConfigurationRecord(t *testing.T) {
 	}
 }
 
+func TestIsAVCDecoderConfigurationRecord(t *testing.T) {
+	sps := mustHex(t, "6742c01eddec0440000003004000000300a3c58be0")
+	pps := mustHex(t, "68ce0fc8")
+	config := avcConfigRecord(t, 4, [][]byte{sps}, [][]byte{pps})
+	if !IsAVCDecoderConfigurationRecord(config) {
+		t.Fatal("avcC config was not detected")
+	}
+	for _, tt := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "empty", data: nil},
+		{name: "no sps", data: avcConfigRecord(t, 4, nil, [][]byte{pps})},
+		{name: "no pps", data: avcConfigRecord(t, 4, [][]byte{sps}, nil)},
+		{name: "wrong sps type", data: avcConfigRecord(t, 4, [][]byte{pps}, [][]byte{pps})},
+		{name: "wrong pps type", data: avcConfigRecord(t, 4, [][]byte{sps}, [][]byte{sps})},
+		{name: "bad reserved bits", data: append([]byte(nil), config...)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := tt.data
+			if tt.name == "bad reserved bits" {
+				data[4] &^= 0x80
+			}
+			if IsAVCDecoderConfigurationRecord(data) {
+				t.Fatal("unexpected avcC detection")
+			}
+		})
+	}
+}
+
 func TestDecodeAVCDecoderConfigurationRecordRejectsInvalidData(t *testing.T) {
 	sps := mustHex(t, "6742c01eddec0440000003004000000300a3c58be0")
 	pps := mustHex(t, "68ce0fc8")

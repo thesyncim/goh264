@@ -395,6 +395,57 @@ func TestDecodeAVCBlack16Frame(t *testing.T) {
 	}
 }
 
+func TestDecodeAutoBlack16AnnexBAndAVC(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	for _, tt := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "annexb", data: data},
+		{name: "avc4", data: annexBToAVC(t, data, 4)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			frame, err := NewDecoder().Decode(tt.data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+		})
+	}
+}
+
+func TestDecodeAutoAVCConfigurationPacket(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	config, packet := annexBToAVCConfigAndPacket(t, data, 4)
+	dec := NewDecoder()
+	frames, err := dec.DecodeFrames(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("config frames = %d, want 0", len(frames))
+	}
+	frames, err = dec.DecodeFrames(packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodeAutoConfiguredLength4SwitchesToAnnexB(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	config, _ := annexBToAVCConfigAndPacket(t, data, 4)
+	dec := NewDecoder()
+	if frames, err := dec.DecodeFrames(config); err != nil || len(frames) != 0 {
+		t.Fatalf("config decode frames=%d err=%v", len(frames), err)
+	}
+	frames, err := dec.DecodeFrames(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeAnnexBBlack16IPFrames(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	dec := NewDecoder()

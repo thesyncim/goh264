@@ -53,6 +53,43 @@ func NewDecoder() *Decoder {
 	return &Decoder{}
 }
 
+func (d *Decoder) Decode(data []byte) (*Frame, error) {
+	frames, err := d.DecodeFrames(data)
+	if err != nil {
+		return nil, err
+	}
+	if len(frames) != 1 {
+		return nil, ErrUnsupported
+	}
+	return frames[0], nil
+}
+
+func (d *Decoder) DecodeFrames(data []byte) ([]*Frame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	if len(data) == 0 {
+		return d.FlushDelayedFrames()
+	}
+	if h264.IsAVCDecoderConfigurationRecord(data) {
+		cfg, err := h264.DecodeAVCDecoderConfigurationRecord(data)
+		if err != nil {
+			return nil, err
+		}
+		d.storeAVCDecoderConfiguration(cfg)
+		return nil, nil
+	}
+	nals, _, err := h264.SplitAutoPacket(data, d.avcNALLengthSize)
+	if err != nil {
+		return nil, err
+	}
+	frames, err := d.simple.DecodeNALUnits(nals)
+	if err != nil {
+		return nil, err
+	}
+	return framesFromH264(frames), nil
+}
+
 func (d *Decoder) DecodeAnnexB(data []byte) (*Frame, error) {
 	frames, err := d.DecodeAnnexBFrames(data)
 	if err != nil {

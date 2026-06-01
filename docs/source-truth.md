@@ -89,7 +89,10 @@ require DPB reference state to survive across public decoder calls. The
 configured B-frame sample tests additionally decode one access unit per call and
 then use the public delayed-frame flush to drain retained future P pictures,
 covering FFmpeg's `last_pocs`/`has_b_frames` reorder inference and signaled VUI
-reorder-depth handling. Monochrome
+reorder-depth handling. The generic public `DecodeFrames` tests exercise Annex B
+and AVC4 auto-detection, packet-level `avcC` configuration storage, FFmpeg's
+configured 4-byte AVC/Annex B sniffing heuristic, and empty-packet delayed flush
+over the B-frame configured-sample fixtures. Monochrome
 native FFmpeg oracle checks
 request `-pix_fmt gray` so the frame-MD5 surface compares only the luma plane
 represented by `chroma_format_idc == 0`. The 16x16 High 4:4:4 Predictive

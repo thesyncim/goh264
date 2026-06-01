@@ -57,6 +57,13 @@ type AVCDecoderConfigurationRecord struct {
 	PPS           [maxPPSCount]*PPS
 }
 
+type H264PacketFormat uint8
+
+const (
+	H264PacketFormatAnnexB H264PacketFormat = iota
+	H264PacketFormatAVC
+)
+
 func SplitAnnexB(data []byte) ([]NALUnit, error) {
 	var out []NALUnit
 
@@ -151,6 +158,56 @@ func DecodeAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfigurationRe
 	return cfg, nil
 }
 
+// IsAVCDecoderConfigurationRecord mirrors the FFmpeg n8.0.1
+// libavcodec/h264dec.c is_avcc_extradata record walk. The public Go facade
+// accepts standalone avcC records with non-zero profile-compatibility flags,
+// while FFmpeg's frame-path wrapper only probes those packets after extra gates.
+func IsAVCDecoderConfigurationRecord(data []byte) bool {
+	if len(data) < 9 || data[0] != 1 || data[4]&0xfc != 0xfc {
+		return false
+	}
+	pos := 6
+	spsCount := int(data[5] & 0x1f)
+	if spsCount == 0 {
+		return false
+	}
+	for i := 0; i < spsCount; i++ {
+		raw, ok := peekAVCConfigNAL(data, &pos)
+		if !ok || raw[0]&0x9f != uint8(NALSPS) {
+			return false
+		}
+	}
+	if pos >= len(data) {
+		return false
+	}
+	ppsCount := int(data[pos])
+	pos++
+	if ppsCount == 0 {
+		return false
+	}
+	for i := 0; i < ppsCount; i++ {
+		raw, ok := peekAVCConfigNAL(data, &pos)
+		if !ok || raw[0]&0x9f != uint8(NALPPS) {
+			return false
+		}
+	}
+	return true
+}
+
+func peekAVCConfigNAL(data []byte, pos *int) ([]byte, bool) {
+	if pos == nil || *pos < 0 || *pos+2 > len(data) {
+		return nil, false
+	}
+	nalSize := int(data[*pos])<<8 | int(data[*pos+1])
+	*pos += 2
+	if nalSize <= 0 || nalSize > len(data)-*pos {
+		return nil, false
+	}
+	raw := data[*pos : *pos+nalSize]
+	*pos += nalSize
+	return raw, true
+}
+
 func readAVCConfigNAL(data []byte, pos *int) ([]byte, error) {
 	if pos == nil || *pos < 0 || *pos+2 > len(data) {
 		return nil, ErrInvalidData
@@ -213,6 +270,52 @@ func SplitAVCC(data []byte, nalLengthSize int) ([]NALUnit, error) {
 		return nil, ErrInvalidData
 	}
 	return out, nil
+}
+
+// SplitAutoPacket ports FFmpeg's nal_length_size==4 is_avc sniffing branch
+// from libavcodec/h264dec.c decode_nal_units, then falls back to the explicit
+// configured packet format or Annex B/4-byte AVC detection for unconfigured
+// public decode calls.
+func SplitAutoPacket(data []byte, configuredNALLengthSize int) ([]NALUnit, H264PacketFormat, error) {
+	if len(data) == 0 {
+		return nil, 0, ErrInvalidData
+	}
+	if configuredNALLengthSize < 0 || configuredNALLengthSize > 4 {
+		return nil, 0, ErrInvalidData
+	}
+
+	if configuredNALLengthSize == 4 {
+		if len(data) > 8 && be32(data, 0) == 1 && be32(data, 5) > uint32(len(data)) {
+			nals, err := SplitAnnexB(data)
+			return nals, H264PacketFormatAnnexB, err
+		}
+		if len(data) > 3 && be32(data, 0) > 1 && be32(data, 0) <= uint32(len(data)) {
+			nals, err := SplitAVCC(data, 4)
+			return nals, H264PacketFormatAVC, err
+		}
+	}
+	if configuredNALLengthSize >= 1 {
+		nals, err := SplitAVCC(data, configuredNALLengthSize)
+		return nals, H264PacketFormatAVC, err
+	}
+	if looksAnnexB(data) {
+		nals, err := SplitAnnexB(data)
+		return nals, H264PacketFormatAnnexB, err
+	}
+	if len(data) > 3 && be32(data, 0) > 1 && be32(data, 0) <= uint32(len(data)) {
+		nals, err := SplitAVCC(data, 4)
+		return nals, H264PacketFormatAVC, err
+	}
+	return nil, 0, ErrInvalidData
+}
+
+func looksAnnexB(data []byte) bool {
+	_, _, ok := findStartCode(data, 0)
+	return ok
+}
+
+func be32(data []byte, off int) uint32 {
+	return uint32(data[off])<<24 | uint32(data[off+1])<<16 | uint32(data[off+2])<<8 | uint32(data[off+3])
 }
 
 func parseNAL(raw []byte) (NALUnit, error) {

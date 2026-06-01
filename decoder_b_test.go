@@ -206,6 +206,50 @@ func TestDecodeConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 	}
 }
 
+func TestDecodeAutoConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
+	for _, tt := range bFrameFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := tt.decode(t)
+			config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+			if len(samples) != len(tt.want) {
+				t.Fatalf("samples = %d, want %d", len(samples), len(tt.want))
+			}
+
+			dec := NewDecoder()
+			out, err := dec.DecodeFrames(config)
+			if err != nil {
+				t.Fatalf("config: %v", err)
+			}
+			if len(out) != 0 {
+				t.Fatalf("config frames = %d, want 0", len(out))
+			}
+
+			var frames []*Frame
+			for i, sample := range samples {
+				out, err = dec.DecodeFrames(sample)
+				if err != nil {
+					t.Fatalf("sample[%d]: %v", i, err)
+				}
+				frames = append(frames, out...)
+			}
+			out, err = dec.DecodeFrames(nil)
+			if err != nil {
+				t.Fatalf("flush: %v", err)
+			}
+			frames = append(frames, out...)
+			assertFrameMD5Strings(t, frames, tt.want)
+
+			out, err = dec.DecodeFrames(nil)
+			if err != nil {
+				t.Fatalf("second flush: %v", err)
+			}
+			if len(out) != 0 {
+				t.Fatalf("second flush frames = %d, want 0", len(out))
+			}
+		})
+	}
+}
+
 func TestDecodeConfiguredAVCTestsrcBFramesFlushRetainedReferenceSample(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
