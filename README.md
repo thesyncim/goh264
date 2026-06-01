@@ -25,12 +25,19 @@ Fixture hashes/oracles: `testdata/h264/corpus/manifest.jsonl`.
 go test ./...
 GOH264_ORACLE=1 go test ./...
 go test . -run TestH264CorpusManifest
+GOH264_REAL_VECTORS=1 GOH264_CORPUS_FETCH=1 GOH264_CORPUS_FILTER=canl4 go test . -run TestH264RealVectorManifest
+GOH264_CORPUS_MANIFEST=testdata/h264/realvectors/failures.jsonl GOH264_CORPUS_FETCH=1 go test . -run TestH264CorpusManifest
 ```
+
+The last command is intentionally red until the public FATE failure ledger is
+cleared. Narrow scout work with `GOH264_CORPUS_FILTER=caba3`, `cvwp3`, `frext`,
+or any feature tag in the manifest.
 
 ## Benchmark
 
 ```sh
 go run ./cmd/goh264bench -manifest testdata/h264/corpus/manifest.jsonl -iters 5 -repeats 5 -ffmpeg -json
+go run ./cmd/goh264bench -manifest testdata/h264/realvectors/manifest.jsonl -filter canl4 -iters 1 -repeats 1 -warmup 0 -ffmpeg -json
 ```
 
 The FFmpeg comparator is CLI-based, useful for parity and rough timing. In-process

@@ -78,6 +78,12 @@ func testH264CorpusManifest(t *testing.T, manifest string) {
 	if len(entries) == 0 {
 		t.Fatalf("%s: no corpus entries", manifest)
 	}
+	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
+		entries = filterH264CorpusEntries(entries, filter)
+		if len(entries) == 0 {
+			t.Fatalf("%s: no corpus entries matched GOH264_CORPUS_FILTER=%q", manifest, os.Getenv("GOH264_CORPUS_FILTER"))
+		}
+	}
 
 	for _, entry := range entries {
 		entry := entry
@@ -123,6 +129,91 @@ func TestH264CorpusManifestPaths(t *testing.T) {
 	if got := h264CorpusManifestPaths(); len(got) != 2 || got[0] != "one.jsonl" || got[1] != "two.jsonl" {
 		t.Fatalf("manifest list = %v, want one.jsonl/two.jsonl", got)
 	}
+}
+
+func TestH264CorpusFilter(t *testing.T) {
+	entries := []h264CorpusEntry{
+		{
+			ID:          "fate/h264-conformance/caba3-sva-b",
+			Path:        "CABA3_SVA_B.264",
+			Source:      "FFmpeg FATE h264-conformance",
+			Expect:      "decode-ok",
+			PixFmt:      "yuv420p",
+			FeatureTags: []string{"cabac", "main", "temporal-direct", "deblock"},
+			Surfaces:    []string{"annexb"},
+		},
+		{
+			ID:          "fate/h264-conformance/cvwp3-toshiba-e",
+			Path:        "CVWP3_TOSHIBA_E.264",
+			Source:      "FFmpeg FATE h264-conformance",
+			Expect:      "decode-ok",
+			PixFmt:      "yuv420p",
+			FeatureTags: []string{"cabac", "implicit-weight-b", "weighted-bipred"},
+			Surfaces:    []string{"annexb"},
+		},
+	}
+
+	filtered := filterH264CorpusEntries(entries, []string{"cabac", "temporal"})
+	if len(filtered) != 1 || filtered[0].ID != "fate/h264-conformance/caba3-sva-b" {
+		t.Fatalf("filtered entries = %+v, want caba3 only", filtered)
+	}
+
+	filtered = filterH264CorpusEntries(entries, []string{"weighted"})
+	if len(filtered) != 1 || filtered[0].ID != "fate/h264-conformance/cvwp3-toshiba-e" {
+		t.Fatalf("filtered entries = %+v, want cvwp3 only", filtered)
+	}
+}
+
+func h264CorpusFilterTokens() []string {
+	filter := os.Getenv("GOH264_CORPUS_FILTER")
+	if filter == "" {
+		return nil
+	}
+	return strings.FieldsFunc(strings.ToLower(filter), func(r rune) bool {
+		switch r {
+		case ',', ';', ' ', '\t', '\n', '\r':
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+func filterH264CorpusEntries(entries []h264CorpusEntry, tokens []string) []h264CorpusEntry {
+	filtered := entries[:0]
+	for _, entry := range entries {
+		if h264CorpusEntryMatches(entry, tokens) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+func h264CorpusEntryMatches(entry h264CorpusEntry, tokens []string) bool {
+	haystack := strings.ToLower(strings.Join(h264CorpusEntrySearchFields(entry), "\x00"))
+	for _, token := range tokens {
+		if token != "" && !strings.Contains(haystack, token) {
+			return false
+		}
+	}
+	return true
+}
+
+func h264CorpusEntrySearchFields(entry h264CorpusEntry) []string {
+	fields := []string{
+		entry.ID,
+		entry.Path,
+		entry.URL,
+		entry.Format,
+		entry.Expect,
+		entry.ExpectedError,
+		entry.PixFmt,
+		entry.Source,
+	}
+	fields = append(fields, entry.Surfaces...)
+	fields = append(fields, entry.GuardTags...)
+	fields = append(fields, entry.FeatureTags...)
+	return fields
 }
 
 func TestValidateH264CorpusEntryAllowsURLBackedDecodeOK(t *testing.T) {

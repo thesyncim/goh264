@@ -36,6 +36,7 @@ type benchMetadata struct {
 	InputBytes     int64  `json:"input_bytes"`
 	InputMD5       string `json:"input_md5"`
 	CorpusManifest string `json:"corpus_manifest,omitempty"`
+	CorpusFilter   string `json:"corpus_filter,omitempty"`
 	CorpusEntries  int    `json:"corpus_entries,omitempty"`
 	CorpusDecodeOK int    `json:"corpus_decode_ok_entries,omitempty"`
 	FairnessPolicy string `json:"fairness_policy,omitempty"`
@@ -113,6 +114,7 @@ type benchOptions struct {
 	ffmpegThreads string
 	ffmpegPixFmt  string
 	strictPixFmt  bool
+	corpusFilter  string
 }
 
 type benchCorpusEntry struct {
@@ -137,6 +139,7 @@ func main() {
 	input := flag.String("input", "", "H.264 input file")
 	manifest := flag.String("manifest", "", "JSONL H.264 corpus manifest; benchmarks decode-ok entries after oracle parity validation")
 	maxEntries := flag.Int("max-entries", 0, "maximum decode-ok manifest entries to benchmark; 0 means all")
+	corpusFilter := flag.String("filter", os.Getenv("GOH264_CORPUS_FILTER"), "comma/space-separated manifest entry filter; defaults to GOH264_CORPUS_FILTER")
 	iters := flag.Int("iters", 5, "measured iterations")
 	repeats := flag.Int("repeats", 1, "measured repeat samples; each sample runs -iters decodes")
 	warmup := flag.Int("warmup", 1, "warmup iterations")
@@ -163,6 +166,7 @@ func main() {
 		ffmpegThreads: *ffmpegThreads,
 		ffmpegPixFmt:  *ffmpegPixFmt,
 		strictPixFmt:  *strictPixFmt,
+		corpusFilter:  *corpusFilter,
 	}
 	report, err := buildBenchReport(*input, *manifest, *maxEntries, opts)
 	if err != nil {
@@ -263,6 +267,12 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 	if err != nil {
 		return benchReport{}, err
 	}
+	if filter := benchCorpusFilterTokens(opts.corpusFilter); len(filter) != 0 {
+		entries = filterBenchCorpusEntries(entries, filter)
+		if len(entries) == 0 {
+			return benchReport{}, fmt.Errorf("%s: no corpus entries matched filter %q", path, opts.corpusFilter)
+		}
+	}
 
 	baseDir := filepath.Dir(path)
 	var results []benchResult
@@ -306,6 +316,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 
 	meta := benchmarkMetadata(path, manifestData, opts.runFFmpeg, opts.ffmpegBin)
 	meta.CorpusManifest = path
+	meta.CorpusFilter = opts.corpusFilter
 	meta.CorpusEntries = len(entries)
 	meta.CorpusDecodeOK = decoded
 	meta.ComparisonKind = "manifest-goh264-in-process"
@@ -314,6 +325,56 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 	}
 	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 match the manifest oracle; optional FFmpeg CLI rawvideo output must match the same rawvideo MD5 before results are emitted. FFmpeg timing remains a process-per-iteration CLI baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
+}
+
+func benchCorpusFilterTokens(filter string) []string {
+	if filter == "" {
+		return nil
+	}
+	return strings.FieldsFunc(strings.ToLower(filter), func(r rune) bool {
+		switch r {
+		case ',', ';', ' ', '\t', '\n', '\r':
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+func filterBenchCorpusEntries(entries []benchCorpusEntry, tokens []string) []benchCorpusEntry {
+	filtered := entries[:0]
+	for _, entry := range entries {
+		if benchCorpusEntryMatches(entry, tokens) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+func benchCorpusEntryMatches(entry benchCorpusEntry, tokens []string) bool {
+	haystack := strings.ToLower(strings.Join(benchCorpusEntrySearchFields(entry), "\x00"))
+	for _, token := range tokens {
+		if token != "" && !strings.Contains(haystack, token) {
+			return false
+		}
+	}
+	return true
+}
+
+func benchCorpusEntrySearchFields(entry benchCorpusEntry) []string {
+	fields := []string{
+		entry.ID,
+		entry.Path,
+		entry.URL,
+		entry.Format,
+		entry.Expect,
+		entry.PixFmt,
+		entry.Source,
+	}
+	fields = append(fields, entry.Surfaces...)
+	fields = append(fields, entry.GuardTags...)
+	fields = append(fields, entry.FeatureTags...)
+	return fields
 }
 
 func readBenchCorpusManifest(path string) ([]benchCorpusEntry, error) {

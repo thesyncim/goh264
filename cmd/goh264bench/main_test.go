@@ -82,6 +82,39 @@ func TestReadBenchCorpusManifestAndValidate(t *testing.T) {
 	}
 }
 
+func TestBenchCorpusFilter(t *testing.T) {
+	entries := []benchCorpusEntry{
+		{
+			ID:          "fate/h264-conformance/caba3-sva-b",
+			Path:        "CABA3_SVA_B.264",
+			Source:      "FFmpeg FATE h264-conformance",
+			Expect:      "decode-ok",
+			PixFmt:      "yuv420p",
+			Surfaces:    []string{"annexb"},
+			FeatureTags: []string{"cabac", "main", "temporal-direct", "deblock"},
+		},
+		{
+			ID:          "fate/h264-conformance/cvwp3-toshiba-e",
+			Path:        "CVWP3_TOSHIBA_E.264",
+			Source:      "FFmpeg FATE h264-conformance",
+			Expect:      "decode-ok",
+			PixFmt:      "yuv420p",
+			Surfaces:    []string{"annexb"},
+			FeatureTags: []string{"cabac", "implicit-weight-b", "weighted-bipred"},
+		},
+	}
+
+	filtered := filterBenchCorpusEntries(entries, benchCorpusFilterTokens("cabac temporal"))
+	if len(filtered) != 1 || filtered[0].ID != "fate/h264-conformance/caba3-sva-b" {
+		t.Fatalf("filtered entries = %+v, want caba3 only", filtered)
+	}
+
+	filtered = filterBenchCorpusEntries(entries, benchCorpusFilterTokens("weighted"))
+	if len(filtered) != 1 || filtered[0].ID != "fate/h264-conformance/cvwp3-toshiba-e" {
+		t.Fatalf("filtered entries = %+v, want cvwp3 only", filtered)
+	}
+}
+
 func TestValidateBenchBitstreamMD5(t *testing.T) {
 	data := []byte("h264")
 	sum := md5.Sum(data)
