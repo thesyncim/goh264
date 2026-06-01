@@ -39,8 +39,9 @@ pinned FFmpeg `libavcodec/cabac.c` and `cabac_functions.h` from
 against the Go port.
 
 The H.264 prediction oracle compiles the pinned `libavcodec/h264pred_template.c`
-and compares 8-bit luma/chroma prediction outputs, including FFmpeg's 4:2:0 and
-4:2:2 mad-cow unavailable-neighbor chroma DC predictors.
+and compares 8-bit plus 9/10/12/14-bit high-bit-depth luma/chroma prediction
+outputs, including FFmpeg's 4:2:0 and 4:2:2 mad-cow unavailable-neighbor
+chroma DC predictors and H.264 lossless prediction-add wrappers.
 
 The H.264 DSP oracle compiles the pinned `libavcodec/h264dsp_template.c` and
 `libavcodec/h264addpx_template.c`, comparing 8-bit reference kernels plus the

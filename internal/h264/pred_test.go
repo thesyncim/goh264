@@ -28,6 +28,29 @@ func TestH264Pred16x16DCAndPlane(t *testing.T) {
 	}
 }
 
+func TestH264PredHighDC128AndValidation(t *testing.T) {
+	const stride = 24
+	const offset = 4*stride + 4
+	pix := make([]uint16, stride*24)
+
+	if err := h264Pred16x16DC128High(pix, offset, stride, 10); err != nil {
+		t.Fatal(err)
+	}
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			if got := pix[offset+y*stride+x]; got != 512 {
+				t.Fatalf("10-bit dc128 sample (%d,%d) = %d, want 512", x, y, got)
+			}
+		}
+	}
+	if err := h264Pred16x16DC128High(pix, offset, stride, 8); err != ErrUnsupported {
+		t.Fatalf("8-bit high predictor error = %v, want ErrUnsupported", err)
+	}
+	if err := h264Pred16x16PlaneHigh(make([]uint16, 16*16), 0, 16, 10); err != ErrInvalidData {
+		t.Fatalf("missing high plane margins error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestH264Pred8x8DCQuadrants(t *testing.T) {
 	const stride = 16
 	const offset = 4*stride + 4
@@ -208,6 +231,35 @@ func TestH264Pred4x4AddWrapsAndClears(t *testing.T) {
 	for i, coeff := range block {
 		if coeff != 0 {
 			t.Fatalf("block[%d] = %d, want cleared", i, coeff)
+		}
+	}
+}
+
+func TestH264Pred4x4HighAddWrapsAndClears(t *testing.T) {
+	const stride = 8
+	const offset = 2*stride + 2
+	pix := make([]uint16, stride*8)
+	pix[offset-stride+0] = 1020
+	pix[offset-stride+1] = 1
+	pix[offset-stride+2] = 1023
+	pix[offset-stride+3] = 5
+	block := []int32{
+		10, -4, 1, -6,
+		0, 0, 0, 0,
+		0, 0, 0, 0,
+		0, 0, 0, 0,
+	}
+
+	if err := h264Pred4x4VerticalAddHigh(pix, offset, block, stride, 10); err != nil {
+		t.Fatal(err)
+	}
+	if pix[offset] != 1030 || pix[offset+1] != 65533 || pix[offset+2] != 1024 || pix[offset+3] != 65535 {
+		t.Fatalf("high vertical add row = %d/%d/%d/%d, want 1030/65533/1024/65535",
+			pix[offset], pix[offset+1], pix[offset+2], pix[offset+3])
+	}
+	for i, coeff := range block {
+		if coeff != 0 {
+			t.Fatalf("high block[%d] = %d, want cleared", i, coeff)
 		}
 	}
 }
