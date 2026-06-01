@@ -170,6 +170,9 @@ type Frame struct {
 	NumUnitsInTick                 uint32
 	TimeScale                      uint32
 	FixedFrameRateFlag             int32
+	RepeatPict                     int
+	InterlacedFrame                bool
+	TopFieldFirst                  bool
 	YStride                        int
 	CStride                        int
 	Y                              []byte
@@ -596,6 +599,9 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 		NumUnitsInTick:                 src.NumUnitsInTick,
 		TimeScale:                      src.TimeScale,
 		FixedFrameRateFlag:             src.FixedFrameRateFlag,
+		RepeatPict:                     src.RepeatPict,
+		InterlacedFrame:                src.InterlacedFrame,
+		TopFieldFirst:                  src.TopFieldFirst,
 		YStride:                        src.LumaStride,
 		CStride:                        src.ChromaStride,
 		Y:                              src.Y,

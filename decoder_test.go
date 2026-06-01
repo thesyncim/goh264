@@ -590,6 +590,76 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 	}
 }
 
+func TestDecodeFrameTimingFromPictureTimingSEI(t *testing.T) {
+	base := replaceAnnexBSPS(t, decodeHexFixture(t, black16AnnexBHex), decoderSPSNALWithPicStructVUI())
+	for _, tt := range []struct {
+		name          string
+		payload       []byte
+		picStruct     int32
+		repeatPict    int
+		interlaced    bool
+		topFieldFirst bool
+	}{
+		{
+			name:          "top-bottom-uses-initial-prev-interlaced",
+			payload:       decoderSEIPictureTimingPayload(decoderSEIPicStructTopBottom),
+			picStruct:     decoderSEIPicStructTopBottom,
+			interlaced:    true,
+			topFieldFirst: true,
+		},
+		{
+			name:       "top-field",
+			payload:    decoderSEIPictureTimingPayload(decoderSEIPicStructTopField),
+			picStruct:  decoderSEIPicStructTopField,
+			interlaced: true,
+		},
+		{
+			name:          "top-bottom-top-repeat",
+			payload:       decoderSEIPictureTimingPayload(decoderSEIPicStructTopBottomTop),
+			picStruct:     decoderSEIPicStructTopBottomTop,
+			repeatPict:    1,
+			topFieldFirst: true,
+		},
+		{
+			name:       "frame-doubling",
+			payload:    decoderSEIPictureTimingPayload(decoderSEIPicStructFrameDoubling),
+			picStruct:  decoderSEIPicStructFrameDoubling,
+			repeatPict: 2,
+		},
+		{
+			name:       "frame-tripling",
+			payload:    decoderSEIPictureTimingPayload(decoderSEIPicStructFrameTripling),
+			picStruct:  decoderSEIPicStructFrameTripling,
+			repeatPict: 4,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := prependAnnexBNAL(base, decoderTestSEINAL(decoderSEITestMessage{
+				typ:     decoderSEITypePicTiming,
+				payload: tt.payload,
+			}))
+			frame, err := NewDecoder().Decode(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+			if frame.RepeatPict != tt.repeatPict || frame.InterlacedFrame != tt.interlaced ||
+				frame.TopFieldFirst != tt.topFieldFirst {
+				t.Fatalf("frame timing = repeat %d interlaced %t top-first %t",
+					frame.RepeatPict, frame.InterlacedFrame, frame.TopFieldFirst)
+			}
+			if frame.SideData.PictureTiming == nil {
+				t.Fatalf("missing picture timing side data")
+			}
+			if frame.SideData.PictureTiming.PicStruct != tt.picStruct ||
+				frame.SideData.PictureTiming.CTType != 0 ||
+				len(frame.SideData.PictureTiming.Timecode) != 0 {
+				t.Fatalf("picture timing = %+v", frame.SideData.PictureTiming)
+			}
+		})
+	}
+}
+
 func TestDecodeAnnexBBlack16IPFrames(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	dec := NewDecoder()
@@ -1548,6 +1618,7 @@ func TestFFmpegFrameMD5OracleTestsrc16High422(t *testing.T) {
 }
 
 const (
+	decoderSEITypePicTiming                    = 1
 	decoderSEITypeRecoveryPoint                = 6
 	decoderSEITypeGreenMetadata                = 56
 	decoderSEITypeFramePackingArrangement      = 45
@@ -1555,27 +1626,31 @@ const (
 	decoderSEITypeMasteringDisplayColourVolume = 137
 	decoderSEITypeContentLightLevelInfo        = 144
 	decoderSEITypeAlternativeTransfer          = 147
+
+	decoderSEIPicStructTopField      = 1
+	decoderSEIPicStructTopBottom     = 3
+	decoderSEIPicStructTopBottomTop  = 5
+	decoderSEIPicStructFrameDoubling = 7
+	decoderSEIPicStructFrameTripling = 8
 )
 
 func decoderSPSNALWithRichVUI(t *testing.T) []byte {
 	t.Helper()
 	var b decoderSEIBitBuilder
-	b.writeBits(66, 8) // profile_idc
-	b.writeBits(0, 6)  // constraint flags
-	b.writeBits(0, 2)
-	b.writeBits(30, 8) // level_idc
-	b.writeUE(0)       // seq_parameter_set_id
-	b.writeUE(0)       // log2_max_frame_num_minus4
-	b.writeUE(0)       // pic_order_cnt_type
-	b.writeUE(0)       // log2_max_pic_order_cnt_lsb_minus4
-	b.writeUE(2)       // max_num_ref_frames
-	b.writeBit(0)      // gaps_in_frame_num_value_allowed_flag
-	b.writeUE(0)       // pic_width_in_mbs_minus1
-	b.writeUE(0)       // pic_height_in_map_units_minus1
-	b.writeBit(1)      // frame_mbs_only_flag
-	b.writeBit(1)      // direct_8x8_inference_flag
-	b.writeBit(0)      // frame_cropping_flag
-	b.writeBit(1)      // vui_parameters_present_flag
+	b.writeBits(66, 8)   // profile_idc
+	b.writeBits(0xc0, 8) // constraint flags plus reserved bits
+	b.writeBits(30, 8)   // level_idc
+	b.writeUE(0)         // seq_parameter_set_id
+	b.writeUE(0)         // log2_max_frame_num_minus4
+	b.writeUE(2)         // pic_order_cnt_type
+	b.writeUE(0)         // max_num_ref_frames
+	b.writeBit(0)        // gaps_in_frame_num_value_allowed_flag
+	b.writeUE(0)         // pic_width_in_mbs_minus1
+	b.writeUE(0)         // pic_height_in_map_units_minus1
+	b.writeBit(1)        // frame_mbs_only_flag
+	b.writeBit(1)        // direct_8x8_inference_flag
+	b.writeBit(0)        // frame_cropping_flag
+	b.writeBit(1)        // vui_parameters_present_flag
 
 	b.writeBit(1)       // aspect_ratio_info_present_flag
 	b.writeBits(255, 8) // Extended_SAR
@@ -1614,13 +1689,22 @@ func decoderSPSNALWithRichVUI(t *testing.T) []byte {
 	return append(raw, escapeRBSPForNALPayload(rbsp)...)
 }
 
+func decoderSPSNALWithPicStructVUI() []byte {
+	return []byte{
+		0x67, 0x42, 0xc0, 0x0a, 0xdd, 0xec, 0x04, 0x40,
+		0x00, 0x00, 0xfa, 0x40, 0x00, 0x3a, 0x98, 0x27,
+		0xc4, 0x89, 0xe0,
+	}
+}
+
 type decoderSEITestMessage struct {
 	typ     int
 	payload []byte
 }
 
 func decoderTestSEINAL(messages ...decoderSEITestMessage) []byte {
-	return append([]byte{byte(h264.NALSEI)}, decoderTestSEIRBSP(messages...)...)
+	rbsp := decoderTestSEIRBSP(messages...)
+	return append([]byte{byte(h264.NALSEI)}, escapeRBSPForNALPayload(rbsp)...)
 }
 
 func decoderTestSEIRBSP(messages ...decoderSEITestMessage) []byte {
@@ -1640,6 +1724,17 @@ func appendDecoderSEIHeaderValue(out []byte, value int) []byte {
 	}
 	return append(out, uint8(value))
 }
+
+func decoderSEIPictureTimingPayload(picStruct uint32) []byte {
+	var b decoderSEIBitBuilder
+	b.writeBits(picStruct, 4)
+	for i := uint8(0); i < decoderSEINumClockTSTable[picStruct]; i++ {
+		b.writeBit(0)
+	}
+	return b.bytes()
+}
+
+var decoderSEINumClockTSTable = [9]uint8{1, 1, 1, 2, 2, 3, 3, 2, 3}
 
 func decoderSEIRecoveryPointPayload() []byte {
 	var b decoderSEIBitBuilder
@@ -1782,6 +1877,28 @@ func prependAnnexBNAL(data []byte, raw []byte) []byte {
 func appendAnnexBNAL(dst []byte, raw []byte) []byte {
 	dst = append(dst, 0x00, 0x00, 0x00, 0x01)
 	return append(dst, raw...)
+}
+
+func replaceAnnexBSPS(t *testing.T, data []byte, sps []byte) []byte {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []byte
+	replaced := false
+	for _, nal := range nals {
+		if nal.Type == h264.NALSPS && !replaced {
+			out = appendAnnexBNAL(out, sps)
+			replaced = true
+			continue
+		}
+		out = appendAnnexBNAL(out, nal.Raw)
+	}
+	if !replaced {
+		t.Fatal("no SPS NAL found")
+	}
+	return out
 }
 
 func annexBParameterSetsAndPacket(t *testing.T, data []byte) ([]byte, []byte) {

@@ -23,6 +23,8 @@ type simpleFrameDPB struct {
 	lastPOCsInit      bool
 	nextOutputedPOC   int32
 	nextOutputedValid bool
+	prevInterlaced    bool
+	prevInterlacedSet bool
 }
 
 type simpleRefEntry struct {
@@ -58,7 +60,28 @@ func (d *simpleFrameDPB) reset() {
 		d.resetLastPOCs()
 		d.nextOutputedPOC = 0
 		d.nextOutputedValid = false
+		d.prevInterlaced = true
+		d.prevInterlacedSet = true
 	}
+}
+
+func (d *simpleFrameDPB) previousInterlacedFrame() bool {
+	if d == nil {
+		return true
+	}
+	if !d.prevInterlacedSet {
+		d.prevInterlaced = true
+		d.prevInterlacedSet = true
+	}
+	return d.prevInterlaced
+}
+
+func (d *simpleFrameDPB) setPreviousInterlacedFrame(v bool) {
+	if d == nil {
+		return
+	}
+	d.prevInterlaced = v
+	d.prevInterlacedSet = true
 }
 
 func (d *simpleFrameDPB) resetRefs() {

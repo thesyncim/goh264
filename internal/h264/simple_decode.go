@@ -35,6 +35,9 @@ type DecodedFrame struct {
 	NumUnitsInTick                 uint32
 	TimeScale                      uint32
 	FixedFrameRateFlag             int32
+	RepeatPict                     int
+	InterlacedFrame                bool
+	TopFieldFirst                  bool
 	SideData                       DecodedFrameSideData
 	frameNum                       uint32
 	fieldPOC                       [2]int32
@@ -262,6 +265,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
+				applySimpleFrameTimingProps(frame, sh.SPS, sei, dpb)
 				frame.keyFrame = nal.Type == NALIDRSlice
 				motionScratch = newH264MotionCompScratchForFrame(frame)
 			} else if err := frame.matchesSPS(sh.SPS); err != nil {
@@ -359,6 +363,58 @@ func cloneByteSlices(src [][]uint8) [][]uint8 {
 		out[i] = append([]uint8(nil), src[i]...)
 	}
 	return out
+}
+
+// applySimpleFrameTimingProps mirrors FFmpeg n8.0.1 h264_export_frame_props
+// for the simple frame-picture path. Field and MBAFF decoding remain
+// unsupported, but the public frame flags still follow picture-timing SEI.
+func applySimpleFrameTimingProps(frame *DecodedFrame, sps *SPS, sei *H264SEIContext, dpb *simpleFrameDPB) {
+	if frame == nil || sps == nil {
+		return
+	}
+
+	interlacedFrame := false
+	topFieldFirst := false
+	repeatPict := 0
+	timingPresent := sei != nil && sei.PictureTiming.Present != 0
+	if sps.PicStructPresentFlag != 0 && timingPresent {
+		pt := &sei.PictureTiming
+		switch pt.PicStruct {
+		case h264SEIPicStructFrame:
+		case h264SEIPicStructTopField, h264SEIPicStructBottomField:
+			interlacedFrame = true
+		case h264SEIPicStructTopBottom, h264SEIPicStructBottomTop:
+			interlacedFrame = dpb.previousInterlacedFrame()
+		case h264SEIPicStructTopBottomTop, h264SEIPicStructBottomTopBottom:
+			repeatPict = 1
+		case h264SEIPicStructFrameDoubling:
+			repeatPict = 2
+		case h264SEIPicStructFrameTripling:
+			repeatPict = 4
+		}
+
+		if (pt.CTType&3) != 0 && pt.PicStruct <= h264SEIPicStructBottomTop {
+			interlacedFrame = (pt.CTType & (1 << 1)) != 0
+		}
+	}
+	if dpb != nil {
+		dpb.setPreviousInterlacedFrame(interlacedFrame)
+	}
+
+	if frame.fieldPOC[0] != frame.fieldPOC[1] {
+		topFieldFirst = frame.fieldPOC[0] < frame.fieldPOC[1]
+	} else if sps.PicStructPresentFlag != 0 && timingPresent {
+		if sei.PictureTiming.PicStruct == h264SEIPicStructTopBottom ||
+			sei.PictureTiming.PicStruct == h264SEIPicStructTopBottomTop {
+			topFieldFirst = true
+		}
+	} else if interlacedFrame {
+		topFieldFirst = true
+	}
+
+	frame.RepeatPict = repeatPict
+	frame.InterlacedFrame = interlacedFrame
+	frame.TopFieldFirst = topFieldFirst
 }
 
 func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
