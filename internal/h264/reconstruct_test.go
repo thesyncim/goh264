@@ -114,6 +114,38 @@ func TestH264HLDecodeFrameMacroblockIntraPCMReconstructs422(t *testing.T) {
 	assertH264Rows(t, "pcm cr", dst.Cr, crOff, dst.ChromaStride, 8, 16, pcm[256+16*8:], 8)
 }
 
+func TestH264HLDecodeFrameMacroblockIntra16x16Reconstructs444PaddedChromaStride(t *testing.T) {
+	dst := makeH264MotionCompPicture(3, 23)
+	_, chromaHeight := h264ChromaFrameSize(dst.MBWidth, dst.MBHeight, dst.ChromaFormatIDC)
+	dst.ChromaStride = dst.LumaStride + 16
+	dst.Cb = make([]uint8, dst.ChromaStride*chromaHeight)
+	dst.Cr = make([]uint8, dst.ChromaStride*chromaHeight)
+	fillH264MotionCompPlane(dst.Cb, 52)
+	fillH264MotionCompPlane(dst.Cr, 94)
+	var residual cavlcResidualContext
+	mbX, mbY := 1, 1
+
+	if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInput{
+		MBType:             MBTypeIntra16x16,
+		MBX:                mbX,
+		MBY:                mbY,
+		QScale:             20,
+		ChromaQP:           [2]uint8{20, 21},
+		Intra16x16PredMode: int8(intraPredDC1288x8),
+		PPS:                cavlcFlatQMulPPS(),
+		Residual:           &residual,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, cbOff, crOff, err := h264MBDestPartOffsets(dst, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertH264ConstantBlock(t, "444 cb", dst.Cb, cbOff, dst.ChromaStride, 16, 16, 128)
+	assertH264ConstantBlock(t, "444 cr", dst.Cr, crOff, dst.ChromaStride, 16, 16, 128)
+}
+
 func TestH264HLDecodeFrameMacroblockIntra4x4Reconstructs420(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
 	residual := h264ReconstructResidualIntra4x4()
@@ -258,6 +290,17 @@ func assertH264Rows(t *testing.T, label string, dst []uint8, offset int, stride 
 			got := dst[offset+y*stride+x]
 			want := src[y*srcStride+x]
 			if got != want {
+				t.Fatalf("%s[%d,%d] = %d, want %d", label, x, y, got, want)
+			}
+		}
+	}
+}
+
+func assertH264ConstantBlock(t *testing.T, label string, dst []uint8, offset int, stride int, width int, height int, want uint8) {
+	t.Helper()
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			if got := dst[offset+y*stride+x]; got != want {
 				t.Fatalf("%s[%d,%d] = %d, want %d", label, x, y, got, want)
 			}
 		}

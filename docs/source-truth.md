@@ -53,9 +53,11 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - High 4:2:2 CABAC `testsrc2` IDR/P rawvideo frame MD5s: `e06b0f34fe689940304653e5c3840a53`, `424fb373278235a5d2b0808968cb0e58`, `b6e4d159f8c0b0bb452de55824214ac6`, `892dfdee5dbf37558f99a6fe0c278abb`
 - High monochrome CAVLC `testsrc2` IDR/P gray rawvideo frame MD5s: `7d7c6b5414619f78c6303e94f6c69dba`, `6ae5ffb09f3156812deccefdf58a6c74`, `f1dd36e9dbc0f928b6e57afc2022a8f2`, `504e78844c238b097aa59235df29ec07`
 - High monochrome CABAC `testsrc2` IDR/P gray rawvideo frame MD5s: `cf88b0a4244f7df1c3c54613f6290345`, `d003fa3ed4b3edd4622c36e4c2b5249c`, `677639d3d5857b18931e727d46e6a4cc`, `fb50b49ba64db3576559b442d3c4a6ad`
+- High 4:4:4 Predictive CAVLC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `0ff3893d32b4b1875412d88a6fa4a5b1`, `008c471027c25eab150c1cc4a30fb9ac`, `ef107480f4c8b836d91e422e1f3c0b75`, `6acd1f8bc304066008a32acf64228305`
+- High 4:4:4 Predictive CABAC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `8539237f1ecaf659fa36c0f76cde8815`, `6f594f9f9f10d12a399d54882ce6c8e5`, `5e4250996d28cff7f2e85b95d78995ff`, `452f232c9a94da5220babd530117a395`
 - same `testsrc2` encode with loop filter disabled: `b729e0367dccdfd707a7ea0c6e68c06e`
 - dimensions: `16x16` and `32x32`
-- frame payload size: `256` bytes (`gray`/`chroma_format_idc == 0`), `384` or `1536` bytes (`yuv420p`), and `512` bytes (`yuv422p`)
+- frame payload size: `256` bytes (`gray`/`chroma_format_idc == 0`), `384` or `1536` bytes (`yuv420p`), `512` bytes (`yuv422p`), and `768` bytes (`yuv444p`)
 
 The AVC/NALFF packet-input tests mechanically convert those Annex B fixtures to
 big-endian length-prefixed NAL units while preserving each raw NAL payload. The
@@ -63,12 +65,15 @@ default Go tests compare the same rawvideo MD5s through explicit `nal_length_siz
 values 2, 3, and 4. The configured AVC tests additionally build FFmpeg-style
 `avcC` extradata from SPS/PPS NAL units, remove those parameter sets from the
 packet payload, and prove the separated-config CAVLC ref-list, CABAC IDR/P,
-High 4:2:2 CAVLC/CABAC, and monochrome CAVLC/CABAC packets against the same
-frame MD5s both as bundled packets and as successive single-frame sample
-packets that require DPB reference state to survive across public decoder
-calls. Monochrome native FFmpeg oracle checks request `-pix_fmt gray` so the
-frame-MD5 surface compares only the luma plane represented by
-`chroma_format_idc == 0`.
+High 4:2:2 CAVLC/CABAC, High 4:4:4 Predictive CAVLC/CABAC, and monochrome
+CAVLC/CABAC packets against the same frame MD5s both as bundled packets and as
+successive single-frame sample packets that require DPB reference state to
+survive across public decoder calls. Monochrome native FFmpeg oracle checks
+request `-pix_fmt gray` so the frame-MD5 surface compares only the luma plane
+represented by `chroma_format_idc == 0`. The High 4:4:4 Predictive fixtures
+carry `disable_deblocking_filter_idc == 1`; they prove 4:4:4 entropy,
+prediction, residual reconstruction, motion, and public packet integration, but
+not 4:4:4 loop-filter parity.
 
 Reference-picture unit coverage now includes FFmpeg's progressive frame-picture
 long-term P-list behavior: default long refs after short refs, ref-list

@@ -153,7 +153,7 @@ func validateSimpleFrameSliceDecodeInputs(m *macroblockTables, dst *h264PictureP
 	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
 		return ErrUnsupported
 	}
-	if sh.SPS.TransformBypass != 0 || sh.SPS.BitDepthLuma != 8 || sh.SPS.ChromaFormatIDC == 3 {
+	if sh.SPS.TransformBypass != 0 || sh.SPS.BitDepthLuma != 8 {
 		return ErrUnsupported
 	}
 	if sh.QScale > qpMaxNum {

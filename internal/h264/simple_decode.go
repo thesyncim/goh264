@@ -231,7 +231,7 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 	if sps.BitDepthLuma != 8 || sps.BitDepthChroma != 8 || sps.FrameMBSOnlyFlag == 0 || sps.MBAFF != 0 || sps.TransformBypass != 0 {
 		return nil, nil, ErrUnsupported
 	}
-	if sps.ChromaFormatIDC > 2 {
+	if sps.ChromaFormatIDC > 3 {
 		return nil, nil, ErrUnsupported
 	}
 	mbWidth := int(sps.MBWidth)
