@@ -379,6 +379,7 @@ func decodedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
 		FilmGrain:            sei.Common.FilmGrain,
 		MasteringDisplay:     sei.Common.MasteringDisplay,
 		ContentLight:         sei.Common.ContentLight,
+		LCEVC:                append([]uint8(nil), sei.Common.LCEVC.Data...),
 	}
 }
 
@@ -439,6 +440,7 @@ func consumeFrameSideDataFromSEI(sei *H264SEIContext) {
 	sei.Common.Unregistered.Data = nil
 	sei.Common.A53Caption.Data = nil
 	sei.Common.AFD.Present = 0
+	sei.Common.LCEVC.Data = nil
 	if sei.Common.FilmGrain.Present != 0 && sei.Common.FilmGrain.RepetitionPeriod == 0 {
 		sei.Common.FilmGrain.Present = 0
 	}

@@ -38,6 +38,7 @@ func TestDecodeSEIMessages(t *testing.T) {
 		seiTestMessage{typ: seiTypeGreenMetadata, payload: []byte{0, 2, 0x01, 0x23, 1, 2, 3, 4}},
 		seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: seiRegisteredAFDPayload(0x0f)},
 		seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: seiRegisteredA53Payload([]byte{0x04, 0x05, 0x06, 0x07, 0x08, 0x09})},
+		seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: seiRegisteredLCEVCPayload([]byte{0x7e, 0x00, 0x00, 0x03, 0x01})},
 		seiTestMessage{typ: seiTypeUserDataUnregistered, payload: seiUnregisteredPayload()},
 		seiTestMessage{typ: seiTypeDisplayOrientation, payload: seiDisplayOrientationPayload()},
 		seiTestMessage{typ: seiTypeFramePackingArrangement, payload: seiFramePackingPayload()},
@@ -85,6 +86,9 @@ func TestDecodeSEIMessages(t *testing.T) {
 	}
 	if got, want := ctx.Common.A53Caption.Data, []byte{0x04, 0x05, 0x06, 0x07, 0x08, 0x09}; !bytes.Equal(got, want) {
 		t.Fatalf("a53 caption = %x, want %x", got, want)
+	}
+	if got, want := ctx.Common.LCEVC.Data, []byte{0x7e, 0x00, 0x00, 0x03, 0x01}; !bytes.Equal(got, want) {
+		t.Fatalf("lcevc = %x, want %x", got, want)
 	}
 	if len(ctx.Common.Unregistered.Data) != 1 || ctx.Common.Unregistered.X264Build != 165 {
 		t.Fatalf("unregistered = count %d x264 %d", len(ctx.Common.Unregistered.Data), ctx.Common.Unregistered.X264Build)
@@ -200,6 +204,26 @@ func TestDecodeSEIRegisteredA53RejectsTruncatedCCData(t *testing.T) {
 	}
 }
 
+func TestDecodeSEIRegisteredLCEVCReplacesPriorPayload(t *testing.T) {
+	ctx, err := DecodeSEI(buildSEIRBSP(
+		seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: seiRegisteredLCEVCPayload([]byte{0x01, 0x02})},
+		seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: seiRegisteredLCEVCPayload([]byte{0x7e, 0x00, 0x00, 0x03, 0x01})},
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ctx.Common.LCEVC.Data, []byte{0x7e, 0x00, 0x00, 0x03, 0x01}; !bytes.Equal(got, want) {
+		t.Fatalf("lcevc = %x, want %x", got, want)
+	}
+}
+
+func TestDecodeSEIRegisteredLCEVCRejectsMissingPayload(t *testing.T) {
+	payload := []byte{ituTT35CountryCodeUK, 0x00, 0x50, 0x01}
+	if _, err := DecodeSEI(buildSEIRBSP(seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: payload}), nil); err != ErrInvalidData {
+		t.Fatalf("err = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestDecodeSEIAmbientViewingRejectsInvalidValues(t *testing.T) {
 	for _, payload := range [][]byte{
 		{0, 0, 0, 0, 0x61, 0xa8, 0x41, 0x1b},
@@ -264,6 +288,12 @@ func TestDecodedFrameSideDataFromSEICopiesUserData(t *testing.T) {
 	if side.ContentLight.Present != 2 || side.ContentLight.MaxContentLightLevel != 1000 ||
 		side.ContentLight.MaxPicAverageLightLevel != 250 {
 		t.Fatalf("content light side data = %+v", side.ContentLight)
+	}
+	ctx.Common.LCEVC.Data = []uint8{0x7e, 0x00, 0x00, 0x03, 0x01}
+	side = decodedFrameSideDataFromSEI(ctx)
+	ctx.Common.LCEVC.Data[0] ^= 0xff
+	if got, want := side.LCEVC, []uint8{0x7e, 0x00, 0x00, 0x03, 0x01}; !bytes.Equal(got, want) {
+		t.Fatalf("side lcevc = %x, want %x", got, want)
 	}
 }
 
@@ -343,6 +373,11 @@ func seiRegisteredA53Payload(cc []byte) []byte {
 
 func seiRegisteredAFDPayload(description uint8) []byte {
 	return []byte{ituTT35CountryCodeUS, 0x00, 0x31, 'D', 'T', 'G', '1', 0x40, description}
+}
+
+func seiRegisteredLCEVCPayload(data []byte) []byte {
+	out := []byte{ituTT35CountryCodeUK, 0x00, 0x50, 0x01}
+	return append(out, data...)
 }
 
 func seiDisplayOrientationPayload() []byte {

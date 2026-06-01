@@ -31,7 +31,9 @@ const (
 	h264SEIPicStructFrameTripling   = 8
 
 	ituTT35CountryCodeUS       = 0xb5
+	ituTT35CountryCodeUK       = 0xb4
 	ituTT35ProviderCodeATSC    = 0x0031
+	ituTT35ProviderCodeVNOVA   = 0x0050
 	ituTT35UserIdentifierDTG1  = 0x44544731
 	ituTT35UserIdentifierGA94  = 0x47413934
 	a53UserDataTypeCodeCaption = 0x03
@@ -102,6 +104,7 @@ type H2645SEI struct {
 	MasteringDisplay    H2645SEIMasteringDisplay
 	ContentLight        H2645SEIContentLight
 	FilmGrain           H2645SEIFilmGrainCharacteristics
+	LCEVC               H2645SEILCEVC
 }
 
 type H2645SEIA53Caption struct {
@@ -246,6 +249,10 @@ type H2645SEIContentLight struct {
 	MaxPicAverageLightLevel uint32
 }
 
+type H2645SEILCEVC struct {
+	Data []uint8
+}
+
 func (h *H264SEIContext) Reset() {
 	if h == nil {
 		return
@@ -267,6 +274,7 @@ func (h *H264SEIContext) Reset() {
 	h.Common.ContentLight.Present = 0
 	h.Common.AmbientViewing = H2645SEIAmbientViewingEnvironment{}
 	h.Common.FilmGrain = H2645SEIFilmGrainCharacteristics{}
+	h.Common.LCEVC.Data = nil
 }
 
 func DecodeSEI(rbsp []byte, spsList *[maxSPSCount]*SPS) (*H264SEIContext, error) {
@@ -637,7 +645,18 @@ func (h *H2645SEI) decodeRegisteredUserData(payload []byte) error {
 		case ituTT35UserIdentifierGA94:
 			return h.A53Caption.decodeRegisteredUserDataClosedCaption(payload[pos:])
 		}
+	} else if countryCode == ituTT35CountryCodeUK && providerCode == ituTT35ProviderCodeVNOVA {
+		if len(payload)-pos < 2 {
+			return ErrInvalidData
+		}
+		pos++
+		return h.LCEVC.decodeRegisteredUserDataLCEVC(payload[pos:])
 	}
+	return nil
+}
+
+func (h *H2645SEILCEVC) decodeRegisteredUserDataLCEVC(payload []byte) error {
+	h.Data = append(h.Data[:0], payload...)
 	return nil
 }
 

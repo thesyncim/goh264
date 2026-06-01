@@ -795,6 +795,7 @@ func TestDecodePacketFramesPacketSideDataMergesWithSEIInFFmpegOrder(t *testing.T
 
 func TestDecodePacketFramesGlobalPacketSideDataDoesNotReplaceCodedSEI(t *testing.T) {
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload([]byte{0x7e, 0x10, 0x00, 0x03, 0x11})},
 		decoderSEITestMessage{typ: decoderSEITypeAmbientViewingEnvironment, payload: decoderSEIAmbientViewingPayload()},
 		decoderSEITestMessage{typ: decoderSEITypeMasteringDisplayColourVolume, payload: decoderSEIMasteringDisplayPayload()},
 		decoderSEITestMessage{typ: decoderSEITypeContentLightLevelInfo, payload: []byte{0x03, 0xe8, 0x00, 0xfa}},
@@ -807,6 +808,7 @@ func TestDecodePacketFramesGlobalPacketSideDataDoesNotReplaceCodedSEI(t *testing
 				[3][2]uint16{{10, 20}, {30, 40}, {50, 60}}, [2]uint16{70, 80}, 900000, 90, true, true,
 			)},
 			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(9, 8)},
+			{Type: PacketSideDataLCEVC, Data: []byte{0x01, 0x02, 0x03}},
 		},
 	})
 	if err != nil {
@@ -829,12 +831,16 @@ func TestDecodePacketFramesGlobalPacketSideDataDoesNotReplaceCodedSEI(t *testing
 		side.ContentLight.MaxPicAverageLightLevel != 250 {
 		t.Fatalf("coded content light = %+v", side.ContentLight)
 	}
+	if got, want := side.LCEVC, []byte{0x7e, 0x10, 0x00, 0x03, 0x11}; !bytes.Equal(got, want) {
+		t.Fatalf("coded lcevc = %x, want %x", got, want)
+	}
 }
 
 func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
 		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0e)},
 		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x04, 0x05, 0x06})},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload([]byte{0x7e, 0x00, 0x00, 0x03, 0x01})},
 		decoderSEITestMessage{typ: decoderSEITypeRecoveryPoint, payload: decoderSEIRecoveryPointPayload()},
 		decoderSEITestMessage{typ: decoderSEITypeGreenMetadata, payload: []byte{0, 2, 0x01, 0x23, 1, 2, 3, 4}},
 		decoderSEITestMessage{typ: decoderSEITypeDisplayOrientation, payload: decoderSEIDisplayOrientationPayload()},
@@ -862,6 +868,9 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 	}
 	if got, want := side.A53ClosedCaptions, []byte{0x04, 0x05, 0x06}; !bytes.Equal(got, want) {
 		t.Fatalf("a53 captions = %x, want %x", got, want)
+	}
+	if got, want := side.LCEVC, []byte{0x7e, 0x00, 0x00, 0x03, 0x01}; !bytes.Equal(got, want) {
+		t.Fatalf("lcevc = %x, want %x", got, want)
 	}
 	if side.GreenMetadata == nil || side.GreenMetadata.NumSeconds != 0x0123 ||
 		side.GreenMetadata.PercentIntraCodedMacroblocks != 2 {
@@ -947,6 +956,7 @@ func TestDecodeFrameOneShotSEISideDataIsNotRepeated(t *testing.T) {
 	data := prependAnnexBNAL(base, decoderTestSEINAL(
 		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0d)},
 		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x01, 0x02, 0x03})},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload([]byte{0x7e, 0x01, 0x00, 0x03, 0x02})},
 		decoderSEITestMessage{typ: decoderSEITypePicTiming, payload: decoderSEIPictureTimingTimecodePayload()},
 		decoderSEITestMessage{typ: decoderSEITypeFilmGrainCharacteristics, payload: decoderSEIFilmGrainPayloadWithRepetition(0)},
 	))
@@ -969,6 +979,9 @@ func TestDecodeFrameOneShotSEISideDataIsNotRepeated(t *testing.T) {
 	if got, want := first.A53ClosedCaptions, []byte{0x01, 0x02, 0x03}; !bytes.Equal(got, want) {
 		t.Fatalf("first a53 captions = %x, want %x", got, want)
 	}
+	if got, want := first.LCEVC, []byte{0x7e, 0x01, 0x00, 0x03, 0x02}; !bytes.Equal(got, want) {
+		t.Fatalf("first lcevc = %x, want %x", got, want)
+	}
 	if len(first.UserDataUnregistered) != 1 || first.X264Build != 165 {
 		t.Fatalf("first unregistered = build %d count %d", first.X264Build, len(first.UserDataUnregistered))
 	}
@@ -981,7 +994,8 @@ func TestDecodeFrameOneShotSEISideDataIsNotRepeated(t *testing.T) {
 
 	second := frames[1].SideData
 	if second.ActiveFormat != nil || len(second.A53ClosedCaptions) != 0 ||
-		len(second.UserDataUnregistered) != 0 || len(second.S12MTimecodes) != 0 || second.FilmGrain != nil {
+		len(second.LCEVC) != 0 || len(second.UserDataUnregistered) != 0 ||
+		len(second.S12MTimecodes) != 0 || second.FilmGrain != nil {
 		t.Fatalf("second repeated one-shot side data = %+v", second)
 	}
 }
@@ -2064,6 +2078,62 @@ func TestFFprobeOracleRecoveryPointKeyFrame(t *testing.T) {
 	}
 }
 
+func TestFFprobeOracleLCEVCSideData(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffprobe oracle")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not available")
+	}
+
+	wantLCEVC := []byte{0x7e, 0x00, 0x00, 0x03, 0x01}
+	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload(wantLCEVC)},
+	))
+	path := writeTempH264(t, data)
+
+	cmd := exec.Command("ffprobe",
+		"-v", "error",
+		"-select_streams", "v:0",
+		"-show_frames",
+		"-of", "json",
+		path,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffprobe: %v", err)
+	}
+	var probe struct {
+		Frames []struct {
+			SideDataList []struct {
+				SideDataType string `json:"side_data_type"`
+			} `json:"side_data_list"`
+		} `json:"frames"`
+	}
+	if err := json.Unmarshal(out, &probe); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, frame := range probe.Frames {
+		for _, side := range frame.SideDataList {
+			if strings.Contains(side.SideDataType, "LCEVC") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("ffprobe LCEVC side data not found in %s", out)
+	}
+
+	frame, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := frame.SideData.LCEVC; !bytes.Equal(got, wantLCEVC) {
+		t.Fatalf("go lcevc = %x, want %x", got, wantLCEVC)
+	}
+}
+
 func TestFFprobeOracleHigh422(t *testing.T) {
 	if os.Getenv("GOH264_ORACLE") != "1" {
 		t.Skip("set GOH264_ORACLE=1 to run native ffprobe oracle")
@@ -2590,6 +2660,11 @@ func decoderSEIRegisteredA53Payload(cc []byte) []byte {
 
 func decoderSEIRegisteredAFDPayload(description uint8) []byte {
 	return []byte{0xb5, 0x00, 0x31, 'D', 'T', 'G', '1', 0x40, description}
+}
+
+func decoderSEIRegisteredLCEVCPayload(data []byte) []byte {
+	out := []byte{0xb4, 0x00, 0x50, 0x01}
+	return append(out, data...)
 }
 
 func decoderSEIRecoveryPointPayload() []byte {
