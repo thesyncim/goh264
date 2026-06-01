@@ -32,8 +32,8 @@ GOH264_REAL_VECTORS=1 GOH264_CORPUS_FETCH=1 GOH264_CORPUS_FILTER=canl4 go test .
 GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorFailureLedgerFreshness
 ```
 
-Use `GOH264_CORPUS_FILTER=frext3`, `hi422`, `hcamff1`, or any feature tag to
-narrow a red public-vector lane.
+Use `GOH264_CORPUS_FILTER=hcamff1`, `mbaff`, or any feature tag to narrow a red
+public-vector lane.
 
 ## Benchmark
 
