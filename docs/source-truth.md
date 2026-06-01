@@ -82,10 +82,13 @@ default Go tests compare the same rawvideo MD5s through explicit `nal_length_siz
 values 2, 3, and 4. The configured AVC tests additionally build FFmpeg-style
 `avcC` extradata from SPS/PPS NAL units, remove those parameter sets from the
 packet payload, and prove the separated-config CAVLC ref-list, CABAC IDR/P,
-High 4:2:2 CAVLC/CABAC, High 4:4:4 Predictive CAVLC/CABAC, monochrome
-CAVLC/CABAC, and qp=0 lossless CAVLC/CABAC packets against the same frame MD5s
+High 4:2:0 32x32 8x8-DCT CAVLC/CABAC, High 4:2:2 CAVLC/CABAC,
+High 4:4:4 Predictive CAVLC/CABAC, monochrome CAVLC/CABAC, and qp=0
+lossless CAVLC/CABAC packets against the same frame MD5s
 both as bundled packets and as successive single-frame sample packets that
-require DPB reference state to survive across public decoder calls. The
+require DPB reference state to survive across public decoder calls. Native
+FFmpeg framemd5 oracle checks cover the 32x32 High 4:2:0 8x8-DCT fixtures in
+addition to the 16x16/32x32 families listed below. The
 configured B-frame sample tests additionally decode one access unit per call and
 then use the public delayed-frame flush to drain retained future P pictures,
 covering FFmpeg's `last_pocs`/`has_b_frames` reorder inference and signaled VUI

@@ -2,7 +2,13 @@
 
 package goh264
 
-import "testing"
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
+	"testing"
+)
 
 const testsrc32CAVLC8x8DCTAnnexBHex = `
 000000016764000aacb44b6022000003000200000300041e244d400000000168ce0f2c8b0000010605ffff6ddc45e9bde6d948b7962cd820d923eeef78323634202d20636f7265203136352072333232322062333536303561202d20482e3236
@@ -45,7 +51,146 @@ a090a8d2d63bfb205bcbc877b2b4ab88d5b589bb8bffa148cca6da323bd930ee673867cc3e96fbe8
 `
 
 func TestDecodeAnnexBTestsrc32High8x8DCTFrames(t *testing.T) {
-	for _, tt := range []struct {
+	for _, tt := range high8x8DCTFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			frames, err := NewDecoder().DecodeAnnexBFrames(decodeHexFixture(t, tt.hex))
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertHigh8x8DCTFrames(t, frames, tt.want)
+		})
+	}
+}
+
+func TestDecodeAVCTestsrc32High8x8DCTFrames(t *testing.T) {
+	for _, tt := range high8x8DCTFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+				}
+				assertHigh8x8DCTFrames(t, frames, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecodeConfiguredAVCTestsrc32High8x8DCTFrames(t *testing.T) {
+	for _, tt := range high8x8DCTFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
+				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+				}
+				assertHigh8x8DCTFrames(t, frames, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecodeConfiguredAVCTestsrc32High8x8DCTFramesAcrossSamples(t *testing.T) {
+	for _, tt := range high8x8DCTFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
+				if len(samples) != len(tt.want) {
+					t.Fatalf("nalLengthSize=%d: samples = %d, want %d", nalLengthSize, len(samples), len(tt.want))
+				}
+
+				dec := NewDecoder()
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
+				}
+				var frames []*Frame
+				for i, sample := range samples {
+					frame, err := dec.DecodeConfiguredAVC(sample)
+					if err != nil {
+						t.Fatalf("nalLengthSize=%d sample[%d]: %v", nalLengthSize, i, err)
+					}
+					frames = append(frames, frame)
+				}
+				assertHigh8x8DCTFrames(t, frames, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecodeAutoConfiguredAVCTestsrc32High8x8DCTFramesAcrossSamples(t *testing.T) {
+	for _, tt := range high8x8DCTFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+			if len(samples) != len(tt.want) {
+				t.Fatalf("samples = %d, want %d", len(samples), len(tt.want))
+			}
+
+			dec := NewDecoder()
+			out, err := dec.DecodeFrames(config)
+			if err != nil {
+				t.Fatalf("config: %v", err)
+			}
+			if len(out) != 0 {
+				t.Fatalf("config frames = %d, want 0", len(out))
+			}
+
+			var frames []*Frame
+			for i, sample := range samples {
+				out, err = dec.DecodeFrames(sample)
+				if err != nil {
+					t.Fatalf("sample[%d]: %v", i, err)
+				}
+				frames = append(frames, out...)
+			}
+			assertHigh8x8DCTFrames(t, frames, tt.want)
+		})
+	}
+}
+
+func TestFFmpegFrameMD5OracleTestsrc32High8x8DCT(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	for _, tt := range high8x8DCTFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeTempH264(t, decodeHexFixture(t, tt.hex))
+			cmd := exec.Command("ffmpeg",
+				"-v", "error",
+				"-f", "h264",
+				"-i", path,
+				"-an", "-sn", "-dn",
+				"-f", "framemd5",
+				"-",
+			)
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("ffmpeg framemd5: %v", err)
+			}
+			for i, hash := range tt.want {
+				line := []byte(fmt.Sprintf("0, %10d, %10d,        1, %8d, %s", i, i, 1536, hash))
+				if !bytes.Contains(out, line) {
+					t.Fatalf("frame[%d] missing %q in framemd5:\n%s", i, line, out)
+				}
+			}
+		})
+	}
+}
+
+func high8x8DCTFixtureCases() []struct {
+	name string
+	hex  string
+	want []string
+} {
+	return []struct {
 		name string
 		hex  string
 		want []string
@@ -70,18 +215,15 @@ func TestDecodeAnnexBTestsrc32High8x8DCTFrames(t *testing.T) {
 				"8ac7c3f6f20b7e002fdf895532a3fd9b",
 			},
 		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			frames, err := NewDecoder().DecodeAnnexBFrames(decodeHexFixture(t, tt.hex))
-			if err != nil {
-				t.Fatal(err)
-			}
-			for i, frame := range frames {
-				if frame.Width != 32 || frame.Height != 32 || frame.ChromaFormatIDC != 1 {
-					t.Fatalf("frame[%d] metadata = %dx%d chroma %d", i, frame.Width, frame.Height, frame.ChromaFormatIDC)
-				}
-			}
-			assertFrameMD5Strings(t, frames, tt.want)
-		})
 	}
+}
+
+func assertHigh8x8DCTFrames(t *testing.T, frames []*Frame, want []string) {
+	t.Helper()
+	for i, frame := range frames {
+		if frame.Width != 32 || frame.Height != 32 || frame.ChromaFormatIDC != 1 {
+			t.Fatalf("frame[%d] metadata = %dx%d chroma %d", i, frame.Width, frame.Height, frame.ChromaFormatIDC)
+		}
+	}
+	assertFrameMD5Strings(t, frames, want)
 }
