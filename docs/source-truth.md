@@ -60,6 +60,8 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - qp=0 High 4:4:4 Predictive CAVLC/CABAC `testsrc2` IDR/P yuv420p lossless rawvideo frame MD5s: `69fcf25f35e829e5a3d96cbaaf22bbb6`, `8563271dc08ef4ed388ebc1f7016834c`, `1a054a3901101da0f6b6c58d8e71bbdb`, `a0addb72f5ea0957ef8a05b782f0e9ff`
 - 16x16 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `4296e3dc95829cc27071a8685a428494`, `36f5a9b9064709ee891652e8f4e06992`, `aa778b981f96d21489196f6a0faa0959`
 - 16x16 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `fef9831ddd54882d715ceb50c382efde`, `4b6a7f1c59198ae9b8e31ef4de333e42`
+- 16x16 non-neutral implicit B-weight CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `4296e3dc95829cc27071a8685a428494`, `8747883f49707799806cf66a630e600e`, `0706cc9ae846c8aefe9597f9e83be042`, `143d2f0e79e82b9d5b6de6f48968c447`
+- 16x16 non-neutral implicit B-weight CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `4a3834dbc6c0ea54fa46d9ec8fd4044e`, `eac9140384dc323ba6e4ef4e7a20c7f6`, `db30cd22f3204ef73b6b8e9ed3fd4e07`
 - 32x32 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `2a9d9acd3e52356ad072de93fdbaca3d`, `96107676801850afd8aed8546397e3bf`, `3967b8bfe3a3a8cde4bc22334008eb1f`
 - 32x32 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `88a962a713f37e05f375eee6ee9f385b`, `a165d65aadbe1410829a22df4459539b`, `8d39f667da04571db61fc68919a64ade`
 - same `testsrc2` encode with loop filter disabled: `b729e0367dccdfd707a7ea0c6e68c06e`
@@ -94,7 +96,10 @@ and either `cabac=0` or `cabac=1`. They intentionally prove POC-backed B list0
 and list1 construction, explicit L0/L1 motion, display-order output, Annex B,
 AVC/NALFF, one-shot configured AVC paths, and qpel/chroma edge emulation when
 the reference stride is smaller than FFmpeg's edge block width, while avoiding
-B-direct/skip and non-neutral implicit weighting.
+B-direct/skip. The implicit-weight B fixtures use the same 16x16 source and
+constraints with `duration=4:bframes=2`, which forces non-symmetric B POC
+distances and proves FFmpeg's `implicit_weight_table(field=-1)` path while
+still avoiding B-direct/skip.
 
 Reference-picture unit coverage now includes FFmpeg's progressive frame-picture
 long-term P-list behavior: default long refs after short refs, ref-list

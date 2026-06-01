@@ -172,6 +172,60 @@ func TestSimpleFrameDPBSwapsIdenticalBLists(t *testing.T) {
 	}
 }
 
+func TestSimpleFrameDPBInitializesImplicitBWeights(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	pps := &PPS{SPS: sps, WeightedBipredIDC: 2}
+	past := simpleDPBTestFrame(sps, 0)
+	past.poc = 0
+	future := simpleDPBTestFrame(sps, 1)
+	future.poc = 6
+	current := simpleDPBTestFrame(sps, 2)
+	current.poc = 2
+	dpb := simpleFrameDPB{short: []*DecodedFrame{future, past}}
+	sh := simpleDPBTestBHeader(sps, 2, 1, 1)
+	sh.PPS = pps
+
+	refs, err := dpb.buildRefLists(sh, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs[0]) != 1 || len(refs[1]) != 1 {
+		t.Fatalf("ref lengths = %d/%d, want 1/1", len(refs[0]), len(refs[1]))
+	}
+	if sh.PredWeightTable.UseWeight != 2 || sh.PredWeightTable.UseWeightChroma != 2 {
+		t.Fatalf("use_weight = %d/%d, want implicit", sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma)
+	}
+	if sh.PredWeightTable.LumaLog2WeightDenom != 5 || sh.PredWeightTable.ChromaLog2WeightDenom != 5 {
+		t.Fatalf("denom = %d/%d, want 5/5", sh.PredWeightTable.LumaLog2WeightDenom, sh.PredWeightTable.ChromaLog2WeightDenom)
+	}
+	if got := sh.PredWeightTable.ImplicitWeight[0][0]; got != [2]int32{43, 43} {
+		t.Fatalf("implicit weight = %v, want 43/43", got)
+	}
+}
+
+func TestSimpleFrameDPBDisablesSymmetricImplicitBWeights(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	pps := &PPS{SPS: sps, WeightedBipredIDC: 2}
+	past := simpleDPBTestFrame(sps, 0)
+	past.poc = 0
+	future := simpleDPBTestFrame(sps, 1)
+	future.poc = 6
+	current := simpleDPBTestFrame(sps, 2)
+	current.poc = 3
+	dpb := simpleFrameDPB{short: []*DecodedFrame{future, past}}
+	sh := simpleDPBTestBHeader(sps, 2, 1, 1)
+	sh.PPS = pps
+	sh.PredWeightTable.UseWeight = 2
+	sh.PredWeightTable.UseWeightChroma = 2
+
+	if _, err := dpb.buildRefLists(sh, current); err != nil {
+		t.Fatal(err)
+	}
+	if sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
+		t.Fatalf("use_weight = %d/%d, want disabled", sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma)
+	}
+}
+
 func TestSimpleFrameDPBDelaysBOutputUntilFlush(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	sps.NumReorderFrames = 1

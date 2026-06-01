@@ -214,44 +214,68 @@ func (d *simpleFrameDPB) buildRefLists(sh *SliceHeader, frame *DecodedFrame) ([2
 
 	switch sh.SliceTypeNoS {
 	case PictureTypeP:
-		list, err := d.buildPRefList(sh)
+		list, err := d.buildPRefEntries(sh)
 		if err != nil {
 			return refs, err
 		}
-		refs[0] = simpleFramePlanesRefs(list)
+		refs[0] = simpleFrameEntryPlanesRefs(list)
 	case PictureTypeB:
 		if frame == nil {
 			return refs, ErrInvalidData
 		}
-		lists, err := d.buildBRefLists(sh, frame.poc)
+		lists, err := d.buildBRefEntries(sh, frame.poc)
 		if err != nil {
 			return refs, err
 		}
-		refs[0] = simpleFramePlanesRefs(lists[0])
-		refs[1] = simpleFramePlanesRefs(lists[1])
+		if sh.PPS != nil && sh.PPS.WeightedBipredIDC == 2 {
+			if err := initImplicitBWeightTable(&sh.PredWeightTable, lists, sh.RefCount, frame.poc); err != nil {
+				return refs, err
+			}
+		}
+		refs[0] = simpleFrameEntryPlanesRefs(lists[0])
+		refs[1] = simpleFrameEntryPlanesRefs(lists[1])
 	default:
 		return refs, ErrUnsupported
 	}
 	return refs, nil
 }
 
-func simpleFramePlanesRefs(list []*DecodedFrame) []*h264PicturePlanes {
+func simpleFrameEntryPlanesRefs(list []simpleRefEntry) []*h264PicturePlanes {
 	planes := make([]h264PicturePlanes, len(list))
 	refs := make([]*h264PicturePlanes, len(list))
-	for i, frame := range list {
-		planes[i] = frame.picturePlanes()
+	for i, entry := range list {
+		planes[i] = entry.frame.picturePlanes()
 		refs[i] = &planes[i]
 	}
 	return refs
 }
 
+func simpleFrameEntryFrames(list []simpleRefEntry) []*DecodedFrame {
+	frames := make([]*DecodedFrame, len(list))
+	for i, entry := range list {
+		frames[i] = entry.frame
+	}
+	return frames
+}
+
 func (d *simpleFrameDPB) buildBRefLists(sh *SliceHeader, curPOC int32) ([2][]*DecodedFrame, error) {
-	var out [2][]*DecodedFrame
+	entries, err := d.buildBRefEntries(sh, curPOC)
+	if err != nil {
+		return [2][]*DecodedFrame{}, err
+	}
+	return [2][]*DecodedFrame{
+		simpleFrameEntryFrames(entries[0]),
+		simpleFrameEntryFrames(entries[1]),
+	}, nil
+}
+
+func (d *simpleFrameDPB) buildBRefEntries(sh *SliceHeader, curPOC int32) ([2][]simpleRefEntry, error) {
+	var entries [2][]simpleRefEntry
 	if sh.RefCount[0] == 0 || sh.RefCount[1] == 0 {
-		return out, ErrInvalidData
+		return entries, ErrInvalidData
 	}
 	if sh.RefCount[0] > simpleMaxShortRefs || sh.RefCount[1] > simpleMaxShortRefs {
-		return out, ErrUnsupported
+		return entries, ErrUnsupported
 	}
 
 	defaults := [2][]simpleRefEntry{}
@@ -259,20 +283,20 @@ func (d *simpleFrameDPB) buildBRefLists(sh *SliceHeader, curPOC int32) ([2][]*De
 		var err error
 		defaults[list], err = d.buildDefaultBRefList(sh, curPOC, list)
 		if err != nil {
-			return out, err
+			return entries, err
 		}
 	}
 	if simpleRefListsSameFrames(defaults[0], defaults[1]) && len(defaults[1]) > 1 {
 		defaults[1][0], defaults[1][1] = defaults[1][1], defaults[1][0]
 	}
 	for list := 0; list < 2; list++ {
-		frames, err := d.applyRefModifications(defaults[list], sh, list)
+		listEntries, err := d.applyRefModificationsEntries(defaults[list], sh, list)
 		if err != nil {
-			return out, err
+			return entries, err
 		}
-		out[list] = frames
+		entries[list] = listEntries
 	}
-	return out, nil
+	return entries, nil
 }
 
 func (d *simpleFrameDPB) buildDefaultBRefList(sh *SliceHeader, curPOC int32, list int) ([]simpleRefEntry, error) {
@@ -359,6 +383,14 @@ func simpleRefListsSameFrames(a []simpleRefEntry, b []simpleRefEntry) bool {
 }
 
 func (d *simpleFrameDPB) applyRefModifications(list []simpleRefEntry, sh *SliceHeader, listIndex int) ([]*DecodedFrame, error) {
+	entries, err := d.applyRefModificationsEntries(list, sh, listIndex)
+	if err != nil {
+		return nil, err
+	}
+	return simpleFrameEntryFrames(entries), nil
+}
+
+func (d *simpleFrameDPB) applyRefModificationsEntries(list []simpleRefEntry, sh *SliceHeader, listIndex int) ([]simpleRefEntry, error) {
 	if listIndex != 0 && listIndex != 1 {
 		return nil, ErrInvalidData
 	}
@@ -430,17 +462,25 @@ func (d *simpleFrameDPB) applyRefModifications(list []simpleRefEntry, sh *SliceH
 		list[index] = entry
 	}
 
-	out := make([]*DecodedFrame, refCount)
+	out := make([]simpleRefEntry, refCount)
 	for i := range out {
 		if list[i].frame == nil {
 			list[i] = defaultRef
 		}
-		out[i] = list[i].frame
+		out[i] = list[i]
 	}
 	return out, nil
 }
 
 func (d *simpleFrameDPB) buildPRefList(sh *SliceHeader) ([]*DecodedFrame, error) {
+	entries, err := d.buildPRefEntries(sh)
+	if err != nil {
+		return nil, err
+	}
+	return simpleFrameEntryFrames(entries), nil
+}
+
+func (d *simpleFrameDPB) buildPRefEntries(sh *SliceHeader) ([]simpleRefEntry, error) {
 	if sh.RefCount[0] == 0 {
 		return nil, ErrInvalidData
 	}
@@ -451,7 +491,59 @@ func (d *simpleFrameDPB) buildPRefList(sh *SliceHeader) ([]*DecodedFrame, error)
 	if err != nil {
 		return nil, err
 	}
-	return d.applyRefModifications(list, sh, 0)
+	return d.applyRefModificationsEntries(list, sh, 0)
+}
+
+// initImplicitBWeightTable is a progressive frame-picture port of FFmpeg
+// n8.0.1 libavcodec/h264_slice.c implicit_weight_table(field=-1).
+func initImplicitBWeightTable(pwt *PredWeightTable, lists [2][]simpleRefEntry, refCount [2]uint32, curPOC int32) error {
+	if pwt == nil {
+		return ErrInvalidData
+	}
+	for i := 0; i < 2; i++ {
+		pwt.LumaWeightFlag[i] = 0
+		pwt.ChromaWeightFlag[i] = 0
+	}
+
+	refCount0 := int(refCount[0])
+	refCount1 := int(refCount[1])
+	if refCount0 <= 0 || refCount1 <= 0 || refCount0 > len(lists[0]) || refCount1 > len(lists[1]) ||
+		refCount0 > len(pwt.ImplicitWeight) || refCount1 > len(pwt.ImplicitWeight[0]) {
+		return ErrInvalidData
+	}
+	if refCount0 == 1 && refCount1 == 1 &&
+		int64(lists[0][0].frame.poc)+int64(lists[1][0].frame.poc) == 2*int64(curPOC) {
+		pwt.UseWeight = 0
+		pwt.UseWeightChroma = 0
+		return nil
+	}
+
+	pwt.UseWeight = 2
+	pwt.UseWeightChroma = 2
+	pwt.LumaLog2WeightDenom = 5
+	pwt.ChromaLog2WeightDenom = 5
+
+	for ref0 := 0; ref0 < refCount0; ref0++ {
+		poc0 := int(lists[0][ref0].frame.poc)
+		for ref1 := 0; ref1 < refCount1; ref1++ {
+			w := int32(32)
+			if !lists[0][ref0].long && !lists[1][ref1].long {
+				poc1 := int(lists[1][ref1].frame.poc)
+				td := clipInt(poc1-poc0, -128, 127)
+				if td != 0 {
+					tb := clipInt(int(curPOC)-poc0, -128, 127)
+					tx := (16384 + (absInt(td) >> 1)) / td
+					distScaleFactor := (tb*tx + 32) >> 8
+					if distScaleFactor >= -64 && distScaleFactor <= 128 {
+						w = int32(64 - distScaleFactor)
+					}
+				}
+			}
+			pwt.ImplicitWeight[ref0][ref1][0] = w
+			pwt.ImplicitWeight[ref0][ref1][1] = w
+		}
+	}
+	return nil
 }
 
 func (d *simpleFrameDPB) buildDefaultPRefList(sh *SliceHeader) ([]simpleRefEntry, error) {
