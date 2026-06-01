@@ -47,6 +47,11 @@ The H.264 DSP oracle compiles the pinned `libavcodec/h264dsp_template.c` and
 high-bit-depth add-pixels fallback, 9/10/12/14-bit weighted prediction cases,
 and selected high-bit-depth deblocking variants.
 
+The H.264 IDCT oracle compiles the pinned `libavcodec/h264idct_template.c` and
+compares 8-bit transform/dequant fixtures plus 9/10/12/14-bit 4x4/8x8 inverse
+transform add, DC-only add, luma DC dequant IDCT, and 4:2:0/4:2:2 chroma DC
+dequant IDCT fixtures.
+
 The `ffprobe` header oracle now compares public `StreamInfo` SPS VUI sample
 aspect ratio and timing rate for the black16 stream in addition to profile,
 level, dimensions, and pixel format.
