@@ -62,6 +62,7 @@ type DecodedFrameSideData struct {
 	AFD                  H2645SEIAFD
 	FramePacking         H2645SEIFramePacking
 	Stereo3D             AVStereo3D
+	Spherical            AVSphericalMapping
 	DisplayMatrix        AVDisplayMatrix
 	DisplayOrientation   H2645SEIDisplayOrientation
 	AlternativeTransfer  H2645SEIAlternativeTransfer
@@ -70,6 +71,8 @@ type DecodedFrameSideData struct {
 	MasteringMetadata    AVMasteringDisplayMetadata
 	MasteringDisplay     H2645SEIMasteringDisplay
 	ContentLight         H2645SEIContentLight
+	ICCProfile           []uint8
+	ReferenceDisplays    AV3DReferenceDisplaysInfo
 }
 
 type SimpleDecoder struct {
@@ -393,6 +396,9 @@ func mergePacketSideDataIntoDecodedFrame(dst *DecodedFrameSideData, src DecodedF
 	if src.Stereo3D.Present != 0 {
 		dst.Stereo3D = src.Stereo3D
 	}
+	if src.Spherical.Present != 0 && dst.Spherical.Present == 0 {
+		dst.Spherical = src.Spherical
+	}
 	if src.DisplayMatrix.Present != 0 {
 		dst.DisplayMatrix = src.DisplayMatrix
 	}
@@ -405,6 +411,17 @@ func mergePacketSideDataIntoDecodedFrame(dst *DecodedFrameSideData, src DecodedF
 	if src.ContentLight.Present != 0 && dst.ContentLight.Present == 0 {
 		dst.ContentLight = src.ContentLight
 	}
+	if len(src.ICCProfile) != 0 && len(dst.ICCProfile) == 0 {
+		dst.ICCProfile = append([]uint8(nil), src.ICCProfile...)
+	}
+	if src.ReferenceDisplays.Present != 0 && dst.ReferenceDisplays.Present == 0 {
+		dst.ReferenceDisplays = cloneReferenceDisplays(src.ReferenceDisplays)
+	}
+}
+
+func cloneReferenceDisplays(src AV3DReferenceDisplaysInfo) AV3DReferenceDisplaysInfo {
+	src.Displays = append([]AV3DReferenceDisplay(nil), src.Displays...)
+	return src
 }
 
 func consumeFrameSideDataFromSEI(sei *H264SEIContext) {

@@ -60,11 +60,14 @@ const (
 	PacketSideDataDisplayMatrix             PacketSideDataType = 5
 	PacketSideDataStereo3D                  PacketSideDataType = 6
 	PacketSideDataMasteringDisplayMetadata  PacketSideDataType = 20
+	PacketSideDataSpherical                 PacketSideDataType = 21
 	PacketSideDataContentLightLevel         PacketSideDataType = 22
 	PacketSideDataA53ClosedCaptions         PacketSideDataType = 23
 	PacketSideDataActiveFormat              PacketSideDataType = 26
+	PacketSideDataICCProfile                PacketSideDataType = 28
 	PacketSideDataS12MTimecode              PacketSideDataType = 30
 	PacketSideDataAmbientViewingEnvironment PacketSideDataType = 35
+	PacketSideData3DReferenceDisplays       PacketSideDataType = 38
 )
 
 type PacketSideData struct {
@@ -89,12 +92,15 @@ type FrameSideData struct {
 	ActiveFormat         *ActiveFormat
 	FramePacking         *FramePackingArrangement
 	Stereo3D             *Stereo3D
+	Spherical            *SphericalMapping
 	DisplayOrientation   *DisplayOrientation
 	AlternativeTransfer  *AlternativeTransfer
 	AmbientViewing       *AmbientViewingEnvironment
 	FilmGrain            *FilmGrainCharacteristics
 	MasteringDisplay     *MasteringDisplay
 	ContentLight         *ContentLight
+	ICCProfile           []byte
+	ReferenceDisplays    *ReferenceDisplaysInfo
 }
 
 type PictureTiming struct {
@@ -194,6 +200,48 @@ type Stereo3D struct {
 	HorizontalDisparityAdjustment Rational
 	HorizontalFieldOfView         Rational
 	StereoMode                    string
+}
+
+type SphericalProjection uint8
+
+const (
+	SphericalProjectionEquirectangular SphericalProjection = iota
+	SphericalProjectionCubemap
+	SphericalProjectionEquirectangularTile
+	SphericalProjectionHalfEquirectangular
+	SphericalProjectionRectilinear
+	SphericalProjectionFisheye
+	SphericalProjectionParametricImmersive
+)
+
+type SphericalMapping struct {
+	Projection  SphericalProjection
+	Yaw         int32
+	Pitch       int32
+	Roll        int32
+	BoundLeft   uint32
+	BoundTop    uint32
+	BoundRight  uint32
+	BoundBottom uint32
+	Padding     uint32
+}
+
+type ReferenceDisplaysInfo struct {
+	PrecRefDisplayWidth    uint8
+	RefViewingDistanceFlag bool
+	PrecRefViewingDist     uint8
+	Displays               []ReferenceDisplay
+}
+
+type ReferenceDisplay struct {
+	LeftViewID                 uint16
+	RightViewID                uint16
+	ExponentRefDisplayWidth    uint8
+	MantissaRefDisplayWidth    uint8
+	ExponentRefViewingDistance uint8
+	MantissaRefViewingDistance uint8
+	AdditionalShiftPresentFlag bool
+	NumSampleShift             int16
 }
 
 type DisplayOrientation struct {
@@ -662,6 +710,11 @@ func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameS
 			out.Stereo3D = stereo
 		}
 	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataSpherical); ok {
+		if spherical, ok := sphericalFromPacketSideData(side.Data); ok {
+			out.Spherical = spherical
+		}
+	}
 	if side, ok := packetSideDataGet(sideData, PacketSideDataDisplayMatrix); ok {
 		if matrix, ok := displayMatrixFromPacketSideData(side.Data); ok {
 			out.DisplayMatrix = matrix
@@ -680,6 +733,14 @@ func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameS
 	if side, ok := packetSideDataGet(sideData, PacketSideDataContentLightLevel); ok {
 		if light, ok := contentLightFromPacketSideData(side.Data); ok {
 			out.ContentLight = light
+		}
+	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataICCProfile); ok && len(side.Data) != 0 {
+		out.ICCProfile = append([]uint8(nil), side.Data...)
+	}
+	if side, ok := packetSideDataGet(sideData, PacketSideData3DReferenceDisplays); ok {
+		if displays, ok := referenceDisplaysFromPacketSideData(side.Data); ok {
+			out.ReferenceDisplays = displays
 		}
 	}
 	return out
@@ -734,6 +795,25 @@ func stereo3DFromPacketSideData(data []byte) (h264.AVStereo3D, bool) {
 			Num: int32(binary.LittleEndian.Uint32(data[28:32])),
 			Den: int32(binary.LittleEndian.Uint32(data[32:36])),
 		},
+	}, true
+}
+
+func sphericalFromPacketSideData(data []byte) (h264.AVSphericalMapping, bool) {
+	const sphericalStructSize = 36
+	if len(data) < sphericalStructSize {
+		return h264.AVSphericalMapping{}, false
+	}
+	return h264.AVSphericalMapping{
+		Present:     1,
+		Projection:  int32(binary.LittleEndian.Uint32(data[0:4])),
+		Yaw:         int32(binary.LittleEndian.Uint32(data[4:8])),
+		Pitch:       int32(binary.LittleEndian.Uint32(data[8:12])),
+		Roll:        int32(binary.LittleEndian.Uint32(data[12:16])),
+		BoundLeft:   binary.LittleEndian.Uint32(data[16:20]),
+		BoundTop:    binary.LittleEndian.Uint32(data[20:24]),
+		BoundRight:  binary.LittleEndian.Uint32(data[24:28]),
+		BoundBottom: binary.LittleEndian.Uint32(data[28:32]),
+		Padding:     binary.LittleEndian.Uint32(data[32:36]),
 	}, true
 }
 
@@ -829,6 +909,50 @@ func contentLightFromPacketSideData(data []byte) (h264.H2645SEIContentLight, boo
 		MaxContentLightLevel:    binary.LittleEndian.Uint32(data[:4]),
 		MaxPicAverageLightLevel: binary.LittleEndian.Uint32(data[4:8]),
 	}, true
+}
+
+func referenceDisplaysFromPacketSideData(data []byte) (h264.AV3DReferenceDisplaysInfo, bool) {
+	const (
+		referenceDisplaysHeaderSize = 24
+		referenceDisplayEntrySize   = 12
+		maxReferenceDisplays        = 32
+	)
+	if len(data) < referenceDisplaysHeaderSize {
+		return h264.AV3DReferenceDisplaysInfo{}, false
+	}
+	count := int(data[3])
+	entriesOffset := binary.LittleEndian.Uint64(data[8:16])
+	entrySize := binary.LittleEndian.Uint64(data[16:24])
+	if count < 1 || count > maxReferenceDisplays ||
+		entriesOffset > uint64(len(data)) ||
+		entrySize < referenceDisplayEntrySize {
+		return h264.AV3DReferenceDisplaysInfo{}, false
+	}
+	entriesEnd := entriesOffset + uint64(count)*entrySize
+	if entriesEnd < entriesOffset || entriesEnd > uint64(len(data)) {
+		return h264.AV3DReferenceDisplaysInfo{}, false
+	}
+	out := h264.AV3DReferenceDisplaysInfo{
+		Present:                1,
+		PrecRefDisplayWidth:    data[0],
+		RefViewingDistanceFlag: data[1],
+		PrecRefViewingDist:     data[2],
+		Displays:               make([]h264.AV3DReferenceDisplay, count),
+	}
+	for i := 0; i < count; i++ {
+		off := int(entriesOffset + uint64(i)*entrySize)
+		out.Displays[i] = h264.AV3DReferenceDisplay{
+			LeftViewID:                 binary.LittleEndian.Uint16(data[off : off+2]),
+			RightViewID:                binary.LittleEndian.Uint16(data[off+2 : off+4]),
+			ExponentRefDisplayWidth:    data[off+4],
+			MantissaRefDisplayWidth:    data[off+5],
+			ExponentRefViewingDistance: data[off+6],
+			MantissaRefViewingDistance: data[off+7],
+			AdditionalShiftPresentFlag: data[off+8],
+			NumSampleShift:             int16(binary.LittleEndian.Uint16(data[off+10 : off+12])),
+		}
+	}
+	return out, true
 }
 
 const avRationalSize = 8
@@ -1008,6 +1132,9 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 	if src.Stereo3D.Present != 0 {
 		out.Stereo3D = stereo3DFromPacketSideDataValue(src.Stereo3D)
 	}
+	if src.Spherical.Present != 0 {
+		out.Spherical = sphericalFromPacketSideDataValue(src.Spherical)
+	}
 	if src.DisplayMatrix.Present != 0 {
 		out.DisplayOrientation = displayOrientationFromPacketMatrix(src.DisplayMatrix)
 	}
@@ -1038,11 +1165,34 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 			MaxPicAverageLightLevel: src.ContentLight.MaxPicAverageLightLevel,
 		}
 	}
+	if len(src.ICCProfile) != 0 {
+		out.ICCProfile = append([]byte(nil), src.ICCProfile...)
+	}
+	if src.ReferenceDisplays.Present != 0 {
+		out.ReferenceDisplays = referenceDisplaysFromPacketSideDataValue(src.ReferenceDisplays)
+	}
 	return out
 }
 
 func displayOrientationFromPacketMatrix(src h264.AVDisplayMatrix) *DisplayOrientation {
 	return &DisplayOrientation{Matrix: src.Matrix}
+}
+
+func sphericalFromPacketSideDataValue(src h264.AVSphericalMapping) *SphericalMapping {
+	if src.Present == 0 || src.Projection < 0 || src.Projection > int32(SphericalProjectionParametricImmersive) {
+		return nil
+	}
+	return &SphericalMapping{
+		Projection:  SphericalProjection(src.Projection),
+		Yaw:         src.Yaw,
+		Pitch:       src.Pitch,
+		Roll:        src.Roll,
+		BoundLeft:   src.BoundLeft,
+		BoundTop:    src.BoundTop,
+		BoundRight:  src.BoundRight,
+		BoundBottom: src.BoundBottom,
+		Padding:     src.Padding,
+	}
 }
 
 func masteringDisplayFromPacketMetadata(src h264.AVMasteringDisplayMetadata) *MasteringDisplay {
@@ -1054,6 +1204,28 @@ func masteringDisplayFromPacketMetadata(src h264.AVMasteringDisplayMetadata) *Ma
 		HasPrimaries:     src.HasPrimaries != 0,
 		HasLuminance:     src.HasLuminance != 0,
 	}
+}
+
+func referenceDisplaysFromPacketSideDataValue(src h264.AV3DReferenceDisplaysInfo) *ReferenceDisplaysInfo {
+	out := &ReferenceDisplaysInfo{
+		PrecRefDisplayWidth:    src.PrecRefDisplayWidth,
+		RefViewingDistanceFlag: src.RefViewingDistanceFlag != 0,
+		PrecRefViewingDist:     src.PrecRefViewingDist,
+		Displays:               make([]ReferenceDisplay, len(src.Displays)),
+	}
+	for i, display := range src.Displays {
+		out.Displays[i] = ReferenceDisplay{
+			LeftViewID:                 display.LeftViewID,
+			RightViewID:                display.RightViewID,
+			ExponentRefDisplayWidth:    display.ExponentRefDisplayWidth,
+			MantissaRefDisplayWidth:    display.MantissaRefDisplayWidth,
+			ExponentRefViewingDistance: display.ExponentRefViewingDistance,
+			MantissaRefViewingDistance: display.MantissaRefViewingDistance,
+			AdditionalShiftPresentFlag: display.AdditionalShiftPresentFlag != 0,
+			NumSampleShift:             display.NumSampleShift,
+		}
+	}
+	return out
 }
 
 func s12mTimecodesFromPictureTiming(src h264.H264SEIPictureTiming, timeScale uint32, numUnitsInTick uint32, x264Build int32) []uint32 {

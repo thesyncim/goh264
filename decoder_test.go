@@ -572,6 +572,7 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	primaries := [3][2]uint16{{30000, 35000}, {10000, 20000}, {15000, 25000}}
 	white := [2]uint16{15635, 16450}
 	matrix := [9]int32{65536, 0, 0, 0, -65536, 0, 123, 456, 1 << 30}
+	iccProfile := []byte{0x00, 0x00, 0x02, 0x10, 'a', 'c', 's', 'p'}
 	frame, err := NewDecoder().DecodePacket(Packet{
 		Data: decodeHexFixture(t, black16AnnexBHex),
 		SideData: []PacketSideData{
@@ -580,9 +581,27 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 				int32(Stereo3DTypeTopBottom), 1, int32(Stereo3DViewLeft), int32(Stereo3DPrimaryEyeRight), 65000,
 				Rational{Num: -1, Den: 2}, Rational{Num: 90, Den: 1},
 			)},
+			{Type: PacketSideDataSpherical, Data: decoderPacketSphericalSideData(
+				int32(SphericalProjectionEquirectangularTile), 1<<16, -(2 << 16), 3<<16,
+				1000, 2000, 3000, 4000, 12,
+			)},
 			{Type: PacketSideDataAmbientViewingEnvironment, Data: decoderPacketAmbientViewingSideData(12345, 25000, 16667)},
 			{Type: PacketSideDataMasteringDisplayMetadata, Data: decoderPacketMasteringDisplaySideData(primaries, white, 10000000, 100, true, true)},
 			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(4000, 300)},
+			{Type: PacketSideDataICCProfile, Data: iccProfile},
+			{Type: PacketSideData3DReferenceDisplays, Data: decoderPacketReferenceDisplaysSideData(
+				12, true, 9,
+				[]ReferenceDisplay{{
+					LeftViewID:                 3,
+					RightViewID:                4,
+					ExponentRefDisplayWidth:    2,
+					MantissaRefDisplayWidth:    33,
+					ExponentRefViewingDistance: 5,
+					MantissaRefViewingDistance: 44,
+					AdditionalShiftPresentFlag: true,
+					NumSampleShift:             -7,
+				}},
+			)},
 		},
 	})
 	if err != nil {
@@ -604,6 +623,18 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 		side.Stereo3D.StereoMode != "bottom_top" {
 		t.Fatalf("packet stereo3d = %+v", side.Stereo3D)
 	}
+	if side.Spherical == nil ||
+		side.Spherical.Projection != SphericalProjectionEquirectangularTile ||
+		side.Spherical.Yaw != 1<<16 ||
+		side.Spherical.Pitch != -(2<<16) ||
+		side.Spherical.Roll != 3<<16 ||
+		side.Spherical.BoundLeft != 1000 ||
+		side.Spherical.BoundTop != 2000 ||
+		side.Spherical.BoundRight != 3000 ||
+		side.Spherical.BoundBottom != 4000 ||
+		side.Spherical.Padding != 12 {
+		t.Fatalf("packet spherical = %+v", side.Spherical)
+	}
 	if side.AmbientViewing == nil || side.AmbientViewing.AmbientIlluminance != 12345 ||
 		side.AmbientViewing.AmbientLightX != 25000 || side.AmbientViewing.AmbientLightY != 16667 {
 		t.Fatalf("packet ambient viewing = %+v", side.AmbientViewing)
@@ -619,6 +650,27 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	if side.ContentLight == nil || side.ContentLight.MaxContentLightLevel != 4000 ||
 		side.ContentLight.MaxPicAverageLightLevel != 300 {
 		t.Fatalf("packet content light = %+v", side.ContentLight)
+	}
+	iccProfile[0] = 0xff
+	if got, want := side.ICCProfile, []byte{0x00, 0x00, 0x02, 0x10, 'a', 'c', 's', 'p'}; !bytes.Equal(got, want) {
+		t.Fatalf("packet icc profile = %x, want %x", got, want)
+	}
+	if side.ReferenceDisplays == nil ||
+		side.ReferenceDisplays.PrecRefDisplayWidth != 12 ||
+		!side.ReferenceDisplays.RefViewingDistanceFlag ||
+		side.ReferenceDisplays.PrecRefViewingDist != 9 ||
+		len(side.ReferenceDisplays.Displays) != 1 {
+		t.Fatalf("packet reference displays = %+v", side.ReferenceDisplays)
+	}
+	if display := side.ReferenceDisplays.Displays[0]; display.LeftViewID != 3 ||
+		display.RightViewID != 4 ||
+		display.ExponentRefDisplayWidth != 2 ||
+		display.MantissaRefDisplayWidth != 33 ||
+		display.ExponentRefViewingDistance != 5 ||
+		display.MantissaRefViewingDistance != 44 ||
+		!display.AdditionalShiftPresentFlag ||
+		display.NumSampleShift != -7 {
+		t.Fatalf("packet reference display[0] = %+v", display)
 	}
 }
 
@@ -676,6 +728,21 @@ func TestPacketGlobalSideDataRejectsNonExactRationals(t *testing.T) {
 	}
 	if side.MasteringMetadata.Present != 0 {
 		t.Fatalf("mastering side data with non-exact rational was accepted: %+v", side.MasteringMetadata)
+	}
+}
+
+func TestPacketReferenceDisplaysRejectsInvalidNativeLayout(t *testing.T) {
+	side := packetFrameSideDataFromPacket([]PacketSideData{{
+		Type: PacketSideData3DReferenceDisplays,
+		Data: []byte{
+			12, 1, 9, 1,
+			0, 0, 0, 0,
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+			12, 0, 0, 0, 0, 0, 0, 0,
+		},
+	}})
+	if side.ReferenceDisplays.Present != 0 {
+		t.Fatalf("reference displays with invalid native offset accepted: %+v", side.ReferenceDisplays)
 	}
 }
 
@@ -1149,10 +1216,14 @@ func TestPacketGlobalSideDataLayoutMatchesNativeFFmpegOracle(t *testing.T) {
 	}
 	got := strings.TrimSpace(string(out))
 	want := strings.Join([]string{
-		fmt.Sprintf("%d %d %d %d %d", PacketSideDataDisplayMatrix, PacketSideDataStereo3D, PacketSideDataMasteringDisplayMetadata, PacketSideDataContentLightLevel, PacketSideDataAmbientViewingEnvironment),
+		fmt.Sprintf("%d %d %d %d %d %d %d %d", PacketSideDataDisplayMatrix, PacketSideDataStereo3D, PacketSideDataMasteringDisplayMetadata, PacketSideDataSpherical, PacketSideDataContentLightLevel, PacketSideDataICCProfile, PacketSideDataAmbientViewingEnvironment, PacketSideData3DReferenceDisplays),
 		"8 8 0 4 24 88 0 48 64 72 80 84",
 		"36 36 0 4 8 12 16 20 28",
 		"0 1 2 3 4 5 6 7 8 0 1 2 3 1",
+		"36 0 4 8 12 16 20 24 28 32",
+		"0 1 2 3 4 5 6",
+		"24 0 1 2 3 8 16",
+		"12 0 2 4 5 6 7 8 10",
 	}, "\n")
 	if got != want {
 		t.Fatalf("packet side-data oracle mismatch\nC:\n%s\nGo:\n%s", got, want)
@@ -1185,16 +1256,21 @@ const packetGlobalSideDataOracleC = `
 #include "libavutil/ambient_viewing_environment.h"
 #include "libavutil/display.h"
 #include "libavutil/mastering_display_metadata.h"
+#include "libavutil/spherical.h"
 #include "libavutil/stereo3d.h"
+#include "libavutil/tdrdi.h"
 
 int main(void)
 {
-    printf("%d %d %d %d %d\n",
+    printf("%d %d %d %d %d %d %d %d\n",
            AV_PKT_DATA_DISPLAYMATRIX,
            AV_PKT_DATA_STEREO3D,
            AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
+           AV_PKT_DATA_SPHERICAL,
            AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
-           AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT);
+           AV_PKT_DATA_ICC_PROFILE,
+           AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT,
+           AV_PKT_DATA_3D_REFERENCE_DISPLAYS);
     printf("%zu %zu %zu %zu %zu %zu %zu %zu %zu %zu %zu %zu\n",
            sizeof(AVRational),
            sizeof(AVContentLightMetadata),
@@ -1233,6 +1309,43 @@ int main(void)
            AV_STEREO3D_VIEW_RIGHT,
            AV_STEREO3D_VIEW_UNSPEC,
            AV_STEREO3D_FLAG_INVERT);
+    printf("%zu %zu %zu %zu %zu %zu %zu %zu %zu %zu\n",
+           sizeof(AVSphericalMapping),
+           offsetof(AVSphericalMapping, projection),
+           offsetof(AVSphericalMapping, yaw),
+           offsetof(AVSphericalMapping, pitch),
+           offsetof(AVSphericalMapping, roll),
+           offsetof(AVSphericalMapping, bound_left),
+           offsetof(AVSphericalMapping, bound_top),
+           offsetof(AVSphericalMapping, bound_right),
+           offsetof(AVSphericalMapping, bound_bottom),
+           offsetof(AVSphericalMapping, padding));
+    printf("%d %d %d %d %d %d %d\n",
+           AV_SPHERICAL_EQUIRECTANGULAR,
+           AV_SPHERICAL_CUBEMAP,
+           AV_SPHERICAL_EQUIRECTANGULAR_TILE,
+           AV_SPHERICAL_HALF_EQUIRECTANGULAR,
+           AV_SPHERICAL_RECTILINEAR,
+           AV_SPHERICAL_FISHEYE,
+           AV_SPHERICAL_PARAMETRIC_IMMERSIVE);
+    printf("%zu %zu %zu %zu %zu %zu %zu\n",
+           sizeof(AV3DReferenceDisplaysInfo),
+           offsetof(AV3DReferenceDisplaysInfo, prec_ref_display_width),
+           offsetof(AV3DReferenceDisplaysInfo, ref_viewing_distance_flag),
+           offsetof(AV3DReferenceDisplaysInfo, prec_ref_viewing_dist),
+           offsetof(AV3DReferenceDisplaysInfo, num_ref_displays),
+           offsetof(AV3DReferenceDisplaysInfo, entries_offset),
+           offsetof(AV3DReferenceDisplaysInfo, entry_size));
+    printf("%zu %zu %zu %zu %zu %zu %zu %zu %zu\n",
+           sizeof(AV3DReferenceDisplay),
+           offsetof(AV3DReferenceDisplay, left_view_id),
+           offsetof(AV3DReferenceDisplay, right_view_id),
+           offsetof(AV3DReferenceDisplay, exponent_ref_display_width),
+           offsetof(AV3DReferenceDisplay, mantissa_ref_display_width),
+           offsetof(AV3DReferenceDisplay, exponent_ref_viewing_distance),
+           offsetof(AV3DReferenceDisplay, mantissa_ref_viewing_distance),
+           offsetof(AV3DReferenceDisplay, additional_shift_present_flag),
+           offsetof(AV3DReferenceDisplay, num_sample_shift));
     return 0;
 }
 `
@@ -2570,6 +2683,50 @@ func decoderPacketStereo3DSideData(typ int32, flags int32, view int32, primaryEy
 	binary.LittleEndian.PutUint32(out[24:28], uint32(disparity.Den))
 	binary.LittleEndian.PutUint32(out[28:32], uint32(fieldOfView.Num))
 	binary.LittleEndian.PutUint32(out[32:36], uint32(fieldOfView.Den))
+	return out
+}
+
+func decoderPacketSphericalSideData(projection int32, yaw int32, pitch int32, roll int32, boundLeft uint32, boundTop uint32, boundRight uint32, boundBottom uint32, padding uint32) []byte {
+	out := make([]byte, 36)
+	binary.LittleEndian.PutUint32(out[0:4], uint32(projection))
+	binary.LittleEndian.PutUint32(out[4:8], uint32(yaw))
+	binary.LittleEndian.PutUint32(out[8:12], uint32(pitch))
+	binary.LittleEndian.PutUint32(out[12:16], uint32(roll))
+	binary.LittleEndian.PutUint32(out[16:20], boundLeft)
+	binary.LittleEndian.PutUint32(out[20:24], boundTop)
+	binary.LittleEndian.PutUint32(out[24:28], boundRight)
+	binary.LittleEndian.PutUint32(out[28:32], boundBottom)
+	binary.LittleEndian.PutUint32(out[32:36], padding)
+	return out
+}
+
+func decoderPacketReferenceDisplaysSideData(precWidth uint8, viewingDistance bool, precDistance uint8, displays []ReferenceDisplay) []byte {
+	const (
+		headerSize = 24
+		entrySize  = 12
+	)
+	out := make([]byte, headerSize+entrySize*len(displays))
+	out[0] = precWidth
+	if viewingDistance {
+		out[1] = 1
+	}
+	out[2] = precDistance
+	out[3] = uint8(len(displays))
+	binary.LittleEndian.PutUint64(out[8:16], headerSize)
+	binary.LittleEndian.PutUint64(out[16:24], entrySize)
+	for i, display := range displays {
+		off := headerSize + i*entrySize
+		binary.LittleEndian.PutUint16(out[off:off+2], display.LeftViewID)
+		binary.LittleEndian.PutUint16(out[off+2:off+4], display.RightViewID)
+		out[off+4] = display.ExponentRefDisplayWidth
+		out[off+5] = display.MantissaRefDisplayWidth
+		out[off+6] = display.ExponentRefViewingDistance
+		out[off+7] = display.MantissaRefViewingDistance
+		if display.AdditionalShiftPresentFlag {
+			out[off+8] = 1
+		}
+		binary.LittleEndian.PutUint16(out[off+10:off+12], uint16(display.NumSampleShift))
+	}
 	return out
 }
 

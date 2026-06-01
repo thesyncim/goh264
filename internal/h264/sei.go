@@ -157,6 +157,38 @@ type AVStereo3D struct {
 	HorizontalFieldOfView         AVRational
 }
 
+type AVSphericalMapping struct {
+	Present     int32
+	Projection  int32
+	Yaw         int32
+	Pitch       int32
+	Roll        int32
+	BoundLeft   uint32
+	BoundTop    uint32
+	BoundRight  uint32
+	BoundBottom uint32
+	Padding     uint32
+}
+
+type AV3DReferenceDisplaysInfo struct {
+	Present                int32
+	PrecRefDisplayWidth    uint8
+	RefViewingDistanceFlag uint8
+	PrecRefViewingDist     uint8
+	Displays               []AV3DReferenceDisplay
+}
+
+type AV3DReferenceDisplay struct {
+	LeftViewID                 uint16
+	RightViewID                uint16
+	ExponentRefDisplayWidth    uint8
+	MantissaRefDisplayWidth    uint8
+	ExponentRefViewingDistance uint8
+	MantissaRefViewingDistance uint8
+	AdditionalShiftPresentFlag uint8
+	NumSampleShift             int16
+}
+
 type H2645SEIAlternativeTransfer struct {
 	Present                          int32
 	PreferredTransferCharacteristics int32
