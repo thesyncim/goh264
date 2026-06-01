@@ -94,6 +94,91 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsB8x8DirectSubNoResi
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsNeutralBDeblockingDirectSkip(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		pps    *PPS
+		mbType uint32
+	}{
+		{name: "cavlc temporal skip", pps: &PPS{}, mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip},
+		{name: "cabac temporal skip", pps: &PPS{CABAC: 1}, mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip},
+		{name: "cavlc spatial skip", pps: &PPS{}, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip},
+		{name: "cabac spatial skip", pps: &PPS{CABAC: 1}, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sh := &SliceHeader{
+				SliceTypeNoS:     PictureTypeB,
+				DeblockingFilter: 1,
+				PPS:              tt.pps,
+			}
+			if err := validateHighFrameSliceMacroblockForReconstruct(sh, tt.mbType, 0, 0); err != nil {
+				t.Fatalf("validate high B deblock direct skip err = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsNeutralBDeblockingDirectSub(t *testing.T) {
+	mbType := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	for _, tt := range []struct {
+		name string
+		pps  *PPS
+		sub  [4]uint32
+	}{
+		{
+			name: "cavlc direct 8x8",
+			pps:  &PPS{},
+			sub: [4]uint32{
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+			},
+		},
+		{
+			name: "cabac direct 8x8",
+			pps:  &PPS{CABAC: 1},
+			sub: [4]uint32{
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+			},
+		},
+		{
+			name: "cavlc direct sub 4x4",
+			pps:  &PPS{},
+			sub: [4]uint32{
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+			},
+		},
+		{
+			name: "cabac spatial direct sub 4x4",
+			pps:  &PPS{CABAC: 1},
+			sub: [4]uint32{
+				MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sh := &SliceHeader{
+				SliceTypeNoS:     PictureTypeB,
+				DeblockingFilter: 1,
+				PPS:              tt.pps,
+			}
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &tt.sub, 0, 0); err != nil {
+				t.Fatalf("validate high B deblock direct-sub err = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsBPartitionedExplicit(t *testing.T) {
 	unweighted := &SliceHeader{SliceTypeNoS: PictureTypeB}
 	implicitWeighted := &SliceHeader{SliceTypeNoS: PictureTypeB, PPS: &PPS{WeightedBipredIDC: 2}}
@@ -310,7 +395,10 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b implicit weighted explicit direct sub mix remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bMixedExplicitDirectSub, want: ErrUnsupported},
 		{name: "b implicit weighted direct explicit sub mix remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bMixedDirectSub, want: ErrUnsupported},
 		{name: "b implicit weighted top-level direct 8x8 remains guarded", sh: bImplicitWeightedSlice, mbType: MBType8x8 | MBTypeL0L1 | MBTypeDirect2, sub: &bExplicitSub, want: ErrUnsupported},
-		{name: "b deblock skip remains guarded", sh: bDeblockSlice, mbType: bSkip, want: ErrUnsupported},
+		{name: "b deblock skip cbp remains guarded", sh: bDeblockSlice, mbType: bSkip, cbp: 1, want: ErrUnsupported},
+		{name: "b deblock skip cbp table remains guarded", sh: bDeblockSlice, mbType: bSkip, cbpTable: 1, want: ErrUnsupported},
+		{name: "b deblock direct sub cbp remains guarded", sh: bDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1, want: ErrUnsupported},
+		{name: "b deblock direct sub cbp table remains guarded", sh: bDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbpTable: 1, want: ErrUnsupported},
 		{name: "b deblock partitioned residual remains guarded", sh: bDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1, want: ErrUnsupported},
 		{name: "b deblock cabac partitioned residual remains guarded", sh: bCABACDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1, want: ErrUnsupported},
 		{name: "b deblock implicit weighted partitioned residual remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1, want: ErrUnsupported},

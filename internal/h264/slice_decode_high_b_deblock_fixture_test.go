@@ -189,6 +189,91 @@ func TestHigh10PartitionedBDeblockFixtureMacroblockSyntax(t *testing.T) {
 	}
 }
 
+func TestHigh10BSkipAndDirectSubDeblockFixtureMacroblockSyntax(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		file          string
+		cabac         int32
+		directSpatial bool
+		direct8x8     bool
+		wantDirectSub bool
+	}{
+		{name: "bskip temporal cavlc", file: "high10_bskip_deblock_temporal_cavlc.h264", direct8x8: true},
+		{name: "bskip temporal cabac", file: "high10_bskip_deblock_temporal_cabac.h264", cabac: 1, direct8x8: true},
+		{name: "bskip spatial cavlc", file: "high10_bskip_deblock_spatial_cavlc.h264", directSpatial: true, direct8x8: true},
+		{name: "bskip spatial cabac", file: "high10_bskip_deblock_spatial_cabac.h264", cabac: 1, directSpatial: true, direct8x8: true},
+		{name: "direct-sub b8x8 temporal cavlc", file: "high10_cavlc_b8x8_temporal_direct_sub_deblock.h264", direct8x8: true, wantDirectSub: true},
+		{name: "direct-sub b8x8 temporal cabac", file: "high10_cabac_b8x8_temporal_direct_sub_deblock.h264", cabac: 1, direct8x8: true, wantDirectSub: true},
+		{name: "direct-sub b8x8 spatial cavlc", file: "high10_cavlc_b8x8_spatial_direct_sub_deblock.h264", directSpatial: true, direct8x8: true, wantDirectSub: true},
+		{name: "direct-sub b8x8 spatial cabac", file: "high10_cabac_b8x8_spatial_direct_sub_deblock.h264", cabac: 1, directSpatial: true, direct8x8: true, wantDirectSub: true},
+		{name: "direct-sub b4x4 temporal cavlc", file: "high10_cavlc_b4x4_temporal_direct_sub_deblock.h264", wantDirectSub: true},
+		{name: "direct-sub b4x4 temporal cabac", file: "high10_cabac_b4x4_temporal_direct_sub_deblock.h264", cabac: 1, wantDirectSub: true},
+		{name: "direct-sub b4x4 spatial cavlc", file: "high10_cavlc_b4x4_spatial_direct_sub_deblock.h264", directSpatial: true, wantDirectSub: true},
+		{name: "direct-sub b4x4 spatial cabac", file: "high10_cabac_b4x4_spatial_direct_sub_deblock.h264", cabac: 1, directSpatial: true, wantDirectSub: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "h264", tt.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			nals, err := SplitAnnexB(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var spsList [maxSPSCount]*SPS
+			var ppsList [maxPPSCount]*PPS
+			for _, nal := range nals {
+				switch nal.Type {
+				case NALSPS:
+					sps, err := DecodeSPS(nal.RBSP)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if sps.Direct8x8InferenceFlag != boolToInt32(tt.direct8x8) {
+						t.Fatalf("direct_8x8_inference_flag = %d, want %t", sps.Direct8x8InferenceFlag, tt.direct8x8)
+					}
+					spsList[sps.SPSID] = sps
+				case NALPPS:
+					pps, err := DecodePPS(nal.RBSP, &spsList)
+					if err != nil {
+						t.Fatal(err)
+					}
+					ppsList[pps.PPSID] = pps
+				case NALSlice:
+					sh, payload, err := parseSliceHeaderWithPayload(nal, &ppsList)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if sh.SliceTypeNoS != PictureTypeB {
+						continue
+					}
+					if sh.DeblockingFilter != 1 || sh.PPS == nil || sh.PPS.CABAC != tt.cabac ||
+						isHighBImplicitWeighted(sh) || (sh.DirectSpatialMVPred != 0) != tt.directSpatial {
+						t.Fatalf("B slice deblock/cabac/implicit/direct = %d/%v/%t/%d, want cabac=%d neutral direct=%t",
+							sh.DeblockingFilter, sh.PPS, isHighBImplicitWeighted(sh), sh.DirectSpatialMVPred, tt.cabac, tt.directSpatial)
+					}
+
+					got := decodeHigh10BDeblockFixtureMacroblocksWithDirect8x8(t, sh, &payload, tt.cabac != 0, 1, tt.directSpatial, tt.direct8x8)[0]
+					if got.CBP != 0 || got.CBPTable != 0 {
+						t.Fatalf("B macroblock CBP/CBPTable = %#x/%#x, want no residual", got.CBP, got.CBPTable)
+					}
+					if tt.wantDirectSub {
+						if got.MBType&(MBTypeSkip|MBType16x8|MBType8x16|MBTypeIntra4x4|MBTypeIntra16x16|MBTypeIntraPCM) != 0 ||
+							!isHighB8x8DirectSubMacroblock(got.MBType, &got.Inter.SubMBType) {
+							t.Fatalf("B macroblock/sub types = %#x/%#x, want direct-sub B8x8/B_SUB_4x4", got.MBType, got.Inter.SubMBType)
+						}
+					} else if !isHighB16x16DirectSkipMacroblock(got.MBType) {
+						t.Fatalf("B macroblock type = %#x, want direct skip", got.MBType)
+					}
+					return
+				}
+			}
+			t.Fatal("B slice not found")
+		})
+	}
+}
+
 func decodeHigh10BDeblockFixtureMacroblock(t *testing.T, sh *SliceHeader, payload *bitReader, cabac bool) cavlcFrameMacroblockResult {
 	t.Helper()
 	return decodeHigh10BDeblockFixtureMacroblocks(t, sh, payload, cabac, 1, false)[0]
@@ -196,12 +281,17 @@ func decodeHigh10BDeblockFixtureMacroblock(t *testing.T, sh *SliceHeader, payloa
 
 func decodeHigh10BDeblockFixtureMacroblocks(t *testing.T, sh *SliceHeader, payload *bitReader, cabac bool, mbWidth int, directSpatial bool) []cavlcFrameMacroblockResult {
 	t.Helper()
+	return decodeHigh10BDeblockFixtureMacroblocksWithDirect8x8(t, sh, payload, cabac, mbWidth, directSpatial, true)
+}
+
+func decodeHigh10BDeblockFixtureMacroblocksWithDirect8x8(t *testing.T, sh *SliceHeader, payload *bitReader, cabac bool, mbWidth int, directSpatial bool, direct8x8 bool) []cavlcFrameMacroblockResult {
+	t.Helper()
 
 	m, err := newMacroblockTables(mbWidth, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	direct := high10BDeblockDirectMotionContext(t, mbWidth, directSpatial)
+	direct := high10BDeblockDirectMotionContext(t, mbWidth, directSpatial, direct8x8)
 	got := make([]cavlcFrameMacroblockResult, 0, mbWidth)
 	var work frameMacroblockDecodeWork
 	if cabac {
@@ -235,7 +325,7 @@ func decodeHigh10BDeblockFixtureMacroblocks(t *testing.T, sh *SliceHeader, paylo
 	return got
 }
 
-func high10BDeblockDirectMotionContext(t *testing.T, mbWidth int, directSpatial bool) h264DirectMotionContext {
+func high10BDeblockDirectMotionContext(t *testing.T, mbWidth int, directSpatial bool, direct8x8 bool) h264DirectMotionContext {
 	t.Helper()
 
 	past := makeH264SliceDecodePictureHigh(mbWidth, 1, 1)
@@ -268,7 +358,14 @@ func high10BDeblockDirectMotionContext(t *testing.T, mbWidth int, directSpatial 
 		},
 		CurPOC:              2,
 		DirectSpatialMVPred: directSpatial,
-		Direct8x8Inference:  true,
+		Direct8x8Inference:  direct8x8,
 		X264Build:           165,
 	}
+}
+
+func boolToInt32(v bool) int32 {
+	if v {
+		return 1
+	}
+	return 0
 }
