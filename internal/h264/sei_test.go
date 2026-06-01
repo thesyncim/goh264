@@ -35,14 +35,7 @@ func TestDecodeSEIMessages(t *testing.T) {
 		seiTestMessage{typ: seiTypeAlternativeTransfer, payload: []byte{16}},
 		seiTestMessage{typ: seiTypeAmbientViewingEnvironment, payload: seiAmbientViewingPayload()},
 		seiTestMessage{typ: seiTypeFilmGrainCharacteristics, payload: seiFilmGrainPayload()},
-		seiTestMessage{typ: seiTypeMasteringDisplayColourVolume, payload: []byte{
-			0, 1, 0, 2,
-			0, 3, 0, 4,
-			0, 5, 0, 6,
-			0, 7, 0, 8,
-			0x01, 0x02, 0x03, 0x04,
-			0x05, 0x06, 0x07, 0x08,
-		}},
+		seiTestMessage{typ: seiTypeMasteringDisplayColourVolume, payload: seiMasteringDisplayPayload()},
 		seiTestMessage{typ: seiTypeContentLightLevelInfo, payload: []byte{0x03, 0xe8, 0x00, 0xfa}},
 	), &spsList)
 	if err != nil {
@@ -88,7 +81,7 @@ func TestDecodeSEIMessages(t *testing.T) {
 		t.Fatalf("unregistered = count %d x264 %d", len(ctx.Common.Unregistered.Data), ctx.Common.Unregistered.X264Build)
 	}
 	if ctx.Common.DisplayOrientation.Present != 1 || ctx.Common.DisplayOrientation.HFlip != 1 ||
-		ctx.Common.DisplayOrientation.VFlip != 0 || ctx.Common.DisplayOrientation.AnticlockwiseRotation != 90 {
+		ctx.Common.DisplayOrientation.VFlip != 0 || ctx.Common.DisplayOrientation.AnticlockwiseRotation != 0x4000 {
 		t.Fatalf("display orientation = %+v", ctx.Common.DisplayOrientation)
 	}
 	if ctx.Common.FramePacking.Present != 1 || ctx.Common.FramePacking.ArrangementID != 2 ||
@@ -122,10 +115,11 @@ func TestDecodeSEIMessages(t *testing.T) {
 		fg.CompModelValue[1][1][0] != 5 {
 		t.Fatalf("film grain component data = %+v %+v %+v", fg.IntensityIntervalLowerBound, fg.IntensityIntervalUpperBound, fg.CompModelValue)
 	}
-	if ctx.Common.MasteringDisplay.Present != 2 || ctx.Common.MasteringDisplay.DisplayPrimaries[2][1] != 6 ||
-		ctx.Common.MasteringDisplay.WhitePoint != [2]uint16{7, 8} ||
-		ctx.Common.MasteringDisplay.MaxLuminance != 0x01020304 ||
-		ctx.Common.MasteringDisplay.MinLuminance != 0x05060708 {
+	if ctx.Common.MasteringDisplay.Present != 2 ||
+		ctx.Common.MasteringDisplay.DisplayPrimaries != [3][2]uint16{{10000, 20000}, {15000, 25000}, {30000, 35000}} ||
+		ctx.Common.MasteringDisplay.WhitePoint != [2]uint16{15635, 16450} ||
+		ctx.Common.MasteringDisplay.MaxLuminance != 10000000 ||
+		ctx.Common.MasteringDisplay.MinLuminance != 100 {
 		t.Fatalf("mastering display = %+v", ctx.Common.MasteringDisplay)
 	}
 	if ctx.Common.ContentLight.Present != 2 || ctx.Common.ContentLight.MaxContentLightLevel != 1000 ||
@@ -347,7 +341,7 @@ func seiDisplayOrientationPayload() []byte {
 	b.writeBit(0)
 	b.writeBit(1)
 	b.writeBit(0)
-	b.writeBits(90, 16)
+	b.writeBits(0x4000, 16)
 	return b.bytes()
 }
 
@@ -370,6 +364,17 @@ func seiFramePackingPayload() []byte {
 
 func seiAmbientViewingPayload() []byte {
 	return []byte{0x00, 0x00, 0x30, 0x39, 0x61, 0xa8, 0x41, 0x1b}
+}
+
+func seiMasteringDisplayPayload() []byte {
+	return []byte{
+		0x27, 0x10, 0x4e, 0x20,
+		0x3a, 0x98, 0x61, 0xa8,
+		0x75, 0x30, 0x88, 0xb8,
+		0x3d, 0x13, 0x40, 0x42,
+		0x00, 0x98, 0x96, 0x80,
+		0x00, 0x00, 0x00, 0x64,
+	}
 }
 
 func seiFilmGrainPayload() []byte {

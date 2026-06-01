@@ -2,7 +2,11 @@
 
 package goh264
 
-import "github.com/thesyncim/goh264/internal/h264"
+import (
+	"math"
+
+	"github.com/thesyncim/goh264/internal/h264"
+)
 
 var (
 	ErrInvalidData = h264.ErrInvalidData
@@ -74,6 +78,7 @@ type FrameSideData struct {
 	GreenMetadata        *GreenMetadata
 	ActiveFormat         *ActiveFormat
 	FramePacking         *FramePackingArrangement
+	Stereo3D             *Stereo3D
 	DisplayOrientation   *DisplayOrientation
 	AlternativeTransfer  *AlternativeTransfer
 	AmbientViewing       *AmbientViewingEnvironment
@@ -134,10 +139,40 @@ type FramePackingArrangement struct {
 	CurrentFrameIsFrame0Flag    bool
 }
 
+type Stereo3DType uint8
+
+const (
+	Stereo3DType2D Stereo3DType = iota
+	Stereo3DTypeSideBySide
+	Stereo3DTypeTopBottom
+	Stereo3DTypeFrameSequence
+	Stereo3DTypeCheckerboard
+	Stereo3DTypeSideBySideQuincunx
+	Stereo3DTypeLines
+	Stereo3DTypeColumns
+)
+
+type Stereo3DView uint8
+
+const (
+	Stereo3DViewPacked Stereo3DView = iota
+	Stereo3DViewLeft
+	Stereo3DViewRight
+	Stereo3DViewUnspecified
+)
+
+type Stereo3D struct {
+	Type       Stereo3DType
+	Inverted   bool
+	View       Stereo3DView
+	StereoMode string
+}
+
 type DisplayOrientation struct {
 	AnticlockwiseRotation int32
 	HFlip                 bool
 	VFlip                 bool
+	Matrix                [9]int32
 }
 
 type AlternativeTransfer struct {
@@ -175,6 +210,8 @@ type MasteringDisplay struct {
 	WhitePoint       [2]uint16
 	MaxLuminance     uint32
 	MinLuminance     uint32
+	HasPrimaries     bool
+	HasLuminance     bool
 }
 
 type ContentLight struct {
@@ -708,14 +745,9 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
 			QuincunxSamplingFlag:        src.FramePacking.QuincunxSamplingFlag != 0,
 			CurrentFrameIsFrame0Flag:    src.FramePacking.CurrentFrameIsFrame0Flag != 0,
 		}
+		out.Stereo3D = stereo3DFromFramePacking(src.FramePacking)
 	}
-	if src.DisplayOrientation.Present != 0 {
-		out.DisplayOrientation = &DisplayOrientation{
-			AnticlockwiseRotation: src.DisplayOrientation.AnticlockwiseRotation,
-			HFlip:                 src.DisplayOrientation.HFlip != 0,
-			VFlip:                 src.DisplayOrientation.VFlip != 0,
-		}
-	}
+	out.DisplayOrientation = displayOrientationFromH264(src.DisplayOrientation)
 	if src.AlternativeTransfer.Present != 0 {
 		out.AlternativeTransfer = &AlternativeTransfer{
 			PreferredTransferCharacteristics: src.AlternativeTransfer.PreferredTransferCharacteristics,
@@ -732,12 +764,7 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
 		out.FilmGrain = filmGrainFromH264(src.FilmGrain)
 	}
 	if src.MasteringDisplay.Present != 0 {
-		out.MasteringDisplay = &MasteringDisplay{
-			DisplayPrimaries: src.MasteringDisplay.DisplayPrimaries,
-			WhitePoint:       src.MasteringDisplay.WhitePoint,
-			MaxLuminance:     src.MasteringDisplay.MaxLuminance,
-			MinLuminance:     src.MasteringDisplay.MinLuminance,
-		}
+		out.MasteringDisplay = masteringDisplayFromH264(src.MasteringDisplay)
 	}
 	if src.ContentLight.Present != 0 {
 		out.ContentLight = &ContentLight{
@@ -745,6 +772,177 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
 			MaxPicAverageLightLevel: src.ContentLight.MaxPicAverageLightLevel,
 		}
 	}
+	return out
+}
+
+func stereo3DFromFramePacking(src h264.H2645SEIFramePacking) *Stereo3D {
+	if src.Present == 0 || !validH264FramePackingType(src.ArrangementType) ||
+		src.ContentInterpretationType <= 0 || src.ContentInterpretationType >= 3 {
+		return nil
+	}
+	out := &Stereo3D{
+		Inverted:   src.ContentInterpretationType == 2,
+		View:       Stereo3DViewPacked,
+		StereoMode: h264FramePackingStereoMode(src),
+	}
+	switch src.ArrangementType {
+	case 0:
+		out.Type = Stereo3DTypeCheckerboard
+	case 1:
+		out.Type = Stereo3DTypeColumns
+	case 2:
+		out.Type = Stereo3DTypeLines
+	case 3:
+		if src.QuincunxSamplingFlag != 0 {
+			out.Type = Stereo3DTypeSideBySideQuincunx
+		} else {
+			out.Type = Stereo3DTypeSideBySide
+		}
+	case 4:
+		out.Type = Stereo3DTypeTopBottom
+	case 5:
+		out.Type = Stereo3DTypeFrameSequence
+		if src.CurrentFrameIsFrame0Flag != 0 {
+			out.View = Stereo3DViewLeft
+		} else {
+			out.View = Stereo3DViewRight
+		}
+	case 6:
+		out.Type = Stereo3DType2D
+	}
+	return out
+}
+
+func validH264FramePackingType(t int32) bool {
+	return t >= 0 && t <= 6
+}
+
+func h264FramePackingStereoMode(src h264.H2645SEIFramePacking) string {
+	if src.ArrangementCancelFlag == 1 {
+		return "mono"
+	}
+	if src.ArrangementCancelFlag != 0 {
+		return ""
+	}
+	rightFirst := src.ContentInterpretationType == 2
+	switch src.ArrangementType {
+	case 0:
+		if rightFirst {
+			return "checkerboard_rl"
+		}
+		return "checkerboard_lr"
+	case 1:
+		if rightFirst {
+			return "col_interleaved_rl"
+		}
+		return "col_interleaved_lr"
+	case 2:
+		if rightFirst {
+			return "row_interleaved_rl"
+		}
+		return "row_interleaved_lr"
+	case 3:
+		if rightFirst {
+			return "right_left"
+		}
+		return "left_right"
+	case 4:
+		if rightFirst {
+			return "bottom_top"
+		}
+		return "top_bottom"
+	case 5:
+		if rightFirst {
+			return "block_rl"
+		}
+		return "block_lr"
+	default:
+		return "mono"
+	}
+}
+
+func displayOrientationFromH264(src h264.H2645SEIDisplayOrientation) *DisplayOrientation {
+	if src.Present == 0 || (src.AnticlockwiseRotation == 0 && src.HFlip == 0 && src.VFlip == 0) {
+		return nil
+	}
+	out := &DisplayOrientation{
+		AnticlockwiseRotation: src.AnticlockwiseRotation,
+		HFlip:                 src.HFlip != 0,
+		VFlip:                 src.VFlip != 0,
+	}
+	angle := float64(src.AnticlockwiseRotation) * 360 / float64(1<<16)
+	angle = -angle
+	if src.HFlip != 0 {
+		angle = -angle
+	}
+	if src.VFlip != 0 {
+		angle = -angle
+	}
+	out.Matrix = displayRotationMatrix(angle)
+	displayMatrixFlip(&out.Matrix, src.HFlip != 0, src.VFlip != 0)
+	return out
+}
+
+func displayRotationMatrix(angle float64) [9]int32 {
+	radians := -angle * math.Pi / 180.0
+	c := math.Cos(radians)
+	s := math.Sin(radians)
+	return [9]int32{
+		int32(c * float64(1<<16)),
+		int32(-s * float64(1<<16)),
+		0,
+		int32(s * float64(1<<16)),
+		int32(c * float64(1<<16)),
+		0,
+		0,
+		0,
+		1 << 30,
+	}
+}
+
+func displayMatrixFlip(matrix *[9]int32, hflip bool, vflip bool) {
+	if !hflip && !vflip {
+		return
+	}
+	flip := [3]int32{1, 1, 1}
+	if hflip {
+		flip[0] = -1
+	}
+	if vflip {
+		flip[1] = -1
+	}
+	for i := range matrix {
+		matrix[i] *= flip[i%3]
+	}
+}
+
+func masteringDisplayFromH264(src h264.H2645SEIMasteringDisplay) *MasteringDisplay {
+	const (
+		chromaXMin = 5
+		chromaXMax = 37000
+		chromaYMin = 5
+		chromaYMax = 42000
+		lumaMin    = 50000
+		lumaMax    = 100000000
+	)
+	mapping := [3]int{2, 0, 1}
+	out := &MasteringDisplay{
+		WhitePoint:   src.WhitePoint,
+		MaxLuminance: src.MaxLuminance,
+		MinLuminance: src.MinLuminance,
+		HasPrimaries: true,
+	}
+	for i, j := range mapping {
+		out.DisplayPrimaries[i] = src.DisplayPrimaries[j]
+		out.HasPrimaries = out.HasPrimaries &&
+			out.DisplayPrimaries[i][0] >= chromaXMin && out.DisplayPrimaries[i][0] <= chromaXMax &&
+			out.DisplayPrimaries[i][1] >= chromaYMin && out.DisplayPrimaries[i][1] <= chromaYMax
+	}
+	out.HasPrimaries = out.HasPrimaries &&
+		out.WhitePoint[0] >= chromaXMin && out.WhitePoint[0] <= chromaXMax &&
+		out.WhitePoint[1] >= chromaYMin && out.WhitePoint[1] <= chromaYMax
+	out.HasLuminance = out.MaxLuminance >= lumaMin && out.MaxLuminance <= lumaMax &&
+		out.MinLuminance <= lumaMin && out.MinLuminance < out.MaxLuminance
 	return out
 }
 

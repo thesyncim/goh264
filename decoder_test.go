@@ -545,14 +545,7 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 		decoderSEITestMessage{typ: decoderSEITypeAlternativeTransfer, payload: []byte{16}},
 		decoderSEITestMessage{typ: decoderSEITypeAmbientViewingEnvironment, payload: decoderSEIAmbientViewingPayload()},
 		decoderSEITestMessage{typ: decoderSEITypeFilmGrainCharacteristics, payload: decoderSEIFilmGrainPayload()},
-		decoderSEITestMessage{typ: decoderSEITypeMasteringDisplayColourVolume, payload: []byte{
-			0, 1, 0, 2,
-			0, 3, 0, 4,
-			0, 5, 0, 6,
-			0, 7, 0, 8,
-			0x01, 0x02, 0x03, 0x04,
-			0x05, 0x06, 0x07, 0x08,
-		}},
+		decoderSEITestMessage{typ: decoderSEITypeMasteringDisplayColourVolume, payload: decoderSEIMasteringDisplayPayload()},
 		decoderSEITestMessage{typ: decoderSEITypeContentLightLevelInfo, payload: []byte{0x03, 0xe8, 0x00, 0xfa}},
 	))
 	frame, err := NewDecoder().Decode(data)
@@ -578,12 +571,18 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 		t.Fatalf("green metadata = %+v", side.GreenMetadata)
 	}
 	if side.DisplayOrientation == nil || !side.DisplayOrientation.HFlip ||
-		side.DisplayOrientation.VFlip || side.DisplayOrientation.AnticlockwiseRotation != 90 {
+		side.DisplayOrientation.VFlip || side.DisplayOrientation.AnticlockwiseRotation != 0x4000 ||
+		side.DisplayOrientation.Matrix != [9]int32{0, 65536, 0, 65536, 0, 0, 0, 0, 1 << 30} {
 		t.Fatalf("display orientation = %+v", side.DisplayOrientation)
 	}
 	if side.FramePacking == nil || side.FramePacking.ArrangementID != 2 ||
 		side.FramePacking.ArrangementType != 3 || !side.FramePacking.CurrentFrameIsFrame0Flag {
 		t.Fatalf("frame packing = %+v", side.FramePacking)
+	}
+	if side.Stereo3D == nil || side.Stereo3D.Type != Stereo3DTypeSideBySide ||
+		!side.Stereo3D.Inverted || side.Stereo3D.View != Stereo3DViewPacked ||
+		side.Stereo3D.StereoMode != "right_left" {
+		t.Fatalf("stereo 3d = %+v", side.Stereo3D)
 	}
 	if side.AlternativeTransfer == nil || side.AlternativeTransfer.PreferredTransferCharacteristics != 16 {
 		t.Fatalf("alternative transfer = %+v", side.AlternativeTransfer)
@@ -611,15 +610,38 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 		fg.CompModelValue[1][1][0] != 5 {
 		t.Fatalf("film grain component data = %+v %+v %+v", fg.IntensityIntervalLowerBound, fg.IntensityIntervalUpperBound, fg.CompModelValue)
 	}
-	if side.MasteringDisplay == nil || side.MasteringDisplay.DisplayPrimaries[2][1] != 6 ||
-		side.MasteringDisplay.WhitePoint != [2]uint16{7, 8} ||
-		side.MasteringDisplay.MaxLuminance != 0x01020304 ||
-		side.MasteringDisplay.MinLuminance != 0x05060708 {
+	if side.MasteringDisplay == nil ||
+		side.MasteringDisplay.DisplayPrimaries != [3][2]uint16{{30000, 35000}, {10000, 20000}, {15000, 25000}} ||
+		side.MasteringDisplay.WhitePoint != [2]uint16{15635, 16450} ||
+		side.MasteringDisplay.MaxLuminance != 10000000 ||
+		side.MasteringDisplay.MinLuminance != 100 ||
+		!side.MasteringDisplay.HasPrimaries || !side.MasteringDisplay.HasLuminance {
 		t.Fatalf("mastering display = %+v", side.MasteringDisplay)
 	}
 	if side.ContentLight == nil || side.ContentLight.MaxContentLightLevel != 1000 ||
 		side.ContentLight.MaxPicAverageLightLevel != 250 {
 		t.Fatalf("content light = %+v", side.ContentLight)
+	}
+}
+
+func TestDecodeFrameSideDataSkipsNoopDisplayMatrixAndInvalidStereo3D(t *testing.T) {
+	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeDisplayOrientation, payload: decoderSEIDisplayOrientationPayloadWith(0, false, false)},
+		decoderSEITestMessage{typ: decoderSEITypeFramePackingArrangement, payload: decoderSEIFramePackingPayloadWith(7, 1, false, false)},
+	))
+	frame, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if frame.SideData.DisplayOrientation != nil {
+		t.Fatalf("display orientation = %+v, want nil for no-op transform", frame.SideData.DisplayOrientation)
+	}
+	if frame.SideData.Stereo3D != nil {
+		t.Fatalf("stereo 3d = %+v, want nil for invalid H.264 frame packing type", frame.SideData.Stereo3D)
+	}
+	if frame.SideData.FramePacking == nil || frame.SideData.FramePacking.ArrangementType != 7 {
+		t.Fatalf("raw frame packing = %+v", frame.SideData.FramePacking)
 	}
 }
 
@@ -1836,23 +1858,47 @@ func decoderSEIRecoveryPointPayload() []byte {
 }
 
 func decoderSEIDisplayOrientationPayload() []byte {
+	return decoderSEIDisplayOrientationPayloadWith(0x4000, true, false)
+}
+
+func decoderSEIDisplayOrientationPayloadWith(rotation uint32, hflip bool, vflip bool) []byte {
 	var b decoderSEIBitBuilder
 	b.writeBit(0)
-	b.writeBit(1)
-	b.writeBit(0)
-	b.writeBits(90, 16)
+	if hflip {
+		b.writeBit(1)
+	} else {
+		b.writeBit(0)
+	}
+	if vflip {
+		b.writeBit(1)
+	} else {
+		b.writeBit(0)
+	}
+	b.writeBits(rotation, 16)
 	return b.bytes()
 }
 
 func decoderSEIFramePackingPayload() []byte {
+	return decoderSEIFramePackingPayloadWith(3, 2, false, true)
+}
+
+func decoderSEIFramePackingPayloadWith(arrangementType uint32, contentInterpretation uint32, quincunx bool, currentFrameIsFrame0 bool) []byte {
 	var b decoderSEIBitBuilder
 	b.writeUE(2)
 	b.writeBit(0)
-	b.writeBits(3, 7)
-	b.writeBit(0)
-	b.writeBits(2, 6)
+	b.writeBits(arrangementType, 7)
+	if quincunx {
+		b.writeBit(1)
+	} else {
+		b.writeBit(0)
+	}
+	b.writeBits(contentInterpretation, 6)
 	b.writeBits(0, 3)
-	b.writeBit(1)
+	if currentFrameIsFrame0 {
+		b.writeBit(1)
+	} else {
+		b.writeBit(0)
+	}
 	b.writeBits(0, 2)
 	b.writeBits(0x1234, 16)
 	b.writeBits(0, 8)
@@ -1863,6 +1909,17 @@ func decoderSEIFramePackingPayload() []byte {
 
 func decoderSEIAmbientViewingPayload() []byte {
 	return []byte{0x00, 0x00, 0x30, 0x39, 0x61, 0xa8, 0x41, 0x1b}
+}
+
+func decoderSEIMasteringDisplayPayload() []byte {
+	return []byte{
+		0x27, 0x10, 0x4e, 0x20,
+		0x3a, 0x98, 0x61, 0xa8,
+		0x75, 0x30, 0x88, 0xb8,
+		0x3d, 0x13, 0x40, 0x42,
+		0x00, 0x98, 0x96, 0x80,
+		0x00, 0x00, 0x00, 0x64,
+	}
 }
 
 func decoderSEIFilmGrainPayload() []byte {

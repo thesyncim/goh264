@@ -102,9 +102,12 @@ user-data, A53 closed captions, active-format description, recovery point,
 green metadata, display orientation, frame packing, alternative transfer,
 ambient viewing environment, H.274 film-grain characteristics, mastering
 display, and content-light metadata while preserving the rawvideo MD5. The
-two-frame side-data test additionally proves FFmpeg's one-shot handoff behavior
-for unregistered SEI payloads, A53 captions, active-format descriptions, and
-H.264 film grain with `repetition_period == 0`.
+same test proves FFmpeg/libavutil frame side-data projection for H.264 frame
+packing into stereo3D metadata, display orientation into the native display
+matrix, and mastering-display RGB ordering plus `has_primaries`/`has_luminance`
+validation. The two-frame side-data test additionally proves FFmpeg's one-shot
+handoff behavior for unregistered SEI payloads, A53 captions, active-format
+descriptions, and H.264 film grain with `repetition_period == 0`.
 Public picture-timing tests use a pic-struct-present SPS and synthetic leading
 SEI to prove decoded `Frame` exposes FFmpeg-shaped `repeat_pict`, interlaced,
 and top-field-first metadata while preserving the rawvideo MD5. Public rich-VUI
@@ -189,7 +192,7 @@ Included:
 - H.264 NAL headers and RBSP handling
 - SPS VUI public metadata for SAR, video range/format, colorimetry, chroma location, and timing
 - Picture-timing-derived `repeat_pict`, interlaced, and top-field-first public frame flags for the simple frame-picture path
-- Decoded frame SEI side data for the translated subset, including registered ITU-T T.35 ATSC AFD/A53 captions, ambient viewing environment, and H.274 film grain characteristics
+- Decoded frame SEI side data for the translated subset, including registered ITU-T T.35 ATSC AFD/A53 captions, stereo3D, display matrix, mastering-display validity, ambient viewing environment, and H.274 film grain characteristics
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:
