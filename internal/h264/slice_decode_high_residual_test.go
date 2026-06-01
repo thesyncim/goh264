@@ -118,8 +118,8 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
 		mbType := MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeP0L1 | MBTypeP1L1
 
-		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != ErrUnsupported {
-			t.Fatalf("partitioned high B validate err = %v, want ErrUnsupported", err)
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != nil {
+			t.Fatalf("partitioned high B validate err = %v, want nil", err)
 		}
 	})
 
@@ -144,6 +144,20 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 
 		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 1, 1); err != ErrUnsupported {
 			t.Fatalf("partitioned high P validate err = %v, want ErrUnsupported", err)
+		}
+	})
+
+	t.Run("p intra macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeP}
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, MBTypeIntra4x4, 0, 0); err != nil {
+			t.Fatalf("intra high P validate err = %v, want nil", err)
+		}
+	})
+
+	t.Run("b intra macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, MBTypeIntra4x4, 0, 0); err != ErrUnsupported {
+			t.Fatalf("intra high B validate err = %v, want ErrUnsupported", err)
 		}
 	})
 }
@@ -337,6 +351,116 @@ func TestDecodeFrameSliceHighReconstructsBDirectSubFromDirectRefs(t *testing.T) 
 	}
 }
 
+func TestDecodeFrameSliceHighReconstructsPartitionedBExplicit(t *testing.T) {
+	b8x8 := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	allL0Sub := [4]uint32{
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+	}
+
+	for _, tt := range []struct {
+		name          string
+		cabac         bool
+		cavlcBits     string
+		cabacBits     []int
+		wantCAVLCBits int
+		wantMBType    uint32
+		assert        func(t *testing.T, label string, dst *h264PicturePlanesHigh, refs [2][]*h264PicturePlanesHigh)
+	}{
+		{
+			name:          "cavlc-b16x8-l0-l1",
+			cavlcBits:     "1000100111111",
+			wantCAVLCBits: 13,
+			wantMBType:    MBType16x8 | MBTypeP0L0 | MBTypeP1L1,
+			assert:        assertHighPartitionedB16x8L0L1,
+		},
+		{
+			name:          "cavlc-b8x16-l0-l1",
+			cavlcBits:     "1000101011111",
+			wantCAVLCBits: 13,
+			wantMBType:    MBType8x16 | MBTypeP0L0 | MBTypeP1L1,
+			assert:        assertHighPartitionedB8x16L0L1,
+		},
+		{
+			name:          "cavlc-b8x8-l0",
+			cavlcBits:     "1000010111010010010010111111111",
+			wantCAVLCBits: 31,
+			wantMBType:    b8x8,
+			assert:        assertHighPartitionedB8x8L0,
+		},
+		{
+			name:       "cabac-b16x8-l0-l1",
+			cabac:      true,
+			cabacBits:  []int{0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			wantMBType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1,
+			assert:     assertHighPartitionedB16x8L0L1,
+		},
+		{
+			name:       "cabac-b8x16-l0-l1",
+			cabac:      true,
+			cabacBits:  []int{0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			wantMBType: MBType8x16 | MBTypeP0L0 | MBTypeP1L1,
+			assert:     assertHighPartitionedB8x16L0L1,
+		},
+		{
+			name:       "cabac-b8x8-l0",
+			cabac:      true,
+			cabacBits:  []int{0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			wantMBType: b8x8,
+			assert:     assertHighPartitionedB8x8L0,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+			sh.QScale = 22
+			sh.RefCount = [2]uint32{1, 1}
+			if tt.cabac {
+				sh.PPS.CABAC = 1
+			}
+			refs := highPartitionedBRefsHigh(t)
+			in := h264FrameSliceDecodeInputHigh{
+				SliceNum:      64,
+				Refs:          refs,
+				MotionScratch: makeH264MotionCompScratchHigh(dst),
+			}
+
+			var got h264FrameSliceDecodeResult
+			var err error
+			if tt.cabac {
+				got, err = m.decodeCABACFrameSliceHigh(&scriptedCABACSource{bits: tt.cabacBits, terms: []int{1}}, dst, sh, in)
+			} else {
+				gb := newBitReader(cavlcBitString(tt.cavlcBits))
+				got, err = m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, in)
+				if err == nil && gb.bitPos != uint32(tt.wantCAVLCBits) {
+					t.Fatalf("CAVLC partitioned B consumed %d bits, want %d", gb.bitPos, tt.wantCAVLCBits)
+				}
+			}
+			if err != nil {
+				t.Fatalf("decode high partitioned B failed: %v", err)
+			}
+			if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+				t.Fatalf("slice result = %+v, want one partitioned B MB frame end", got)
+			}
+			if m.MacroblockTyp[0] != tt.wantMBType || m.CBPTable[0] != 0 || m.QScaleTable[0] != 22 || m.SliceTable[0] != 64 {
+				t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+			}
+			if tt.wantMBType == b8x8 {
+				for i := 0; i < 4; i++ {
+					if got := m.RefIndex[0][i]; got != 0 {
+						t.Fatalf("sub[%d] ref0 = %d, want 0", i, got)
+					}
+				}
+				if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, b8x8, &allL0Sub, 0, 0); err != nil {
+					t.Fatalf("validate explicit B8x8 subtypes err = %v, want nil", err)
+				}
+			}
+			tt.assert(t, tt.name, dst, refs)
+		})
+	}
+}
+
 func TestDecodeFrameSliceHighRejectsPartitionedBSkipBeforeWriteback(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
@@ -374,6 +498,50 @@ func TestDecodeFrameSliceHighRejectsPartitionedBSkipBeforeWriteback(t *testing.T
 			assertHighBRejectUntouched(t, m)
 		})
 	}
+}
+
+func highPartitionedBRefsHigh(t *testing.T) [2][]*h264PicturePlanesHigh {
+	t.Helper()
+
+	past := makeH264SliceDecodePictureHigh(1, 1, 1)
+	future := makeH264SliceDecodePictureHigh(1, 1, 1)
+	fillH264HighResidualPlane(past.Y, 101)
+	fillH264HighResidualPlane(past.Cb, 151)
+	fillH264HighResidualPlane(past.Cr, 201)
+	fillH264HighResidualPlane(future.Y, 701)
+	fillH264HighResidualPlane(future.Cb, 751)
+	fillH264HighResidualPlane(future.Cr, 801)
+	return [2][]*h264PicturePlanesHigh{{past}, {future}}
+}
+
+func assertHighPartitionedB16x8L0L1(t *testing.T, label string, dst *h264PicturePlanesHigh, refs [2][]*h264PicturePlanesHigh) {
+	t.Helper()
+
+	assertH264RowsHigh(t, label+" top y", dst.Y, 0, dst.LumaStride, 16, 8, refs[0][0].Y, refs[0][0].LumaStride)
+	assertH264RowsHigh(t, label+" bottom y", dst.Y, 8*dst.LumaStride, dst.LumaStride, 16, 8, refs[1][0].Y, refs[1][0].LumaStride)
+	assertH264RowsHigh(t, label+" top cb", dst.Cb, 0, dst.ChromaStride, 8, 4, refs[0][0].Cb, refs[0][0].ChromaStride)
+	assertH264RowsHigh(t, label+" bottom cb", dst.Cb, 4*dst.ChromaStride, dst.ChromaStride, 8, 4, refs[1][0].Cb, refs[1][0].ChromaStride)
+	assertH264RowsHigh(t, label+" top cr", dst.Cr, 0, dst.ChromaStride, 8, 4, refs[0][0].Cr, refs[0][0].ChromaStride)
+	assertH264RowsHigh(t, label+" bottom cr", dst.Cr, 4*dst.ChromaStride, dst.ChromaStride, 8, 4, refs[1][0].Cr, refs[1][0].ChromaStride)
+}
+
+func assertHighPartitionedB8x16L0L1(t *testing.T, label string, dst *h264PicturePlanesHigh, refs [2][]*h264PicturePlanesHigh) {
+	t.Helper()
+
+	assertH264RowsHigh(t, label+" left y", dst.Y, 0, dst.LumaStride, 8, 16, refs[0][0].Y, refs[0][0].LumaStride)
+	assertH264RowsHigh(t, label+" right y", dst.Y, 8, dst.LumaStride, 8, 16, refs[1][0].Y, refs[1][0].LumaStride)
+	assertH264RowsHigh(t, label+" left cb", dst.Cb, 0, dst.ChromaStride, 4, 8, refs[0][0].Cb, refs[0][0].ChromaStride)
+	assertH264RowsHigh(t, label+" right cb", dst.Cb, 4, dst.ChromaStride, 4, 8, refs[1][0].Cb, refs[1][0].ChromaStride)
+	assertH264RowsHigh(t, label+" left cr", dst.Cr, 0, dst.ChromaStride, 4, 8, refs[0][0].Cr, refs[0][0].ChromaStride)
+	assertH264RowsHigh(t, label+" right cr", dst.Cr, 4, dst.ChromaStride, 4, 8, refs[1][0].Cr, refs[1][0].ChromaStride)
+}
+
+func assertHighPartitionedB8x8L0(t *testing.T, label string, dst *h264PicturePlanesHigh, refs [2][]*h264PicturePlanesHigh) {
+	t.Helper()
+
+	assertH264RowsHigh(t, label+" y", dst.Y, 0, dst.LumaStride, 16, 16, refs[0][0].Y, refs[0][0].LumaStride)
+	assertH264RowsHigh(t, label+" cb", dst.Cb, 0, dst.ChromaStride, 8, 8, refs[0][0].Cb, refs[0][0].ChromaStride)
+	assertH264RowsHigh(t, label+" cr", dst.Cr, 0, dst.ChromaStride, 8, 8, refs[0][0].Cr, refs[0][0].ChromaStride)
 }
 
 func assertHighBRejectUntouched(t *testing.T, m *macroblockTables) {

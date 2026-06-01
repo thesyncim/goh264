@@ -84,6 +84,72 @@ func TestH264ApplyLoopFilterEdgeHigh420MutatesLumaChroma(t *testing.T) {
 	}
 }
 
+func TestH264ApplyLoopFilterEdgeHigh422MutatesLumaChroma(t *testing.T) {
+	const (
+		lumaStride   = 32
+		chromaStride = 16
+		bitDepth     = 10
+		qp           = 42
+	)
+	dst := &h264PicturePlanesHigh{
+		Y:               make([]uint16, lumaStride*16),
+		Cb:              make([]uint16, chromaStride*16),
+		Cr:              make([]uint16, chromaStride*16),
+		LumaStride:      lumaStride,
+		ChromaStride:    chromaStride,
+		MBWidth:         1,
+		MBHeight:        1,
+		ChromaFormatIDC: 2,
+	}
+	fillHighLoopFilterStep(dst.Y, lumaStride, 16, 16, 8, 400, 408)
+	fillHighLoopFilterStep(dst.Cb, chromaStride, 16, 16, 4, 300, 308)
+	fillHighLoopFilterStep(dst.Cr, chromaStride, 16, 16, 4, 200, 208)
+	yBefore := [2]uint16{dst.Y[7], dst.Y[8]}
+	cbBefore := [2]uint16{dst.Cb[3], dst.Cb[4]}
+	crBefore := [2]uint16{dst.Cr[3], dst.Cr[4]}
+
+	if err := h264ApplyLoopFilterEdgeHigh(dst, 0, 0, 0, 0, 2, [4]int16{3, 3, 3, 3}, qp, [2]int{qp, qp}, h264LoopFilterSliceParams{}, false, true, true, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[7] == yBefore[0] || dst.Y[8] == yBefore[1] {
+		t.Fatalf("High10 4:2:2 luma edge did not filter: %v -> [%d %d]", yBefore, dst.Y[7], dst.Y[8])
+	}
+	if dst.Cb[3] == cbBefore[0] || dst.Cb[4] == cbBefore[1] || dst.Cr[3] == crBefore[0] || dst.Cr[4] == crBefore[1] {
+		t.Fatalf("High10 4:2:2 chroma edge did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
+			cbBefore, dst.Cb[3], dst.Cb[4], crBefore, dst.Cr[3], dst.Cr[4])
+	}
+}
+
+func TestH264ApplyLoopFilterEdgeHigh444UsesLumaKernelsForChroma(t *testing.T) {
+	const (
+		stride   = 32
+		bitDepth = 10
+		qp       = 42
+	)
+	dst := &h264PicturePlanesHigh{
+		Y:               make([]uint16, stride*16),
+		Cb:              make([]uint16, stride*16),
+		Cr:              make([]uint16, stride*16),
+		LumaStride:      stride,
+		ChromaStride:    stride,
+		MBWidth:         1,
+		MBHeight:        1,
+		ChromaFormatIDC: 3,
+	}
+	fillHighLoopFilterStep(dst.Cb, stride, 16, 16, 4, 600, 616)
+	fillHighLoopFilterStep(dst.Cr, stride, 16, 16, 4, 500, 516)
+	cbBefore := [2]uint16{dst.Cb[3], dst.Cb[4]}
+	crBefore := [2]uint16{dst.Cr[3], dst.Cr[4]}
+
+	if err := h264ApplyLoopFilterEdgeHigh(dst, 0, 0, 0, 0, 1, [4]int16{3, 3, 3, 3}, qp, [2]int{qp, qp}, h264LoopFilterSliceParams{}, false, false, true, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Cb[3] == cbBefore[0] || dst.Cb[4] == cbBefore[1] || dst.Cr[3] == crBefore[0] || dst.Cr[4] == crBefore[1] {
+		t.Fatalf("High10 4:4:4 chroma luma-kernel edge did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
+			cbBefore, dst.Cb[3], dst.Cb[4], crBefore, dst.Cr[3], dst.Cr[4])
+	}
+}
+
 func TestMacroblockTablesFilterFrameHighDeblocksBoundary(t *testing.T) {
 	const (
 		mbWidth  = 2
@@ -140,6 +206,34 @@ func TestMacroblockTablesFilterFrameHighDeblocksBoundary(t *testing.T) {
 	}
 }
 
+func TestMacroblockTablesFilterFrameHighSliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
+	const bitDepth = 10
+	dst := high422SliceBoundaryFrame()
+	m, params := high422SliceBoundaryTables(t, bitDepth, 2)
+	yBoundaryBefore := [2]uint16{dst.Y[15], dst.Y[16]}
+	yInternalBefore := [2]uint16{dst.Y[23], dst.Y[24]}
+	cbBoundaryBefore := [2]uint16{dst.Cb[7], dst.Cb[8]}
+	cbInternalBefore := [2]uint16{dst.Cb[11], dst.Cb[12]}
+	crBoundaryBefore := [2]uint16{dst.Cr[7], dst.Cr[8]}
+	crInternalBefore := [2]uint16{dst.Cr[11], dst.Cr[12]}
+
+	if err := m.filterFrameHigh(dst, params); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[15] != yBoundaryBefore[0] || dst.Y[16] != yBoundaryBefore[1] ||
+		dst.Cb[7] != cbBoundaryBefore[0] || dst.Cb[8] != cbBoundaryBefore[1] ||
+		dst.Cr[7] != crBoundaryBefore[0] || dst.Cr[8] != crBoundaryBefore[1] {
+		t.Fatalf("High10 slice-boundary mode filtered cross-slice edge: y %v -> [%d %d] cb %v -> [%d %d] cr %v -> [%d %d]",
+			yBoundaryBefore, dst.Y[15], dst.Y[16], cbBoundaryBefore, dst.Cb[7], dst.Cb[8], crBoundaryBefore, dst.Cr[7], dst.Cr[8])
+	}
+	if dst.Y[23] == yInternalBefore[0] || dst.Y[24] == yInternalBefore[1] ||
+		dst.Cb[11] == cbInternalBefore[0] || dst.Cb[12] == cbInternalBefore[1] ||
+		dst.Cr[11] == crInternalBefore[0] || dst.Cr[12] == crInternalBefore[1] {
+		t.Fatalf("High10 slice-boundary mode did not filter same-slice internal edge: y %v -> [%d %d] cb %v -> [%d %d] cr %v -> [%d %d]",
+			yInternalBefore, dst.Y[23], dst.Y[24], cbInternalBefore, dst.Cb[11], dst.Cb[12], crInternalBefore, dst.Cr[11], dst.Cr[12])
+	}
+}
+
 func fill444LoopFilterStep(pix []uint8, stride int, edge int, left uint8, right uint8) {
 	for y := 0; y < 16; y++ {
 		row := y * stride
@@ -148,6 +242,64 @@ func fill444LoopFilterStep(pix []uint8, stride int, edge int, left uint8, right 
 		}
 		for x := edge; x < 16; x++ {
 			pix[row+x] = right
+		}
+	}
+}
+
+func high422SliceBoundaryFrame() *h264PicturePlanesHigh {
+	const (
+		lumaStride   = 32
+		chromaStride = 16
+	)
+	dst := &h264PicturePlanesHigh{
+		Y:               make([]uint16, lumaStride*16),
+		Cb:              make([]uint16, chromaStride*16),
+		Cr:              make([]uint16, chromaStride*16),
+		LumaStride:      lumaStride,
+		ChromaStride:    chromaStride,
+		MBWidth:         2,
+		MBHeight:        1,
+		ChromaFormatIDC: 2,
+	}
+	fillHighLoopFilterStep(dst.Y, dst.LumaStride, 32, 16, 16, 400, 408)
+	fillHighLoopFilterStep(dst.Cb, dst.ChromaStride, 16, 16, 8, 300, 308)
+	fillHighLoopFilterStep(dst.Cr, dst.ChromaStride, 16, 16, 8, 200, 208)
+	setHighLoopFilterRightRegion(dst.Y, dst.LumaStride, 16, 24, 416)
+	setHighLoopFilterRightRegion(dst.Cb, dst.ChromaStride, 16, 12, 316)
+	setHighLoopFilterRightRegion(dst.Cr, dst.ChromaStride, 16, 12, 216)
+	return dst
+}
+
+func high422SliceBoundaryTables(t *testing.T, bitDepth int, deblockingFilter int) (*macroblockTables, []h264LoopFilterSliceParams) {
+	t.Helper()
+	m, err := newMacroblockTables(2, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for mbXY := 0; mbXY < 2; mbXY++ {
+		m.MacroblockTyp[mbXY] = MBTypeIntra16x16
+		m.CBPTable[mbXY] = 1
+		m.QScaleTable[mbXY] = uint8(30 + 6*(bitDepth-8))
+		m.SliceTable[mbXY] = uint16(mbXY)
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     int32(bitDepth),
+		BitDepthChroma:   int32(bitDepth),
+		ChromaFormatIDC:  2,
+		FrameMBSOnlyFlag: 1,
+	}
+	return m, []h264LoopFilterSliceParams{
+		{PPS: pps, ListCount: 1, DeblockingFilter: int32(deblockingFilter)},
+		{PPS: pps, ListCount: 1, DeblockingFilter: int32(deblockingFilter)},
+	}
+}
+
+func setHighLoopFilterRightRegion(pix []uint16, stride int, height int, edge int, value uint16) {
+	for y := 0; y < height; y++ {
+		row := y * stride
+		for x := edge; x < stride; x++ {
+			pix[row+x] = value
 		}
 	}
 }

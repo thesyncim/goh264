@@ -145,12 +145,9 @@ func TestWriteBackCABACInterMacroblockStateWritesMVD(t *testing.T) {
 	mbXY := 5
 	base := int(h264Scan8[0])
 	var motion macroblockMotionCache
-	for _, idx := range []int{base - 1, base - 8, base - 8 + 4} {
-		motion.Ref[0][idx] = 0
-	}
-	motion.MV[0][base-1] = [2]int16{1, 11}
-	motion.MV[0][base-8] = [2]int16{3, 33}
-	motion.MV[0][base-8+4] = [2]int16{2, 22}
+	fillRefRectangle(&motion.Ref[0], base, 4, 4, 8, 0)
+	fillMotionRectangle(&motion.MV[0], base, 4, 4, 8, [2]int16{7, 16})
+	fillMVDRectangle(&motion.MVD[0], base, 4, 4, 8, [2]uint8{5, 6})
 
 	var ctx cavlcResidualContext
 	for i := range ctx.NonZeroCountCache {
@@ -161,7 +158,6 @@ func TestWriteBackCABACInterMacroblockStateWritesMVD(t *testing.T) {
 	mb.CBPTable = 0x567
 	mb.QScale = 18
 	mb.Ref[0][0] = 0
-	mb.MVD[0][0] = [2]int32{5, -6}
 
 	if err := m.writeBackCABACInterMacroblock(mbXY, &mb, &ctx, &motion, 1, PictureTypeP, 13); err != nil {
 		t.Fatal(err)

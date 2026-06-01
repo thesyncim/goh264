@@ -126,6 +126,7 @@ const high10BSkipFrameRawSize = 768
 
 type high10BSkipFixture struct {
 	name          string
+	path          string
 	hex           string
 	cabac         int32
 	directSpatial int32
@@ -147,6 +148,25 @@ func TestHigh10BSkipFixtureSyntax(t *testing.T) {
 				t.Fatalf("annex b md5 = %s, want %s", got, tt.annexBMD5)
 			}
 			assertHigh10BSkipFixtureSyntax(t, data, tt)
+		})
+	}
+}
+
+func TestHigh10BSkipFileFixturesMatchEmbeddedAnnexB(t *testing.T) {
+	for _, tt := range high10BSkipFixtures() {
+		t.Run(tt.name, func(t *testing.T) {
+			embedded := decodeHexFixture(t, tt.hex)
+			disk, err := os.ReadFile(tt.path)
+			if err != nil {
+				t.Fatalf("read %s: %v", tt.path, err)
+			}
+			if !bytes.Equal(disk, embedded) {
+				diskSum := md5.Sum(disk)
+				embeddedSum := md5.Sum(embedded)
+				t.Fatalf("%s differs from embedded fixture: file len/md5=%d/%s embedded len/md5=%d/%s",
+					tt.path, len(disk), hex.EncodeToString(diskSum[:]), len(embedded), hex.EncodeToString(embeddedSum[:]))
+			}
+			assertHigh10BSkipFixtureSyntax(t, disk, tt)
 		})
 	}
 }
@@ -324,6 +344,7 @@ func high10BSkipFixtures() []high10BSkipFixture {
 	return []high10BSkipFixture{
 		{
 			name:          "temporal/cavlc",
+			path:          "testdata/h264/high10_bskip_temporal_cavlc.h264",
 			hex:           high10TemporalBSkipCAVLCAnnexBHex,
 			cabac:         0,
 			directSpatial: 0,
@@ -338,6 +359,7 @@ func high10BSkipFixtures() []high10BSkipFixture {
 		},
 		{
 			name:          "spatial/cavlc",
+			path:          "testdata/h264/high10_bskip_spatial_cavlc.h264",
 			hex:           high10SpatialBSkipCAVLCAnnexBHex,
 			cabac:         0,
 			directSpatial: 1,
@@ -352,6 +374,7 @@ func high10BSkipFixtures() []high10BSkipFixture {
 		},
 		{
 			name:          "temporal/cabac",
+			path:          "testdata/h264/high10_bskip_temporal_cabac.h264",
 			hex:           high10TemporalBSkipCABACAnnexBHex,
 			cabac:         1,
 			directSpatial: 0,
@@ -366,6 +389,7 @@ func high10BSkipFixtures() []high10BSkipFixture {
 		},
 		{
 			name:          "spatial/cabac",
+			path:          "testdata/h264/high10_bskip_spatial_cabac.h264",
 			hex:           high10SpatialBSkipCABACAnnexBHex,
 			cabac:         1,
 			directSpatial: 1,

@@ -134,9 +134,8 @@ func (m *macroblockTables) writeBackCABACInterMacroblock(mbXY int, mb *cavlcInte
 			return err
 		}
 	} else if isInter(mb.MBType) {
-		if err := fillCABACInterMotionCache(cache, mb, listCount); err != nil {
-			return err
-		}
+		// CABAC MVD contexts depend on previously decoded subpartitions, so the
+		// syntax decoder has already populated this cache in source order.
 		if err := m.writeBackMotion(mbXY, mb.MBType, sliceTypeNoS, true, &mb.SubMBType, cache); err != nil {
 			return err
 		}

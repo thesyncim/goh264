@@ -138,14 +138,11 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 }
 
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Deblocking(t *testing.T) {
-	for _, sliceType := range []int32{PictureTypeI, PictureTypeP, PictureTypeB} {
+	for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
 		t.Run(pictureTypeName(sliceType), func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, true, sliceType)
 			if sliceType == PictureTypeP {
 				sh.RefCount = [2]uint32{1, 0}
-			}
-			if sliceType == PictureTypeB {
-				sh.RefCount = [2]uint32{1, 1}
 			}
 
 			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
@@ -155,24 +152,96 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Deblocking(t *testing.T) 
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighRejectsWeightedB(t *testing.T) {
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaDeblocking(t *testing.T) {
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+			t.Run(chromaFormatName(chromaFormatIDC)+"/"+pictureTypeName(sliceType), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, true, sliceType)
+				if sliceType == PictureTypeP {
+					sh.RefCount = [2]uint32{1, 0}
+				}
+
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high chroma deblock validation err = %v, want nil", err)
+				}
+			})
+		}
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		run  func(*SliceHeader)
 	}{
 		{
-			name: "implicit",
+			name: "b-deblock-enabled",
 			run: func(sh *SliceHeader) {
-				sh.PPS.WeightedBipredIDC = 2
-				sh.PredWeightTable.UseWeight = 2
-				sh.PredWeightTable.UseWeightChroma = 2
+				sh.SliceType = PictureTypeB
+				sh.SliceTypeNoS = PictureTypeB
+				sh.RefCount = [2]uint32{1, 1}
+				sh.DeblockingFilter = 1
 			},
 		},
+		{
+			name: "slice-boundary-mode",
+			run: func(sh *SliceHeader) {
+				sh.DeblockingFilter = 2
+			},
+		},
+		{
+			name: "chroma-deblock-disabled",
+			run: func(sh *SliceHeader) {
+				sh.SPS.ChromaFormatIDC = 2
+				sh.DeblockingFilter = 0
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 2, false, PictureTypeI)
+			tt.run(sh)
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+				t.Fatalf("high deblock validation err = %v, want ErrUnsupported", err)
+			}
+		})
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighAllowsImplicitWeightedB(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+	sh.RefCount = [2]uint32{1, 1}
+	sh.PPS.WeightedBipredIDC = 2
+
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+		t.Fatalf("serialized implicit weighted high B validation err = %v, want nil", err)
+	}
+
+	sh.PredWeightTable.UseWeight = 2
+	sh.PredWeightTable.UseWeightChroma = 2
+	if err := validateSimpleFrameSliceDecodeInputHighRefs(sh, h264FrameSliceDecodeInputHigh{PredWeight: &sh.PredWeightTable}); err != nil {
+		t.Fatalf("initialized implicit weighted high B ref validation err = %v, want nil", err)
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsUnsupportedWeightedB(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		run  func(*SliceHeader)
+	}{
 		{
 			name: "explicit table",
 			run: func(sh *SliceHeader) {
 				sh.PPS.WeightedBipredIDC = 1
 				sh.PredWeightTable.UseWeight = 1
+			},
+		},
+		{
+			name: "mismatched implicit flags",
+			run: func(sh *SliceHeader) {
+				sh.PPS.WeightedBipredIDC = 2
+				sh.PredWeightTable.UseWeight = 2
+				sh.PredWeightTable.UseWeightChroma = 0
 			},
 		},
 	} {
@@ -371,6 +440,60 @@ func TestDecodeCABACFrameSliceHighReconstructsIntra4x4NoResidual(t *testing.T) {
 	wantIndexes(t, src, append(append([]int{3}, repeatCABACBits(16, 68)...), []int{64, 73, 74, 75, 76, 77}...))
 }
 
+func TestDecodeCAVLCFrameSliceHighReconstructsPIntra4x4NoResidual(t *testing.T) {
+	const bitDepth = 10
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
+	sh.RefCount = [2]uint32{1, 0}
+	gb := newBitReader(cavlcBitString("1001101111111111111111100100"))
+
+	got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 41})
+	if err != nil {
+		t.Fatalf("decode high cavlc P intra4x4 slice failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one P intra MB frame end", got)
+	}
+	assertH264ConstantBlockHigh(t, "cavlc high P intra4x4 y", dst.Y, 0, dst.LumaStride, 16, 16, 1<<(bitDepth-1))
+	assertH264ConstantBlockHigh(t, "cavlc high P intra4x4 cb", dst.Cb, 0, dst.ChromaStride, 8, 8, 1<<(bitDepth-1))
+	assertH264ConstantBlockHigh(t, "cavlc high P intra4x4 cr", dst.Cr, 0, dst.ChromaStride, 8, 8, 1<<(bitDepth-1))
+	if m.MacroblockTyp[0] != MBTypeIntra4x4 || m.CBPTable[0] != 0 || m.QScaleTable[0] != 20 || m.SliceTable[0] != 41 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+}
+
+func TestDecodeCABACFrameSliceHighReconstructsPIntra4x4NoResidual(t *testing.T) {
+	const bitDepth = 10
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
+	sh.PPS.CABAC = 1
+	sh.RefCount = [2]uint32{1, 0}
+	src := &scriptedCABACSource{
+		bits: append(append([]int{0, 1, 0}, repeatCABACBits(16, 1)...), []int{
+			0,
+			0, 0, 0, 0,
+			0,
+		}...),
+		terms: []int{1},
+	}
+
+	got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 43})
+	if err != nil {
+		t.Fatalf("decode high cabac P intra4x4 slice failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one P intra MB frame end", got)
+	}
+	assertH264ConstantBlockHigh(t, "cabac high P intra4x4 y", dst.Y, 0, dst.LumaStride, 16, 16, 1<<(bitDepth-1))
+	assertH264ConstantBlockHigh(t, "cabac high P intra4x4 cb", dst.Cb, 0, dst.ChromaStride, 8, 8, 1<<(bitDepth-1))
+	assertH264ConstantBlockHigh(t, "cabac high P intra4x4 cr", dst.Cr, 0, dst.ChromaStride, 8, 8, 1<<(bitDepth-1))
+	if m.MacroblockTyp[0] != MBTypeIntra4x4 || m.CBPTable[0] != 0 || m.QScaleTable[0] != 20 || m.SliceTable[0] != 43 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	if len(src.pcmReadSizes) != 0 {
+		t.Fatalf("pcm reads = %v, want none", src.pcmReadSizes)
+	}
+	wantIndexes(t, src, append(append([]int{11, 14, 17}, repeatCABACBits(16, 68)...), []int{64, 73, 74, 75, 76, 77}...))
+}
+
 func TestDecodeCAVLCFrameSliceHighReconstructsPSkip(t *testing.T) {
 	const bitDepth = 10
 	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
@@ -513,7 +636,7 @@ func TestDecodeCABACFrameSliceHighReconstructsP16x16NoResidual(t *testing.T) {
 
 func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBeforeEntropy(t *testing.T) {
 	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 1, true, PictureTypeI)
-	sh.SPS.ChromaFormatIDC = 2
+	sh.DeblockingFilter = 2
 	gb := newBitReader(cavlcIntraPCMBytes(h264ReconstructIntraPCMHigh(1, 10, 5)))
 
 	_, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 2})
@@ -531,7 +654,7 @@ func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBeforeEntropy(t *testing.T) 
 func TestDecodeFrameSliceDataHighRejectsUnsupportedCABACBeforeStartup(t *testing.T) {
 	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 1, true, PictureTypeI)
 	sh.PPS.CABAC = 1
-	sh.SPS.ChromaFormatIDC = 2
+	sh.DeblockingFilter = 2
 	gb := newBitReader([]byte{0xe0})
 	if _, err := gb.readBits(3); err != nil {
 		t.Fatal(err)
@@ -645,6 +768,21 @@ func pictureTypeName(sliceType int32) string {
 		return "B"
 	default:
 		return "unknown"
+	}
+}
+
+func chromaFormatName(chromaFormatIDC int) string {
+	switch chromaFormatIDC {
+	case 0:
+		return "mono"
+	case 1:
+		return "420"
+	case 2:
+		return "422"
+	case 3:
+		return "444"
+	default:
+		return "chroma"
 	}
 }
 

@@ -84,15 +84,19 @@ expose high ref-list views over those uint16 planes, and
 proved High 10 4:2:0 deblock-disabled I subset, the proved High 10 4:2:0
 deblock-disabled P-skip/P16x16 no-residual subset, the proved High 10 4:2:0
 frame-only deblock-disabled exact P16x16 L0 residual subset, explicit weighted
-P over those P-skip/P16x16 L0 lanes, and the first High 10 4:2:0
-deblock-enabled 32x32 IDR/P subset. The exact High 10 4:2:0
+P over those P-skip/P16x16 L0 lanes, the High 10 4:2:0 deblock-enabled
+32x32 IDR/P subset, and the narrow High 10 4:2:2/4:4:4 deblock-enabled
+32x32 IDR/P subset. The exact High 10 4:2:0
 frame-only deblock-disabled non-direct B16x16 bidirectional lane, top-level
-temporal/spatial B_Direct lane resolving to B16x16, and temporal/spatial
-B-skip lane are opened for CAVLC/CABAC; the CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub
-lane is also opened with CBP zero and neutral B weighting, proved by the
-rawvideo hashes below. Partitioned P, P intra macroblocks, implicit weighted B,
-partitioned B, broader high deblocking, unproved depth/chroma combinations, and
-MBAFF remain outside the supported boundary.
+temporal/spatial B_Direct lane resolving to B16x16, temporal/spatial B-skip
+lane, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub lane with CBP zero, implicit
+weighted B16x16 lane, explicit partitioned B16x8/B8x16/B8x8 lane, mixed-P
+Intra4x4/Intra16x16 lane, and CAVLC/CABAC partitioned P16x8/P8x16/P8x8 lane
+are opened for the proved surfaces below. P IntraPCM, P 8x8-DCT intra,
+weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub
+B, partitioned implicit weighted B, high B
+deblocking, public high slice-boundary mode, 12/14-bit public high bitstreams,
+and MBAFF remain outside the supported boundary.
 
 The public high-depth raw output helper surface follows FFmpeg rawvideo byte
 layout. `decoder.go` `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`,
@@ -160,6 +164,34 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
   `968ca595fffbfded0f4fbc1c0840cdde`,
   `36e2a95ad8461d4f280bab116f6087e6`; concatenated rawvideo MD5
   `c9f7de8ec190db53525801f41b473de9`
+- true High 10 4:2:0 deblock-disabled CAVLC/CABAC 64x16 mixed IDR/P with
+  P-slice Intra16x16 macroblocks rawvideo frame MD5s:
+  `d8763101b7caf84ef313361b2c509966`,
+  `bc57ab466b36d17a8f97bce6d2778fd2`,
+  `120c1cc35907941cf8adacb9289389a3`,
+  `270c2deffbbf00fbab9f02a4646f6a70`,
+  `288f0ebfec67eb2cd02622d6e84e4b78`,
+  `1dfb9457bc1c92737c21a9eeb0d3c5c0`,
+  `8588fa7d5b458765c9c23943d089d955`,
+  `1814743e97f04868d87b1060194606c7`,
+  `d8105649af4d4c96dc72ec39dd84186d`,
+  `ba305727a671c37d878ca128112dc50a`,
+  `8ce69b5e4ceda53f964d9187dd08754f`,
+  `bc6c9b3bdfb4007e95957c0d1de7bc04`; concatenated rawvideo MD5
+  `79ab32c577ba4992c3c259bd3a0948ec`; stripped Annex B MD5s
+  `2f7cf7da83f2bb10eda8092c9cc3bdc3` and
+  `f98517c8acf532fb1005b88e4235bc08`
+- true High 10 4:2:0 deblock-disabled CAVLC/CABAC 64x64 IDR/P/P/P/P
+  partitioned P16x8/P8x16/P8x8 rawvideo frame MD5s:
+  `1e10f859d4a3be85a0b4057dd7bff92c`,
+  `a87c5d14c468e549ae461bd63d21e7d6`,
+  `1e079388524aab8937783f56d36383c6`,
+  `360bf39f49dbbd060fdbb52e68f1c5ce`,
+  `d85d56ee1073b087635fcedb5d229025`; concatenated rawvideo MD5
+  `447dd2695f723fc336ddb1a6c0b710cc` for CAVLC and
+  `d37c9f22040bed0d61923dd6af57147a` for CABAC; stripped Annex B MD5s
+  `1855c563913e2b4372d655417d333cdd` and
+  `4300b297e11dc082735c4f784c46ed62`.
 - true High 10 4:2:0 deblock-disabled CAVLC 16x16 exact non-direct B16x16
   bidirectional rawvideo frame MD5s:
   `95893f95fdce0f45e7593f4eca8bd834`,
@@ -227,6 +259,46 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
   `70b723a521824437321dca37b6b4f335` (B8x8 spatial CABAC),
   `56fbd77d91f0ce2e22d485e77c98a491` (B_SUB_4x4 temporal CABAC), and
   `3f567a5a22de5ae171658d71264a83f5` (B_SUB_4x4 spatial CABAC)
+- true High 10 4:2:0 deblock-disabled 16x16 implicit weighted B rawvideo
+  frame MD5s for CAVLC/CABAC:
+  `857cc91515b2182f4444a4d746b9d721`,
+  `734370de9ff1562a091bd9da2e7388f4`,
+  `0278043f7918f89fb326a88e60c9c01b`,
+  `1b742676a4555b46109892813b9feaa6`,
+  `aed2dfa63ba343c3f2ef494bff5e3f74`; concatenated rawvideo MD5
+  `fb94a7906e135740b49588c257f4bc15`; stripped Annex B MD5s
+  `41bfa783c0361d76fbc8e0df36a6edca` (CAVLC) and
+  `5865569a46cdb4f1692f1a1a589cd16b` (CABAC)
+- true High 10 4:2:0 deblock-disabled 16x16 explicit partitioned B16x8
+  rawvideo frame MD5s for CAVLC/CABAC:
+  `da42dbbc6702ac820c7162dd19030ea3`,
+  `6dc0b7afff881b7f69b9176db6c5155e`,
+  `ae723753e3ae671a34e4f57f325d2cb8`; concatenated rawvideo MD5
+  `8057ca8e0ee9e2f51fc59b824333e0da`; stripped Annex B MD5s
+  `2798d9490dcb9f4b1495faee8e23c998` (CAVLC) and
+  `74d9dd3315d2a1b45406508786722c25` (CABAC)
+- true High 10 4:2:0 deblock-disabled 16x16 explicit partitioned B8x16
+  rawvideo frame MD5s for CAVLC/CABAC:
+  `3de0d9ec87d2b43d34b08554de5509e0`,
+  `6dc0b7afff881b7f69b9176db6c5155e`,
+  `360499a4bb17c8730018ce06b58180b7`; concatenated rawvideo MD5
+  `d927d8a41788f89e93b8d66d54347ec7`; stripped Annex B MD5s
+  `8f041ebd2075c5ee3195c6e4ea197d69` (CAVLC) and
+  `0b7b7c3094532f5fff464f7a3819635a` (CABAC)
+- true High 10 4:2:0 deblock-disabled 16x16 explicit partitioned B8x8
+  rawvideo frame MD5s for CAVLC:
+  `41ea931c1df0c87907ca7627beeb1dfc`,
+  `ca7db1692b52de6fd7be03eae5d6b121`,
+  `e355a7851b20224a769b798c9a63c8b3`; concatenated rawvideo MD5
+  `017a85619aefcae9c7c98f11f6b829ee`; stripped Annex B MD5
+  `9bd955daf127957bc6684c012a91df6a`
+- true High 10 4:2:0 deblock-disabled 16x16 explicit partitioned B8x8
+  rawvideo frame MD5s for CABAC:
+  `541565314ead228ebda2b21fc3ee25d6`,
+  `ccd7e4a2a29432b1db826acd229b78cd`,
+  `730d70dba915767dc72964eb71a28ae4`; concatenated rawvideo MD5
+  `63bbee01f26a0382dd58777ccb6c05e3`; stripped Annex B MD5
+  `880484c1f22f9ac1846f5f9cd7652917`
 - true High 10 4:2:0 deblock-enabled 32x32 IDR/P rawvideo frame MD5s
   for CAVLC/CABAC:
   `ba8f5dc7f864b5cd854ee7d30e89fde1`,
@@ -234,6 +306,24 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
   `b635135b4e7db55894f75c390cf194c2`; stripped Annex B MD5s
   `9b221dc5e9937f2a4e9e95c06e00eb3f` (CAVLC) and
   `3d38082a580bf4945f6c7e6edfea81b3` (CABAC)
+- true High 10 4:2:2/4:4:4 deblock-enabled 32x32 IDR/P rawvideo
+  frame MD5s for CAVLC/CABAC:
+  `754ac4c117c705808e87230f2d39a521`,
+  `accfc50bf3e08afaf0e073d0849992dc`; concatenated rawvideo MD5
+  `710f36ec1dd547e5b584144bb299ee7a`; stripped Annex B MD5
+  `095b3897df89b12b6fba734931771d8b` (4:2:2 CAVLC);
+  `77bd0e8f2c734a359d2238bbeffab77b`,
+  `b5fd410a1bb665f5c10f8268fbfd2d53`; concatenated rawvideo MD5
+  `1a011c767ac1131c7eb4b07c32f8a1ab`; stripped Annex B MD5
+  `a697f204f63ac7d5d5eab7df23c16755` (4:2:2 CABAC);
+  `b456b84535b2b0241a9ad973edaccd25`,
+  `b0b7fc22ee4cb292a902d4949365c040`; concatenated rawvideo MD5
+  `6cd1945a6daefd4ab1bc257f6be1d906`; stripped Annex B MD5
+  `91ac19688e8e9fa26ad3941954b7948f` (4:4:4 CAVLC);
+  `e0e3b6a956484218ee7c5979780ed9d6`,
+  `b169bd10fc31bb91aa50a040b1358838`; concatenated rawvideo MD5
+  `1f70a47728f816c0406fd7aed90bcbb2`; stripped Annex B MD5
+  `f3ed8d65e4a600c331770ec9acb4d8f6` (4:4:4 CABAC)
 - 16x16 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `4296e3dc95829cc27071a8685a428494`, `36f5a9b9064709ee891652e8f4e06992`, `aa778b981f96d21489196f6a0faa0959`
 - 16x16 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `fef9831ddd54882d715ceb50c382efde`, `4b6a7f1c59198ae9b8e31ef4de333e42`
 - 16x16 temporal-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `dca1bb7607ebcd45d700a7b7f9feb2f6`, `6248c3284f9d89ac6346701f8f226ba8`, `0e1be965e4fb7e790038cda9d21845cf`
@@ -272,9 +362,14 @@ High 10 non-direct B16x16 CAVLC/CABAC fixtures are accepted packet and frame-MD5
 proof for the exact B16x16 bidirectional subset only; the High 10
 temporal/spatial direct B16x16 fixtures add top-level B_Direct proof for both
 entropy modes, and the High 10 temporal/spatial B-skip fixtures add skip-run/
-skip-flag direct-motion proof for both entropy modes. The High 10 CAVLC
-B 8x8/B_SUB_4x4 direct-sub fixtures open the direct-sub no-residual lane without
-opening CABAC direct-sub public bitstreams, implicit weighted B, or partitioned B.
+skip-flag direct-motion proof for both entropy modes. The High 10 CAVLC/CABAC
+B 8x8/B_SUB_4x4 direct-sub fixtures open the direct-sub no-residual lane, the
+High 10 implicit weighted B16x16 fixtures open `weighted_bipred_idc == 2` over
+P16x16 anchors, the High 10 explicit partitioned B16x8/B8x16/B8x8 fixtures
+open non-direct partitioned B, the High10 mixed-P fixtures open P
+Intra4x4/Intra16x16, and the CAVLC/CABAC partitioned-P fixtures open
+P16x8/P8x16/P8x8 without opening P IntraPCM, P 8x8-DCT intra, or weighted
+partitioned P.
 Configured B-frame sample
 tests additionally decode one access unit per call and
 then use the public delayed-frame flush to drain retained future P pictures,
@@ -361,7 +456,17 @@ They prove only B16x16 standard bidirectional averaging over high refs, B-list
 POC ordering, delayed display-order output, configured sample-by-sample decode,
 and explicit flush. The bitstreams keep deblocking disabled, avoid B
 skip/direct prediction, avoid 16x8/8x16/8x8 partitioned B, and keep
-`weighted_bipred_idc == 0` so implicit weighted B remains a separate lane.
+`weighted_bipred_idc == 0`.
+
+The High 10 implicit weighted B fixtures use a 16x16 linear-luma
+`nullsrc,geq` source with `bframes=2`, `b-pyramid=none`, `ref=1`,
+`weightb=1`, `weightp=0`, `partitions=none`, `direct=none`,
+`no-8x8dct=1`, and deblocking disabled. They keep the two P anchors inside the
+proved P16x16 high subset and code the B macroblocks as bidirectional 16x16,
+so the lane proves FFmpeg's progressive frame-picture
+`implicit_weight_table(field=-1)` path over uint16 refs without admitting P
+IntraPCM, P 8x8-DCT intra, partitioned P, B direct/skip, direct-sub,
+partitioned B, or high deblocking.
 
 The High 10 temporal/spatial direct B fixtures use a 32x16 `testsrc2` source
 with a luma bump on the right macroblock of the B display frame. The forced
@@ -382,8 +487,10 @@ disabled. x264 reports P skip 100% and B skip 100%. They prove CAVLC
 temporal/spatial direct motion, high ref-list consumption, delayed output,
 Annex B, AVC/NALFF, configured AVC, sample-by-sample decode, public flush, and
 FFmpeg `yuv420p10le` rawvideo MD5 parity. The fixtures keep direct-sub,
-implicit weighted B, partitioned B, broader high deblocking, and broader
-chroma/depth outside the supported boundary.
+explicit partitioned B, broader high deblocking, and broader chroma/depth
+outside that fixture family. The public B-skip tests also
+compare the embedded Annex B hex byte-for-byte with the file-backed corpus
+fixtures so the manifest rows and public API oracle checks cannot drift apart.
 
 The High 10 CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub fixtures are one-macroblock
 static IBP streams derived from the matching High 10 B-skip shape by replacing the B slice
@@ -396,6 +503,16 @@ and CABAC direct-sub entropy-to-state paths, FFmpeg-shaped temporal/spatial dire
 uint16 motion compensation, delayed output, Annex B, AVC/NALFF, configured AVC,
 sample-by-sample decode, public flush, and FFmpeg `yuv420p10le` rawvideo MD5
 parity.
+
+The High 10 CAVLC/CABAC explicit partitioned B fixtures are small 16x16
+frame-only IBP streams with deblocking disabled, neutral B weighting, no direct
+mode in the B payload, and x264-selected B16x8, B8x16, or B8x8 explicit
+partitions. They prove CAVLC and CABAC entropy-to-state, high ref-list
+consumption, uint16 motion compensation, delayed output, Annex B, AVC/NALFF,
+configured AVC, sample-by-sample decode, public flush, corpus manifest rows,
+and FFmpeg `yuv420p10le` rawvideo MD5 parity for explicit non-direct
+partitioned B without opening mixed direct/explicit B8x8, residual-bearing
+direct-sub, partitioned implicit weighted B, or high B deblocking.
 
 The CAVLC and CABAC B 8x8 direct-sub fixtures are committed as 64x64 Annex B
 bitstreams under `testdata/h264/`; they cover both spatial and temporal direct
@@ -484,9 +601,17 @@ Included:
 - Public High 10 4:2:0 deblock-disabled CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub
   decode through the high raw helper surface, with Annex B, AVC, configured
   AVC, sample-by-sample flush, and FFmpeg rawvideo oracle proof.
+- Public High 10 4:2:0 deblock-disabled CAVLC/CABAC partitioned P16x8/P8x16/P8x8
+  decode through the high raw helper surface, with Annex B, AVC, configured
+  AVC, sample-by-sample flush, auto nil-flush, corpus, and FFmpeg rawvideo
+  oracle proof.
 - Public High 10 4:2:0 deblock-enabled CAVLC/CABAC 32x32 IDR/P decode
   through the high raw helper surface, covered by Annex B, AVC/NALFF,
   configured AVC, and FFmpeg rawvideo oracle proof.
+- Public High 10 4:2:2/4:4:4 deblock-enabled CAVLC/CABAC 32x32 IDR/P decode
+  through the high raw helper surface, covered by Annex B, AVC/NALFF,
+  configured AVC, configured sample-by-sample decode, corpus manifest rows, and
+  FFmpeg rawvideo/framemd5 oracle proof.
 - Manifest-driven H.264 corpus runner `decoder_corpus_test.go`, with default
   JSONL entries in `testdata/h264/corpus/manifest.jsonl` and external corpus
   override through `GOH264_CORPUS_MANIFEST` or a path-list through
@@ -494,9 +619,11 @@ Included:
   concatenated rawvideo MD5s; unsupported rows must name guard tags and assert
   `ErrUnsupported`. The committed manifest now file-backs the
   local 8-bit B direct-sub vectors plus the proved High 10 4:2:0 IDR/P,
-  residual P16x16, explicit weighted P16x16, non-direct B16x16,
+  residual P16x16, explicit weighted P16x16, CAVLC/CABAC partitioned P16x8/P8x16/P8x8,
+  non-direct B16x16,
   temporal/spatial direct B16x16, temporal/spatial B-skip, CAVLC/CABAC
-  B 8x8/B_SUB_4x4 direct-sub, and deblock-enabled 32x32 IDR/P vectors.
+  B 8x8/B_SUB_4x4 direct-sub, implicit weighted B16x16, and deblock-enabled
+  32x32 IDR/P vectors including the narrow High 10 4:2:2/4:4:4 rows.
 - Decoder benchmark harness `cmd/goh264bench`, including Go decode/raw-output
   timing, raw MD5 reporting, allocation counters, repeated samples/statistics,
   machine-readable input/host/VCS/FFmpeg metadata, Go raw pixel-format reporting,
@@ -517,13 +644,19 @@ Excluded unless directly required by decoder parity:
 - FFmpeg muxer/demuxer/filter frontends
 - Hardware acceleration backends
 - Non-H.264 codecs
-- Public high-bit-depth decode beyond the proved High 10 deblock-disabled I,
+- Public high-bit-depth behavior outside the proved High 10 deblock-disabled I,
   P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P,
   exact non-direct plus temporal/spatial direct B16x16, temporal/spatial
-  B-skip, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, and deblock-enabled 32x32
-  IDR/P subsets remains explicitly unsupported. P intra macroblocks, implicit
-  weighted B, partitioned B, partitioned P, broader high deblocking, additional
-  depth/chroma fixtures, and MBAFF remain later lanes.
+  B-skip, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, explicit partitioned
+  B16x8/B8x16/B8x8, implicit weighted B16x16, mixed-P Intra4x4/Intra16x16,
+  CAVLC/CABAC partitioned P16x8/P8x16/P8x8,
+  deblock-enabled 4:2:0 32x32 IDR/P, and deblock-enabled 4:2:2/4:4:4 32x32
+  IDR/P subsets remains explicitly unsupported. In particular, P IntraPCM,
+  P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8,
+  residual-bearing direct-sub B,
+  partitioned implicit weighted B, high B deblocking, public high
+  slice-boundary mode, 12/14-bit public high bitstreams, and MBAFF remain later
+  lanes.
 - Full conformance/testvector corpus passing and production benchmark claims
   remain pending until curated external corpora are added and manifest benchmark
   reports cover stable larger clips with profile presets, benchstat-friendly
