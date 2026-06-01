@@ -101,11 +101,30 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 		}
 	})
 
-	t.Run("b slice", func(t *testing.T) {
-		m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+	t.Run("b direct macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		mbType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2
 
-		if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 45); err != ErrUnsupported {
-			t.Fatalf("B high validation err = %v, want ErrUnsupported", err)
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != ErrUnsupported {
+			t.Fatalf("direct high B validate err = %v, want ErrUnsupported", err)
+		}
+	})
+
+	t.Run("b partitioned macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		mbType := MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeP0L1 | MBTypeP1L1
+
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != ErrUnsupported {
+			t.Fatalf("partitioned high B validate err = %v, want ErrUnsupported", err)
+		}
+	})
+
+	t.Run("b16x16 bidirectional macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		mbType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 1, 1); err != nil {
+			t.Fatalf("B16x16 high validate err = %v, want nil", err)
 		}
 	})
 
@@ -123,6 +142,61 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 			t.Fatalf("partitioned high P validate err = %v, want ErrUnsupported", err)
 		}
 	})
+}
+
+func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		bits string
+	}{
+		{name: "skip", bits: "010"},
+		{name: "direct", bits: "11"},
+		{name: "l1 only", bits: "1011"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+			sh.RefCount = [2]uint32{1, 1}
+			gb := newBitReader(cavlcBitString(tt.bits))
+
+			_, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 51})
+			if err != ErrUnsupported {
+				t.Fatalf("decode high CAVLC B err = %v, want ErrUnsupported", err)
+			}
+			assertHighBRejectUntouched(t, m)
+		})
+	}
+}
+
+func TestDecodeCABACFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		bits []int
+	}{
+		{name: "skip", bits: []int{1}},
+		{name: "direct", bits: []int{0, 0}},
+		{name: "l1 only", bits: []int{0, 1, 0, 1}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+			sh.PPS.CABAC = 1
+			sh.RefCount = [2]uint32{1, 1}
+			src := &scriptedCABACSource{bits: tt.bits}
+
+			_, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 53})
+			if err != ErrUnsupported {
+				t.Fatalf("decode high CABAC B err = %v, want ErrUnsupported", err)
+			}
+			assertHighBRejectUntouched(t, m)
+		})
+	}
+}
+
+func assertHighBRejectUntouched(t *testing.T, m *macroblockTables) {
+	t.Helper()
+	if m.MacroblockTyp[0] != 0 || m.CBPTable[0] != 0 || m.QScaleTable[0] != 0 || m.SliceTable[0] != ^uint16(0) {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%#x, want untouched",
+			m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
 }
 
 type h264HighResidualLumaBlock struct {

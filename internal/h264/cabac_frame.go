@@ -8,18 +8,19 @@
 package h264
 
 type cabacFrameMacroblockInput struct {
-	MBXY                int
-	SliceNum            uint16
-	SliceType           int32
-	SliceTypeNoS        int32
-	QScale              int
-	LastQScaleDiff      int
-	RefCount            [2]uint32
-	DCT8x8Allowed       bool
-	DirectSpatialMVPred bool
-	Direct              h264DirectMotionContext
-	PPS                 *PPS
-	SPS                 *SPS
+	MBXY                   int
+	SliceNum               uint16
+	SliceType              int32
+	SliceTypeNoS           int32
+	QScale                 int
+	LastQScaleDiff         int
+	RefCount               [2]uint32
+	DCT8x8Allowed          bool
+	DirectSpatialMVPred    bool
+	Direct                 h264DirectMotionContext
+	PPS                    *PPS
+	SPS                    *SPS
+	RejectUnsupportedHighB bool
 }
 
 type cabacFrameMacroblockResult struct {
@@ -57,6 +58,10 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithWork(src cabacSynt
 }
 
 func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWork(src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
+	return m.decodeCABACFrameSliceMacroblockWithDirectWorkGuard(src, sh, state, mbXY, sliceNum, direct, work, false)
+}
+
+func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	if m == nil || src == nil || sh == nil || sh.PPS == nil || sh.SPS == nil || state == nil || work == nil {
 		return result, ErrInvalidData
@@ -74,6 +79,9 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWork(src cab
 			return result, err
 		}
 		if skip {
+			if rejectUnsupportedHighB && sh.SliceTypeNoS == PictureTypeB {
+				return result, ErrUnsupported
+			}
 			state.PrevMBSkipped = true
 			state.LastQScaleDiff = 0
 			return m.writeBackCABACFrameSkipMacroblockWithDirectWork(sh, state.QScale, mbXY, sliceNum, direct, work)
@@ -82,18 +90,19 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWork(src cab
 	state.PrevMBSkipped = false
 
 	result, err := m.decodeCABACFrameMacroblockWithWork(src, cabacFrameMacroblockInput{
-		MBXY:                mbXY,
-		SliceNum:            sliceNum,
-		SliceType:           sh.SliceType,
-		SliceTypeNoS:        sh.SliceTypeNoS,
-		QScale:              state.QScale,
-		LastQScaleDiff:      state.LastQScaleDiff,
-		RefCount:            sh.RefCount,
-		DCT8x8Allowed:       sh.PPS.Transform8x8Mode != 0,
-		DirectSpatialMVPred: sh.DirectSpatialMVPred != 0,
-		Direct:              direct,
-		PPS:                 sh.PPS,
-		SPS:                 sh.SPS,
+		MBXY:                   mbXY,
+		SliceNum:               sliceNum,
+		SliceType:              sh.SliceType,
+		SliceTypeNoS:           sh.SliceTypeNoS,
+		QScale:                 state.QScale,
+		LastQScaleDiff:         state.LastQScaleDiff,
+		RefCount:               sh.RefCount,
+		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
+		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
+		Direct:                 direct,
+		PPS:                    sh.PPS,
+		SPS:                    sh.SPS,
+		RejectUnsupportedHighB: rejectUnsupportedHighB,
 	}, work)
 	if err != nil {
 		return result, err
@@ -129,6 +138,11 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 		return result, err
 	}
 	result.MBType = base.MBType
+	if in.RejectUnsupportedHighB {
+		if err := validateHighFrameSliceBaseMacroblockForDecode(in.SliceTypeNoS, base.MBType); err != nil {
+			return result, err
+		}
+	}
 	if base.MBType&MBTypeIntraPCM != 0 {
 		return m.decodeCABACFrameIntraPCMMacroblock(src, in, base, result)
 	}

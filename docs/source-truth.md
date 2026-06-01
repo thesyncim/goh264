@@ -84,9 +84,13 @@ expose high ref-list views over those uint16 planes, and
 proved High 10 4:2:0 deblock-disabled I subset, the proved High 10 4:2:0
 deblock-disabled P-skip/P16x16 no-residual subset, the proved High 10 4:2:0
 frame-only deblock-disabled exact P16x16 L0 residual subset, and explicit
-weighted P over those P-skip/P16x16 L0 lanes. Partitioned P, P intra
-macroblocks, B slices, high deblocking, unproved depth/chroma combinations, and
-MBAFF remain outside the supported boundary.
+weighted P over those P-skip/P16x16 L0 lanes. The exact High 10 4:2:0
+frame-only deblock-disabled non-direct B16x16 bidirectional lane is now the
+only B-slice lane opened, with standard L0/L1 bipred and neutral B weighting
+only, proved by the CAVLC/CABAC rawvideo hashes below. Partitioned P, P intra
+macroblocks, direct B, implicit weighted B, partitioned B, high deblocking,
+unproved depth/chroma combinations, and MBAFF remain outside the supported
+boundary.
 
 The public high-depth raw output helper surface follows FFmpeg rawvideo byte
 layout. `decoder.go` `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`,
@@ -154,6 +158,20 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
   `968ca595fffbfded0f4fbc1c0840cdde`,
   `36e2a95ad8461d4f280bab116f6087e6`; concatenated rawvideo MD5
   `c9f7de8ec190db53525801f41b473de9`
+- true High 10 4:2:0 deblock-disabled CAVLC 16x16 exact non-direct B16x16
+  bidirectional rawvideo frame MD5s:
+  `95893f95fdce0f45e7593f4eca8bd834`,
+  `9e8ad599e09f708487e0614412596665`,
+  `b7edf8a2678e03b0495ba6a6efebc063`; concatenated rawvideo MD5
+  `1ccf5f80b965f0e5788e592b2496e432`; stripped Annex B MD5
+  `5a18eb8a8156a259ae2c3c915116fd7f`
+- true High 10 4:2:0 deblock-disabled CABAC 16x16 exact non-direct B16x16
+  bidirectional rawvideo frame MD5s:
+  `b43174bc46328c029e698e5b27960dcd`,
+  `8b7a30d943aeacb4c000a53bb1dbc212`,
+  `6c997570b55af8ecd2ad29fbf56386a3`; concatenated rawvideo MD5
+  `70c7595de7146ac9b0aec7a2cf2d116b`; stripped Annex B MD5
+  `0067912e1f4bb582a1a6accf6930ab8d`
 - 16x16 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `4296e3dc95829cc27071a8685a428494`, `36f5a9b9064709ee891652e8f4e06992`, `aa778b981f96d21489196f6a0faa0959`
 - 16x16 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `fef9831ddd54882d715ceb50c382efde`, `4b6a7f1c59198ae9b8e31ef4de333e42`
 - 16x16 temporal-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `dca1bb7607ebcd45d700a7b7f9feb2f6`, `6248c3284f9d89ac6346701f8f226ba8`, `0e1be965e4fb7e790038cda9d21845cf`
@@ -187,7 +205,9 @@ FFmpeg framemd5 oracle checks cover the 32x32 High 4:2:0 8x8-DCT fixtures in
 addition to the true High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/I and
 P-skip/P16x16 no-residual fixtures, the exact P16x16 L0 residual fixtures,
 explicit weighted P16x16 fixtures, and the 16x16/32x32 families listed below. The
-configured B-frame sample tests additionally decode one access unit per call and
+High 10 non-direct B16x16 CAVLC/CABAC fixtures are accepted packet and frame-MD5
+proof for the exact B16x16 bidirectional subset only. Configured B-frame sample
+tests additionally decode one access unit per call and
 then use the public delayed-frame flush to drain retained future P pictures,
 covering FFmpeg's `last_pocs`/`has_b_frames` reorder inference and signaled VUI
 reorder-depth handling. The generic public `DecodeFrames` tests exercise Annex B
@@ -265,6 +285,15 @@ B-skip write-back for both CAVLC and CABAC. The implicit-weight B fixtures use
 the same 16x16 source and constraints with `duration=4:bframes=2`, which forces
 non-symmetric B POC distances and proves FFmpeg's
 `implicit_weight_table(field=-1)` path while still avoiding B-direct/skip.
+
+The High 10 non-direct B fixtures mirror the 16x16 no-skip non-direct B shape,
+but request true High 10 4:2:0 output and compare `yuv420p10le` rawvideo bytes.
+They prove only B16x16 standard bidirectional averaging over high refs, B-list
+POC ordering, delayed display-order output, configured sample-by-sample decode,
+and explicit flush. The bitstreams keep deblocking disabled, avoid B
+skip/direct prediction, avoid 16x8/8x16/8x8 partitioned B, and keep
+`weighted_bipred_idc == 0` so implicit weighted B remains a separate lane.
+
 The CAVLC and CABAC B 8x8 direct-sub fixtures are committed as 64x64 Annex B
 bitstreams under `testdata/h264/`; they cover both spatial and temporal direct
 prediction for sub-macroblocks across Annex B, AVC/NALFF, configured AVC,
@@ -340,6 +369,9 @@ Included:
   weighted P16x16 decode through the high raw helper surface, covered by Annex
   B, AVC/NALFF, configured AVC, configured sample-by-sample decode, and FFmpeg
   rawvideo/framemd5 oracle tests
+- Public High 10 4:2:0 deblock-disabled CAVLC/CABAC exact non-direct B16x16
+  bidirectional decode through the high raw helper surface, with Annex B, AVC,
+  configured AVC, sample-by-sample flush, and FFmpeg rawvideo oracle proof.
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:
@@ -350,6 +382,7 @@ Excluded unless directly required by decoder parity:
 - Hardware acceleration backends
 - Non-H.264 codecs
 - Public high-bit-depth decode beyond the proved High 10 deblock-disabled I,
-  P-skip/P16x16 no-residual, exact P16x16 L0 residual, and explicit weighted P
-  subsets remains explicitly unsupported. Partitioned P, high B, high
-  deblocking, additional depth/chroma fixtures, and MBAFF remain later lanes.
+  P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P, and
+  exact non-direct B16x16 subsets remains explicitly unsupported. Direct
+  B, implicit weighted B, partitioned B, partitioned P, high deblocking,
+  additional depth/chroma fixtures, and MBAFF remain later lanes.

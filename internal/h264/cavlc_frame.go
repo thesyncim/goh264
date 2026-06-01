@@ -8,17 +8,18 @@
 package h264
 
 type cavlcFrameMacroblockInput struct {
-	MBXY                int
-	SliceNum            uint16
-	SliceType           int32
-	SliceTypeNoS        int32
-	QScale              int
-	RefCount            [2]uint32
-	DCT8x8Allowed       bool
-	DirectSpatialMVPred bool
-	Direct              h264DirectMotionContext
-	PPS                 *PPS
-	SPS                 *SPS
+	MBXY                   int
+	SliceNum               uint16
+	SliceType              int32
+	SliceTypeNoS           int32
+	QScale                 int
+	RefCount               [2]uint32
+	DCT8x8Allowed          bool
+	DirectSpatialMVPred    bool
+	Direct                 h264DirectMotionContext
+	PPS                    *PPS
+	SPS                    *SPS
+	RejectUnsupportedHighB bool
 }
 
 type cavlcFrameMacroblockResult struct {
@@ -60,6 +61,10 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithWork(gb *bitReader
 }
 
 func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWork(gb *bitReader, sh *SliceHeader, state *cavlcFrameSliceState, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork) (cavlcFrameMacroblockResult, error) {
+	return m.decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb, sh, state, mbXY, sliceNum, direct, work, false)
+}
+
+func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb *bitReader, sh *SliceHeader, state *cavlcFrameSliceState, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cavlcFrameMacroblockResult, error) {
 	var result cavlcFrameMacroblockResult
 	if m == nil || gb == nil || sh == nil || sh.PPS == nil || sh.SPS == nil || state == nil || work == nil {
 		return result, ErrInvalidData
@@ -83,6 +88,9 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWork(gb *bit
 			state.MBSkipRun = int32(run)
 		}
 		if state.MBSkipRun > 0 {
+			if rejectUnsupportedHighB && sh.SliceTypeNoS == PictureTypeB {
+				return result, ErrUnsupported
+			}
 			state.MBSkipRun--
 			return m.writeBackCAVLCFrameSkipMacroblockWithDirectWork(sh, state.QScale, mbXY, sliceNum, direct, work)
 		}
@@ -90,17 +98,18 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWork(gb *bit
 	}
 
 	result, err := m.decodeCAVLCFrameMacroblockWithWork(gb, cavlcFrameMacroblockInput{
-		MBXY:                mbXY,
-		SliceNum:            sliceNum,
-		SliceType:           sh.SliceType,
-		SliceTypeNoS:        sh.SliceTypeNoS,
-		QScale:              state.QScale,
-		RefCount:            sh.RefCount,
-		DCT8x8Allowed:       sh.PPS.Transform8x8Mode != 0,
-		DirectSpatialMVPred: sh.DirectSpatialMVPred != 0,
-		Direct:              direct,
-		PPS:                 sh.PPS,
-		SPS:                 sh.SPS,
+		MBXY:                   mbXY,
+		SliceNum:               sliceNum,
+		SliceType:              sh.SliceType,
+		SliceTypeNoS:           sh.SliceTypeNoS,
+		QScale:                 state.QScale,
+		RefCount:               sh.RefCount,
+		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
+		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
+		Direct:                 direct,
+		PPS:                    sh.PPS,
+		SPS:                    sh.SPS,
+		RejectUnsupportedHighB: rejectUnsupportedHighB,
 	}, work)
 	if err != nil {
 		return result, err
@@ -131,6 +140,11 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 		return result, err
 	}
 	result.MBType = base.MBType
+	if in.RejectUnsupportedHighB {
+		if err := validateHighFrameSliceBaseMacroblockForDecode(in.SliceTypeNoS, base.MBType); err != nil {
+			return result, err
+		}
+	}
 	if base.MBType&MBTypeIntraPCM != 0 {
 		return m.decodeCAVLCFrameIntraPCMMacroblock(gb, in, base, result)
 	}

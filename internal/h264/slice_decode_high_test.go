@@ -98,6 +98,15 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10P420NoWeight(t *testing.T
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10B420NoWeight(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+	sh.RefCount = [2]uint32{1, 1}
+
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+		t.Fatalf("high B validation err = %v, want nil", err)
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -115,7 +124,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 		{name: "monochrome", bitDepth: 10, chroma: 10, format: 0, slice: PictureTypeI},
 		{name: "422", bitDepth: 10, chroma: 10, format: 2, slice: PictureTypeI},
 		{name: "444", bitDepth: 10, chroma: 10, format: 3, slice: PictureTypeI},
-		{name: "b-slice", bitDepth: 10, chroma: 10, format: 1, slice: PictureTypeB},
 		{name: "deblock-enabled", bitDepth: 10, chroma: 10, format: 1, deblock: true, slice: PictureTypeI},
 	}
 	for _, tt := range tests {
@@ -127,6 +135,57 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 				t.Fatalf("high validation err = %v, want ErrUnsupported", err)
 			}
 		})
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsWeightedB(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		run  func(*SliceHeader)
+	}{
+		{
+			name: "implicit",
+			run: func(sh *SliceHeader) {
+				sh.PPS.WeightedBipredIDC = 2
+				sh.PredWeightTable.UseWeight = 2
+				sh.PredWeightTable.UseWeightChroma = 2
+			},
+		},
+		{
+			name: "explicit table",
+			run: func(sh *SliceHeader) {
+				sh.PPS.WeightedBipredIDC = 1
+				sh.PredWeightTable.UseWeight = 1
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+			sh.RefCount = [2]uint32{1, 1}
+			tt.run(sh)
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+				t.Fatalf("weighted high B validation err = %v, want ErrUnsupported", err)
+			}
+		})
+	}
+}
+
+func TestDecodeFrameSliceDataHighRejectsBInputPredWeightBeforeEntropy(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+	sh.RefCount = [2]uint32{1, 1}
+	gb := newBitReader(cavlcBitString("10100"))
+	pwt := PredWeightTable{UseWeight: 1}
+
+	_, err := m.decodeFrameSliceDataHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{
+		SliceNum:   11,
+		PredWeight: &pwt,
+	})
+	if err != ErrUnsupported {
+		t.Fatalf("high B input pred weight err = %v, want ErrUnsupported", err)
+	}
+	if gb.bitPos != 0 {
+		t.Fatalf("bit reader consumed %d bits, want 0", gb.bitPos)
 	}
 }
 

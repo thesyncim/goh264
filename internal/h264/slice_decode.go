@@ -66,6 +66,9 @@ func (m *macroblockTables) decodeFrameSliceDataHigh(gb *bitReader, dst *h264Pict
 	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	if err := validateSimpleFrameSliceDecodeInputHighRefs(sh, in); err != nil {
+		return result, err
+	}
 	if sh.PPS.CABAC == 0 {
 		return m.decodeCAVLCFrameSliceHigh(gb, dst, sh, in)
 	}
@@ -142,6 +145,9 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	if err := validateSimpleFrameSliceDecodeInputHighRefs(sh, in); err != nil {
+		return result, err
+	}
 	cur, err := newSliceMacroblockCursor(m, sh)
 	if err != nil {
 		return result, err
@@ -150,7 +156,7 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 	state := newCAVLCFrameSliceState(int(sh.QScale))
 	for {
 		var work frameMacroblockDecodeWork
-		mb, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWork(gb, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
+		mb, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, sh.SliceTypeNoS == PictureTypeB)
 		if err != nil {
 			return result, err
 		}
@@ -222,6 +228,9 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	if err := validateSimpleFrameSliceDecodeInputHighRefs(sh, in); err != nil {
+		return result, err
+	}
 	cur, err := newSliceMacroblockCursor(m, sh)
 	if err != nil {
 		return result, err
@@ -230,7 +239,7 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 	state := cabacFrameSliceState{QScale: int(sh.QScale)}
 	for {
 		var work frameMacroblockDecodeWork
-		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
+		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuard(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, sh.SliceTypeNoS == PictureTypeB)
 		if err != nil {
 			return result, err
 		}
@@ -306,6 +315,13 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	switch sh.SliceTypeNoS {
 	case PictureTypeI:
 	case PictureTypeP:
+	case PictureTypeB:
+		if sh.PPS != nil && sh.PPS.WeightedBipredIDC != 0 {
+			return ErrUnsupported
+		}
+		if sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
+			return ErrUnsupported
+		}
 	default:
 		return ErrUnsupported
 	}
@@ -327,6 +343,29 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	return nil
 }
 
+func validateSimpleFrameSliceDecodeInputHighRefs(sh *SliceHeader, in h264FrameSliceDecodeInputHigh) error {
+	if sh == nil {
+		return ErrInvalidData
+	}
+	if sh.SliceTypeNoS != PictureTypeB || in.PredWeight == nil {
+		return nil
+	}
+	if in.PredWeight.UseWeight != 0 || in.PredWeight.UseWeightChroma != 0 {
+		return ErrUnsupported
+	}
+	return nil
+}
+
+func validateHighFrameSliceBaseMacroblockForDecode(sliceTypeNoS int32, mbType uint32) error {
+	if sliceTypeNoS != PictureTypeB {
+		return nil
+	}
+	if mbType == MBType16x16|MBTypeP0L0|MBTypeP0L1 {
+		return nil
+	}
+	return ErrUnsupported
+}
+
 func validateHighFrameSliceMacroblockForReconstruct(sh *SliceHeader, mbType uint32, cbp int, cbpTable int) error {
 	if sh == nil {
 		return ErrInvalidData
@@ -335,10 +374,20 @@ func validateHighFrameSliceMacroblockForReconstruct(sh *SliceHeader, mbType uint
 	case PictureTypeI:
 		return nil
 	case PictureTypeP:
+	case PictureTypeB:
 	default:
 		return ErrUnsupported
 	}
 	if cbp < 0 || cbpTable < 0 || isIntra(mbType) {
+		return ErrUnsupported
+	}
+	if sh.SliceTypeNoS == PictureTypeB {
+		if isSkip(mbType) || isDirect(mbType) {
+			return ErrUnsupported
+		}
+		if mbType == MBType16x16|MBTypeP0L0|MBTypeP0L1 {
+			return nil
+		}
 		return ErrUnsupported
 	}
 	if isSkip(mbType) {

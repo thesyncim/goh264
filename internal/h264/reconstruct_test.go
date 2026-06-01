@@ -107,6 +107,46 @@ func TestH264HLDecodeFrameMacroblockHighInterP16x16MotionThenResidual(t *testing
 	}
 }
 
+func TestH264HLDecodeFrameMacroblockHighB16x16BiMotion(t *testing.T) {
+	const bitDepth = 10
+	dst := makeH264MotionCompPictureHigh(1, bitDepth, 11)
+	ref0 := makeH264MotionCompPictureHigh(1, bitDepth, 73)
+	ref1 := makeH264MotionCompPictureHigh(1, bitDepth, 151)
+	refs := [2][]*h264PicturePlanesHigh{{ref0}, {ref1}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+	cache.Ref[1][h264Scan8[0]] = 0
+	var residual cavlcResidualContext
+
+	const mbX = 1
+	const mbY = 1
+	if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHigh{
+		MBType:        MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+		MBX:           mbX,
+		MBY:           mbY,
+		CBP:           0,
+		QScale:        18,
+		ChromaQP:      [2]uint8{18, 18},
+		ListCount:     2,
+		PPS:           cavlcFlatQMulPPS(),
+		Residual:      &residual,
+		Motion:        &cache,
+		Refs:          refs,
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+		BitDepth:      bitDepth,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	yOff, cbOff, crOff, err := h264MBDestPartOffsetsHigh(dst, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertH264AvgRowsHigh(t, "high b16x16 y", dst.Y, yOff, dst.LumaStride, 16, 16, ref0.Y, ref1.Y, ref0.LumaStride)
+	assertH264AvgRowsHigh(t, "high b16x16 cb", dst.Cb, cbOff, dst.ChromaStride, 8, 8, ref0.Cb, ref1.Cb, ref0.ChromaStride)
+	assertH264AvgRowsHigh(t, "high b16x16 cr", dst.Cr, crOff, dst.ChromaStride, 8, 8, ref0.Cr, ref1.Cr, ref0.ChromaStride)
+}
+
 func TestH264HLDecodeFrameMacroblockIntraPCMReconstructs420(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
 	pcm := h264ReconstructIntraPCM(1, 33)
@@ -580,6 +620,19 @@ func assertH264RowsHigh(t *testing.T, label string, dst []uint16, offset int, st
 		for x := 0; x < width; x++ {
 			got := dst[offset+y*stride+x]
 			want := src[y*srcStride+x]
+			if got != want {
+				t.Fatalf("%s[%d,%d] = %d, want %d", label, x, y, got, want)
+			}
+		}
+	}
+}
+
+func assertH264AvgRowsHigh(t *testing.T, label string, dst []uint16, offset int, stride int, width int, height int, src0 []uint16, src1 []uint16, srcStride int) {
+	t.Helper()
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			got := dst[offset+y*stride+x]
+			want := uint16((int(src0[offset+y*srcStride+x]) + int(src1[offset+y*srcStride+x]) + 1) >> 1)
 			if got != want {
 				t.Fatalf("%s[%d,%d] = %d, want %d", label, x, y, got, want)
 			}
