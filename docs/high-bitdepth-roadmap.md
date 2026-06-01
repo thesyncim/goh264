@@ -62,9 +62,10 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
   the high path for deblock-disabled I pictures, High 10 P-skip/P16x16
   no-residual pictures, exact P16x16 L0 residual pictures, and explicit
   weighted P16x16 pictures, plus the High 10 non-direct, temporal/spatial
-  direct B16x16, and temporal/spatial B-skip lanes. Partitioned P, P intra
-  macroblocks, direct-sub, implicit weighted B, partitioned B, and high
-  deblocking/border-exchange modes remain at the unsupported boundary.
+  direct B16x16, temporal/spatial B-skip lanes, and first deblock-enabled
+  32x32 IDR/P lane. Partitioned P, P intra macroblocks, direct-sub, implicit
+  weighted B, partitioned B, and broader high deblocking/border-exchange modes
+  remain at the unsupported boundary.
 - `internal/h264/motion_comp_high.go` now mirrors the 8-bit `hl_motion`
   call-site layer over uint16 planes. It covers standard and weighted
   macroblock partitions, 4:2:0/4:2:2 chroma MC, 4:4:4 qpel-shaped Cb/Cr, and
@@ -136,10 +137,14 @@ suite. The first corpus runner lives in `decoder_corpus_test.go` and reads
 `GOH264_CORPUS_MANIFEST`. It can execute file-backed H.264 testvector sets
 without weakening existing unsupported-feature guards: decode-ok rows require
 bitstream, per-frame raw, and concatenated rawvideo MD5s, while unsupported rows
-must name guard tags and assert `ErrUnsupported`. Each newly passing corpus class
-should update this roadmap and the translation ledger with the exact profiles,
-chroma formats, bit depths, picture structures, and unsupported features still
-excluded.
+must name guard tags and assert `ErrUnsupported`. The seed manifest now includes
+the local 8-bit B 8x8/B_SUB_4x4 direct-sub vectors plus the proved High 10
+4:2:0 IDR/P, residual P16x16, explicit weighted P16x16, non-direct B16x16,
+temporal/spatial direct B16x16, temporal/spatial B-skip, and deblock-enabled
+32x32 IDR/P vectors across all public packet surfaces. Each newly passing corpus
+class should update this roadmap and the translation ledger with the exact
+profiles, chroma formats, bit depths, picture structures, and unsupported
+features still excluded.
 
 Benchmarking starts with `cmd/goh264bench`, which reads the compressed input
 outside the timed region, warms up, decodes with a fresh Go decoder per
@@ -170,7 +175,7 @@ an in-process libavcodec/native baseline before making broad claims.
 | Inter/motion reconstruction | 8-bit `hl_motion` is integrated for P/B, weighted P, implicit B, direct B, and 4:4:4 planes. High `h264HLMotionFrame*` is now ported for internal MB-level 4:2:0/4:2:2/4:4:4 motion, explicit/implicit weighting, and edge emulation; High 10 P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P16x16, exact non-direct B16x16 standard bidirectional avg, top-level temporal/spatial direct B16x16, temporal/spatial B-skip, and first deblock-enabled IDR/P outputs are now wired through public slice/frame output. | Partitioned P, P intra macroblocks, B 8x8/direct-sub, implicit weighted B, partitioned B, broader high deblocking, other chroma/depth, and MBAFF stay guarded until each gets bitstream/oracle proof. |
 | Loop filter integration | 8-bit frame-picture strength/call-site integration works post-frame for the simple path; high deblock kernels are wired for High10 4:2:0 frame pictures with source-shaped `qp_bd_offset` threshold indexing and public CAVLC/CABAC 32x32 deblock-enabled IDR/P fixtures. | Add high slice-boundary mode proof, 12/14-bit fixtures, 4:2:2 and 4:4:4 high edge dispatch proof, and row-threaded/border-exchange scheduling before broadening the public contract. |
 | Public output | Public `Frame` exposes `Y16/Cb16/Cr16`, `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`, `AppendRawYUV16`, and `AppendRawYUVBytesLE`; `AppendRawYUV` remains 8-bit-only; High 10 deblock-disabled I output, no-residual P-skip/P16x16 output, exact P16x16 L0 residual output, explicit weighted P16x16 output, exact non-direct B16x16 output, temporal/spatial direct B16x16 output, temporal/spatial B-skip output, and first deblock-enabled IDR/P output are proved against FFmpeg rawvideo MD5s. | Keep partitioned P, P intra macroblocks, B 8x8/direct-sub, implicit weighted B, partitioned B, broader high deblocking, GBR, MBAFF, and unproved chroma/depth combinations guarded. |
-| Oracle fixtures | Kernel oracles cover high primitives; public frame-MD5 fixtures cover 8-bit High-profile streams, true High 10 CAVLC/CABAC deblock-disabled IDR/I fixtures, true High 10 IDR/P P-skip/P16x16 no-residual fixtures, true High 10 exact P16x16 L0 residual fixtures, true High 10 explicit weighted P16x16 fixtures, true High 10 non-direct B16x16 fixtures, true High 10 temporal/spatial direct B16x16 fixtures, true High 10 temporal/spatial B-skip fixtures, and true High 10 deblock-enabled CAVLC/CABAC 32x32 IDR/P fixtures across Annex B/AVC/configured surfaces. | Build later oracle targets for B 8x8/direct-sub, implicit weighted B, partitioned B, and broader high loop filtering without widening this guard. |
+| Oracle fixtures | Kernel oracles cover high primitives; public frame-MD5 fixtures cover 8-bit High-profile streams, true High 10 CAVLC/CABAC deblock-disabled IDR/I fixtures, true High 10 IDR/P P-skip/P16x16 no-residual fixtures, true High 10 exact P16x16 L0 residual fixtures, true High 10 explicit weighted P16x16 fixtures, true High 10 non-direct B16x16 fixtures, true High 10 temporal/spatial direct B16x16 fixtures, true High 10 temporal/spatial B-skip fixtures, and true High 10 deblock-enabled CAVLC/CABAC 32x32 IDR/P fixtures across Annex B/AVC/configured surfaces. The same proved High 10 classes are now promoted into the file-backed corpus manifest for repeatable testvector and benchmark runs. | Build later oracle targets for B 8x8/direct-sub, implicit weighted B, partitioned B, and broader high loop filtering without widening this guard. |
 
 ## Internal Frame And Plane Work
 
@@ -554,8 +559,11 @@ surface.
      cover B 8x8/B_SUB_4x4 direct-sub, implicit weighted B, and partitioned B.
 
 8. **Wire High Loop Filter**
-   - Add high threshold tables/indexing and high edge application.
-   - Tests: deblock-enabled 4:2:0, 4:2:2, 4:4:4, plus disabled-filter controls.
+   - Done for High10 4:2:0 frame-picture post-frame filtering with source-shaped
+     `qp_bd_offset` threshold indexing and deblock-enabled 32x32 IDR/P CAVLC
+     and CABAC rawvideo oracle fixtures.
+   - Remaining tests: high `disable_deblocking_filter_idc == 2` slice-boundary
+     proof, 12/14-bit, 4:2:2, 4:4:4, and row-threaded/border-exchange controls.
 
 9. **Broaden Packet Surfaces**
    - Mirror the current 8-bit fixture matrix for high-bit-depth streams:

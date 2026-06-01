@@ -31,6 +31,11 @@ go test . -run TestH264CorpusManifest
 GOH264_CORPUS_MANIFEST=/path/to/manifest.jsonl go test . -run TestH264CorpusManifest
 ```
 
+The seed manifest is intentionally small but now file-backs the local 8-bit
+B direct-sub vectors plus the proved High 10 4:2:0 IDR/P, residual P, weighted
+P, non-direct B, temporal/spatial direct B, temporal/spatial B-skip, and
+deblock-enabled IDR/P vectors.
+
 Run the benchmark harness with repeated samples and an FFmpeg CLI rawvideo
 baseline. The JSON report includes input, host, VCS, timing-scope, raw pixel
 format, and per-repeat statistics. For corpus-bound reports, use `-manifest`;

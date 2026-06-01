@@ -460,7 +460,11 @@ Included:
   JSONL entries in `testdata/h264/corpus/manifest.jsonl` and external corpus
   override through `GOH264_CORPUS_MANIFEST`. Decode-ok rows require bitstream,
   per-frame raw, and concatenated rawvideo MD5s; unsupported rows must name guard
-  tags and assert `ErrUnsupported`.
+  tags and assert `ErrUnsupported`. The committed manifest now file-backs the
+  local 8-bit B direct-sub vectors plus the proved High 10 4:2:0 IDR/P,
+  residual P16x16, explicit weighted P16x16, non-direct B16x16,
+  temporal/spatial direct B16x16, temporal/spatial B-skip, and deblock-enabled
+  32x32 IDR/P vectors.
 - Decoder benchmark harness `cmd/goh264bench`, including Go decode/raw-output
   timing, raw MD5 reporting, allocation counters, repeated samples/statistics,
   machine-readable input/host/VCS/FFmpeg metadata, Go raw pixel-format reporting,
