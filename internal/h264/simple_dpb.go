@@ -31,6 +31,11 @@ type simpleRefEntry struct {
 	long  bool
 }
 
+type simpleFrameRefContext struct {
+	Refs    [2][]*h264PicturePlanes
+	Entries [2][]simpleRefEntry
+}
+
 type simplePOCContext struct {
 	pocLSB             int32
 	pocMSB             int32
@@ -205,43 +210,96 @@ func (d *simpleFrameDPB) finishFramePOC(nalRefIDC uint8) {
 }
 
 func (d *simpleFrameDPB) buildRefLists(sh *SliceHeader, frame *DecodedFrame) ([2][]*h264PicturePlanes, error) {
+	ctx, err := d.buildRefContext(sh, frame)
+	if err != nil {
+		return [2][]*h264PicturePlanes{}, err
+	}
+	return ctx.Refs, nil
+}
+
+func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (simpleFrameRefContext, error) {
+	var ctx simpleFrameRefContext
 	var refs [2][]*h264PicturePlanes
 	if d == nil || sh == nil || sh.SPS == nil {
-		return refs, ErrInvalidData
+		return ctx, ErrInvalidData
 	}
 	if sh.SliceTypeNoS == PictureTypeI {
-		return refs, nil
+		return ctx, nil
 	}
 	if sh.PictureStructure != PictureFrame {
-		return refs, ErrUnsupported
+		return ctx, ErrUnsupported
 	}
 
 	switch sh.SliceTypeNoS {
 	case PictureTypeP:
 		list, err := d.buildPRefEntries(sh)
 		if err != nil {
-			return refs, err
+			return ctx, err
 		}
-		refs[0] = simpleFrameEntryPlanesRefs(list)
+		ctx.Entries[0] = cloneSimpleRefEntries(list)
+		refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
 	case PictureTypeB:
 		if frame == nil {
-			return refs, ErrInvalidData
+			return ctx, ErrInvalidData
 		}
 		lists, err := d.buildBRefEntries(sh, frame.poc)
 		if err != nil {
-			return refs, err
+			return ctx, err
 		}
 		if sh.PPS != nil && sh.PPS.WeightedBipredIDC == 2 {
 			if err := initImplicitBWeightTable(&sh.PredWeightTable, lists, sh.RefCount, frame.poc); err != nil {
-				return refs, err
+				return ctx, err
 			}
 		}
-		refs[0] = simpleFrameEntryPlanesRefs(lists[0])
-		refs[1] = simpleFrameEntryPlanesRefs(lists[1])
+		ctx.Entries[0] = cloneSimpleRefEntries(lists[0])
+		ctx.Entries[1] = cloneSimpleRefEntries(lists[1])
+		refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
+		refs[1] = simpleFrameEntryPlanesRefs(ctx.Entries[1])
 	default:
-		return refs, ErrUnsupported
+		return ctx, ErrUnsupported
 	}
-	return refs, nil
+	ctx.Refs = refs
+	return ctx, nil
+}
+
+func (c simpleFrameRefContext) directMotionContext(frame *DecodedFrame, sh *SliceHeader, sei *H264SEIContext) h264DirectMotionContext {
+	var x264Build int32
+	if sei != nil {
+		x264Build = sei.Common.Unregistered.X264Build
+	}
+	var curPOC int32
+	if frame != nil {
+		curPOC = frame.poc
+	}
+	direct8x8 := false
+	directSpatial := false
+	if sh != nil && sh.SPS != nil {
+		directSpatial = sh.DirectSpatialMVPred != 0
+		direct8x8 = sh.SPS.Direct8x8InferenceFlag != 0
+	}
+	return h264DirectMotionContext{
+		RefEntries:          c.Entries,
+		CurPOC:              curPOC,
+		DirectSpatialMVPred: directSpatial,
+		Direct8x8Inference:  direct8x8,
+		X264Build:           x264Build,
+	}
+}
+
+func cloneSimpleRefEntries2(entries [2][]simpleRefEntry) [2][]simpleRefEntry {
+	return [2][]simpleRefEntry{
+		cloneSimpleRefEntries(entries[0]),
+		cloneSimpleRefEntries(entries[1]),
+	}
+}
+
+func cloneSimpleRefEntries(entries []simpleRefEntry) []simpleRefEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]simpleRefEntry, len(entries))
+	copy(out, entries)
+	return out
 }
 
 func simpleFrameEntryPlanesRefs(list []simpleRefEntry) []*h264PicturePlanes {

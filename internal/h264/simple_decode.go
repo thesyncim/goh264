@@ -26,6 +26,8 @@ type DecodedFrame struct {
 	poc             int32
 	keyFrame        bool
 	mmcoReset       bool
+	tables          *macroblockTables
+	refEntries      [2][]simpleRefEntry
 }
 
 type SimpleDecoder struct {
@@ -222,13 +224,15 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 			}
 			loopFilterSlices[sliceNum] = h264LoopFilterSliceParamsFromHeader(sh)
 			pic := frame.picturePlanes()
-			refs, err := dpb.buildRefLists(sh, frame)
+			refctx, err := dpb.buildRefContext(sh, frame)
 			if err != nil {
 				return nil, err
 			}
+			frame.refEntries = cloneSimpleRefEntries2(refctx.Entries)
 			result, err := tables.decodeFrameSliceData(&payload, &pic, sh, h264FrameSliceDecodeInput{
 				SliceNum:      sliceNum,
-				Refs:          refs,
+				Refs:          refctx.Refs,
+				Direct:        refctx.directMotionContext(frame, sh, sei),
 				PredWeight:    &sh.PredWeightTable,
 				MotionScratch: motionScratch,
 			})
@@ -315,6 +319,7 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	frame.tables = tables
 	pic := frame.picturePlanes()
 	if err := pic.validate(); err != nil {
 		return nil, nil, err

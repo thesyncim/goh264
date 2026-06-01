@@ -176,11 +176,12 @@ func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterType(gb *bitReade
 	if isIntra(mb.MBType) {
 		return mb, ErrUnsupported
 	}
-	if isDirect(mb.MBType) {
-		return mb, ErrUnsupported
-	}
 
-	if mb.PartitionCount == 4 {
+	if isDirect(mb.MBType) {
+		// B_Direct carries no ref-index or MVD syntax; h264_direct.c derives
+		// the concrete partition shape and motion vectors after the residual
+		// syntax has been read by the frame-MB handoff.
+	} else if mb.PartitionCount == 4 {
 		for i := 0; i < 4; i++ {
 			subType, err := gb.readUEGolomb31()
 			if err != nil {

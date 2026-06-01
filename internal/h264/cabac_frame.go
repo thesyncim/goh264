@@ -17,6 +17,7 @@ type cabacFrameMacroblockInput struct {
 	RefCount            [2]uint32
 	DCT8x8Allowed       bool
 	DirectSpatialMVPred bool
+	Direct              h264DirectMotionContext
 	PPS                 *PPS
 	SPS                 *SPS
 }
@@ -52,6 +53,10 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblock(src cabacSyntaxSource
 }
 
 func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithWork(src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
+	return m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, state, mbXY, sliceNum, h264DirectMotionContext{}, work)
+}
+
+func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWork(src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	if m == nil || src == nil || sh == nil || sh.PPS == nil || sh.SPS == nil || state == nil || work == nil {
 		return result, ErrInvalidData
@@ -71,7 +76,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithWork(src cabacSynt
 		if skip {
 			state.PrevMBSkipped = true
 			state.LastQScaleDiff = 0
-			return m.writeBackCABACFrameSkipMacroblockWithWork(sh, state.QScale, mbXY, sliceNum, work)
+			return m.writeBackCABACFrameSkipMacroblockWithDirectWork(sh, state.QScale, mbXY, sliceNum, direct, work)
 		}
 	}
 	state.PrevMBSkipped = false
@@ -86,6 +91,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithWork(src cabacSynt
 		RefCount:            sh.RefCount,
 		DCT8x8Allowed:       sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred: sh.DirectSpatialMVPred != 0,
+		Direct:              direct,
 		PPS:                 sh.PPS,
 		SPS:                 sh.SPS,
 	}, work)
@@ -212,15 +218,22 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblock(sh *SliceHeader, mb
 }
 
 func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithWork(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
+	return m.writeBackCABACFrameSkipMacroblockWithDirectWork(sh, qscale, mbXY, sliceNum, h264DirectMotionContext{}, work)
+}
+
+func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWork(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	if sh == nil || work == nil {
 		return result, ErrInvalidData
 	}
-	if sh.SliceTypeNoS != PictureTypeP {
-		return result, ErrUnsupported
-	}
 	if qscale < 0 || qscale > qpMaxNum {
 		return result, ErrInvalidData
+	}
+	if sh.SliceTypeNoS == PictureTypeB {
+		return m.writeBackCABACFrameBSkipMacroblockWithDirectWork(sh, qscale, mbXY, sliceNum, direct, work)
+	}
+	if sh.SliceTypeNoS != PictureTypeP {
+		return result, ErrUnsupported
 	}
 
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
@@ -239,6 +252,34 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithWork(sh *SliceHe
 	result.QScale = qscale
 	result.LastQScaleDiff = 0
 	result.Neighbors = neighbors
+	result.IsInter = true
+	result.Skipped = true
+	return result, nil
+}
+
+func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWork(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
+	var result cabacFrameMacroblockResult
+	mbType := MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
+	neighbors, err := m.fillDecodeNeighborsFrame(mbXY, sliceNum, mbType)
+	if err != nil {
+		return result, err
+	}
+	*work = frameMacroblockDecodeWork{}
+	var subMBType [4]uint32
+	if err := m.predDirectMotionFrame(&work.Motion, mbXY, &mbType, &subMBType, direct); err != nil {
+		return result, err
+	}
+	if err := m.writeBackBskipMacroblockWithMotion(mbXY, qscale, mbType, true, &subMBType, sliceNum, &work.Motion); err != nil {
+		return result, err
+	}
+
+	result.MBType = mbType
+	result.CBP = 0
+	result.CBPTable = 0
+	result.QScale = qscale
+	result.LastQScaleDiff = 0
+	result.Neighbors = neighbors
+	result.Inter.SubMBType = subMBType
 	result.IsInter = true
 	result.Skipped = true
 	return result, nil
@@ -332,14 +373,18 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 }
 
 func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, motion *macroblockMotionCache, listCount int, cacheResult frameMacroblockDecodeCacheResult, result cabacFrameMacroblockResult) (cabacFrameMacroblockResult, error) {
-	if isDirect(base.MBType) {
-		return result, ErrUnsupported
-	}
-
 	var mb cavlcInterMacroblockSyntax
 	mb.cavlcMacroblockSyntax = base
-	if err := decodeCABACInterMotionSyntax(src, &mb, motion, in.SliceTypeNoS, listCount, in.RefCount); err != nil {
-		return result, err
+	if isDirect(base.MBType) {
+		if err := m.predDirectMotionFrame(motion, in.MBXY, &mb.MBType, &mb.SubMBType, in.Direct); err != nil {
+			return result, err
+		}
+		fillMVDRectangle(&motion.MVD[0], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
+		fillMVDRectangle(&motion.MVD[1], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
+	} else {
+		if err := decodeCABACInterMotionSyntax(src, &mb, motion, in.SliceTypeNoS, listCount, in.RefCount); err != nil {
+			return result, err
+		}
 	}
 
 	mb.CBP = decodeCABACMBCBPLuma(src, cacheResult.Residual.LeftCBP, cacheResult.Residual.TopCBP)

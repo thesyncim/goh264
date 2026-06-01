@@ -98,15 +98,25 @@ func TestDecodeCAVLCInterP8x8SubMacroblockNoResidual(t *testing.T) {
 	}
 }
 
-func TestDecodeCAVLCInterBDirectUnsupported(t *testing.T) {
+func TestDecodeCAVLCInterBDirectSyntaxSkipsRefsMVD(t *testing.T) {
 	pps := cavlcFlatQMulPPS()
 	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
 	var ctx cavlcResidualContext
-	gb := newBitReader(cavlcBitString("1"))
+	gb := newBitReader(cavlcBitString("11"))
 
-	_, err := ctx.decodeCAVLCInterBMacroblock(&gb, pps, sps, 18, [2]uint32{1, 1}, false)
-	if err != ErrUnsupported {
-		t.Fatalf("err = %v, want ErrUnsupported", err)
+	mb, err := ctx.decodeCAVLCInterBMacroblock(&gb, pps, sps, 18, [2]uint32{1, 1}, false)
+	if err != nil {
+		t.Fatalf("decode direct B syntax failed: %v", err)
+	}
+	if mb.MBType != (MBTypeDirect2|MBTypeL0L1) || mb.CBP != 0 || gb.bitPos != 2 {
+		t.Fatalf("direct type/cbp/bits = %#x/%d/%d", mb.MBType, mb.CBP, gb.bitPos)
+	}
+	for list := 0; list < 2; list++ {
+		for i := 0; i < 4; i++ {
+			if mb.Ref[list][i] != -1 || mb.MVD[list][4*i] != ([2]int32{}) {
+				t.Fatalf("direct list %d sub %d ref/mvd = %d/%v", list, i, mb.Ref[list][i], mb.MVD[list][4*i])
+			}
+		}
 	}
 }
 

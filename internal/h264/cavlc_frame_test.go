@@ -264,7 +264,7 @@ func TestDecodeCAVLCFrameBDirectUnsupportedBeforeWriteback(t *testing.T) {
 	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 1}
 	pps := cavlcFlatQMulPPS()
 	pps.SPS = sps
-	gb := newBitReader(cavlcBitString("1"))
+	gb := newBitReader(cavlcBitString("11"))
 
 	_, err = m.decodeCAVLCFrameMacroblock(&gb, cavlcFrameMacroblockInput{
 		MBXY:                0,

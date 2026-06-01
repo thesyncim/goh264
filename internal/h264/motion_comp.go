@@ -45,9 +45,6 @@ func h264HLMotionFrameCore(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes,
 	if mbX >= dst.MBWidth || mbY >= dst.MBHeight || !isInter(mbType) {
 		return ErrInvalidData
 	}
-	if isDirect(mbType) {
-		return ErrUnsupported
-	}
 
 	if is16x16(mbType) {
 		return h264MCPartFrame(dst, refs, cache, mbX, mbY, mbType, 0, 0, true, 16, 0, 0, 0, 16, 8, 16, listCount, pwt, scratch)
@@ -71,9 +68,6 @@ func h264HLMotionFrameCore(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes,
 
 	for i := 0; i < 4; i++ {
 		subType := subMBType[i]
-		if isDirect(subType) {
-			return ErrUnsupported
-		}
 		n := 4 * i
 		xOffset := (i & 1) << 2
 		yOffset := (i & 2) << 1

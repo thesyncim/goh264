@@ -11,6 +11,7 @@ package h264
 type h264FrameSliceDecodeInput struct {
 	SliceNum      uint16
 	Refs          [2][]*h264PicturePlanes
+	Direct        h264DirectMotionContext
 	PredWeight    *PredWeightTable
 	MotionScratch *h264MotionCompScratch
 }
@@ -85,7 +86,7 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 	state := newCAVLCFrameSliceState(int(sh.QScale))
 	for {
 		var work frameMacroblockDecodeWork
-		mb, err := m.decodeCAVLCFrameSliceMacroblockWithWork(gb, sh, &state, cur.MBXY, in.SliceNum, &work)
+		mb, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWork(gb, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
 		if err != nil {
 			return result, err
 		}
@@ -123,7 +124,7 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 	state := cabacFrameSliceState{QScale: int(sh.QScale)}
 	for {
 		var work frameMacroblockDecodeWork
-		mb, err := m.decodeCABACFrameSliceMacroblockWithWork(src, sh, &state, cur.MBXY, in.SliceNum, &work)
+		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
 		if err != nil {
 			return result, err
 		}

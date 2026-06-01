@@ -107,9 +107,10 @@ func (m *macroblockTables) writeBackCAVLCInterMacroblock(mbXY int, mb *cavlcInte
 		return ErrInvalidData
 	}
 	if isDirect(mb.MBType) {
-		return ErrUnsupported
-	}
-	if isInter(mb.MBType) {
+		if err := m.writeBackMotion(mbXY, mb.MBType, sliceTypeNoS, false, &mb.SubMBType, cache); err != nil {
+			return err
+		}
+	} else if isInter(mb.MBType) {
 		if err := fillCAVLCInterMotionCache(cache, mb, listCount); err != nil {
 			return err
 		}
@@ -129,9 +130,10 @@ func (m *macroblockTables) writeBackCABACInterMacroblock(mbXY int, mb *cavlcInte
 		return ErrInvalidData
 	}
 	if isDirect(mb.MBType) {
-		return ErrUnsupported
-	}
-	if isInter(mb.MBType) {
+		if err := m.writeBackMotion(mbXY, mb.MBType, sliceTypeNoS, true, &mb.SubMBType, cache); err != nil {
+			return err
+		}
+	} else if isInter(mb.MBType) {
 		if err := fillCABACInterMotionCache(cache, mb, listCount); err != nil {
 			return err
 		}
@@ -178,6 +180,21 @@ func (m *macroblockTables) writeBackPskipMacroblockWithCABAC(mbXY int, qscale in
 		return err
 	}
 	if err := m.writeBackMotion(mbXY, mbType, PictureTypeP, cabac, nil, motion); err != nil {
+		return err
+	}
+	if err := m.writeBackMacroblockTables(mbXY, mbType, 0, qscale, sliceNum); err != nil {
+		return err
+	}
+	clearMacroblockNonZeroCount(&m.NonZeroCount[mbXY])
+	m.ChromaPred[mbXY] = 0
+	return nil
+}
+
+func (m *macroblockTables) writeBackBskipMacroblockWithMotion(mbXY int, qscale int, mbType uint32, cabac bool, subMBType *[4]uint32, sliceNum uint16, motion *macroblockMotionCache) error {
+	if qscale < 0 || qscale > qpMaxNum || motion == nil || !isDirect(mbType) || !isSkip(mbType) {
+		return ErrInvalidData
+	}
+	if err := m.writeBackMotion(mbXY, mbType, PictureTypeB, cabac, subMBType, motion); err != nil {
 		return err
 	}
 	if err := m.writeBackMacroblockTables(mbXY, mbType, 0, qscale, sliceNum); err != nil {
