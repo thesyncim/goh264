@@ -13,8 +13,8 @@ decoder path is in scope.
   deblocking.
 - High internals: 9/10/12/14-bit scalar DSP and uint16 frame/ref/output planes.
 - Public High10/High12: only manifest-backed lanes. Latest addition is High10
-  4:2:0 frame-only deblock-disabled explicit weighted partitioned
-  P16x8/P8x16/P8x8, CAVLC and CABAC.
+  4:2:0 frame-only `disable_deblocking_filter_idc == 2` slice-boundary IDR/P,
+  CAVLC and CABAC.
 
 Canonical fixture detail lives in `testdata/h264/corpus/manifest.jsonl`, not in
 Markdown.
@@ -31,6 +31,6 @@ go run ./cmd/goh264bench -manifest testdata/h264/corpus/manifest.jsonl -iters 1 
 
 P IntraPCM, P 8x8-DCT intra, deblock-enabled weighted partitioned P, mixed
 direct/explicit B8x8, residual direct-sub B, broader high B deblock residual
-lanes, public CABAC/chroma/B-slice slice-boundary modes, broader 12-bit and all
-14-bit public streams, GBR/RGB, field/MBAFF, FMO, threading/SIMD, broad error
+lanes, public chroma/B-slice slice-boundary modes, broader 12-bit and all 14-bit
+public streams, GBR/RGB, field/MBAFF, FMO, threading/SIMD, broad error
 resilience, and full libavcodec delayed-output behavior.

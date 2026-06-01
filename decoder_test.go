@@ -3106,21 +3106,39 @@ func annexBToAVCConfigAndSamples(t *testing.T, data []byte, nalLengthSize int) (
 
 	var spsNals [][]byte
 	var ppsNals [][]byte
+	var spsList [32]*h264.SPS
+	var ppsList [256]*h264.PPS
 	var samples [][]byte
 	var sample []byte
 	hasVCL := false
 	for _, nal := range nals {
 		switch nal.Type {
 		case h264.NALSPS:
+			sps, err := h264.DecodeSPS(nal.RBSP)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spsList[sps.SPSID] = sps
 			spsNals = append(spsNals, nal.Raw)
 		case h264.NALPPS:
+			pps, err := h264.DecodePPS(nal.RBSP, &spsList)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ppsList[pps.PPSID] = pps
 			ppsNals = append(ppsNals, nal.Raw)
 		default:
 			isVCL := nal.Type == h264.NALSlice || nal.Type == h264.NALIDRSlice
-			if isVCL && hasVCL {
-				samples = append(samples, sample)
-				sample = nil
-				hasVCL = false
+			if isVCL {
+				sh, err := h264.ParseSliceHeader(nal, &ppsList)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if hasVCL && sh.FirstMBAddr == 0 {
+					samples = append(samples, sample)
+					sample = nil
+					hasVCL = false
+				}
 			}
 			sample = appendAVCNALUnit(t, sample, nal.Raw, nalLengthSize)
 			if isVCL {

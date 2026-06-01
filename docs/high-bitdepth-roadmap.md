@@ -10,7 +10,7 @@ does not by itself admit public streams.
   weights when deblocking is disabled.
 - High10 selected B/direct/implicit-weighted lanes and selected deblock-enabled
   IDR/P/B lanes.
-- High10 CAVLC-only slice-boundary IDR/P.
+- High10 CAVLC/CABAC slice-boundary IDR/P.
 - High12 CAVLC IDR/I IntraPCM.
 
 Hashes and row IDs live in `testdata/h264/corpus/manifest.jsonl`.
@@ -19,11 +19,10 @@ Hashes and row IDs live in `testdata/h264/corpus/manifest.jsonl`.
 
 | Priority | Lane |
 | --- | --- |
-| 1 | CABAC High10 4:2:0 slice-boundary IDR/P |
-| 2 | Residual-bearing direct-sub B |
-| 3 | High B deblock residual partitions |
-| 4 | Broader 12-bit / first 14-bit streams |
-| 5 | MBAFF/field pictures |
+| 1 | Residual-bearing direct-sub B |
+| 2 | High B deblock residual partitions |
+| 3 | Broader 12-bit / first 14-bit streams |
+| 4 | MBAFF/field pictures |
 
 Keep deblocking, weighting, direct motion, residual, chroma, and bit depth as
 separate guard axes unless one oracle proves the combination.
@@ -32,5 +31,5 @@ separate guard axes unless one oracle proves the combination.
 
 P IntraPCM, P 8x8-DCT intra, deblock-enabled weighted partitioned P, mixed
 direct/explicit B8x8, residual direct-sub B, unproved partitioned implicit B
-variants, broader 12/14-bit, GBR/RGB, field/MBAFF, FMO, threading/SIMD, and row
-border exchange.
+variants, chroma/B-slice slice-boundary modes, broader 12/14-bit, GBR/RGB,
+field/MBAFF, FMO, threading/SIMD, and row border exchange.

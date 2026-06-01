@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestSimpleFrameSliceDecodeBitDepthGate(t *testing.T) {
 	for _, tc := range []struct {
@@ -171,18 +174,21 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10BDeblockingAtSliceLevel(t
 }
 
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10SliceBoundaryDeblocking(t *testing.T) {
-	for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
-		t.Run(pictureTypeName(sliceType), func(t *testing.T) {
-			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 2, true, sliceType)
-			sh.DeblockingFilter = 2
-			if sliceType == PictureTypeP {
-				sh.RefCount = [2]uint32{1, 0}
-			}
+	for _, cabac := range []int32{0, 1} {
+		for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+			t.Run(fmt.Sprintf("cabac%d/%s", cabac, pictureTypeName(sliceType)), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 2, true, sliceType)
+				sh.PPS.CABAC = cabac
+				sh.DeblockingFilter = 2
+				if sliceType == PictureTypeP {
+					sh.RefCount = [2]uint32{1, 0}
+				}
 
-			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-				t.Fatalf("high slice-boundary deblock validation err = %v, want nil", err)
-			}
-		})
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high slice-boundary deblock validation err = %v, want nil", err)
+				}
+			})
+		}
 	}
 }
 
@@ -214,13 +220,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *tes
 				sh.SliceType = PictureTypeB
 				sh.SliceTypeNoS = PictureTypeB
 				sh.RefCount = [2]uint32{1, 1}
-				sh.DeblockingFilter = 2
-			},
-		},
-		{
-			name: "cabac-slice-boundary-mode",
-			run: func(sh *SliceHeader) {
-				sh.PPS.CABAC = 1
 				sh.DeblockingFilter = 2
 			},
 		},
@@ -704,8 +703,8 @@ func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBeforeEntropy(t *testing.T) 
 	}
 }
 
-func TestDecodeFrameSliceDataHighRejectsUnsupportedCABACBeforeStartup(t *testing.T) {
-	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 1, true, PictureTypeI)
+func TestDecodeFrameSliceDataHighRejectsUnsupportedChromaSliceBoundaryBeforeStartup(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 2, true, PictureTypeI)
 	sh.PPS.CABAC = 1
 	sh.DeblockingFilter = 2
 	gb := newBitReader([]byte{0xe0})

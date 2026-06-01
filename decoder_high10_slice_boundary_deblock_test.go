@@ -174,6 +174,17 @@ func high10SliceBoundaryDeblockFixtures() []high10SliceBoundaryDeblockFixture {
 				"2395db9c9fd32c34e3705708c566177e",
 			},
 		},
+		{
+			name:         "cabac",
+			file:         "high10_slice_boundary_deblock_cabac.h264",
+			cabac:        1,
+			bitstreamMD5: "713139081e4cb3b74959cb4f5ab8ebae",
+			rawVideoMD5:  "37eab6fac969fa7b9e57291bc2cf998e",
+			frameMD5: []string{
+				"2cdab993b06016b46acbaf9d161f7cc8",
+				"9c3bb013624f83c5d2f61ee96f510107",
+			},
+		},
 	}
 }
 

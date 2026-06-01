@@ -391,9 +391,6 @@ func validateHighFrameSliceDeblockingScope(sh *SliceHeader) error {
 		if sh.SliceTypeNoS == PictureTypeB {
 			return ErrUnsupported
 		}
-		if sh.PPS != nil && sh.PPS.CABAC != 0 {
-			return ErrUnsupported
-		}
 	}
 	return nil
 }
