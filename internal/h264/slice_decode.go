@@ -154,7 +154,7 @@ func validateSimpleFrameSliceDecodeInputs(m *macroblockTables, dst *h264PictureP
 	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
 		return ErrUnsupported
 	}
-	if sh.SPS.BitDepthLuma != 8 {
+	if !h264SimpleFrameSliceDecodeSupportsBitDepth(sh.SPS.BitDepthLuma) {
 		return ErrUnsupported
 	}
 	if sh.QScale > qpMaxNum {
@@ -170,6 +170,12 @@ func validateSimpleFrameSliceDecodeInputs(m *macroblockTables, dst *h264PictureP
 		return ErrInvalidData
 	}
 	return nil
+}
+
+func h264SimpleFrameSliceDecodeSupportsBitDepth(bitDepth int32) bool {
+	// High-depth entropy paths exist, but this simple slice loop still feeds
+	// 8-bit reconstruction/loop-filter state.
+	return bitDepth == 8
 }
 
 func h264FrameMBReconstructInputFromCAVLC(sh *SliceHeader, cur sliceMacroblockCursor, mb cavlcFrameMacroblockResult, work *frameMacroblockDecodeWork, in h264FrameSliceDecodeInput) h264FrameMBReconstructInput {

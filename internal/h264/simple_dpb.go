@@ -42,8 +42,9 @@ type simpleRefEntry struct {
 }
 
 type simpleFrameRefContext struct {
-	Refs    [2][]*h264PicturePlanes
-	Entries [2][]simpleRefEntry
+	Refs     [2][]*h264PicturePlanes
+	RefsHigh [2][]*h264PicturePlanesHigh
+	Entries  [2][]simpleRefEntry
 }
 
 type simplePOCContext struct {
@@ -302,9 +303,18 @@ func (d *simpleFrameDPB) buildRefLists(sh *SliceHeader, frame *DecodedFrame) ([2
 	return ctx.Refs, nil
 }
 
+func (d *simpleFrameDPB) buildRefListsHigh(sh *SliceHeader, frame *DecodedFrame) ([2][]*h264PicturePlanesHigh, error) {
+	ctx, err := d.buildRefContext(sh, frame)
+	if err != nil {
+		return [2][]*h264PicturePlanesHigh{}, err
+	}
+	return ctx.RefsHigh, nil
+}
+
 func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (simpleFrameRefContext, error) {
 	var ctx simpleFrameRefContext
 	var refs [2][]*h264PicturePlanes
+	var refsHigh [2][]*h264PicturePlanesHigh
 	if d == nil || sh == nil || sh.SPS == nil {
 		return ctx, ErrInvalidData
 	}
@@ -314,6 +324,7 @@ func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (
 	if sh.PictureStructure != PictureFrame {
 		return ctx, ErrUnsupported
 	}
+	highDepth := frame != nil && frame.BitDepthLuma > 8
 
 	switch sh.SliceTypeNoS {
 	case PictureTypeP:
@@ -322,7 +333,11 @@ func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (
 			return ctx, err
 		}
 		ctx.Entries[0] = cloneSimpleRefEntries(list)
-		refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
+		if highDepth {
+			refsHigh[0] = simpleFrameEntryPlanesRefsHigh(ctx.Entries[0])
+		} else {
+			refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
+		}
 	case PictureTypeB:
 		if frame == nil {
 			return ctx, ErrInvalidData
@@ -338,12 +353,18 @@ func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (
 		}
 		ctx.Entries[0] = cloneSimpleRefEntries(lists[0])
 		ctx.Entries[1] = cloneSimpleRefEntries(lists[1])
-		refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
-		refs[1] = simpleFrameEntryPlanesRefs(ctx.Entries[1])
+		if highDepth {
+			refsHigh[0] = simpleFrameEntryPlanesRefsHigh(ctx.Entries[0])
+			refsHigh[1] = simpleFrameEntryPlanesRefsHigh(ctx.Entries[1])
+		} else {
+			refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
+			refs[1] = simpleFrameEntryPlanesRefs(ctx.Entries[1])
+		}
 	default:
 		return ctx, ErrUnsupported
 	}
 	ctx.Refs = refs
+	ctx.RefsHigh = refsHigh
 	return ctx, nil
 }
 
@@ -392,6 +413,16 @@ func simpleFrameEntryPlanesRefs(list []simpleRefEntry) []*h264PicturePlanes {
 	refs := make([]*h264PicturePlanes, len(list))
 	for i, entry := range list {
 		planes[i] = entry.frame.picturePlanes()
+		refs[i] = &planes[i]
+	}
+	return refs
+}
+
+func simpleFrameEntryPlanesRefsHigh(list []simpleRefEntry) []*h264PicturePlanesHigh {
+	planes := make([]h264PicturePlanesHigh, len(list))
+	refs := make([]*h264PicturePlanesHigh, len(list))
+	for i, entry := range list {
+		planes[i] = entry.frame.picturePlanesHigh()
 		refs[i] = &planes[i]
 	}
 	return refs

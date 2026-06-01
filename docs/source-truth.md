@@ -70,6 +70,37 @@ chroma, weighting, and edge-emulation templates and compares 8-bit plus
 10/12-bit high-bit-depth `hl_motion`/weighted fixtures over 4:2:0, 4:2:2, and
 4:4:4 macroblock partitions.
 
+The high-bit-depth frame-storage boundary follows pinned FFmpeg
+`libavcodec/h264_slice.c` source: `h264_slice_header_init` accepts bit depths
+8, 9, 10, 12, and 14, sets `bits_per_raw_sample`, and sets `pixel_shift` for
+depths greater than 8; `get_pixel_format` selects the software YUV/GBR
+`AVPixelFormat`; `alloc_picture` and `h264_frame_start` allocate the `AVFrame`
+and derive byte offsets from `pixel_shift` and frame linesizes. Locally,
+`internal/h264/simple_decode.go` keeps one `DecodedFrame` type with byte planes
+for 8-bit frames and uint16 `Y16/Cb16/Cr16` planes for high frames. This is a
+storage safe point only: `internal/h264/simple_dpb.go` can expose high ref-list
+views over those uint16 planes, but `decodeSimpleNALUnitsWithState` still
+returns `ErrUnsupported` for high-bit-depth frames before slice reconstruction
+reaches public decode output.
+
+The public high-depth raw output helper surface follows FFmpeg rawvideo byte
+layout without claiming high-bit-depth public decode support. `decoder.go`
+`RawPixelFormat`, `RawYUVSize`, `BytesPerSample`, `AppendRawYUV16`, and
+`AppendRawYUVBytesLE` preserve sample values; `AppendRawYUV` remains 8-bit-only.
+`AppendRawYUVBytesLE` is shaped for FFmpeg `libavcodec/rawenc.c` `raw_encode`,
+which sizes/copies frames through `av_image_get_buffer_size` and
+`av_image_copy_to_buffer`, and for `libavutil/pixfmt.h`/`pixdesc.c` planar
+little-endian high-depth pixel formats. Samples are written unshifted into
+little-endian uint16 slots and rejected if they exceed the declared bit depth.
+
+| Local chroma/depth | FFmpeg source selection | Rawvideo oracle `pix_fmt` |
+| --- | --- | --- |
+| `chroma_format_idc == 0`, 9/10/12/14-bit | Local luma-only oracle surface; FFmpeg H.264 software selection falls through to the non-4:2:2/non-4:4:4 branch in `get_pixel_format`. | `gray9le`, `gray10le`, `gray12le`, `gray14le` |
+| `chroma_format_idc == 1`, 9/10/12/14-bit | `AV_PIX_FMT_YUV420P9/10/12/14` | `yuv420p9le`, `yuv420p10le`, `yuv420p12le`, `yuv420p14le` |
+| `chroma_format_idc == 2`, 9/10/12/14-bit | `AV_PIX_FMT_YUV422P9/10/12/14` | `yuv422p9le`, `yuv422p10le`, `yuv422p12le`, `yuv422p14le` |
+| `chroma_format_idc == 3`, YCbCr, 9/10/12/14-bit | `AV_PIX_FMT_YUV444P9/10/12/14` | `yuv444p9le`, `yuv444p10le`, `yuv444p12le`, `yuv444p14le` |
+| `chroma_format_idc == 3`, RGB colorspace | `AV_PIX_FMT_GBRP9/10/12/14` | Unsupported by the current Y/Cb/Cr helper surface. |
+
 The `ffprobe` header oracle now compares public `StreamInfo` SPS VUI sample
 aspect ratio and timing rate for the black16 stream in addition to profile,
 level, dimensions, and pixel format.
@@ -261,6 +292,8 @@ Included:
 - SPS VUI public metadata for SAR, video range/format, colorimetry, chroma location, and timing
 - Picture-timing-derived `repeat_pict`, interlaced, top-field-first, SMPTE 12M timecode, and key-frame public frame metadata for the simple frame-picture path
 - Decoded frame SEI side data for the translated subset, including registered ITU-T T.35 ATSC AFD/A53 captions, registered VNOVA LCEVC bytes, stereo3D, display matrix, mastering-display validity, content light, ambient viewing environment, and H.274 film grain characteristics
+- Internal uint16 frame storage for high-bit-depth frames and public raw helper
+  methods for value-preserving sample output when a high frame is available
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:
@@ -270,3 +303,5 @@ Excluded unless directly required by decoder parity:
 - FFmpeg muxer/demuxer/filter frontends
 - Hardware acceleration backends
 - Non-H.264 codecs
+- Actual public high-bit-depth H.264 bitstream decode/output remains explicitly
+  unsupported until high slice integration and FFmpeg rawvideo MD5 fixtures land

@@ -330,6 +330,9 @@ type Frame struct {
 	Y                              []byte
 	Cb                             []byte
 	Cr                             []byte
+	Y16                            []uint16
+	Cb16                           []uint16
+	Cr16                           []uint16
 	SideData                       FrameSideData
 }
 
@@ -994,6 +997,140 @@ func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	if f.BitDepthLuma != 8 || f.BitDepthChroma != 8 {
 		return dst, ErrUnsupported
 	}
+	return f.appendRawYUVBytes8(dst)
+}
+
+func (f *Frame) BytesPerSample() (int, error) {
+	depth, err := f.rawBitDepth()
+	if err != nil {
+		return 0, err
+	}
+	if depth == 8 {
+		return 1, nil
+	}
+	return 2, nil
+}
+
+func (f *Frame) RawPixelFormat() (string, error) {
+	depth, err := f.rawBitDepth()
+	if err != nil {
+		return "", err
+	}
+	base := ""
+	switch f.ChromaFormatIDC {
+	case 0:
+		base = "gray"
+	case 1:
+		base = "yuv420p"
+	case 2:
+		base = "yuv422p"
+	case 3:
+		base = "yuv444p"
+	default:
+		return "", ErrInvalidData
+	}
+	if depth == 8 {
+		return base, nil
+	}
+	return base + rawBitDepthSuffix(depth), nil
+}
+
+func (f *Frame) RawYUVSize() (int, error) {
+	samples, err := f.rawYUVSampleCount()
+	if err != nil {
+		return 0, err
+	}
+	bytesPerSample, err := f.BytesPerSample()
+	if err != nil {
+		return 0, err
+	}
+	return samples * bytesPerSample, nil
+}
+
+func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
+	depth, err := f.rawBitDepth()
+	if err != nil {
+		return dst, err
+	}
+	if depth == 8 {
+		return dst, ErrUnsupported
+	}
+	chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, err := f.rawYUV16Geometry()
+	if err != nil {
+		return dst, err
+	}
+	maxSample := maxRawSample(depth)
+	for y := 0; y < f.Height; y++ {
+		row := (f.CropTop+y)*f.YStride + f.CropLeft
+		dst, err = appendRawUint16Samples(dst, f.Y16[row:row+f.Width], maxSample)
+		if err != nil {
+			return dst, err
+		}
+	}
+	if chromaWidth == 0 || chromaHeight == 0 {
+		return dst, nil
+	}
+	for y := 0; y < chromaHeight; y++ {
+		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
+		dst, err = appendRawUint16Samples(dst, f.Cb16[row:row+chromaWidth], maxSample)
+		if err != nil {
+			return dst, err
+		}
+	}
+	for y := 0; y < chromaHeight; y++ {
+		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
+		dst, err = appendRawUint16Samples(dst, f.Cr16[row:row+chromaWidth], maxSample)
+		if err != nil {
+			return dst, err
+		}
+	}
+	return dst, nil
+}
+
+func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
+	depth, err := f.rawBitDepth()
+	if err != nil {
+		return dst, err
+	}
+	if depth == 8 {
+		return f.appendRawYUVBytes8(dst)
+	}
+	chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, err := f.rawYUV16Geometry()
+	if err != nil {
+		return dst, err
+	}
+	maxSample := maxRawSample(depth)
+	for y := 0; y < f.Height; y++ {
+		row := (f.CropTop+y)*f.YStride + f.CropLeft
+		dst, err = appendRawUint16LE(dst, f.Y16[row:row+f.Width], maxSample)
+		if err != nil {
+			return dst, err
+		}
+	}
+	if chromaWidth == 0 || chromaHeight == 0 {
+		return dst, nil
+	}
+	for y := 0; y < chromaHeight; y++ {
+		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
+		dst, err = appendRawUint16LE(dst, f.Cb16[row:row+chromaWidth], maxSample)
+		if err != nil {
+			return dst, err
+		}
+	}
+	for y := 0; y < chromaHeight; y++ {
+		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
+		dst, err = appendRawUint16LE(dst, f.Cr16[row:row+chromaWidth], maxSample)
+		if err != nil {
+			return dst, err
+		}
+	}
+	return dst, nil
+}
+
+func (f *Frame) appendRawYUVBytes8(dst []byte) ([]byte, error) {
+	if f == nil || f.Width <= 0 || f.Height <= 0 {
+		return dst, ErrInvalidData
+	}
 	if f.CropLeft < 0 || f.CropTop < 0 || f.YStride < f.Width+f.CropLeft ||
 		len(f.Y) < (f.CropTop+f.Height-1)*f.YStride+f.CropLeft+f.Width {
 		return dst, ErrInvalidData
@@ -1026,6 +1163,112 @@ func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	for y := 0; y < chromaHeight; y++ {
 		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
 		dst = append(dst, f.Cr[row:row+chromaWidth]...)
+	}
+	return dst, nil
+}
+
+func (f *Frame) rawBitDepth() (int, error) {
+	if f == nil {
+		return 0, ErrInvalidData
+	}
+	switch f.ChromaFormatIDC {
+	case 0, 1, 2, 3:
+	default:
+		return 0, ErrInvalidData
+	}
+	switch f.BitDepthLuma {
+	case 8, 9, 10, 12, 14:
+	default:
+		if f.BitDepthLuma <= 0 {
+			return 0, ErrInvalidData
+		}
+		return 0, ErrUnsupported
+	}
+	if f.ChromaFormatIDC != 0 && f.BitDepthChroma != f.BitDepthLuma {
+		if f.BitDepthChroma <= 0 {
+			return 0, ErrInvalidData
+		}
+		return 0, ErrUnsupported
+	}
+	return f.BitDepthLuma, nil
+}
+
+func rawBitDepthSuffix(depth int) string {
+	switch depth {
+	case 9:
+		return "9le"
+	case 10:
+		return "10le"
+	case 12:
+		return "12le"
+	case 14:
+		return "14le"
+	default:
+		return ""
+	}
+}
+
+func (f *Frame) rawYUVSampleCount() (int, error) {
+	if f == nil || f.Width <= 0 || f.Height <= 0 {
+		return 0, ErrInvalidData
+	}
+	if _, err := f.rawBitDepth(); err != nil {
+		return 0, err
+	}
+	chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, f.ChromaFormatIDC)
+	if err != nil {
+		return 0, err
+	}
+	return f.Width*f.Height + 2*chromaWidth*chromaHeight, nil
+}
+
+func (f *Frame) rawYUV16Geometry() (int, int, int, int, error) {
+	if f == nil || f.Width <= 0 || f.Height <= 0 {
+		return 0, 0, 0, 0, ErrInvalidData
+	}
+	if f.CropLeft < 0 || f.CropTop < 0 || f.YStride < f.Width+f.CropLeft ||
+		len(f.Y16) < (f.CropTop+f.Height-1)*f.YStride+f.CropLeft+f.Width {
+		return 0, 0, 0, 0, ErrInvalidData
+	}
+	chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, f.ChromaFormatIDC)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if chromaWidth == 0 || chromaHeight == 0 {
+		return chromaWidth, chromaHeight, 0, 0, nil
+	}
+	chromaCropLeft, chromaCropTop, err := frameChromaCrop(f.CropLeft, f.CropTop, f.ChromaFormatIDC)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if f.CStride < chromaWidth+chromaCropLeft ||
+		len(f.Cb16) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth ||
+		len(f.Cr16) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth {
+		return 0, 0, 0, 0, ErrInvalidData
+	}
+	return chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, nil
+}
+
+func maxRawSample(depth int) uint16 {
+	return uint16((1 << uint(depth)) - 1)
+}
+
+func appendRawUint16Samples(dst []uint16, samples []uint16, maxSample uint16) ([]uint16, error) {
+	for _, sample := range samples {
+		if sample > maxSample {
+			return dst, ErrInvalidData
+		}
+		dst = append(dst, sample)
+	}
+	return dst, nil
+}
+
+func appendRawUint16LE(dst []byte, samples []uint16, maxSample uint16) ([]byte, error) {
+	for _, sample := range samples {
+		if sample > maxSample {
+			return dst, ErrInvalidData
+		}
+		dst = append(dst, byte(sample), byte(sample>>8))
 	}
 	return dst, nil
 }
@@ -1065,6 +1308,9 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 		Y:                              src.Y,
 		Cb:                             src.Cb,
 		Cr:                             src.Cr,
+		Y16:                            src.Y16,
+		Cb16:                           src.Cb16,
+		Cr16:                           src.Cr16,
 		SideData:                       frameSideDataFromH264(src.SideData, src.TimeScale, src.NumUnitsInTick),
 	}
 }

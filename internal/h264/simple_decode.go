@@ -10,6 +10,7 @@ package h264
 
 type DecodedFrame struct {
 	Y, Cb, Cr                      []uint8
+	Y16, Cb16, Cr16                []uint16
 	LumaStride                     int
 	ChromaStride                   int
 	Width                          int
@@ -283,6 +284,9 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				if err != nil {
 					return nil, err
 				}
+				if frame.BitDepthLuma != 8 || frame.BitDepthChroma != 8 {
+					return nil, ErrUnsupported
+				}
 				frame.SideData = decodedFrameSideDataFromSEI(sei)
 				mergePacketSideDataIntoDecodedFrame(&frame.SideData, packetSideData)
 				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
@@ -516,8 +520,16 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 	if sps == nil {
 		return nil, nil, ErrInvalidData
 	}
-	if sps.BitDepthLuma != 8 || sps.BitDepthChroma != 8 || sps.FrameMBSOnlyFlag == 0 || sps.MBAFF != 0 {
+	if sps.FrameMBSOnlyFlag == 0 || sps.MBAFF != 0 {
 		return nil, nil, ErrUnsupported
+	}
+	if sps.BitDepthLuma != sps.BitDepthChroma {
+		return nil, nil, ErrUnsupported
+	}
+	if sps.BitDepthLuma != 8 {
+		if err := checkH264DSPHighBitDepth(int(sps.BitDepthLuma)); err != nil {
+			return nil, nil, err
+		}
 	}
 	if sps.ChromaFormatIDC > 3 {
 		return nil, nil, ErrUnsupported
@@ -555,12 +567,22 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 		TimeScale:                      sps.TimeScale,
 		FixedFrameRateFlag:             sps.FixedFrameRateFlag,
 	}
-	frame.Y = make([]uint8, frame.LumaStride*mbHeight*16)
+	highBitDepth := sps.BitDepthLuma != 8
+	if highBitDepth {
+		frame.Y16 = make([]uint16, frame.LumaStride*mbHeight*16)
+	} else {
+		frame.Y = make([]uint8, frame.LumaStride*mbHeight*16)
+	}
 	if chromaFormatIDC != 0 {
 		chromaWidth, chromaHeight := h264ChromaFrameSize(mbWidth, mbHeight, chromaFormatIDC)
 		frame.ChromaStride = chromaWidth
-		frame.Cb = make([]uint8, frame.ChromaStride*chromaHeight)
-		frame.Cr = make([]uint8, frame.ChromaStride*chromaHeight)
+		if highBitDepth {
+			frame.Cb16 = make([]uint16, frame.ChromaStride*chromaHeight)
+			frame.Cr16 = make([]uint16, frame.ChromaStride*chromaHeight)
+		} else {
+			frame.Cb = make([]uint8, frame.ChromaStride*chromaHeight)
+			frame.Cr = make([]uint8, frame.ChromaStride*chromaHeight)
+		}
 	}
 
 	tables, err := newMacroblockTables(mbWidth, mbHeight, chromaFormatIDC)
@@ -568,9 +590,16 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 		return nil, nil, err
 	}
 	frame.tables = tables
-	pic := frame.picturePlanes()
-	if err := pic.validate(); err != nil {
-		return nil, nil, err
+	if highBitDepth {
+		pic := frame.picturePlanesHigh()
+		if err := pic.validate(); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		pic := frame.picturePlanes()
+		if err := pic.validate(); err != nil {
+			return nil, nil, err
+		}
 	}
 	return frame, tables, nil
 }
@@ -583,6 +612,22 @@ func (f *DecodedFrame) picturePlanes() h264PicturePlanes {
 		Y:               f.Y,
 		Cb:              f.Cb,
 		Cr:              f.Cr,
+		LumaStride:      f.LumaStride,
+		ChromaStride:    f.ChromaStride,
+		MBWidth:         f.MBWidth,
+		MBHeight:        f.MBHeight,
+		ChromaFormatIDC: f.ChromaFormatIDC,
+	}
+}
+
+func (f *DecodedFrame) picturePlanesHigh() h264PicturePlanesHigh {
+	if f == nil {
+		return h264PicturePlanesHigh{}
+	}
+	return h264PicturePlanesHigh{
+		Y:               f.Y16,
+		Cb:              f.Cb16,
+		Cr:              f.Cr16,
 		LumaStride:      f.LumaStride,
 		ChromaStride:    f.ChromaStride,
 		MBWidth:         f.MBWidth,
@@ -625,6 +670,29 @@ func newH264MotionCompScratchForFrame(f *DecodedFrame) *h264MotionCompScratch {
 		Cb:   make([]uint8, len(f.Cb)),
 		Cr:   make([]uint8, len(f.Cr)),
 		Edge: make([]uint8, edge),
+	}
+}
+
+func newH264MotionCompScratchHighForFrame(f *DecodedFrame) *h264MotionCompScratchHigh {
+	if f == nil {
+		return nil
+	}
+	edge := h264EdgeScratchSize(f.LumaStride, 16+5, 16+5)
+	if f.ChromaFormatIDC != 0 {
+		chromaBlockH := 8*f.ChromaFormatIDC + 1
+		chromaEdge := h264EdgeScratchSize(f.ChromaStride, 9, chromaBlockH)
+		if f.ChromaFormatIDC == 3 {
+			chromaEdge = h264EdgeScratchSize(f.ChromaStride, 16+5, 16+5)
+		}
+		if chromaEdge > edge {
+			edge = chromaEdge
+		}
+	}
+	return &h264MotionCompScratchHigh{
+		Y:    make([]uint16, 16*f.LumaStride),
+		Cb:   make([]uint16, len(f.Cb16)),
+		Cr:   make([]uint16, len(f.Cr16)),
+		Edge: make([]uint16, edge),
 	}
 }
 
