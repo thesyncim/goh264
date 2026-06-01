@@ -125,7 +125,7 @@ dd58509e2dab66e7e826a6b4f136736c041bb1f72a9f7ba8b1c1598ceaa9cf76f47bc5fcfc493426
 func TestDecodeAnnexBTestsrcBFrames(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			data := decodeHexFixture(t, tt.hex)
+			data := tt.decode(t)
 			frames, err := NewDecoder().DecodeAnnexBFrames(data)
 			if err != nil {
 				t.Fatal(err)
@@ -138,7 +138,7 @@ func TestDecodeAnnexBTestsrcBFrames(t *testing.T) {
 func TestDecodeAVCTestsrcBFrames(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			data := decodeHexFixture(t, tt.hex)
+			data := tt.decode(t)
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
 				if err != nil {
@@ -153,7 +153,7 @@ func TestDecodeAVCTestsrcBFrames(t *testing.T) {
 func TestDecodeConfiguredAVCTestsrcBFrames(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			data := decodeHexFixture(t, tt.hex)
+			data := tt.decode(t)
 			config, packet := annexBToAVCConfigAndPacket(t, data, 4)
 			frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
 			if err != nil {
@@ -167,7 +167,7 @@ func TestDecodeConfiguredAVCTestsrcBFrames(t *testing.T) {
 func TestDecodeConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			data := decodeHexFixture(t, tt.hex)
+			data := tt.decode(t)
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
 				if len(samples) != len(tt.want) {
@@ -209,7 +209,7 @@ func TestDecodeConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 func TestDecodeConfiguredAVCTestsrcBFramesFlushRetainedReferenceSample(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			data := decodeHexFixture(t, tt.hex)
+			data := tt.decode(t)
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
 				if len(samples) < 2 {
@@ -240,7 +240,11 @@ func TestDecodeConfiguredAVCTestsrcBFramesFlushRetainedReferenceSample(t *testin
 					t.Fatalf("nalLengthSize=%d flush: %v", nalLengthSize, err)
 				}
 				frames = append(frames, out...)
-				assertFrameMD5Strings(t, frames, []string{tt.want[0], tt.want[len(tt.want)-1]})
+				want := []string{tt.want[0], tt.want[len(tt.want)-1]}
+				if tt.retainedFlushWant != nil {
+					want = tt.retainedFlushWant
+				}
+				assertFrameMD5Strings(t, frames, want)
 			}
 		})
 	}
@@ -255,7 +259,7 @@ func TestFFmpegFrameMD5OracleTestsrcBFrames(t *testing.T) {
 	}
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			path := writeTempH264(t, decodeHexFixture(t, tt.hex))
+			path := writeTempH264(t, tt.decode(t))
 			cmd := exec.Command("ffmpeg",
 				"-v", "error",
 				"-i", path,
@@ -279,10 +283,24 @@ func TestFFmpegFrameMD5OracleTestsrcBFrames(t *testing.T) {
 }
 
 type bFrameFixtureCase struct {
-	name      string
-	hex       string
-	frameSize int
-	want      []string
+	name              string
+	hex               string
+	file              string
+	frameSize         int
+	want              []string
+	retainedFlushWant []string
+}
+
+func (tt bFrameFixtureCase) decode(t *testing.T) []byte {
+	t.Helper()
+	if tt.file != "" {
+		data, err := os.ReadFile(tt.file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	return decodeHexFixture(t, tt.hex)
 }
 
 func bFrameFixtureCases() []bFrameFixtureCase {
@@ -367,6 +385,36 @@ func bFrameFixtureCases() []bFrameFixtureCase {
 				"4a3834dbc6c0ea54fa46d9ec8fd4044e",
 				"eac9140384dc323ba6e4ef4e7a20c7f6",
 				"db30cd22f3204ef73b6b8e9ed3fd4e07",
+			},
+		},
+		{
+			name:      "64/cabac-b8x8-spatial-direct-sub",
+			file:      "testdata/h264/cabac_b8x8_spatial_direct_sub.h264",
+			frameSize: 6144,
+			want: []string{
+				"22bb7fe7a4aca7a1787c5718a9d44db8",
+				"7540cc3e8724970545310329e1fbdee2",
+				"5e211d19fa1a31c72a8745437edee153",
+				"ce460e840a2648b112ca2a2f7dd53a51",
+			},
+			retainedFlushWant: []string{
+				"22bb7fe7a4aca7a1787c5718a9d44db8",
+				"5e211d19fa1a31c72a8745437edee153",
+			},
+		},
+		{
+			name:      "64/cabac-b8x8-temporal-direct-sub",
+			file:      "testdata/h264/cabac_b8x8_temporal_direct_sub.h264",
+			frameSize: 6144,
+			want: []string{
+				"22bb7fe7a4aca7a1787c5718a9d44db8",
+				"8a589e2d5be830ebee0fadca20018973",
+				"5e211d19fa1a31c72a8745437edee153",
+				"ce460e840a2648b112ca2a2f7dd53a51",
+			},
+			retainedFlushWant: []string{
+				"22bb7fe7a4aca7a1787c5718a9d44db8",
+				"5e211d19fa1a31c72a8745437edee153",
 			},
 		},
 		{

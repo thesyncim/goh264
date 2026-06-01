@@ -275,6 +275,65 @@ func TestDecodeCABACFrameP8x8MacroblockDecodesSubPartitions(t *testing.T) {
 	wantIndexes(t, src, []int{14, 15, 16, 21, 21, 21, 21, 40, 47, 40, 47, 40, 47, 40, 47, 73, 74, 75, 76, 77})
 }
 
+func TestDecodeCABACFrameB8x8DirectSubMacroblocks(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType8x8|MBTypeP0L0|MBTypeP1L0)
+	bxy := int(col.tables.MB2BXY[0])
+	for i8, mv := range [4][2]int16{{4, 0}, {0, 4}, {2, 2}, {6, 2}} {
+		col.tables.RefIndex[0][i8] = 0
+		x8 := i8 & 1
+		y8 := i8 >> 1
+		col.tables.MotionVal[0][bxy+x8*3+y8*3*col.tables.BStride] = mv
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 1, Direct8x8InferenceFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	src := &scriptedCABACSource{bits: []int{
+		1, 1, 1, 1, 1, 1,
+		0, 0, 0, 0,
+		0, 0, 0, 0,
+		0,
+	}}
+
+	got, err := m.decodeCABACFrameMacroblock(src, cabacFrameMacroblockInput{
+		MBXY:          0,
+		SliceNum:      10,
+		SliceType:     PictureTypeB,
+		SliceTypeNoS:  PictureTypeB,
+		QScale:        18,
+		RefCount:      [2]uint32{1, 1},
+		DCT8x8Allowed: true,
+		Direct: h264DirectMotionContext{
+			RefEntries: [2][]simpleRefEntry{
+				{{frame: idr}},
+				{{frame: col}},
+			},
+			CurPOC:             2,
+			Direct8x8Inference: true,
+		},
+		PPS: pps,
+		SPS: sps,
+	})
+	if err != nil {
+		t.Fatalf("decode cabac b8x8 direct-sub failed: %v", err)
+	}
+	wantType := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	if got.MBType != wantType || m.MacroblockTyp[0] != wantType || got.CBP != 0 || got.QScale != 18 || got.LastQScaleDiff != 0 {
+		t.Fatalf("type/cbp/q/diff = %#x/%#x/%d/%d/%d", got.MBType, m.MacroblockTyp[0], got.CBP, got.QScale, got.LastQScaleDiff)
+	}
+	wantSub := MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2
+	for i8 := 0; i8 < 4; i8++ {
+		if got.Inter.SubMBType[i8] != wantSub {
+			t.Fatalf("sub[%d] = %#x, want %#x", i8, got.Inter.SubMBType[i8], wantSub)
+		}
+	}
+	if m.MotionVal[0][bxy] != ([2]int16{2, 0}) || m.MotionVal[1][bxy] != ([2]int16{-2, 0}) {
+		t.Fatalf("direct-sub written mv0/mv1 = %v/%v", m.MotionVal[0][bxy], m.MotionVal[1][bxy])
+	}
+	if m.MVDTable[0][0] != ([2]uint8{}) || m.MVDTable[1][0] != ([2]uint8{}) {
+		t.Fatalf("direct-sub mvd table = %v/%v", m.MVDTable[0][0], m.MVDTable[1][0])
+	}
+}
+
 func TestDecodeCABACFrameSlicePskipWritesCABACSkipState(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {

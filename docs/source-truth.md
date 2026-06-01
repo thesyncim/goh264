@@ -116,6 +116,13 @@ B-skip write-back for both CAVLC and CABAC. The implicit-weight B fixtures use
 the same 16x16 source and constraints with `duration=4:bframes=2`, which forces
 non-symmetric B POC distances and proves FFmpeg's
 `implicit_weight_table(field=-1)` path while still avoiding B-direct/skip.
+The CABAC B 8x8 direct-sub fixtures are committed as 64x64 Annex B bitstreams
+under `testdata/h264/`; they cover both spatial and temporal direct prediction
+for sub-macroblocks across Annex B, AVC/NALFF, configured AVC, sample-by-sample
+flush behavior, and native FFmpeg frame-MD5 oracle checks. The corresponding
+CAVLC generated candidates remain excluded because their first mismatch
+currently localizes to a B 8x8 residual subpartition lane, so CAVLC sub-direct
+stays pending rather than silently widening support.
 
 Reference-picture unit coverage now includes FFmpeg's progressive frame-picture
 long-term P-list behavior: default long refs after short refs, ref-list

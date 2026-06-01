@@ -136,6 +136,9 @@ func (c *cavlcResidualContext) decodeCAVLCInterPMacroblockAfterType(gb *bitReade
 		return mb, err
 	}
 	mb.CBP = cbp
+	if mb.PartitionCount == 4 {
+		dct8x8Allowed = subMBTypesAllowDCT8x8(dct8x8Allowed, &mb.SubMBType, true)
+	}
 	if dct8x8Allowed && (mb.CBP&15) != 0 {
 		flag, err := gb.readBit()
 		if err != nil {
@@ -191,11 +194,11 @@ func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterType(gb *bitReade
 				return mb, ErrInvalidData
 			}
 			info := h264BSubMBTypeInfo[subType]
-			mb.SubPartitionCount[i] = info.PartitionCount
-			mb.SubMBType[i] = info.Type
-			if isDirect(mb.SubMBType[i]) {
+			if isDirect(info.Type) {
 				return mb, ErrUnsupported
 			}
+			mb.SubPartitionCount[i] = info.PartitionCount
+			mb.SubMBType[i] = info.Type
 		}
 
 		for list := 0; list < 2; list++ {
@@ -204,6 +207,9 @@ func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterType(gb *bitReade
 				refTotal = 1
 			}
 			for i := 0; i < 4; i++ {
+				if isDirect(mb.SubMBType[i]) {
+					continue
+				}
 				if isDir(mb.SubMBType[i], 0, list) {
 					ref, err := readCAVLCRefIndex(gb, refTotal)
 					if err != nil {
@@ -216,6 +222,9 @@ func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterType(gb *bitReade
 
 		for list := 0; list < 2; list++ {
 			for i := 0; i < 4; i++ {
+				if isDirect(mb.SubMBType[i]) {
+					continue
+				}
 				if !isDir(mb.SubMBType[i], 0, list) {
 					continue
 				}
@@ -272,6 +281,9 @@ func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterType(gb *bitReade
 		return mb, err
 	}
 	mb.CBP = cbp
+	if mb.PartitionCount == 4 {
+		dct8x8Allowed = subMBTypesAllowDCT8x8(dct8x8Allowed, &mb.SubMBType, sps.Direct8x8InferenceFlag != 0)
+	}
 	if dct8x8Allowed && (mb.CBP&15) != 0 {
 		flag, err := gb.readBit()
 		if err != nil {
@@ -326,6 +338,29 @@ func readCAVLCMVD(gb *bitReader, dst *[2]int32) error {
 	dst[0] = mx
 	dst[1] = my
 	return nil
+}
+
+func hasDirectSubMBType(sub *[4]uint32) bool {
+	if sub == nil {
+		return false
+	}
+	return isDirect(sub[0] | sub[1] | sub[2] | sub[3])
+}
+
+func subMBTypesAllowDCT8x8(allowed bool, sub *[4]uint32, direct8x8Inference bool) bool {
+	if !allowed || sub == nil {
+		return false
+	}
+	mask := MBType16x8 | MBType8x16 | MBType8x8
+	if !direct8x8Inference {
+		mask |= MBTypeDirect2
+	}
+	for i := 0; i < 4; i++ {
+		if sub[i]&mask != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func isDir(mbType uint32, part int, list int) bool {

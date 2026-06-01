@@ -332,27 +332,22 @@ func fillCAVLCInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacro
 }
 
 func fillCAVLCSubInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacroblockSyntax, listCount int) error {
-	for list := 0; list < listCount; list++ {
-		for i := 0; i < 4; i++ {
-			if isDirect(mb.SubMBType[i]) {
-				cache.Ref[list][h264Scan8[4*i]] = cache.Ref[list][h264Scan8[4*i]+1]
-				continue
-			}
-			ref := h264ListNotUsed
-			if isDir(mb.SubMBType[i], 0, list) {
-				ref = int8(mb.Ref[list][i])
-			}
-			fillRefRectangle(&cache.Ref[list], int(h264Scan8[4*i]), 2, 2, 8, ref)
+	for i := 0; i < 4; i++ {
+		if isDirect(mb.SubMBType[i]) {
+			return ErrUnsupported
 		}
 	}
 
 	for list := 0; list < listCount; list++ {
 		for i := 0; i < 4; i++ {
-			if isDirect(mb.SubMBType[i]) {
-				continue
+			start := int(h264Scan8[4*i])
+			ref := h264ListNotUsed
+			if isDir(mb.SubMBType[i], 0, list) {
+				ref = int8(mb.Ref[list][i])
 			}
+			fillRefRectangle(&cache.Ref[list], start, 2, 2, 8, ref)
 			if !isDir(mb.SubMBType[i], 0, list) {
-				fillMotionRectangle(&cache.MV[list], int(h264Scan8[4*i]), 2, 2, 8, [2]int16{})
+				fillMotionRectangle(&cache.MV[list], start, 2, 2, 8, [2]int16{})
 				continue
 			}
 			blockWidth := 1

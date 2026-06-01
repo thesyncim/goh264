@@ -387,7 +387,7 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 		fillMVDRectangle(&motion.MVD[0], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
 		fillMVDRectangle(&motion.MVD[1], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
 	} else {
-		if err := decodeCABACInterMotionSyntax(src, &mb, motion, in.SliceTypeNoS, listCount, in.RefCount); err != nil {
+		if err := m.decodeCABACInterMotionSyntax(src, &mb, motion, in.MBXY, in.SliceTypeNoS, listCount, in.RefCount, in.Direct); err != nil {
 			return result, err
 		}
 	}
@@ -396,7 +396,11 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	if in.SPS.ChromaFormatIDC == 1 || in.SPS.ChromaFormatIDC == 2 {
 		mb.CBP |= decodeCABACMBCBPChroma(src, cacheResult.Residual.LeftCBP, cacheResult.Residual.TopCBP) << 4
 	}
-	if in.DCT8x8Allowed && (mb.CBP&15) != 0 {
+	dct8x8Allowed := in.DCT8x8Allowed
+	if mb.PartitionCount == 4 {
+		dct8x8Allowed = subMBTypesAllowDCT8x8(dct8x8Allowed, &mb.SubMBType, in.SPS.Direct8x8InferenceFlag != 0)
+	}
+	if dct8x8Allowed && (mb.CBP&15) != 0 {
 		if src.get(399+cabacNeighborTransformSize(cacheResult.Neighbors)) != 0 {
 			mb.MBType |= MBType8x8DCT
 			mb.TransformSize8x8DCT = true
@@ -459,7 +463,7 @@ func readCABACIntraPCMBytes(src cabacSyntaxSource, sps *SPS) ([]byte, error) {
 	return pcmSrc.intraPCMBytes(h264IntraPCMSampleCount[sps.ChromaFormatIDC])
 }
 
-func decodeCABACInterMotionSyntax(src cabacSyntaxSource, mb *cavlcInterMacroblockSyntax, motion *macroblockMotionCache, sliceTypeNoS int32, listCount int, refCount [2]uint32) error {
+func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, mb *cavlcInterMacroblockSyntax, motion *macroblockMotionCache, mbXY int, sliceTypeNoS int32, listCount int, refCount [2]uint32, direct h264DirectMotionContext) error {
 	if src == nil || mb == nil || motion == nil || listCount < 0 || listCount > 2 || isIntra(mb.MBType) {
 		return ErrInvalidData
 	}
@@ -476,9 +480,24 @@ func decodeCABACInterMotionSyntax(src cabacSyntaxSource, mb *cavlcInterMacrobloc
 		if err := decodeCABACSubMBTypes(src, mb, sliceTypeNoS); err != nil {
 			return err
 		}
+		hasDirectSub := sliceTypeNoS == PictureTypeB && hasDirectSubMBType(&mb.SubMBType)
+		if hasDirectSub {
+			if m == nil {
+				return ErrInvalidData
+			}
+			if err := m.predDirectMotionFrame(motion, mbXY, &mb.MBType, &mb.SubMBType, direct); err != nil {
+				return err
+			}
+			markDirectSubRefsUnavailable(motion)
+			fillDirectCacheFromSubMBTypes(&motion.Direct, &mb.SubMBType)
+		}
 		for list := 0; list < listCount; list++ {
 			for i := 0; i < 4; i++ {
 				ref := int32(-1)
+				if isDirect(mb.SubMBType[i]) {
+					mb.Ref[list][i] = ref
+					continue
+				}
 				if isDir(mb.SubMBType[i], 0, list) {
 					var err error
 					ref, err = decodeCABACRefForPartition(src, motion, sliceTypeNoS, list, 4*i, refCount[list])
@@ -487,12 +506,24 @@ func decodeCABACInterMotionSyntax(src cabacSyntaxSource, mb *cavlcInterMacrobloc
 					}
 				}
 				mb.Ref[list][i] = ref
-				fillRefRectangle(&motion.Ref[list], int(h264Scan8[4*i]), 2, 2, 8, int8(ref))
+				start := int(h264Scan8[4*i])
+				if hasDirectSub {
+					motion.Ref[list][start+1] = int8(ref)
+					motion.Ref[list][start+8] = int8(ref)
+					motion.Ref[list][start+9] = int8(ref)
+				} else {
+					fillRefRectangle(&motion.Ref[list], start, 2, 2, 8, int8(ref))
+				}
 			}
 		}
 		for list := 0; list < listCount; list++ {
 			for i := 0; i < 4; i++ {
 				start := int(h264Scan8[4*i])
+				motion.Ref[list][start] = motion.Ref[list][start+1]
+				if isDirect(mb.SubMBType[i]) {
+					fillMVDRectangle(&motion.MVD[list], start, 2, 2, 8, [2]uint8{})
+					continue
+				}
 				if !isDir(mb.SubMBType[i], 0, list) {
 					fillMVDRectangle(&motion.MVD[list], start, 2, 2, 8, [2]uint8{})
 					continue
@@ -621,13 +652,29 @@ func decodeCABACSubMBTypes(src cabacSyntaxSource, mb *cavlcInterMacroblockSyntax
 		} else {
 			return ErrInvalidData
 		}
-		if isDirect(info.Type) {
-			return ErrUnsupported
-		}
 		mb.SubPartitionCount[i] = info.PartitionCount
 		mb.SubMBType[i] = info.Type
 	}
 	return nil
+}
+
+func markDirectSubRefsUnavailable(motion *macroblockMotionCache) {
+	if motion == nil {
+		return
+	}
+	for list := 0; list < 2; list++ {
+		motion.Ref[list][h264Scan8[4]] = h264PartNotAvailable
+		motion.Ref[list][h264Scan8[12]] = h264PartNotAvailable
+	}
+}
+
+func fillDirectCacheFromSubMBTypes(cache *[h264MotionCacheSize]uint8, sub *[4]uint32) {
+	if cache == nil || sub == nil {
+		return
+	}
+	for i := 0; i < 4; i++ {
+		fillDirectRectangle(cache, int(h264Scan8[4*i]), 2, 2, 8, uint8(sub[i]>>1))
+	}
 }
 
 func decodeCABACRefForPartition(src cabacSyntaxSource, motion *macroblockMotionCache, sliceTypeNoS int32, list int, n int, refTotal uint32) (int32, error) {
