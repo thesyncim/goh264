@@ -66,6 +66,8 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - 16x16 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `fef9831ddd54882d715ceb50c382efde`, `4b6a7f1c59198ae9b8e31ef4de333e42`
 - 16x16 temporal-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `dca1bb7607ebcd45d700a7b7f9feb2f6`, `6248c3284f9d89ac6346701f8f226ba8`, `0e1be965e4fb7e790038cda9d21845cf`
 - 16x16 temporal-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `dca1bb7607ebcd45d700a7b7f9feb2f6`, `6248c3284f9d89ac6346701f8f226ba8`, `0e1be965e4fb7e790038cda9d21845cf`
+- 16x16 spatial-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `dca1bb7607ebcd45d700a7b7f9feb2f6`, `6248c3284f9d89ac6346701f8f226ba8`, `0e1be965e4fb7e790038cda9d21845cf`
+- 16x16 spatial-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `dca1bb7607ebcd45d700a7b7f9feb2f6`, `6248c3284f9d89ac6346701f8f226ba8`, `0e1be965e4fb7e790038cda9d21845cf`
 - 16x16 non-neutral implicit B-weight CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `4296e3dc95829cc27071a8685a428494`, `8747883f49707799806cf66a630e600e`, `0706cc9ae846c8aefe9597f9e83be042`, `143d2f0e79e82b9d5b6de6f48968c447`
 - 16x16 non-neutral implicit B-weight CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `4a3834dbc6c0ea54fa46d9ec8fd4044e`, `eac9140384dc323ba6e4ef4e7a20c7f6`, `db30cd22f3204ef73b6b8e9ed3fd4e07`
 - 32x32 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `2a9d9acd3e52356ad072de93fdbaca3d`, `96107676801850afd8aed8546397e3bf`, `3967b8bfe3a3a8cde4bc22334008eb1f`
@@ -106,11 +108,12 @@ and either `cabac=0` or `cabac=1`. They intentionally prove POC-backed B list0
 and list1 construction, explicit L0/L1 motion, display-order output, Annex B,
 AVC/NALFF, one-shot configured AVC paths, and qpel/chroma edge emulation when
 the reference stride is smaller than FFmpeg's edge block width, while avoiding
-B-direct/skip. The temporal-direct B fixtures use the same 16x16 source with
-`direct=temporal`, `partitions=none`, `subme=1`, and skip enabled, proving the
-progressive frame-picture `h264_direct.c` colocated-ref mapping and B-skip
-write-back for both CAVLC and CABAC. The implicit-weight B fixtures use the
-same 16x16 source and constraints with `duration=4:bframes=2`, which forces
+B-direct/skip. The temporal-direct and spatial-direct B fixtures use the same
+16x16 source with `partitions=none`, `subme=1`, skip enabled, and
+`direct=temporal` or `direct=spatial`, proving the progressive frame-picture
+`h264_direct.c` colocated-ref mapping, spatial neighbor-ref median path, and
+B-skip write-back for both CAVLC and CABAC. The implicit-weight B fixtures use
+the same 16x16 source and constraints with `duration=4:bframes=2`, which forces
 non-symmetric B POC distances and proves FFmpeg's
 `implicit_weight_table(field=-1)` path while still avoiding B-direct/skip.
 

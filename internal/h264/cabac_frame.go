@@ -265,6 +265,11 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWork(sh *
 		return result, err
 	}
 	*work = frameMacroblockDecodeWork{}
+	if direct.DirectSpatialMVPred {
+		if err := m.fillMotionDecodeCaches(&work.Motion, neighbors.motionNeighbors(mbType, 2, PictureTypeB, true, true)); err != nil {
+			return result, err
+		}
+	}
 	var subMBType [4]uint32
 	if err := m.predDirectMotionFrame(&work.Motion, mbXY, &mbType, &subMBType, direct); err != nil {
 		return result, err

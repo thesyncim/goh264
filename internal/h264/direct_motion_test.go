@@ -78,6 +78,128 @@ func TestPredTemporalDirect8x8FromColocatedShape(t *testing.T) {
 	}
 }
 
+func TestPredSpatialDirect16x16UsesNeighborMedian(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
+	col.tables.RefIndex[0][0] = 0
+	col.tables.MotionVal[0][col.tables.MB2BXY[0]] = [2]int16{3, 0}
+
+	var cache macroblockMotionCache
+	base := int(h264Scan8[0])
+	cache.Ref[0][base-1] = 0
+	cache.Ref[0][base-8] = 0
+	cache.Ref[0][base+4-8] = 0
+	cache.MV[0][base-1] = [2]int16{3, 9}
+	cache.MV[0][base-8] = [2]int16{5, 5}
+	cache.MV[0][base+4-8] = [2]int16{7, 1}
+	cache.Ref[1][base-1] = h264PartNotAvailable
+	cache.Ref[1][base-8] = h264PartNotAvailable
+	cache.Ref[1][base+4-8] = h264PartNotAvailable
+	cache.Ref[1][base-1-8] = h264PartNotAvailable
+
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr}},
+			{{frame: col}},
+		},
+		DirectSpatialMVPred: true,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	})
+	if err != nil {
+		t.Fatalf("spatial direct failed: %v", err)
+	}
+	if !is16x16(mbType) || !isDirect(mbType) || mbType&MBTypeP0L1 != 0 {
+		t.Fatalf("mbType = %#x, want list0-only direct 16x16", mbType)
+	}
+	if cache.Ref[0][base] != 0 || cache.Ref[1][base] != -1 {
+		t.Fatalf("refs = %d/%d, want 0/-1", cache.Ref[0][base], cache.Ref[1][base])
+	}
+	if cache.MV[0][base] != ([2]int16{5, 5}) || cache.MV[1][base] != ([2]int16{}) {
+		t.Fatalf("mvs = %v/%v", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
+func TestPredSpatialDirectColZeroClearsZeroRefs(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
+	col.tables.RefIndex[0][0] = 0
+	col.tables.MotionVal[0][col.tables.MB2BXY[0]] = [2]int16{1, -1}
+
+	var cache macroblockMotionCache
+	base := int(h264Scan8[0])
+	for list := 0; list < 2; list++ {
+		cache.Ref[list][base-1] = 0
+		cache.Ref[list][base-8] = 0
+		cache.Ref[list][base+4-8] = 0
+		cache.MV[list][base-1] = [2]int16{4, 4}
+		cache.MV[list][base-8] = [2]int16{6, 6}
+		cache.MV[list][base+4-8] = [2]int16{8, 8}
+	}
+
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr}},
+			{{frame: col}},
+		},
+		DirectSpatialMVPred: true,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	})
+	if err != nil {
+		t.Fatalf("spatial col-zero direct failed: %v", err)
+	}
+	if cache.MV[0][base] != ([2]int16{}) || cache.MV[1][base] != ([2]int16{}) {
+		t.Fatalf("col-zero mvs = %v/%v, want zero", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
+func TestPredSpatialDirect8x8SameMotionCollapsesTo16x16(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType8x8|MBTypeP0L0|MBTypeP1L0)
+	bxy := int(col.tables.MB2BXY[0])
+	for i8 := 0; i8 < 4; i8++ {
+		col.tables.RefIndex[0][i8] = 0
+		x8 := i8 & 1
+		y8 := i8 >> 1
+		col.tables.MotionVal[0][bxy+x8*3+y8*3*col.tables.BStride] = [2]int16{4, 0}
+	}
+
+	var cache macroblockMotionCache
+	base := int(h264Scan8[0])
+	for list := 0; list < 2; list++ {
+		cache.Ref[list][base-1] = 0
+		cache.Ref[list][base-8] = 0
+		cache.Ref[list][base+4-8] = 0
+		cache.MV[list][base-1] = [2]int16{2, -2}
+		cache.MV[list][base-8] = [2]int16{6, 2}
+		cache.MV[list][base+4-8] = [2]int16{4, 0}
+	}
+
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr}},
+			{{frame: col}},
+		},
+		DirectSpatialMVPred: true,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	})
+	if err != nil {
+		t.Fatalf("spatial 8x8 direct failed: %v", err)
+	}
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2
+	if mbType != wantType {
+		t.Fatalf("mbType = %#x, want collapsed %#x", mbType, wantType)
+	}
+	if cache.MV[0][base] != ([2]int16{4, 0}) || cache.MV[1][base] != ([2]int16{4, 0}) {
+		t.Fatalf("collapsed mvs = %v/%v", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
 func TestWriteBackCAVLCFrameBSkipTemporalDirect(t *testing.T) {
 	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
 	col.tables.RefIndex[0][0] = 0
@@ -106,6 +228,31 @@ func TestWriteBackCAVLCFrameBSkipTemporalDirect(t *testing.T) {
 	}
 	if m.RefIndex[0][0] != 0 || m.RefIndex[1][0] != 0 {
 		t.Fatalf("written refs = %d/%d", m.RefIndex[0][0], m.RefIndex[1][0])
+	}
+}
+
+func TestWriteBackCAVLCFrameBSkipSpatialDirectNoNeighbors(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
+	var work frameMacroblockDecodeWork
+	sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+	got, err := m.writeBackCAVLCFrameSkipMacroblockWithDirectWork(sh, 22, 0, 7, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr}},
+			{{frame: col}},
+		},
+		DirectSpatialMVPred: true,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	}, &work)
+	if err != nil {
+		t.Fatalf("write back spatial B-skip failed: %v", err)
+	}
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip
+	if got.MBType != wantType || m.MacroblockTyp[0] != wantType {
+		t.Fatalf("spatial bskip type = %#x/%#x, want %#x", got.MBType, m.MacroblockTyp[0], wantType)
+	}
+	if m.MotionVal[0][0] != ([2]int16{}) || m.MotionVal[1][0] != ([2]int16{}) || m.RefIndex[0][0] != 0 || m.RefIndex[1][0] != 0 {
+		t.Fatalf("spatial bskip motion refs/mvs = %d/%d %v/%v", m.RefIndex[0][0], m.RefIndex[1][0], m.MotionVal[0][0], m.MotionVal[1][0])
 	}
 }
 
