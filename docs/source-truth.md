@@ -55,9 +55,11 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - High monochrome CABAC `testsrc2` IDR/P gray rawvideo frame MD5s: `cf88b0a4244f7df1c3c54613f6290345`, `d003fa3ed4b3edd4622c36e4c2b5249c`, `677639d3d5857b18931e727d46e6a4cc`, `fb50b49ba64db3576559b442d3c4a6ad`
 - High 4:4:4 Predictive CAVLC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `0ff3893d32b4b1875412d88a6fa4a5b1`, `008c471027c25eab150c1cc4a30fb9ac`, `ef107480f4c8b836d91e422e1f3c0b75`, `6acd1f8bc304066008a32acf64228305`
 - High 4:4:4 Predictive CABAC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `8539237f1ecaf659fa36c0f76cde8815`, `6f594f9f9f10d12a399d54882ce6c8e5`, `5e4250996d28cff7f2e85b95d78995ff`, `452f232c9a94da5220babd530117a395`
+- deblock-enabled High 4:4:4 Predictive 32x32 CAVLC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `e6522cb7daa4278fa238f995daea8594`, `274c8ec306ee4705f93c3cc6bdedc948`, `d42015040093bf782173b1d8d00a5b74`, `9d93f36ffaeb8caa764f2b06240ba5d7`
+- deblock-enabled High 4:4:4 Predictive 32x32 CABAC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `df7f5b803f967fcd46070b2b182c3805`, `5bc16fb5ebe5c3021e77c7c82c34127c`, `5e0f2020cfefc09d993a68c2963ad8ed`, `f14846abbb44addf3e1ce0e66394b683`
 - same `testsrc2` encode with loop filter disabled: `b729e0367dccdfd707a7ea0c6e68c06e`
 - dimensions: `16x16` and `32x32`
-- frame payload size: `256` bytes (`gray`/`chroma_format_idc == 0`), `384` or `1536` bytes (`yuv420p`), `512` bytes (`yuv422p`), and `768` bytes (`yuv444p`)
+- frame payload size: `256` bytes (`gray`/`chroma_format_idc == 0`), `384` or `1536` bytes (`yuv420p`), `512` bytes (`yuv422p`), and `768` or `3072` bytes (`yuv444p`)
 
 The AVC/NALFF packet-input tests mechanically convert those Annex B fixtures to
 big-endian length-prefixed NAL units while preserving each raw NAL payload. The
@@ -70,10 +72,11 @@ CAVLC/CABAC packets against the same frame MD5s both as bundled packets and as
 successive single-frame sample packets that require DPB reference state to
 survive across public decoder calls. Monochrome native FFmpeg oracle checks
 request `-pix_fmt gray` so the frame-MD5 surface compares only the luma plane
-represented by `chroma_format_idc == 0`. The High 4:4:4 Predictive fixtures
-carry `disable_deblocking_filter_idc == 1`; they prove 4:4:4 entropy,
-prediction, residual reconstruction, motion, and public packet integration, but
-not 4:4:4 loop-filter parity.
+represented by `chroma_format_idc == 0`. The 16x16 High 4:4:4 Predictive
+fixtures carry `disable_deblocking_filter_idc == 1`; the 32x32 High 4:4:4
+Predictive fixtures keep deblocking enabled and prove the simple 8-bit
+frame-picture loop filter over luma-shaped Cb/Cr planes and inter-macroblock
+edges.
 
 Reference-picture unit coverage now includes FFmpeg's progressive frame-picture
 long-term P-list behavior: default long refs after short refs, ref-list

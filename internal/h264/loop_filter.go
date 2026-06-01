@@ -123,7 +123,7 @@ func (p h264LoopFilterSliceParams) validate() error {
 	if p.PPS == nil || p.PPS.SPS == nil {
 		return ErrInvalidData
 	}
-	if p.PPS.SPS.BitDepthLuma != 8 || p.PPS.SPS.ChromaFormatIDC == 3 || p.PPS.SPS.MBAFF != 0 || p.PPS.SPS.FrameMBSOnlyFlag == 0 {
+	if p.PPS.SPS.BitDepthLuma != 8 || p.PPS.SPS.MBAFF != 0 || p.PPS.SPS.FrameMBSOnlyFlag == 0 {
 		return ErrUnsupported
 	}
 	return nil
@@ -459,10 +459,10 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 		}
 		filterLuma := deblockEdge
 		filterChroma := true
-		if dir == 0 && edge&1 != 0 {
+		if dir == 0 && dst.ChromaFormatIDC != 3 && edge&1 != 0 {
 			filterChroma = false
 		}
-		if dir == 1 && dst.ChromaFormatIDC != 2 && edge&1 != 0 {
+		if dir == 1 && dst.ChromaFormatIDC == 1 && edge&1 != 0 {
 			filterChroma = false
 		}
 		if err := h264ApplyLoopFilterEdge(dst, dstY, dstCb, dstCr, dir, edge, bS, qp, chromaQP, p, false, filterLuma, filterChroma); err != nil {
@@ -659,6 +659,17 @@ func h264ApplyLoopFilterEdge(dst *h264PicturePlanes, dstY int, dstCb int, dstCr 
 			return err
 		}
 		return h264FilterMBEdgeHChroma(dst.Cr, dstCr+4*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[1], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra)
+	case 3:
+		if dir == 0 {
+			if err := h264FilterMBEdgeVLuma(dst.Cb, dstCb+4*edge, dst.ChromaStride, bS, chromaQP[0], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra); err != nil {
+				return err
+			}
+			return h264FilterMBEdgeVLuma(dst.Cr, dstCr+4*edge, dst.ChromaStride, bS, chromaQP[1], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra)
+		}
+		if err := h264FilterMBEdgeHLuma(dst.Cb, dstCb+4*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[0], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra); err != nil {
+			return err
+		}
+		return h264FilterMBEdgeHLuma(dst.Cr, dstCr+4*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[1], int(p.SliceAlphaC0Offset), int(p.SliceBetaOffset), intra)
 	default:
 		return ErrUnsupported
 	}
