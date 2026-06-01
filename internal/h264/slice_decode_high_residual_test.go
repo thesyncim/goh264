@@ -101,12 +101,30 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 		}
 	})
 
-	t.Run("b direct macroblock", func(t *testing.T) {
+	t.Run("b direct 16x16 macroblock", func(t *testing.T) {
 		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
 		mbType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2
 
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != nil {
+			t.Fatalf("direct high B16x16 validate err = %v, want nil", err)
+		}
+	})
+
+	t.Run("b temporal direct 16x16 macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		mbType := MBType16x16 | MBTypeL0L1 | MBTypeDirect2
+
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != nil {
+			t.Fatalf("temporal direct high B16x16 validate err = %v, want nil", err)
+		}
+	})
+
+	t.Run("b direct unresolved macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		mbType := MBTypeDirect2 | MBTypeL0L1
+
 		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != ErrUnsupported {
-			t.Fatalf("direct high B validate err = %v, want ErrUnsupported", err)
+			t.Fatalf("unresolved direct high B validate err = %v, want ErrUnsupported", err)
 		}
 	})
 
@@ -150,7 +168,7 @@ func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.
 		bits string
 	}{
 		{name: "skip", bits: "010"},
-		{name: "direct", bits: "11"},
+		{name: "direct without refs", bits: "111"},
 		{name: "l1 only", bits: "1011"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

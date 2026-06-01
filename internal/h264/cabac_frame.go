@@ -428,6 +428,11 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	mb.QScale = qscale
 	mb.ChromaQP = chromaQP
 	mb.CBPTable = cbpTable
+	if in.RejectUnsupportedHighB {
+		if err := validateHighFrameSliceMacroblockForReconstruct(&SliceHeader{SliceTypeNoS: in.SliceTypeNoS}, mb.MBType, mb.CBP, mb.CBPTable); err != nil {
+			return result, err
+		}
+	}
 	if err := m.writeBackCABACInterMacroblock(in.MBXY, &mb, residual, motion, listCount, in.SliceTypeNoS, in.SliceNum); err != nil {
 		return result, err
 	}

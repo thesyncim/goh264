@@ -54,6 +54,9 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "negative cbp", sh: pSlice, mbType: MBType16x16 | MBTypeP0L0, cbp: -1, want: ErrUnsupported},
 		{name: "negative cbp table", sh: pSlice, mbType: MBType16x16 | MBTypeP0L0, cbpTable: -1, want: ErrUnsupported},
 		{name: "b direct", sh: bSlice, mbType: MBTypeDirect2 | MBTypeL0L1, cbp: 1, cbpTable: 1, want: ErrUnsupported},
+		{name: "b direct missing l1", sh: bSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeDirect2, want: ErrUnsupported},
+		{name: "b direct partial temporal flags", sh: bSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeDirect2, want: ErrUnsupported},
+		{name: "b direct partition", sh: bSlice, mbType: MBType16x16 | MBType16x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2, want: ErrUnsupported},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

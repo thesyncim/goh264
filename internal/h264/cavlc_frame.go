@@ -328,6 +328,11 @@ func (m *macroblockTables) decodeCAVLCFrameInterMacroblock(gb *bitReader, in cav
 		}
 		markDirectSubRefsUnavailable(motion)
 	}
+	if in.RejectUnsupportedHighB {
+		if err := validateHighFrameSliceMacroblockForReconstruct(&SliceHeader{SliceTypeNoS: in.SliceTypeNoS}, mb.MBType, mb.CBP, mb.CBPTable); err != nil {
+			return result, err
+		}
+	}
 	if err := m.writeBackCAVLCInterMacroblock(in.MBXY, &mb, residual, motion, listCount, in.SliceTypeNoS, in.SliceNum); err != nil {
 		return result, err
 	}

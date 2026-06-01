@@ -363,6 +363,9 @@ func validateHighFrameSliceBaseMacroblockForDecode(sliceTypeNoS int32, mbType ui
 	if mbType == MBType16x16|MBTypeP0L0|MBTypeP0L1 {
 		return nil
 	}
+	if mbType == MBTypeDirect2|MBTypeL0L1 {
+		return nil
+	}
 	return ErrUnsupported
 }
 
@@ -378,14 +381,20 @@ func validateHighFrameSliceMacroblockForReconstruct(sh *SliceHeader, mbType uint
 	default:
 		return ErrUnsupported
 	}
-	if cbp < 0 || cbpTable < 0 || isIntra(mbType) {
+	if cbp < 0 || cbpTable < 0 {
+		return ErrUnsupported
+	}
+	if isIntra(mbType) {
 		return ErrUnsupported
 	}
 	if sh.SliceTypeNoS == PictureTypeB {
-		if isSkip(mbType) || isDirect(mbType) {
+		if isSkip(mbType) {
 			return ErrUnsupported
 		}
 		if mbType == MBType16x16|MBTypeP0L0|MBTypeP0L1 {
+			return nil
+		}
+		if isHighB16x16DirectMacroblock(mbType) {
 			return nil
 		}
 		return ErrUnsupported
@@ -400,6 +409,12 @@ func validateHighFrameSliceMacroblockForReconstruct(sh *SliceHeader, mbType uint
 		return nil
 	}
 	return ErrUnsupported
+}
+
+func isHighB16x16DirectMacroblock(mbType uint32) bool {
+	const spatial = MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2
+	const temporal = MBType16x16 | MBTypeL0L1 | MBTypeDirect2
+	return mbType == spatial || mbType == temporal
 }
 
 func h264SimpleFrameSliceDecodeSupportsBitDepth(bitDepth int32) bool {
