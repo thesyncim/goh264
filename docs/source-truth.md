@@ -38,9 +38,9 @@ pinned FFmpeg `libavcodec/cabac.c` and `cabac_functions.h` from
 `.upstream/ffmpeg-n8.0.1` in a temporary directory and compares primitive traces
 against the Go port.
 
-The `ffprobe` header oracle now compares the parsed SPS VUI sample aspect ratio
-and timing rate for the black16 stream in addition to profile, level,
-dimensions, and pixel format.
+The `ffprobe` header oracle now compares public `StreamInfo` SPS VUI sample
+aspect ratio and timing rate for the black16 stream in addition to profile,
+level, dimensions, and pixel format.
 
 The embedded smoke bitstreams currently have these decoded-frame oracles:
 
@@ -99,8 +99,10 @@ extradata and repeated side data across sample-by-sample P-frame decode without
 resetting DPB reference state. Public frame side-data tests prepend synthetic
 leading SEI to the black16 fixture and prove the decoded frame retains x264
 user-data, recovery point, green metadata, display orientation, frame packing,
-alternative transfer,
-mastering display, and content-light metadata while preserving the rawvideo MD5.
+alternative transfer, mastering display, and content-light metadata while
+preserving the rawvideo MD5. Public rich-VUI tests synthesize a valid SPS and
+prove `StreamInfo` exposes FFmpeg-normalized SAR, video full-range signaling,
+color primaries/transfer/matrix, chroma location, and timing fields.
 Monochrome
 native FFmpeg oracle checks
 request `-pix_fmt gray` so the frame-MD5 surface compares only the luma plane
@@ -172,6 +174,7 @@ Included:
 - H.264 AVC/NALFF length-prefixed packet parsing when the caller supplies `nal_length_size`
 - H.264 packet side-data handling for `AV_PKT_DATA_NEW_EXTRADATA`-style parameter-set updates
 - H.264 NAL headers and RBSP handling
+- SPS VUI public metadata for SAR, video range/format, colorimetry, chroma location, and timing
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:

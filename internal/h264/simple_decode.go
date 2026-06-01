@@ -9,26 +9,40 @@
 package h264
 
 type DecodedFrame struct {
-	Y, Cb, Cr       []uint8
-	LumaStride      int
-	ChromaStride    int
-	Width           int
-	Height          int
-	CropLeft        int
-	CropTop         int
-	MBWidth         int
-	MBHeight        int
-	ChromaFormatIDC int
-	BitDepthLuma    int
-	BitDepthChroma  int
-	SideData        DecodedFrameSideData
-	frameNum        uint32
-	fieldPOC        [2]int32
-	poc             int32
-	keyFrame        bool
-	mmcoReset       bool
-	tables          *macroblockTables
-	refEntries      [2][]simpleRefEntry
+	Y, Cb, Cr                      []uint8
+	LumaStride                     int
+	ChromaStride                   int
+	Width                          int
+	Height                         int
+	CropLeft                       int
+	CropTop                        int
+	MBWidth                        int
+	MBHeight                       int
+	ChromaFormatIDC                int
+	BitDepthLuma                   int
+	BitDepthChroma                 int
+	SARNum                         int32
+	SARDen                         int32
+	VideoFormat                    int32
+	VideoFullRangeFlag             int32
+	ColorPrimaries                 int32
+	ColorTransfer                  int32
+	ColorMatrix                    int32
+	ChromaLocation                 int32
+	ChromaSampleLocTypeTopField    int32
+	ChromaSampleLocTypeBottomField int32
+	TimingInfoPresentFlag          int32
+	NumUnitsInTick                 uint32
+	TimeScale                      uint32
+	FixedFrameRateFlag             int32
+	SideData                       DecodedFrameSideData
+	frameNum                       uint32
+	fieldPOC                       [2]int32
+	poc                            int32
+	keyFrame                       bool
+	mmcoReset                      bool
+	tables                         *macroblockTables
+	refEntries                     [2][]simpleRefEntry
 }
 
 type DecodedFrameSideData struct {
@@ -365,16 +379,30 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 	}
 
 	frame := &DecodedFrame{
-		LumaStride:      mbWidth * 16,
-		Width:           int(sps.Width),
-		Height:          int(sps.Height),
-		CropLeft:        int(sps.CropLeft),
-		CropTop:         int(sps.CropTop),
-		MBWidth:         mbWidth,
-		MBHeight:        mbHeight,
-		ChromaFormatIDC: chromaFormatIDC,
-		BitDepthLuma:    int(sps.BitDepthLuma),
-		BitDepthChroma:  int(sps.BitDepthChroma),
+		LumaStride:                     mbWidth * 16,
+		Width:                          int(sps.Width),
+		Height:                         int(sps.Height),
+		CropLeft:                       int(sps.CropLeft),
+		CropTop:                        int(sps.CropTop),
+		MBWidth:                        mbWidth,
+		MBHeight:                       mbHeight,
+		ChromaFormatIDC:                chromaFormatIDC,
+		BitDepthLuma:                   int(sps.BitDepthLuma),
+		BitDepthChroma:                 int(sps.BitDepthChroma),
+		SARNum:                         sps.VUI.SARNum,
+		SARDen:                         sps.VUI.SARDen,
+		VideoFormat:                    sps.VUI.VideoFormat,
+		VideoFullRangeFlag:             sps.VUI.VideoFullRangeFlag,
+		ColorPrimaries:                 sps.VUI.ColourPrimaries,
+		ColorTransfer:                  sps.VUI.TransferCharacteristics,
+		ColorMatrix:                    sps.VUI.MatrixCoeffs,
+		ChromaLocation:                 sps.VUI.ChromaLocation,
+		ChromaSampleLocTypeTopField:    sps.VUI.ChromaSampleLocTypeTopField,
+		ChromaSampleLocTypeBottomField: sps.VUI.ChromaSampleLocTypeBottomField,
+		TimingInfoPresentFlag:          sps.TimingInfoPresentFlag,
+		NumUnitsInTick:                 sps.NumUnitsInTick,
+		TimeScale:                      sps.TimeScale,
+		FixedFrameRateFlag:             sps.FixedFrameRateFlag,
 	}
 	frame.Y = make([]uint8, frame.LumaStride*mbHeight*16)
 	if chromaFormatIDC != 0 {

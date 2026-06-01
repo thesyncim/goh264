@@ -226,6 +226,9 @@ func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	if info.ChromaFormatIDC != 1 || info.BitDepthLuma != 8 || info.BitDepthChroma != 8 {
 		t.Fatalf("format = chroma %d depth %d/%d", info.ChromaFormatIDC, info.BitDepthLuma, info.BitDepthChroma)
 	}
+	if info.SARDen != 1 || info.VideoFullRangeFlag != -1 || info.ColorMatrix != 2 {
+		t.Fatalf("vui defaults = sar %d:%d range %d matrix %d", info.SARNum, info.SARDen, info.VideoFullRangeFlag, info.ColorMatrix)
+	}
 	if dec.pps[0] == nil {
 		t.Fatal("PPS 0 was not retained")
 	}
@@ -243,6 +246,29 @@ func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	}
 	if dec.slices[0].ChromaQP != [2]uint8{dec.pps[0].ChromaQPTable[0][dec.slices[0].QScale], dec.pps[0].ChromaQPTable[1][dec.slices[0].QScale]} {
 		t.Fatalf("slice chroma qp = %+v", dec.slices[0].ChromaQP)
+	}
+}
+
+func TestParseHeadersAnnexBExposesVUIMetadata(t *testing.T) {
+	data := appendAnnexBNAL(nil, decoderSPSNALWithRichVUI(t))
+	info, err := NewDecoder().ParseHeadersAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Width != 16 || info.Height != 16 || info.ProfileIDC != 66 || info.LevelIDC != 30 {
+		t.Fatalf("basic stream info = %+v", info)
+	}
+	if info.SARNum != 4 || info.SARDen != 3 || info.VideoFormat != 5 || info.VideoFullRangeFlag != 1 {
+		t.Fatalf("vui sar/video = %+v", info)
+	}
+	if info.ColorPrimaries != 1 || info.ColorTransfer != 1 || info.ColorMatrix != 1 {
+		t.Fatalf("vui color = prim %d trc %d matrix %d", info.ColorPrimaries, info.ColorTransfer, info.ColorMatrix)
+	}
+	if info.ChromaSampleLocTypeTopField != 2 || info.ChromaSampleLocTypeBottomField != 3 || info.ChromaLocation != 3 {
+		t.Fatalf("vui chroma location = top %d bottom %d loc %d", info.ChromaSampleLocTypeTopField, info.ChromaSampleLocTypeBottomField, info.ChromaLocation)
+	}
+	if info.TimingInfoPresentFlag != 1 || info.NumUnitsInTick != 1001 || info.TimeScale != 60000 || info.FixedFrameRateFlag != 1 {
+		t.Fatalf("vui timing = present %d tick %d scale %d fixed %d", info.TimingInfoPresentFlag, info.NumUnitsInTick, info.TimeScale, info.FixedFrameRateFlag)
 	}
 }
 
@@ -368,6 +394,9 @@ func TestDecodeAnnexBBlack16Frame(t *testing.T) {
 	}
 	if frame.Width != 16 || frame.Height != 16 || frame.ChromaFormatIDC != 1 || frame.BitDepthLuma != 8 || frame.BitDepthChroma != 8 {
 		t.Fatalf("frame metadata = %dx%d chroma %d depth %d/%d", frame.Width, frame.Height, frame.ChromaFormatIDC, frame.BitDepthLuma, frame.BitDepthChroma)
+	}
+	if frame.SARDen != 1 || frame.VideoFullRangeFlag != -1 || frame.ColorMatrix != 2 {
+		t.Fatalf("frame vui defaults = sar %d:%d range %d matrix %d", frame.SARNum, frame.SARDen, frame.VideoFullRangeFlag, frame.ColorMatrix)
 	}
 	raw, err := frame.AppendRawYUV(nil)
 	if err != nil {
@@ -1136,12 +1165,12 @@ func TestFFprobeOracleBlack16(t *testing.T) {
 	if dec.sps[0] == nil {
 		t.Fatal("SPS 0 was not retained")
 	}
-	if stream.SAR != ratioColonString(dec.sps[0].VUI.SARNum, dec.sps[0].VUI.SARDen) {
-		t.Fatalf("oracle SAR %s, go %d:%d", stream.SAR, dec.sps[0].VUI.SARNum, dec.sps[0].VUI.SARDen)
+	if stream.SAR != ratioColonString(info.SARNum, info.SARDen) {
+		t.Fatalf("oracle SAR %s, go %d:%d", stream.SAR, info.SARNum, info.SARDen)
 	}
-	if dec.sps[0].TimingInfoPresentFlag != 0 {
-		if stream.FrameRate != ratioSlashString(int64(dec.sps[0].TimeScale), int64(dec.sps[0].NumUnitsInTick)) {
-			t.Fatalf("oracle r_frame_rate %s, go timing %d/%d", stream.FrameRate, dec.sps[0].TimeScale, dec.sps[0].NumUnitsInTick)
+	if info.TimingInfoPresentFlag != 0 {
+		if stream.FrameRate != ratioSlashString(int64(info.TimeScale), int64(info.NumUnitsInTick)) {
+			t.Fatalf("oracle r_frame_rate %s, go timing %d/%d", stream.FrameRate, info.TimeScale, info.NumUnitsInTick)
 		}
 	}
 }
@@ -1528,6 +1557,63 @@ const (
 	decoderSEITypeAlternativeTransfer          = 147
 )
 
+func decoderSPSNALWithRichVUI(t *testing.T) []byte {
+	t.Helper()
+	var b decoderSEIBitBuilder
+	b.writeBits(66, 8) // profile_idc
+	b.writeBits(0, 6)  // constraint flags
+	b.writeBits(0, 2)
+	b.writeBits(30, 8) // level_idc
+	b.writeUE(0)       // seq_parameter_set_id
+	b.writeUE(0)       // log2_max_frame_num_minus4
+	b.writeUE(0)       // pic_order_cnt_type
+	b.writeUE(0)       // log2_max_pic_order_cnt_lsb_minus4
+	b.writeUE(2)       // max_num_ref_frames
+	b.writeBit(0)      // gaps_in_frame_num_value_allowed_flag
+	b.writeUE(0)       // pic_width_in_mbs_minus1
+	b.writeUE(0)       // pic_height_in_map_units_minus1
+	b.writeBit(1)      // frame_mbs_only_flag
+	b.writeBit(1)      // direct_8x8_inference_flag
+	b.writeBit(0)      // frame_cropping_flag
+	b.writeBit(1)      // vui_parameters_present_flag
+
+	b.writeBit(1)       // aspect_ratio_info_present_flag
+	b.writeBits(255, 8) // Extended_SAR
+	b.writeBits(4, 16)
+	b.writeBits(3, 16)
+	b.writeBit(1) // overscan_info_present_flag
+	b.writeBit(0)
+	b.writeBit(1) // video_signal_type_present_flag
+	b.writeBits(5, 3)
+	b.writeBit(1)
+	b.writeBit(1) // colour_description_present_flag
+	b.writeBits(1, 8)
+	b.writeBits(1, 8)
+	b.writeBits(1, 8)
+	b.writeBit(1) // chroma_loc_info_present_flag
+	b.writeUE(2)
+	b.writeUE(3)
+	b.writeBit(1) // timing_info_present_flag
+	b.writeBits(1001, 32)
+	b.writeBits(60000, 32)
+	b.writeBit(1)
+	b.writeBit(0) // nal_hrd_parameters_present_flag
+	b.writeBit(0) // vcl_hrd_parameters_present_flag
+	b.writeBit(1) // pic_struct_present_flag
+	b.writeBit(1) // bitstream_restriction_flag
+	b.writeBit(1) // motion_vectors_over_pic_boundaries_flag
+	b.writeUE(0)
+	b.writeUE(1)
+	b.writeUE(8)
+	b.writeUE(9)
+	b.writeUE(2)
+	b.writeUE(4)
+
+	rbsp := b.rbsp()
+	raw := []byte{0x67}
+	return append(raw, escapeRBSPForNALPayload(rbsp)...)
+}
+
 type decoderSEITestMessage struct {
 	typ     int
 	payload []byte
@@ -1622,6 +1708,32 @@ func (b *decoderSEIBitBuilder) bytes() []byte {
 	for i, bit := range b.bits {
 		if bit != 0 {
 			out[i/8] |= 1 << uint(7-i%8)
+		}
+	}
+	return out
+}
+
+func (b *decoderSEIBitBuilder) rbsp() []byte {
+	b.writeBit(1)
+	for len(b.bits)&7 != 0 {
+		b.writeBit(0)
+	}
+	return b.bytes()
+}
+
+func escapeRBSPForNALPayload(rbsp []byte) []byte {
+	out := make([]byte, 0, len(rbsp))
+	zeros := 0
+	for _, b := range rbsp {
+		if zeros == 2 && b <= 3 {
+			out = append(out, 0x03)
+			zeros = 0
+		}
+		out = append(out, b)
+		if b == 0 {
+			zeros++
+		} else {
+			zeros = 0
 		}
 	}
 	return out

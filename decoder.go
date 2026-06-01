@@ -18,15 +18,29 @@ type Decoder struct {
 }
 
 type StreamInfo struct {
-	SPSID           uint32
-	ProfileIDC      uint8
-	Profile         string
-	LevelIDC        uint8
-	Width           int
-	Height          int
-	ChromaFormatIDC uint32
-	BitDepthLuma    int
-	BitDepthChroma  int
+	SPSID                          uint32
+	ProfileIDC                     uint8
+	Profile                        string
+	LevelIDC                       uint8
+	Width                          int
+	Height                         int
+	ChromaFormatIDC                uint32
+	BitDepthLuma                   int
+	BitDepthChroma                 int
+	SARNum                         int32
+	SARDen                         int32
+	VideoFormat                    int32
+	VideoFullRangeFlag             int32
+	ColorPrimaries                 int32
+	ColorTransfer                  int32
+	ColorMatrix                    int32
+	ChromaLocation                 int32
+	ChromaSampleLocTypeTopField    int32
+	ChromaSampleLocTypeBottomField int32
+	TimingInfoPresentFlag          int32
+	NumUnitsInTick                 uint32
+	TimeScale                      uint32
+	FixedFrameRateFlag             int32
 }
 
 type AVCDecoderConfiguration struct {
@@ -135,19 +149,33 @@ type ContentLight struct {
 }
 
 type Frame struct {
-	Width           int
-	Height          int
-	CropLeft        int
-	CropTop         int
-	ChromaFormatIDC uint32
-	BitDepthLuma    int
-	BitDepthChroma  int
-	YStride         int
-	CStride         int
-	Y               []byte
-	Cb              []byte
-	Cr              []byte
-	SideData        FrameSideData
+	Width                          int
+	Height                         int
+	CropLeft                       int
+	CropTop                        int
+	ChromaFormatIDC                uint32
+	BitDepthLuma                   int
+	BitDepthChroma                 int
+	SARNum                         int32
+	SARDen                         int32
+	VideoFormat                    int32
+	VideoFullRangeFlag             int32
+	ColorPrimaries                 int32
+	ColorTransfer                  int32
+	ColorMatrix                    int32
+	ChromaLocation                 int32
+	ChromaSampleLocTypeTopField    int32
+	ChromaSampleLocTypeBottomField int32
+	TimingInfoPresentFlag          int32
+	NumUnitsInTick                 uint32
+	TimeScale                      uint32
+	FixedFrameRateFlag             int32
+	YStride                        int
+	CStride                        int
+	Y                              []byte
+	Cb                             []byte
+	Cr                             []byte
+	SideData                       FrameSideData
 }
 
 func NewDecoder() *Decoder {
@@ -547,19 +575,33 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 		return nil
 	}
 	return &Frame{
-		Width:           src.Width,
-		Height:          src.Height,
-		CropLeft:        src.CropLeft,
-		CropTop:         src.CropTop,
-		ChromaFormatIDC: uint32(src.ChromaFormatIDC),
-		BitDepthLuma:    src.BitDepthLuma,
-		BitDepthChroma:  src.BitDepthChroma,
-		YStride:         src.LumaStride,
-		CStride:         src.ChromaStride,
-		Y:               src.Y,
-		Cb:              src.Cb,
-		Cr:              src.Cr,
-		SideData:        frameSideDataFromH264(src.SideData),
+		Width:                          src.Width,
+		Height:                         src.Height,
+		CropLeft:                       src.CropLeft,
+		CropTop:                        src.CropTop,
+		ChromaFormatIDC:                uint32(src.ChromaFormatIDC),
+		BitDepthLuma:                   src.BitDepthLuma,
+		BitDepthChroma:                 src.BitDepthChroma,
+		SARNum:                         src.SARNum,
+		SARDen:                         src.SARDen,
+		VideoFormat:                    src.VideoFormat,
+		VideoFullRangeFlag:             src.VideoFullRangeFlag,
+		ColorPrimaries:                 src.ColorPrimaries,
+		ColorTransfer:                  src.ColorTransfer,
+		ColorMatrix:                    src.ColorMatrix,
+		ChromaLocation:                 src.ChromaLocation,
+		ChromaSampleLocTypeTopField:    src.ChromaSampleLocTypeTopField,
+		ChromaSampleLocTypeBottomField: src.ChromaSampleLocTypeBottomField,
+		TimingInfoPresentFlag:          src.TimingInfoPresentFlag,
+		NumUnitsInTick:                 src.NumUnitsInTick,
+		TimeScale:                      src.TimeScale,
+		FixedFrameRateFlag:             src.FixedFrameRateFlag,
+		YStride:                        src.LumaStride,
+		CStride:                        src.ChromaStride,
+		Y:                              src.Y,
+		Cb:                             src.Cb,
+		Cr:                             src.Cr,
+		SideData:                       frameSideDataFromH264(src.SideData),
 	}
 }
 
@@ -697,15 +739,29 @@ func frameChromaCrop(cropLeft int, cropTop int, chromaFormatIDC uint32) (int, in
 func streamInfoFromSPS(sps *h264.SPS) StreamInfo {
 	profileIDC := uint8(sps.ProfileIDC)
 	return StreamInfo{
-		SPSID:           sps.SPSID,
-		ProfileIDC:      profileIDC,
-		Profile:         profileName(profileIDC, uint8(sps.ConstraintSetFlags)),
-		LevelIDC:        uint8(sps.LevelIDC),
-		Width:           int(sps.Width),
-		Height:          int(sps.Height),
-		ChromaFormatIDC: sps.ChromaFormatIDC,
-		BitDepthLuma:    int(sps.BitDepthLuma),
-		BitDepthChroma:  int(sps.BitDepthChroma),
+		SPSID:                          sps.SPSID,
+		ProfileIDC:                     profileIDC,
+		Profile:                        profileName(profileIDC, uint8(sps.ConstraintSetFlags)),
+		LevelIDC:                       uint8(sps.LevelIDC),
+		Width:                          int(sps.Width),
+		Height:                         int(sps.Height),
+		ChromaFormatIDC:                sps.ChromaFormatIDC,
+		BitDepthLuma:                   int(sps.BitDepthLuma),
+		BitDepthChroma:                 int(sps.BitDepthChroma),
+		SARNum:                         sps.VUI.SARNum,
+		SARDen:                         sps.VUI.SARDen,
+		VideoFormat:                    sps.VUI.VideoFormat,
+		VideoFullRangeFlag:             sps.VUI.VideoFullRangeFlag,
+		ColorPrimaries:                 sps.VUI.ColourPrimaries,
+		ColorTransfer:                  sps.VUI.TransferCharacteristics,
+		ColorMatrix:                    sps.VUI.MatrixCoeffs,
+		ChromaLocation:                 sps.VUI.ChromaLocation,
+		ChromaSampleLocTypeTopField:    sps.VUI.ChromaSampleLocTypeTopField,
+		ChromaSampleLocTypeBottomField: sps.VUI.ChromaSampleLocTypeBottomField,
+		TimingInfoPresentFlag:          sps.TimingInfoPresentFlag,
+		NumUnitsInTick:                 sps.NumUnitsInTick,
+		TimeScale:                      sps.TimeScale,
+		FixedFrameRateFlag:             sps.FixedFrameRateFlag,
 	}
 }
 
