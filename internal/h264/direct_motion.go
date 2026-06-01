@@ -253,7 +253,7 @@ func spatialDirectColZeroList(col *macroblockTables, mbXY int, i8 int, ctx h264D
 	if col.RefIndex[0][refIndex] == 0 {
 		return 0, true
 	}
-	if col.RefIndex[0][refIndex] < 0 && col.RefIndex[1][refIndex] == 0 && ctx.X264Build > 33 {
+	if col.RefIndex[0][refIndex] < 0 && col.RefIndex[1][refIndex] == 0 && uint32(ctx.X264Build) > 33 {
 		return 1, true
 	}
 	return 0, false

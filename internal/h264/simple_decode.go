@@ -266,11 +266,11 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 					return nil, err
 				}
 				frame.SideData = decodedFrameSideDataFromSEI(sei)
-				consumeFrameSideDataFromSEI(sei)
 				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
 				applySimpleFrameTimingProps(frame, sh.SPS, sei, dpb)
+				consumeFrameSideDataFromSEI(sei)
 				frame.keyFrame = nal.Type == NALIDRSlice
 				motionScratch = newH264MotionCompScratchForFrame(frame)
 			} else if err := frame.matchesSPS(sh.SPS); err != nil {
@@ -373,6 +373,8 @@ func consumeFrameSideDataFromSEI(sei *H264SEIContext) {
 	if sei.Common.FilmGrain.Present != 0 && sei.Common.FilmGrain.RepetitionPeriod == 0 {
 		sei.Common.FilmGrain.Present = 0
 	}
+	sei.PictureTiming.Present = 0
+	sei.PictureTiming.TimecodeCount = 0
 }
 
 func cloneByteSlices(src [][]uint8) [][]uint8 {

@@ -11,6 +11,7 @@ import (
 	"math/bits"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -646,9 +647,11 @@ func TestDecodeFrameSideDataSkipsNoopDisplayMatrixAndInvalidStereo3D(t *testing.
 }
 
 func TestDecodeFrameOneShotSEISideDataIsNotRepeated(t *testing.T) {
-	data := prependAnnexBNAL(decodeHexFixture(t, black16IPAnnexBHex), decoderTestSEINAL(
+	base := replaceAnnexBSPS(t, decodeHexFixture(t, black16IPAnnexBHex), decoderSPSNALWithPicStructVUI())
+	data := prependAnnexBNAL(base, decoderTestSEINAL(
 		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0d)},
 		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x01, 0x02, 0x03})},
+		decoderSEITestMessage{typ: decoderSEITypePicTiming, payload: decoderSEIPictureTimingTimecodePayload()},
 		decoderSEITestMessage{typ: decoderSEITypeFilmGrainCharacteristics, payload: decoderSEIFilmGrainPayloadWithRepetition(0)},
 	))
 	frames, err := NewDecoder().DecodeAnnexBFrames(data)
@@ -676,10 +679,13 @@ func TestDecodeFrameOneShotSEISideDataIsNotRepeated(t *testing.T) {
 	if first.FilmGrain == nil || first.FilmGrain.RepetitionPeriod != 0 {
 		t.Fatalf("first film grain = %+v", first.FilmGrain)
 	}
+	if got, want := first.S12MTimecodes, []uint32{0x40345607}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("first s12m timecodes = %08x, want %08x", got, want)
+	}
 
 	second := frames[1].SideData
 	if second.ActiveFormat != nil || len(second.A53ClosedCaptions) != 0 ||
-		len(second.UserDataUnregistered) != 0 || second.FilmGrain != nil {
+		len(second.UserDataUnregistered) != 0 || len(second.S12MTimecodes) != 0 || second.FilmGrain != nil {
 		t.Fatalf("second repeated one-shot side data = %+v", second)
 	}
 }
@@ -753,6 +759,174 @@ func TestDecodeFrameTimingFromPictureTimingSEI(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeFrameS12MTimecodeFromPictureTimingSEI(t *testing.T) {
+	base := replaceAnnexBSPS(t, decodeHexFixture(t, black16AnnexBHex), decoderSPSNALWithPicStructVUI())
+	data := prependAnnexBNAL(base, decoderTestSEINAL(decoderSEITestMessage{
+		typ:     decoderSEITypePicTiming,
+		payload: decoderSEIPictureTimingTimecodePayload(),
+	}))
+	frame, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if got, want := frame.SideData.S12MTimecodes, []uint32{0x40345607}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("s12m timecodes = %08x, want %08x", got, want)
+	}
+	pt := frame.SideData.PictureTiming
+	if pt == nil || len(pt.Timecode) != 1 {
+		t.Fatalf("picture timing = %+v", pt)
+	}
+	tc := pt.Timecode[0]
+	if pt.PicStruct != decoderSEIPicStructFrame || pt.CTType != 1<<2 ||
+		!tc.Full || !tc.DropFrame || tc.Frame != 0 || tc.Seconds != 34 ||
+		tc.Minutes != 56 || tc.Hours != 7 {
+		t.Fatalf("picture timing timecode = %+v %+v", pt, tc)
+	}
+}
+
+func TestS12MTimecodePackingMatchesFFmpegBranches(t *testing.T) {
+	for _, tt := range []struct {
+		name             string
+		rateNum, rateDen int64
+		drop             bool
+		frame            int32
+		want             uint32
+	}{
+		{
+			name:    "ntsc-drop-under-30fps",
+			rateNum: 30000, rateDen: 1001,
+			drop:  true,
+			frame: 12,
+			want:  0x52345607,
+		},
+		{
+			name:    "50fps-odd-frame-uses-field-mark-bit",
+			rateNum: 50, rateDen: 1,
+			frame: 13,
+			want:  0x06345687,
+		},
+		{
+			name:    "60fps-odd-frame-uses-frame-mark-bit",
+			rateNum: 60, rateDen: 1,
+			frame: 13,
+			want:  0x06b45607,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := avTimecodeGetSMPTE(tt.rateNum, tt.rateDen, tt.drop, 7, 56, 34, tt.frame)
+			if got != tt.want {
+				t.Fatalf("smpte = %#08x, want %#08x", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestS12MTimecodePackingMatchesNativeFFmpegOracle(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native FFmpeg timecode oracle")
+	}
+	cc := os.Getenv("CC")
+	if cc == "" {
+		cc = "cc"
+	}
+	if _, err := exec.LookPath(cc); err != nil {
+		t.Skip("C compiler not available")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "timecode_oracle.c")
+	bin := filepath.Join(dir, "timecode_oracle")
+	if err := os.WriteFile(src, []byte(timecodeOracleC), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(cc, "-std=c99", "-Wall", "-Wextra", src, "-o", bin).CombinedOutput(); err != nil {
+		t.Fatalf("compile timecode oracle: %v\n%s", err, out)
+	}
+	out, err := exec.Command(bin).Output()
+	if err != nil {
+		t.Fatalf("run timecode oracle: %v", err)
+	}
+	got := strings.TrimSpace(string(out))
+	want := strings.Join([]string{
+		fmt.Sprintf("%08x", avTimecodeGetSMPTE(30000, 1001, true, 7, 56, 34, 12)),
+		fmt.Sprintf("%08x", avTimecodeGetSMPTE(50, 1, false, 7, 56, 34, 13)),
+		fmt.Sprintf("%08x", avTimecodeGetSMPTE(60, 1, false, 7, 56, 34, 13)),
+	}, "\n")
+	if got != want {
+		t.Fatalf("oracle mismatch\nC:\n%s\nGo:\n%s", got, want)
+	}
+}
+
+const timecodeOracleC = `
+#include <stdint.h>
+#include <stdio.h>
+
+typedef struct AVRational {
+    int num;
+    int den;
+} AVRational;
+
+static int av_cmp_q(AVRational a, AVRational b)
+{
+    int64_t lhs = (int64_t)a.num * b.den;
+    int64_t rhs = (int64_t)b.num * a.den;
+    if (lhs < rhs)
+        return -1;
+    if (lhs > rhs)
+        return 1;
+    return 0;
+}
+
+static int av_clip(int a, int amin, int amax)
+{
+    if (a < amin)
+        return amin;
+    if (a > amax)
+        return amax;
+    return a;
+}
+
+static uint32_t av_timecode_get_smpte(AVRational rate, int drop, int hh, int mm, int ss, int ff)
+{
+    uint32_t tc = 0;
+
+    if (av_cmp_q(rate, (AVRational) {30, 1}) == 1) {
+        if (ff % 2 == 1) {
+            if (av_cmp_q(rate, (AVRational) {50, 1}) == 0)
+                tc |= (1 << 7);
+            else
+                tc |= (1 << 23);
+        }
+        ff /= 2;
+    }
+
+    hh = hh % 24;
+    mm = av_clip(mm, 0, 59);
+    ss = av_clip(ss, 0, 59);
+    ff = ff % 40;
+
+    tc |= drop << 30;
+    tc |= (ff / 10) << 28;
+    tc |= (ff % 10) << 24;
+    tc |= (ss / 10) << 20;
+    tc |= (ss % 10) << 16;
+    tc |= (mm / 10) << 12;
+    tc |= (mm % 10) << 8;
+    tc |= (hh / 10) << 4;
+    tc |= (hh % 10);
+
+    return tc;
+}
+
+int main(void)
+{
+    printf("%08x\n", av_timecode_get_smpte((AVRational) {30000, 1001}, 1, 7, 56, 34, 12));
+    printf("%08x\n", av_timecode_get_smpte((AVRational) {50, 1}, 0, 7, 56, 34, 13));
+    printf("%08x\n", av_timecode_get_smpte((AVRational) {60, 1}, 0, 7, 56, 34, 13));
+    return 0;
+}
+`
 
 func TestDecodeAnnexBBlack16IPFrames(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
@@ -1724,6 +1898,7 @@ const (
 	decoderSEITypeAlternativeTransfer          = 147
 	decoderSEITypeAmbientViewingEnvironment    = 148
 
+	decoderSEIPicStructFrame         = 0
 	decoderSEIPicStructTopField      = 1
 	decoderSEIPicStructTopBottom     = 3
 	decoderSEIPicStructTopBottomTop  = 5
@@ -1828,6 +2003,24 @@ func decoderSEIPictureTimingPayload(picStruct uint32) []byte {
 	for i := uint8(0); i < decoderSEINumClockTSTable[picStruct]; i++ {
 		b.writeBit(0)
 	}
+	return b.bytes()
+}
+
+func decoderSEIPictureTimingTimecodePayload() []byte {
+	var b decoderSEIBitBuilder
+	b.writeBits(decoderSEIPicStructFrame, 4)
+	b.writeBit(1)
+	b.writeBits(2, 2)
+	b.writeBit(0)
+	b.writeBits(3, 5)
+	b.writeBit(1)
+	b.writeBit(0)
+	b.writeBit(1)
+	b.writeBits(0, 8)
+	b.writeBits(34, 6)
+	b.writeBits(56, 6)
+	b.writeBits(7, 5)
+	b.writeBits(0, 24)
 	return b.bytes()
 }
 

@@ -190,7 +190,7 @@ func (h *H264SEIContext) Reset() {
 	h.Common.A53Caption.Data = nil
 	h.Common.AFD.Present = 0
 	h.Common.Unregistered.Data = nil
-	h.Common.Unregistered.X264Build = 0
+	h.Common.Unregistered.X264Build = -1
 	h.RecoveryPoint.RecoveryFrameCount = -1
 	h.PictureTiming.DPBOutputDelay = 0
 	h.PictureTiming.CPBRemovalDelay = -1

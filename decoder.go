@@ -72,6 +72,7 @@ type FrameSideData struct {
 	UserDataUnregistered [][]byte
 	A53ClosedCaptions    []byte
 	X264Build            int
+	S12MTimecodes        []uint32
 	PictureTiming        *PictureTiming
 	RecoveryPoint        *RecoveryPoint
 	BufferingPeriod      *BufferingPeriod
@@ -678,11 +679,11 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 		Y:                              src.Y,
 		Cb:                             src.Cb,
 		Cr:                             src.Cr,
-		SideData:                       frameSideDataFromH264(src.SideData),
+		SideData:                       frameSideDataFromH264(src.SideData, src.TimeScale, src.NumUnitsInTick),
 	}
 }
 
-func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
+func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numUnitsInTick uint32) FrameSideData {
 	out := FrameSideData{
 		UserDataUnregistered: cloneByteSlices(src.UserDataUnregistered),
 		A53ClosedCaptions:    append([]byte(nil), src.A53ClosedCaptions...),
@@ -711,6 +712,7 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
 			})
 		}
 		out.PictureTiming = &pt
+		out.S12MTimecodes = s12mTimecodesFromPictureTiming(src.PictureTiming, timeScale, numUnitsInTick, src.X264Build)
 	}
 	if src.RecoveryPoint.RecoveryFrameCount >= 0 {
 		out.RecoveryPoint = &RecoveryPoint{RecoveryFrameCount: src.RecoveryPoint.RecoveryFrameCount}
@@ -773,6 +775,116 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
 		}
 	}
 	return out
+}
+
+func s12mTimecodesFromPictureTiming(src h264.H264SEIPictureTiming, timeScale uint32, numUnitsInTick uint32, x264Build int32) []uint32 {
+	count := int(src.TimecodeCount)
+	if count <= 0 {
+		return nil
+	}
+	if count > len(src.Timecode) {
+		count = len(src.Timecode)
+	}
+	rateNum, rateDen := h264TimecodeFrameRate(timeScale, numUnitsInTick, x264Build)
+	out := make([]uint32, count)
+	for i := 0; i < count; i++ {
+		tc := src.Timecode[i]
+		out[i] = avTimecodeGetSMPTE(rateNum, rateDen, tc.DropFrame != 0, tc.Hours, tc.Minutes, tc.Seconds, tc.Frame)
+	}
+	return out
+}
+
+func h264TimecodeFrameRate(timeScale uint32, numUnitsInTick uint32, x264Build int32) (int64, int64) {
+	if timeScale == 0 || numUnitsInTick == 0 {
+		return 0, 1
+	}
+	num := uint64(timeScale)
+	den := uint64(numUnitsInTick) * 2
+	if x264Build >= 0 && x264Build < 44 {
+		den *= 2
+	}
+	g := gcdUint64(num, den)
+	return int64(num / g), int64(den / g)
+}
+
+func avTimecodeGetSMPTE(rateNum int64, rateDen int64, drop bool, hh int32, mm int32, ss int32, ff int32) uint32 {
+	var tc uint32
+	if cmpRational(rateNum, rateDen, 30, 1) > 0 {
+		if ff%2 == 1 {
+			if cmpRational(rateNum, rateDen, 50, 1) == 0 {
+				tc |= 1 << 7
+			} else {
+				tc |= 1 << 23
+			}
+		}
+		ff /= 2
+	}
+
+	hh %= 24
+	mm = clipInt32(mm, 0, 59)
+	ss = clipInt32(ss, 0, 59)
+	ff %= 40
+
+	if drop {
+		tc |= 1 << 30
+	}
+	tc |= uint32(ff/10) << 28
+	tc |= uint32(ff%10) << 24
+	tc |= uint32(ss/10) << 20
+	tc |= uint32(ss%10) << 16
+	tc |= uint32(mm/10) << 12
+	tc |= uint32(mm%10) << 8
+	tc |= uint32(hh/10) << 4
+	tc |= uint32(hh % 10)
+	return tc
+}
+
+func cmpRational(aNum int64, aDen int64, bNum int64, bDen int64) int {
+	if aDen == 0 && bDen == 0 {
+		return 0
+	}
+	if aDen == 0 {
+		if aNum < 0 {
+			return -1
+		}
+		return 1
+	}
+	if bDen == 0 {
+		if bNum < 0 {
+			return 1
+		}
+		return -1
+	}
+	lhs := aNum * bDen
+	rhs := bNum * aDen
+	switch {
+	case lhs < rhs:
+		return -1
+	case lhs > rhs:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func clipInt32(v int32, min int32, max int32) int32 {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+func gcdUint64(a uint64, b uint64) uint64 {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	if a == 0 {
+		return 1
+	}
+	return a
 }
 
 func stereo3DFromFramePacking(src h264.H2645SEIFramePacking) *Stereo3D {

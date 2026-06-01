@@ -198,6 +198,23 @@ func TestPredSpatialDirectColZeroClearsZeroRefs(t *testing.T) {
 	}
 }
 
+func TestSpatialDirectColZeroUsesFFmpegUnsignedX264BuildCompare(t *testing.T) {
+	_, col, _ := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
+	col.tables.RefIndex[0][0] = -1
+	col.tables.RefIndex[1][0] = 0
+
+	list, ok := spatialDirectColZeroList(col.tables, 0, 0, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			nil,
+			{{frame: col}},
+		},
+		X264Build: -1,
+	})
+	if !ok || list != 1 {
+		t.Fatalf("col-zero list = %d/%v, want 1/true", list, ok)
+	}
+}
+
 func TestPredSpatialDirect8x8SameMotionCollapsesTo16x16(t *testing.T) {
 	m, col, idr := newTemporalDirectTestTables(t, MBType8x8|MBTypeP0L0|MBTypeP1L0)
 	bxy := int(col.tables.MB2BXY[0])

@@ -8,6 +8,15 @@ import (
 	"testing"
 )
 
+func TestH264SEIContextResetInitializesX264BuildLikeFFmpeg(t *testing.T) {
+	var ctx H264SEIContext
+	ctx.Common.Unregistered.X264Build = 165
+	ctx.Reset()
+	if ctx.Common.Unregistered.X264Build != -1 {
+		t.Fatalf("x264 build = %d, want -1", ctx.Common.Unregistered.X264Build)
+	}
+}
+
 func TestDecodeSEIMessages(t *testing.T) {
 	sps := &SPS{
 		SPSID:                        0,

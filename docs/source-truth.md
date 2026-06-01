@@ -105,13 +105,18 @@ display, and content-light metadata while preserving the rawvideo MD5. The
 same test proves FFmpeg/libavutil frame side-data projection for H.264 frame
 packing into stereo3D metadata, display orientation into the native display
 matrix, and mastering-display RGB ordering plus `has_primaries`/`has_luminance`
-validation. The two-frame side-data test additionally proves FFmpeg's one-shot
-handoff behavior for unregistered SEI payloads, A53 captions, active-format
-descriptions, and H.264 film grain with `repetition_period == 0`.
+validation. Public picture-timing tests also cover FFmpeg's
+`AV_FRAME_DATA_S12M_TIMECODE` projection from processed picture-timing SEI. The
+two-frame side-data test additionally proves FFmpeg's one-shot handoff behavior
+for unregistered SEI payloads, A53 captions, active-format descriptions,
+picture-timing timecodes, and H.264 film grain with `repetition_period == 0`.
 Public picture-timing tests use a pic-struct-present SPS and synthetic leading
 SEI to prove decoded `Frame` exposes FFmpeg-shaped `repeat_pict`, interlaced,
-and top-field-first metadata while preserving the rawvideo MD5. Public rich-VUI
-tests synthesize a valid SPS and prove `StreamInfo` exposes FFmpeg-normalized
+top-field-first metadata, and SMPTE 12M timecode words while preserving the
+rawvideo MD5. A native opt-in C oracle compiles the pinned
+`av_timecode_get_smpte` packing branch and compares the Go helper for 29.97,
+50, and 60 fps cases. Public rich-VUI tests synthesize a valid SPS and prove
+`StreamInfo` exposes FFmpeg-normalized
 SAR, video full-range signaling, color primaries/transfer/matrix, chroma
 location, and timing fields.
 Monochrome
@@ -176,11 +181,14 @@ truncated-caption rejection, recovery point, green metadata, x264 unregistered
 user data, display orientation, frame packing, alternative transfer, ambient
 viewing environment with FFmpeg's invalid-value checks, H.274 film-grain
 characteristics including the six-value component-model limit, mastering
-display, and content light messages. The simple decoder now parses leading SEI
-NALs into decoder state while keeping SEI parser failures non-fatal, matching
-FFmpeg's default behavior without `AV_EF_EXPLODE`, consumes one-shot frame side
-data after export, and applies the simple frame-picture portion of FFmpeg
-`h264_export_frame_props` for picture-timing frame flags.
+display, and content light messages. Public side-data projection includes
+SMPTE 12M picture-timing timecodes using the same VUI-derived frame-rate and
+x264-build reset rules that feed FFmpeg's `h264_export_frame_props`. The simple
+decoder now parses leading SEI NALs into decoder state while keeping SEI parser
+failures non-fatal, matching FFmpeg's default behavior without `AV_EF_EXPLODE`,
+consumes one-shot frame side data after export, and applies the simple
+frame-picture portion of FFmpeg `h264_export_frame_props` for picture-timing
+frame flags.
 
 ## Decoder Boundary
 
@@ -191,7 +199,7 @@ Included:
 - H.264 packet side-data handling for `AV_PKT_DATA_NEW_EXTRADATA`-style parameter-set updates
 - H.264 NAL headers and RBSP handling
 - SPS VUI public metadata for SAR, video range/format, colorimetry, chroma location, and timing
-- Picture-timing-derived `repeat_pict`, interlaced, and top-field-first public frame flags for the simple frame-picture path
+- Picture-timing-derived `repeat_pict`, interlaced, top-field-first, and SMPTE 12M timecode public frame metadata for the simple frame-picture path
 - Decoded frame SEI side data for the translated subset, including registered ITU-T T.35 ATSC AFD/A53 captions, stereo3D, display matrix, mastering-display validity, ambient viewing environment, and H.274 film grain characteristics
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
