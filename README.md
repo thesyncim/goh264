@@ -14,6 +14,9 @@ Scope is decoder-only.
 - Still not a general libavcodec replacement: field/MBAFF, FMO, broad error
   resilience, threading/SIMD, full delayed output, broad 12/14-bit streams, and
   unproved high-bit-depth feature combinations remain guarded.
+- Public FATE vectors are wired as an oracle gate. `GOH264_ORACLE=1` runs them
+  and is intentionally red until `testdata/h264/realvectors/failures.jsonl` is
+  empty.
 
 Detailed source state: [docs/source-truth.md](docs/source-truth.md).
 File/function ledger: [docs/translation-ledger.md](docs/translation-ledger.md).
@@ -23,15 +26,14 @@ Fixture hashes/oracles: `testdata/h264/corpus/manifest.jsonl`.
 
 ```sh
 go test ./...
-GOH264_ORACLE=1 go test ./...
+GOH264_ORACLE=1 GOH264_CORPUS_FETCH=1 go test ./...
 go test . -run TestH264CorpusManifest
 GOH264_REAL_VECTORS=1 GOH264_CORPUS_FETCH=1 GOH264_CORPUS_FILTER=canl4 go test . -run TestH264RealVectorManifest
-GOH264_CORPUS_MANIFEST=testdata/h264/realvectors/failures.jsonl GOH264_CORPUS_FETCH=1 go test . -run TestH264CorpusManifest
+GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorFailureLedgerFreshness
 ```
 
-The last command is intentionally red until the public FATE failure ledger is
-cleared. Narrow scout work with `GOH264_CORPUS_FILTER=frext`, `cacqp3`, `hi422`,
-or any feature tag in the manifest.
+Use `GOH264_CORPUS_FILTER=frext3`, `hi422`, `hcamff1`, or any feature tag to
+narrow a red public-vector lane.
 
 ## Benchmark
 

@@ -20,6 +20,7 @@ import (
 
 const defaultH264CorpusManifest = "testdata/h264/corpus/manifest.jsonl"
 const defaultH264RealVectorManifest = "testdata/h264/realvectors/manifest.jsonl"
+const defaultH264RealVectorFailureManifest = "testdata/h264/realvectors/failures.jsonl"
 
 func h264CorpusManifestPaths() []string {
 	if manifests := os.Getenv("GOH264_CORPUS_MANIFESTS"); manifests != "" {
@@ -68,15 +69,15 @@ func TestH264CorpusManifest(t *testing.T) {
 }
 
 func TestH264RealVectorManifest(t *testing.T) {
-	if os.Getenv("GOH264_REAL_VECTORS") != "1" {
-		t.Skip("set GOH264_REAL_VECTORS=1 to run external public H.264 vectors")
+	if !h264RealVectorsEnabled() {
+		t.Skip("set GOH264_REAL_VECTORS=1 or GOH264_ORACLE=1 to run external public H.264 vectors")
 	}
 	testH264CorpusManifest(t, defaultH264RealVectorManifest)
 }
 
 func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
-	failures := readH264CorpusManifest(t, "testdata/h264/realvectors/failures.jsonl")
+	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
 	if len(manifest) == 0 {
 		t.Fatal("real-vector manifest is empty")
 	}
@@ -126,6 +127,46 @@ func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 	}
 }
 
+func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
+	if !h264RealVectorsEnabled() && os.Getenv("GOH264_REAL_VECTOR_FAILURES") != "1" {
+		t.Skip("set GOH264_REAL_VECTOR_FAILURES=1, GOH264_REAL_VECTORS=1, or GOH264_ORACLE=1 to verify red public vector rows")
+	}
+	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
+	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
+		failures = filterH264CorpusEntries(failures, filter)
+		if len(failures) == 0 {
+			t.Fatalf("%s: no failure entries matched GOH264_CORPUS_FILTER=%q", defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"))
+		}
+	}
+	for _, entry := range failures {
+		entry := entry
+		t.Run(entry.ID, func(t *testing.T) {
+			validateH264CorpusEntry(t, entry)
+			if entry.Expect != "decode-ok" {
+				t.Fatalf("%s: failure ledger rows must stay decode-ok oracle rows, got %q", entry.ID, entry.Expect)
+			}
+			if !h264CorpusEntryHasSurface(entry, "annexb") {
+				t.Fatalf("%s: failure-ledger freshness currently requires an annexb surface", entry.ID)
+			}
+			path := materializeH264CorpusEntry(t, defaultH264RealVectorFailureManifest, entry)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			assertCorpusBitstreamMD5(t, entry, data)
+			matches, detail := h264CorpusAnnexBMatchesOracle(t, entry, data)
+			if matches {
+				t.Fatalf("%s: failure-ledger row now matches oracle; remove it from %s", entry.ID, defaultH264RealVectorFailureManifest)
+			}
+			t.Logf("%s: still red: %s", entry.ID, detail)
+		})
+	}
+}
+
+func h264RealVectorsEnabled() bool {
+	return os.Getenv("GOH264_REAL_VECTORS") == "1" || os.Getenv("GOH264_ORACLE") == "1"
+}
+
 func testH264CorpusManifest(t *testing.T, manifest string) {
 	entries := readH264CorpusManifest(t, manifest)
 	if len(entries) == 0 {
@@ -164,6 +205,15 @@ func testH264CorpusManifest(t *testing.T, manifest string) {
 			}
 		})
 	}
+}
+
+func h264CorpusEntryHasSurface(entry h264CorpusEntry, want string) bool {
+	for _, surface := range entry.Surfaces {
+		if surface == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestH264CorpusManifestPaths(t *testing.T) {
@@ -599,6 +649,52 @@ func assertH264CorpusFrames(t *testing.T, entry h264CorpusEntry, frames []*Frame
 	if got := hex.EncodeToString(rawHash.Sum(nil)); got != entry.RawVideoMD5 {
 		t.Fatalf("%s: rawvideo md5 = %s, want %s", entry.ID, got, entry.RawVideoMD5)
 	}
+}
+
+func h264CorpusAnnexBMatchesOracle(t *testing.T, entry h264CorpusEntry, data []byte) (bool, string) {
+	t.Helper()
+	frames, err := NewDecoder().DecodeAnnexBFrames(data)
+	if err != nil {
+		return false, fmt.Sprintf("decode error: %v", err)
+	}
+	if len(frames) != entry.FrameCount {
+		return false, fmt.Sprintf("frames = %d, want %d", len(frames), entry.FrameCount)
+	}
+	rawHash := md5.New()
+	var total int
+	for i, frame := range frames {
+		pixFmt, err := frame.RawPixelFormat()
+		if err != nil {
+			return false, fmt.Sprintf("frame[%d] pix_fmt: %v", i, err)
+		}
+		if pixFmt != entry.PixFmt {
+			return false, fmt.Sprintf("frame[%d] pix_fmt = %s, want %s", i, pixFmt, entry.PixFmt)
+		}
+		raw, err := frame.AppendRawYUVBytesLE(nil)
+		if err != nil {
+			return false, fmt.Sprintf("frame[%d] raw yuv: %v", i, err)
+		}
+		if len(raw) != entry.FrameSize {
+			return false, fmt.Sprintf("frame[%d] raw size = %d, want %d", i, len(raw), entry.FrameSize)
+		}
+		sum := md5.Sum(raw)
+		if len(entry.FrameMD5) != 0 {
+			if got := hex.EncodeToString(sum[:]); got != entry.FrameMD5[i] {
+				return false, fmt.Sprintf("frame[%d] md5 = %s, want %s", i, got, entry.FrameMD5[i])
+			}
+		}
+		if _, err := rawHash.Write(raw); err != nil {
+			return false, fmt.Sprintf("frame[%d] raw hash: %v", i, err)
+		}
+		total += len(raw)
+	}
+	if total != entry.FrameCount*entry.FrameSize {
+		return false, fmt.Sprintf("raw total = %d, want %d", total, entry.FrameCount*entry.FrameSize)
+	}
+	if got := hex.EncodeToString(rawHash.Sum(nil)); got != entry.RawVideoMD5 {
+		return false, fmt.Sprintf("rawvideo md5 = %s, want %s", got, entry.RawVideoMD5)
+	}
+	return true, "matched rawvideo oracle"
 }
 
 func assertH264CorpusUnsupported(t *testing.T, entry h264CorpusEntry, err error) {

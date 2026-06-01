@@ -8,15 +8,16 @@ Seed manifest: `testdata/h264/corpus/manifest.jsonl`.
 Real-vector seed: `testdata/h264/realvectors/manifest.jsonl` (gated).
 
 ```sh
-GOH264_REAL_VECTORS=1 GOH264_CORPUS_FETCH=1 GOH264_CORPUS_FILTER=canl4 go test . -run TestH264RealVectorManifest
-GOH264_CORPUS_MANIFEST=testdata/h264/realvectors/failures.jsonl GOH264_CORPUS_FETCH=1 go test . -run TestH264CorpusManifest
+GOH264_ORACLE=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorManifest
+GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorFailureLedgerFreshness
 go run ./cmd/goh264bench -manifest testdata/h264/realvectors/manifest.jsonl -filter canl4 -iters 1 -repeats 1 -warmup 0 -ffmpeg -json
 GOH264_CORPUS_MANIFEST=/corpora/h264/jvt-avc/manifest.jsonl go test . -run TestH264CorpusManifest
 GOH264_CORPUS_MANIFESTS="/corpora/h264/jvt-avc/manifest.jsonl:/corpora/h264/fate-h264/manifest.jsonl" go test . -run TestH264CorpusManifest
 ```
 
-`failures.jsonl` is supposed to fail today; use `GOH264_CORPUS_FILTER` for one
-public vector or feature lane per scout.
+`GOH264_ORACLE=1` is intentionally red until `realvectors/failures.jsonl` is
+empty. Use `GOH264_CORPUS_FILTER` for one public vector or feature lane per
+agent.
 
 External manifests to add:
 

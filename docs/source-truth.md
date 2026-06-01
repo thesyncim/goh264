@@ -14,8 +14,8 @@ decoder path is in scope.
 - High internals: 9/10/12/14-bit scalar DSP and uint16 frame/ref/output planes.
 - Public High10/High12: only manifest-backed lanes. Latest addition is High10
   CAVLC temporal B8x8 direct-sub with visible luma residual.
-- External FATE vectors: URL-backed, gated by `GOH264_REAL_VECTORS=1`; first
-  passing canary is `CANL4_SVA_B.264` across all public surfaces.
+- External FATE vectors: URL-backed, gated by `GOH264_REAL_VECTORS=1` or
+  `GOH264_ORACLE=1`; red rows live in `realvectors/failures.jsonl`.
 
 Canonical fixture detail lives in `testdata/h264/corpus/manifest.jsonl`, not in
 Markdown.
@@ -24,7 +24,8 @@ Markdown.
 
 ```sh
 go test ./...
-GOH264_ORACLE=1 go test ./...
+GOH264_ORACLE=1 GOH264_CORPUS_FETCH=1 go test ./...
+GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorFailureLedgerFreshness
 go run ./cmd/goh264bench -manifest testdata/h264/corpus/manifest.jsonl -iters 1 -repeats 1 -warmup 0 -ffmpeg -json
 ```
 
