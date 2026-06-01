@@ -60,6 +60,8 @@ type DecodedFrameSideData struct {
 	FramePacking         H2645SEIFramePacking
 	DisplayOrientation   H2645SEIDisplayOrientation
 	AlternativeTransfer  H2645SEIAlternativeTransfer
+	AmbientViewing       H2645SEIAmbientViewingEnvironment
+	FilmGrain            H2645SEIFilmGrainCharacteristics
 	MasteringDisplay     H2645SEIMasteringDisplay
 	ContentLight         H2645SEIContentLight
 }
@@ -264,6 +266,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 					return nil, err
 				}
 				frame.SideData = decodedFrameSideDataFromSEI(sei)
+				consumeFrameSideDataFromSEI(sei)
 				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
@@ -353,8 +356,22 @@ func decodedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
 		FramePacking:         sei.Common.FramePacking,
 		DisplayOrientation:   sei.Common.DisplayOrientation,
 		AlternativeTransfer:  sei.Common.AlternativeTransfer,
+		AmbientViewing:       sei.Common.AmbientViewing,
+		FilmGrain:            sei.Common.FilmGrain,
 		MasteringDisplay:     sei.Common.MasteringDisplay,
 		ContentLight:         sei.Common.ContentLight,
+	}
+}
+
+func consumeFrameSideDataFromSEI(sei *H264SEIContext) {
+	if sei == nil {
+		return
+	}
+	sei.Common.Unregistered.Data = nil
+	sei.Common.A53Caption.Data = nil
+	sei.Common.AFD.Present = 0
+	if sei.Common.FilmGrain.Present != 0 && sei.Common.FilmGrain.RepetitionPeriod == 0 {
+		sei.Common.FilmGrain.Present = 0
 	}
 }
 

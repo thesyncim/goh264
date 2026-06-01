@@ -543,6 +543,8 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 		decoderSEITestMessage{typ: decoderSEITypeDisplayOrientation, payload: decoderSEIDisplayOrientationPayload()},
 		decoderSEITestMessage{typ: decoderSEITypeFramePackingArrangement, payload: decoderSEIFramePackingPayload()},
 		decoderSEITestMessage{typ: decoderSEITypeAlternativeTransfer, payload: []byte{16}},
+		decoderSEITestMessage{typ: decoderSEITypeAmbientViewingEnvironment, payload: decoderSEIAmbientViewingPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeFilmGrainCharacteristics, payload: decoderSEIFilmGrainPayload()},
 		decoderSEITestMessage{typ: decoderSEITypeMasteringDisplayColourVolume, payload: []byte{
 			0, 1, 0, 2,
 			0, 3, 0, 4,
@@ -586,6 +588,29 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 	if side.AlternativeTransfer == nil || side.AlternativeTransfer.PreferredTransferCharacteristics != 16 {
 		t.Fatalf("alternative transfer = %+v", side.AlternativeTransfer)
 	}
+	if side.AmbientViewing == nil || side.AmbientViewing.AmbientIlluminance != 12345 ||
+		side.AmbientViewing.AmbientLightX != 25000 || side.AmbientViewing.AmbientLightY != 16667 {
+		t.Fatalf("ambient viewing = %+v", side.AmbientViewing)
+	}
+	fg := side.FilmGrain
+	if fg == nil || fg.ModelID != 1 || !fg.SeparateColourDescriptionPresentFlag ||
+		fg.BitDepthLuma != 10 || fg.BitDepthChroma != 8 || !fg.FullRange ||
+		fg.ColorPrimaries != 9 || fg.TransferCharacteristics != 16 || fg.MatrixCoeffs != 9 ||
+		fg.BlendingModeID != 1 || fg.Log2ScaleFactor != 7 || fg.RepetitionPeriod != 4 {
+		t.Fatalf("film grain header = %+v", fg)
+	}
+	if fg.CompModelPresentFlag != [3]bool{true, true, false} ||
+		fg.NumIntensityIntervals != [3]uint16{1, 2, 0} ||
+		fg.NumModelValues != [3]uint8{2, 1, 0} {
+		t.Fatalf("film grain component counts = present %+v intervals %+v values %+v",
+			fg.CompModelPresentFlag, fg.NumIntensityIntervals, fg.NumModelValues)
+	}
+	if fg.IntensityIntervalLowerBound[0][0] != 10 || fg.IntensityIntervalUpperBound[0][0] != 20 ||
+		fg.CompModelValue[0][0][0] != 3 || fg.CompModelValue[0][0][1] != -2 ||
+		fg.IntensityIntervalLowerBound[1][1] != 41 || fg.IntensityIntervalUpperBound[1][1] != 60 ||
+		fg.CompModelValue[1][1][0] != 5 {
+		t.Fatalf("film grain component data = %+v %+v %+v", fg.IntensityIntervalLowerBound, fg.IntensityIntervalUpperBound, fg.CompModelValue)
+	}
 	if side.MasteringDisplay == nil || side.MasteringDisplay.DisplayPrimaries[2][1] != 6 ||
 		side.MasteringDisplay.WhitePoint != [2]uint16{7, 8} ||
 		side.MasteringDisplay.MaxLuminance != 0x01020304 ||
@@ -595,6 +620,45 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 	if side.ContentLight == nil || side.ContentLight.MaxContentLightLevel != 1000 ||
 		side.ContentLight.MaxPicAverageLightLevel != 250 {
 		t.Fatalf("content light = %+v", side.ContentLight)
+	}
+}
+
+func TestDecodeFrameOneShotSEISideDataIsNotRepeated(t *testing.T) {
+	data := prependAnnexBNAL(decodeHexFixture(t, black16IPAnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0d)},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x01, 0x02, 0x03})},
+		decoderSEITestMessage{typ: decoderSEITypeFilmGrainCharacteristics, payload: decoderSEIFilmGrainPayloadWithRepetition(0)},
+	))
+	frames, err := NewDecoder().DecodeAnnexBFrames(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("frames = %d, want 2", len(frames))
+	}
+	assertFrameMD5Strings(t, frames, []string{
+		"8aaefe0adcea094cfb5161a060bab4e2",
+		"8aaefe0adcea094cfb5161a060bab4e2",
+	})
+
+	first := frames[0].SideData
+	if first.ActiveFormat == nil || first.ActiveFormat.Description != 0x0d {
+		t.Fatalf("first active format = %+v", first.ActiveFormat)
+	}
+	if got, want := first.A53ClosedCaptions, []byte{0x01, 0x02, 0x03}; !bytes.Equal(got, want) {
+		t.Fatalf("first a53 captions = %x, want %x", got, want)
+	}
+	if len(first.UserDataUnregistered) != 1 || first.X264Build != 165 {
+		t.Fatalf("first unregistered = build %d count %d", first.X264Build, len(first.UserDataUnregistered))
+	}
+	if first.FilmGrain == nil || first.FilmGrain.RepetitionPeriod != 0 {
+		t.Fatalf("first film grain = %+v", first.FilmGrain)
+	}
+
+	second := frames[1].SideData
+	if second.ActiveFormat != nil || len(second.A53ClosedCaptions) != 0 ||
+		len(second.UserDataUnregistered) != 0 || second.FilmGrain != nil {
+		t.Fatalf("second repeated one-shot side data = %+v", second)
 	}
 }
 
@@ -1629,12 +1693,14 @@ const (
 	decoderSEITypePicTiming                    = 1
 	decoderSEITypeUserDataRegisteredITUTT35    = 4
 	decoderSEITypeRecoveryPoint                = 6
+	decoderSEITypeFilmGrainCharacteristics     = 19
 	decoderSEITypeGreenMetadata                = 56
 	decoderSEITypeFramePackingArrangement      = 45
 	decoderSEITypeDisplayOrientation           = 47
 	decoderSEITypeMasteringDisplayColourVolume = 137
 	decoderSEITypeContentLightLevelInfo        = 144
 	decoderSEITypeAlternativeTransfer          = 147
+	decoderSEITypeAmbientViewingEnvironment    = 148
 
 	decoderSEIPicStructTopField      = 1
 	decoderSEIPicStructTopBottom     = 3
@@ -1795,6 +1861,48 @@ func decoderSEIFramePackingPayload() []byte {
 	return b.bytes()
 }
 
+func decoderSEIAmbientViewingPayload() []byte {
+	return []byte{0x00, 0x00, 0x30, 0x39, 0x61, 0xa8, 0x41, 0x1b}
+}
+
+func decoderSEIFilmGrainPayload() []byte {
+	return decoderSEIFilmGrainPayloadWithRepetition(4)
+}
+
+func decoderSEIFilmGrainPayloadWithRepetition(repetitionPeriod uint32) []byte {
+	var b decoderSEIBitBuilder
+	b.writeBit(0)
+	b.writeBits(1, 2)
+	b.writeBit(1)
+	b.writeBits(2, 3)
+	b.writeBits(0, 3)
+	b.writeBit(1)
+	b.writeBits(9, 8)
+	b.writeBits(16, 8)
+	b.writeBits(9, 8)
+	b.writeBits(1, 2)
+	b.writeBits(7, 4)
+	b.writeBit(1)
+	b.writeBit(1)
+	b.writeBit(0)
+	b.writeBits(0, 8)
+	b.writeBits(1, 3)
+	b.writeBits(10, 8)
+	b.writeBits(20, 8)
+	b.writeSE(3)
+	b.writeSE(-2)
+	b.writeBits(1, 8)
+	b.writeBits(0, 3)
+	b.writeBits(30, 8)
+	b.writeBits(40, 8)
+	b.writeSE(-1)
+	b.writeBits(41, 8)
+	b.writeBits(60, 8)
+	b.writeSE(5)
+	b.writeUE(repetitionPeriod)
+	return b.bytes()
+}
+
 type decoderSEIBitBuilder struct {
 	bits []byte
 }
@@ -1820,6 +1928,16 @@ func (b *decoderSEIBitBuilder) writeUE(v uint32) {
 		b.writeBit(0)
 	}
 	b.writeBits(codeNum, uint32(bitLen))
+}
+
+func (b *decoderSEIBitBuilder) writeSE(v int32) {
+	var ue uint32
+	if v <= 0 {
+		ue = uint32(-v) * 2
+	} else {
+		ue = uint32(v)*2 - 1
+	}
+	b.writeUE(ue)
 }
 
 func (b *decoderSEIBitBuilder) bytes() []byte {

@@ -76,6 +76,8 @@ type FrameSideData struct {
 	FramePacking         *FramePackingArrangement
 	DisplayOrientation   *DisplayOrientation
 	AlternativeTransfer  *AlternativeTransfer
+	AmbientViewing       *AmbientViewingEnvironment
+	FilmGrain            *FilmGrainCharacteristics
 	MasteringDisplay     *MasteringDisplay
 	ContentLight         *ContentLight
 }
@@ -140,6 +142,32 @@ type DisplayOrientation struct {
 
 type AlternativeTransfer struct {
 	PreferredTransferCharacteristics int32
+}
+
+type AmbientViewingEnvironment struct {
+	AmbientIlluminance uint32
+	AmbientLightX      uint16
+	AmbientLightY      uint16
+}
+
+type FilmGrainCharacteristics struct {
+	ModelID                              int32
+	SeparateColourDescriptionPresentFlag bool
+	BitDepthLuma                         int32
+	BitDepthChroma                       int32
+	FullRange                            bool
+	ColorPrimaries                       int32
+	TransferCharacteristics              int32
+	MatrixCoeffs                         int32
+	BlendingModeID                       int32
+	Log2ScaleFactor                      int32
+	CompModelPresentFlag                 [3]bool
+	NumIntensityIntervals                [3]uint16
+	NumModelValues                       [3]uint8
+	IntensityIntervalLowerBound          [3][256]uint8
+	IntensityIntervalUpperBound          [3][256]uint8
+	CompModelValue                       [3][256][6]int16
+	RepetitionPeriod                     uint32
 }
 
 type MasteringDisplay struct {
@@ -693,6 +721,16 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
 			PreferredTransferCharacteristics: src.AlternativeTransfer.PreferredTransferCharacteristics,
 		}
 	}
+	if src.AmbientViewing.Present != 0 {
+		out.AmbientViewing = &AmbientViewingEnvironment{
+			AmbientIlluminance: src.AmbientViewing.AmbientIlluminance,
+			AmbientLightX:      src.AmbientViewing.AmbientLightX,
+			AmbientLightY:      src.AmbientViewing.AmbientLightY,
+		}
+	}
+	if src.FilmGrain.Present != 0 {
+		out.FilmGrain = filmGrainFromH264(src.FilmGrain)
+	}
 	if src.MasteringDisplay.Present != 0 {
 		out.MasteringDisplay = &MasteringDisplay{
 			DisplayPrimaries: src.MasteringDisplay.DisplayPrimaries,
@@ -706,6 +744,31 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
 			MaxContentLightLevel:    src.ContentLight.MaxContentLightLevel,
 			MaxPicAverageLightLevel: src.ContentLight.MaxPicAverageLightLevel,
 		}
+	}
+	return out
+}
+
+func filmGrainFromH264(src h264.H2645SEIFilmGrainCharacteristics) *FilmGrainCharacteristics {
+	out := &FilmGrainCharacteristics{
+		ModelID:                              src.ModelID,
+		SeparateColourDescriptionPresentFlag: src.SeparateColourDescriptionPresentFlag != 0,
+		BitDepthLuma:                         src.BitDepthLuma,
+		BitDepthChroma:                       src.BitDepthChroma,
+		FullRange:                            src.FullRange != 0,
+		ColorPrimaries:                       src.ColorPrimaries,
+		TransferCharacteristics:              src.TransferCharacteristics,
+		MatrixCoeffs:                         src.MatrixCoeffs,
+		BlendingModeID:                       src.BlendingModeID,
+		Log2ScaleFactor:                      src.Log2ScaleFactor,
+		NumIntensityIntervals:                src.NumIntensityIntervals,
+		NumModelValues:                       src.NumModelValues,
+		IntensityIntervalLowerBound:          src.IntensityIntervalLowerBound,
+		IntensityIntervalUpperBound:          src.IntensityIntervalUpperBound,
+		CompModelValue:                       src.CompModelValue,
+		RepetitionPeriod:                     src.RepetitionPeriod,
+	}
+	for i := range src.CompModelPresentFlag {
+		out.CompModelPresentFlag[i] = src.CompModelPresentFlag[i] != 0
 	}
 	return out
 }

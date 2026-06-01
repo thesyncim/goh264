@@ -12,11 +12,13 @@ const (
 	seiTypeUserDataUnregistered         = 5
 	seiTypeRecoveryPoint                = 6
 	seiTypeGreenMetadata                = 56
+	seiTypeFilmGrainCharacteristics     = 19
 	seiTypeFramePackingArrangement      = 45
 	seiTypeDisplayOrientation           = 47
 	seiTypeMasteringDisplayColourVolume = 137
 	seiTypeContentLightLevelInfo        = 144
 	seiTypeAlternativeTransfer          = 147
+	seiTypeAmbientViewingEnvironment    = 148
 
 	h264SEIPicStructFrame           = 0
 	h264SEIPicStructTopField        = 1
@@ -96,8 +98,10 @@ type H2645SEI struct {
 	FramePacking        H2645SEIFramePacking
 	DisplayOrientation  H2645SEIDisplayOrientation
 	AlternativeTransfer H2645SEIAlternativeTransfer
+	AmbientViewing      H2645SEIAmbientViewingEnvironment
 	MasteringDisplay    H2645SEIMasteringDisplay
 	ContentLight        H2645SEIContentLight
+	FilmGrain           H2645SEIFilmGrainCharacteristics
 }
 
 type H2645SEIA53Caption struct {
@@ -137,6 +141,34 @@ type H2645SEIAlternativeTransfer struct {
 	PreferredTransferCharacteristics int32
 }
 
+type H2645SEIAmbientViewingEnvironment struct {
+	Present            int32
+	AmbientIlluminance uint32
+	AmbientLightX      uint16
+	AmbientLightY      uint16
+}
+
+type H2645SEIFilmGrainCharacteristics struct {
+	Present                              int32
+	ModelID                              int32
+	SeparateColourDescriptionPresentFlag int32
+	BitDepthLuma                         int32
+	BitDepthChroma                       int32
+	FullRange                            int32
+	ColorPrimaries                       int32
+	TransferCharacteristics              int32
+	MatrixCoeffs                         int32
+	BlendingModeID                       int32
+	Log2ScaleFactor                      int32
+	CompModelPresentFlag                 [3]int32
+	NumIntensityIntervals                [3]uint16
+	NumModelValues                       [3]uint8
+	IntensityIntervalLowerBound          [3][256]uint8
+	IntensityIntervalUpperBound          [3][256]uint8
+	CompModelValue                       [3][256][6]int16
+	RepetitionPeriod                     uint32
+}
+
 type H2645SEIMasteringDisplay struct {
 	Present          int32
 	DisplayPrimaries [3][2]uint16
@@ -170,6 +202,8 @@ func (h *H264SEIContext) Reset() {
 	h.Common.DisplayOrientation.Present = 0
 	h.Common.MasteringDisplay.Present = 0
 	h.Common.ContentLight.Present = 0
+	h.Common.AmbientViewing = H2645SEIAmbientViewingEnvironment{}
+	h.Common.FilmGrain = H2645SEIFilmGrainCharacteristics{}
 }
 
 func DecodeSEI(rbsp []byte, spsList *[maxSPSCount]*SPS) (*H264SEIContext, error) {
@@ -243,10 +277,14 @@ func (h *H264SEIContext) decodeMessage(payloadType int, payload []byte, spsList 
 		return h.Common.Unregistered.decodeUnregisteredUserData(payload)
 	case seiTypeDisplayOrientation:
 		return h.Common.DisplayOrientation.decodeDisplayOrientation(payload)
+	case seiTypeFilmGrainCharacteristics:
+		return h.Common.FilmGrain.decodeFilmGrainCharacteristics(payload)
 	case seiTypeFramePackingArrangement:
 		return h.Common.FramePacking.decodeFramePackingArrangement(payload)
 	case seiTypeAlternativeTransfer:
 		return h.Common.AlternativeTransfer.decodeAlternativeTransfer(payload)
+	case seiTypeAmbientViewingEnvironment:
+		return h.Common.AmbientViewing.decodeAmbientViewingEnvironment(payload)
 	case seiTypeMasteringDisplayColourVolume:
 		return h.Common.MasteringDisplay.decodeMasteringDisplay(payload)
 	case seiTypeContentLightLevelInfo:
@@ -684,6 +722,147 @@ func (h *H2645SEIAlternativeTransfer) decodeAlternativeTransfer(payload []byte) 
 	}
 	h.Present = 1
 	h.PreferredTransferCharacteristics = int32(payload[0])
+	return nil
+}
+
+func (h *H2645SEIAmbientViewingEnvironment) decodeAmbientViewingEnvironment(payload []byte) error {
+	const maxAmbientLightValue = 50000
+	if len(payload) < 8 {
+		return ErrInvalidData
+	}
+	illuminance := readBE32(payload)
+	if illuminance == 0 {
+		return ErrInvalidData
+	}
+	lightX := readBE16(payload[4:])
+	if lightX > maxAmbientLightValue {
+		return ErrInvalidData
+	}
+	lightY := readBE16(payload[6:])
+	if lightY > maxAmbientLightValue {
+		return ErrInvalidData
+	}
+	h.AmbientIlluminance = illuminance
+	h.AmbientLightX = lightX
+	h.AmbientLightY = lightY
+	h.Present = 1
+	return nil
+}
+
+func (h *H2645SEIFilmGrainCharacteristics) decodeFilmGrainCharacteristics(payload []byte) error {
+	gb := newBitReader(payload)
+	cancel, err := gb.readBit()
+	if err != nil {
+		return err
+	}
+	h.Present = int32(1 - cancel)
+	if h.Present == 0 {
+		return nil
+	}
+
+	*h = H2645SEIFilmGrainCharacteristics{}
+	modelID, err := gb.readBits(2)
+	if err != nil {
+		return err
+	}
+	separateColour, err := gb.readBit()
+	if err != nil {
+		return err
+	}
+	h.ModelID = int32(modelID)
+	h.SeparateColourDescriptionPresentFlag = int32(separateColour)
+	if separateColour != 0 {
+		bitDepthLuma, err := gb.readBits(3)
+		if err != nil {
+			return err
+		}
+		bitDepthChroma, err := gb.readBits(3)
+		if err != nil {
+			return err
+		}
+		fullRange, err := gb.readBit()
+		if err != nil {
+			return err
+		}
+		colorPrimaries, err := gb.readBits(8)
+		if err != nil {
+			return err
+		}
+		transferCharacteristics, err := gb.readBits(8)
+		if err != nil {
+			return err
+		}
+		matrixCoeffs, err := gb.readBits(8)
+		if err != nil {
+			return err
+		}
+		h.BitDepthLuma = int32(bitDepthLuma + 8)
+		h.BitDepthChroma = int32(bitDepthChroma + 8)
+		h.FullRange = int32(fullRange)
+		h.ColorPrimaries = int32(colorPrimaries)
+		h.TransferCharacteristics = int32(transferCharacteristics)
+		h.MatrixCoeffs = int32(matrixCoeffs)
+	}
+	blendingMode, err := gb.readBits(2)
+	if err != nil {
+		return err
+	}
+	log2Scale, err := gb.readBits(4)
+	if err != nil {
+		return err
+	}
+	h.BlendingModeID = int32(blendingMode)
+	h.Log2ScaleFactor = int32(log2Scale)
+	for c := 0; c < 3; c++ {
+		present, err := gb.readBit()
+		if err != nil {
+			return err
+		}
+		h.CompModelPresentFlag[c] = int32(present)
+	}
+	for c := 0; c < 3; c++ {
+		if h.CompModelPresentFlag[c] == 0 {
+			continue
+		}
+		intervals, err := gb.readBits(8)
+		if err != nil {
+			return err
+		}
+		values, err := gb.readBits(3)
+		if err != nil {
+			return err
+		}
+		h.NumIntensityIntervals[c] = uint16(intervals + 1)
+		h.NumModelValues[c] = uint8(values + 1)
+		if h.NumModelValues[c] > 6 {
+			return ErrInvalidData
+		}
+		for i := 0; i < int(h.NumIntensityIntervals[c]); i++ {
+			lower, err := gb.readBits(8)
+			if err != nil {
+				return err
+			}
+			upper, err := gb.readBits(8)
+			if err != nil {
+				return err
+			}
+			h.IntensityIntervalLowerBound[c][i] = uint8(lower)
+			h.IntensityIntervalUpperBound[c][i] = uint8(upper)
+			for j := 0; j < int(h.NumModelValues[c]); j++ {
+				value, err := gb.readSEGolombLong()
+				if err != nil {
+					return err
+				}
+				h.CompModelValue[c][i][j] = int16(value)
+			}
+		}
+	}
+	repetitionPeriod, err := gb.readUEGolombLong()
+	if err != nil {
+		return err
+	}
+	h.RepetitionPeriod = repetitionPeriod
+	h.Present = 1
 	return nil
 }
 

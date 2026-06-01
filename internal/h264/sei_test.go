@@ -33,6 +33,8 @@ func TestDecodeSEIMessages(t *testing.T) {
 		seiTestMessage{typ: seiTypeDisplayOrientation, payload: seiDisplayOrientationPayload()},
 		seiTestMessage{typ: seiTypeFramePackingArrangement, payload: seiFramePackingPayload()},
 		seiTestMessage{typ: seiTypeAlternativeTransfer, payload: []byte{16}},
+		seiTestMessage{typ: seiTypeAmbientViewingEnvironment, payload: seiAmbientViewingPayload()},
+		seiTestMessage{typ: seiTypeFilmGrainCharacteristics, payload: seiFilmGrainPayload()},
 		seiTestMessage{typ: seiTypeMasteringDisplayColourVolume, payload: []byte{
 			0, 1, 0, 2,
 			0, 3, 0, 4,
@@ -96,6 +98,29 @@ func TestDecodeSEIMessages(t *testing.T) {
 	}
 	if ctx.Common.AlternativeTransfer.Present != 1 || ctx.Common.AlternativeTransfer.PreferredTransferCharacteristics != 16 {
 		t.Fatalf("alternative transfer = %+v", ctx.Common.AlternativeTransfer)
+	}
+	if ctx.Common.AmbientViewing.Present != 1 || ctx.Common.AmbientViewing.AmbientIlluminance != 12345 ||
+		ctx.Common.AmbientViewing.AmbientLightX != 25000 || ctx.Common.AmbientViewing.AmbientLightY != 16667 {
+		t.Fatalf("ambient viewing = %+v", ctx.Common.AmbientViewing)
+	}
+	fg := ctx.Common.FilmGrain
+	if fg.Present != 1 || fg.ModelID != 1 || fg.SeparateColourDescriptionPresentFlag != 1 ||
+		fg.BitDepthLuma != 10 || fg.BitDepthChroma != 8 || fg.FullRange != 1 ||
+		fg.ColorPrimaries != 9 || fg.TransferCharacteristics != 16 || fg.MatrixCoeffs != 9 ||
+		fg.BlendingModeID != 1 || fg.Log2ScaleFactor != 7 || fg.RepetitionPeriod != 4 {
+		t.Fatalf("film grain header = %+v", fg)
+	}
+	if fg.CompModelPresentFlag != [3]int32{1, 1, 0} ||
+		fg.NumIntensityIntervals != [3]uint16{1, 2, 0} ||
+		fg.NumModelValues != [3]uint8{2, 1, 0} {
+		t.Fatalf("film grain component counts = present %+v intervals %+v values %+v",
+			fg.CompModelPresentFlag, fg.NumIntensityIntervals, fg.NumModelValues)
+	}
+	if fg.IntensityIntervalLowerBound[0][0] != 10 || fg.IntensityIntervalUpperBound[0][0] != 20 ||
+		fg.CompModelValue[0][0][0] != 3 || fg.CompModelValue[0][0][1] != -2 ||
+		fg.IntensityIntervalLowerBound[1][1] != 41 || fg.IntensityIntervalUpperBound[1][1] != 60 ||
+		fg.CompModelValue[1][1][0] != 5 {
+		t.Fatalf("film grain component data = %+v %+v %+v", fg.IntensityIntervalLowerBound, fg.IntensityIntervalUpperBound, fg.CompModelValue)
 	}
 	if ctx.Common.MasteringDisplay.Present != 2 || ctx.Common.MasteringDisplay.DisplayPrimaries[2][1] != 6 ||
 		ctx.Common.MasteringDisplay.WhitePoint != [2]uint16{7, 8} ||
@@ -168,6 +193,25 @@ func TestDecodeSEIRegisteredA53RejectsTruncatedCCData(t *testing.T) {
 	payload := seiRegisteredA53Payload([]byte{0x01, 0x02, 0x03})
 	payload = payload[:len(payload)-1]
 	if _, err := DecodeSEI(buildSEIRBSP(seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: payload}), nil); err != ErrInvalidData {
+		t.Fatalf("err = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestDecodeSEIAmbientViewingRejectsInvalidValues(t *testing.T) {
+	for _, payload := range [][]byte{
+		{0, 0, 0, 0, 0x61, 0xa8, 0x41, 0x1b},
+		{0, 0, 0x30, 0x39, 0xc3, 0x51, 0x41, 0x1b},
+		{0, 0, 0x30, 0x39, 0x61, 0xa8, 0xc3, 0x51},
+		{0, 0, 0x30, 0x39, 0x61, 0xa8, 0x41},
+	} {
+		if _, err := DecodeSEI(buildSEIRBSP(seiTestMessage{typ: seiTypeAmbientViewingEnvironment, payload: payload}), nil); err != ErrInvalidData {
+			t.Fatalf("payload %x err = %v, want ErrInvalidData", payload, err)
+		}
+	}
+}
+
+func TestDecodeSEIFilmGrainRejectsTooManyModelValues(t *testing.T) {
+	if _, err := DecodeSEI(buildSEIRBSP(seiTestMessage{typ: seiTypeFilmGrainCharacteristics, payload: seiFilmGrainTooManyValuesPayload()}), nil); err != ErrInvalidData {
 		t.Fatalf("err = %v, want ErrInvalidData", err)
 	}
 }
@@ -324,6 +368,59 @@ func seiFramePackingPayload() []byte {
 	return b.bytes()
 }
 
+func seiAmbientViewingPayload() []byte {
+	return []byte{0x00, 0x00, 0x30, 0x39, 0x61, 0xa8, 0x41, 0x1b}
+}
+
+func seiFilmGrainPayload() []byte {
+	var b seiBitBuilder
+	b.writeBit(0)
+	b.writeBits(1, 2)
+	b.writeBit(1)
+	b.writeBits(2, 3)
+	b.writeBits(0, 3)
+	b.writeBit(1)
+	b.writeBits(9, 8)
+	b.writeBits(16, 8)
+	b.writeBits(9, 8)
+	b.writeBits(1, 2)
+	b.writeBits(7, 4)
+	b.writeBit(1)
+	b.writeBit(1)
+	b.writeBit(0)
+	b.writeBits(0, 8)
+	b.writeBits(1, 3)
+	b.writeBits(10, 8)
+	b.writeBits(20, 8)
+	b.writeSE(3)
+	b.writeSE(-2)
+	b.writeBits(1, 8)
+	b.writeBits(0, 3)
+	b.writeBits(30, 8)
+	b.writeBits(40, 8)
+	b.writeSE(-1)
+	b.writeBits(41, 8)
+	b.writeBits(60, 8)
+	b.writeSE(5)
+	b.writeUE(4)
+	return b.bytes()
+}
+
+func seiFilmGrainTooManyValuesPayload() []byte {
+	var b seiBitBuilder
+	b.writeBit(0)
+	b.writeBits(0, 2)
+	b.writeBit(0)
+	b.writeBits(0, 2)
+	b.writeBits(0, 4)
+	b.writeBit(1)
+	b.writeBit(0)
+	b.writeBit(0)
+	b.writeBits(0, 8)
+	b.writeBits(6, 3)
+	return b.bytes()
+}
+
 func seiUnregisteredPayload() []byte {
 	payload := []byte{
 		0x00, 0x01, 0x02, 0x03,
@@ -359,6 +456,16 @@ func (b *seiBitBuilder) writeUE(v uint32) {
 		b.writeBit(0)
 	}
 	b.writeBits(codeNum, uint32(width))
+}
+
+func (b *seiBitBuilder) writeSE(v int32) {
+	var ue uint32
+	if v <= 0 {
+		ue = uint32(-v) * 2
+	} else {
+		ue = uint32(v)*2 - 1
+	}
+	b.writeUE(ue)
 }
 
 func (b *seiBitBuilder) bytes() []byte {
