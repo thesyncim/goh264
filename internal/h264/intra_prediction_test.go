@@ -83,3 +83,25 @@ func TestCheckIntraPredMode(t *testing.T) {
 		t.Fatalf("out-of-range err = %v, want ErrInvalidData", err)
 	}
 }
+
+func TestCheckIntraPredModeMadCowChromaModes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		top  uint16
+		left uint16
+		want int
+	}{
+		{"left top only", 0xffff, 0x8000, intraPred8x8AlzheimerL0TDC},
+		{"left bottom only", 0xffff, 0x0080, intraPred8x8Alzheimer0LTDC},
+		{"top missing left top only", 0, 0x8000, intraPred8x8AlzheimerL00DC},
+		{"top missing left bottom only", 0, 0x0080, intraPred8x8Alzheimer0L0DC},
+	} {
+		got, err := checkIntraPredMode(intraPred8x8DC, tc.top, tc.left, true)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if got != tc.want {
+			t.Fatalf("%s: mode = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}

@@ -38,6 +38,10 @@ pinned FFmpeg `libavcodec/cabac.c` and `cabac_functions.h` from
 `.upstream/ffmpeg-n8.0.1` in a temporary directory and compares primitive traces
 against the Go port.
 
+The H.264 prediction oracle compiles the pinned `libavcodec/h264pred_template.c`
+and compares 8-bit luma/chroma prediction outputs, including FFmpeg's 4:2:0 and
+4:2:2 mad-cow unavailable-neighbor chroma DC predictors.
+
 The `ffprobe` header oracle now compares public `StreamInfo` SPS VUI sample
 aspect ratio and timing rate for the black16 stream in addition to profile,
 level, dimensions, and pixel format.

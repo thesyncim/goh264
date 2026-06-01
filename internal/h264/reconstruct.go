@@ -847,6 +847,14 @@ func h264Pred8x8ByMode(pix []uint8, offset int, stride int, mode int) error {
 		return h264Pred8x8TopDC(pix, offset, stride)
 	case intraPredDC1288x8:
 		return h264Pred8x8DC128(pix, offset, stride)
+	case intraPred8x8AlzheimerL0TDC:
+		return h264Pred8x8MadCowDCL0T(pix, offset, stride)
+	case intraPred8x8Alzheimer0LTDC:
+		return h264Pred8x8MadCowDC0LT(pix, offset, stride)
+	case intraPred8x8AlzheimerL00DC:
+		return h264Pred8x8MadCowDCL00(pix, offset, stride)
+	case intraPred8x8Alzheimer0L0DC:
+		return h264Pred8x8MadCowDC0L0(pix, offset, stride)
 	default:
 		return ErrUnsupported
 	}
@@ -868,6 +876,14 @@ func h264Pred8x16ByMode(pix []uint8, offset int, stride int, mode int) error {
 		return h264Pred8x16TopDC(pix, offset, stride)
 	case intraPredDC1288x8:
 		return h264Pred8x16DC128(pix, offset, stride)
+	case intraPred8x8AlzheimerL0TDC:
+		return h264Pred8x16MadCowDCL0T(pix, offset, stride)
+	case intraPred8x8Alzheimer0LTDC:
+		return h264Pred8x16MadCowDC0LT(pix, offset, stride)
+	case intraPred8x8AlzheimerL00DC:
+		return h264Pred8x16MadCowDCL00(pix, offset, stride)
+	case intraPred8x8Alzheimer0L0DC:
+		return h264Pred8x16MadCowDC0L0(pix, offset, stride)
 	default:
 		return ErrUnsupported
 	}

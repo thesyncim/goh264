@@ -450,6 +450,74 @@ func h264Pred8x16DC128(pix []uint8, offset int, stride int) error {
 	return h264PredConstant(pix, offset, stride, 8, 16, 128)
 }
 
+func h264Pred8x8MadCowDCL0T(pix []uint8, offset int, stride int) error {
+	if err := h264Pred8x8TopDC(pix, offset, stride); err != nil {
+		return err
+	}
+	return h264Pred4x4DC(pix, offset, stride)
+}
+
+func h264Pred8x16MadCowDCL0T(pix []uint8, offset int, stride int) error {
+	if err := h264Pred8x16TopDC(pix, offset, stride); err != nil {
+		return err
+	}
+	return h264Pred4x4DC(pix, offset, stride)
+}
+
+func h264Pred8x8MadCowDC0LT(pix []uint8, offset int, stride int) error {
+	if err := h264Pred8x8DC(pix, offset, stride); err != nil {
+		return err
+	}
+	return h264Pred4x4TopDC(pix, offset, stride)
+}
+
+func h264Pred8x16MadCowDC0LT(pix []uint8, offset int, stride int) error {
+	if err := h264Pred8x16DC(pix, offset, stride); err != nil {
+		return err
+	}
+	return h264Pred4x4TopDC(pix, offset, stride)
+}
+
+func h264Pred8x8MadCowDCL00(pix []uint8, offset int, stride int) error {
+	if err := h264Pred8x8LeftDC(pix, offset, stride); err != nil {
+		return err
+	}
+	if err := h264Pred4x4DC128(pix, offset+4*stride, stride); err != nil {
+		return err
+	}
+	return h264Pred4x4DC128(pix, offset+4*stride+4, stride)
+}
+
+func h264Pred8x16MadCowDCL00(pix []uint8, offset int, stride int) error {
+	if err := h264Pred8x16LeftDC(pix, offset, stride); err != nil {
+		return err
+	}
+	if err := h264Pred4x4DC128(pix, offset+4*stride, stride); err != nil {
+		return err
+	}
+	return h264Pred4x4DC128(pix, offset+4*stride+4, stride)
+}
+
+func h264Pred8x8MadCowDC0L0(pix []uint8, offset int, stride int) error {
+	if err := h264Pred8x8LeftDC(pix, offset, stride); err != nil {
+		return err
+	}
+	if err := h264Pred4x4DC128(pix, offset, stride); err != nil {
+		return err
+	}
+	return h264Pred4x4DC128(pix, offset+4, stride)
+}
+
+func h264Pred8x16MadCowDC0L0(pix []uint8, offset int, stride int) error {
+	if err := h264Pred8x16LeftDC(pix, offset, stride); err != nil {
+		return err
+	}
+	if err := h264Pred4x4DC128(pix, offset, stride); err != nil {
+		return err
+	}
+	return h264Pred4x4DC128(pix, offset+4, stride)
+}
+
 func h264Pred8x8Plane(pix []uint8, offset int, stride int) error {
 	if err := checkPredictionArgs(pix, offset, stride, 8, 8, 1, 1); err != nil {
 		return err

@@ -56,6 +56,45 @@ func TestH264Pred8x16Plane(t *testing.T) {
 	}
 }
 
+func TestH264PredChromaMadCowDispatch(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		chromaFormat int
+		mode         int
+		rows         int
+		height       int
+		fn           h264PredFunc
+	}{
+		{"420 l0t", 1, intraPred8x8AlzheimerL0TDC, 16, 8, h264Pred8x8MadCowDCL0T},
+		{"420 0lt", 1, intraPred8x8Alzheimer0LTDC, 16, 8, h264Pred8x8MadCowDC0LT},
+		{"420 l00", 1, intraPred8x8AlzheimerL00DC, 16, 8, h264Pred8x8MadCowDCL00},
+		{"420 0l0", 1, intraPred8x8Alzheimer0L0DC, 16, 8, h264Pred8x8MadCowDC0L0},
+		{"422 l0t", 2, intraPred8x8AlzheimerL0TDC, 24, 16, h264Pred8x16MadCowDCL0T},
+		{"422 0lt", 2, intraPred8x8Alzheimer0LTDC, 24, 16, h264Pred8x16MadCowDC0LT},
+		{"422 l00", 2, intraPred8x8AlzheimerL00DC, 24, 16, h264Pred8x16MadCowDCL00},
+		{"422 0l0", 2, intraPred8x8Alzheimer0L0DC, 24, 16, h264Pred8x16MadCowDC0L0},
+	} {
+		const stride = 16
+		const offset = 4*stride + 4
+		got := makePredictionFixture(stride, tc.rows)
+		want := makePredictionFixture(stride, tc.rows)
+		if err := h264PredChromaByMode(got, offset, stride, tc.chromaFormat, tc.mode); err != nil {
+			t.Fatalf("%s dispatch: %v", tc.name, err)
+		}
+		if err := tc.fn(want, offset, stride); err != nil {
+			t.Fatalf("%s direct: %v", tc.name, err)
+		}
+		for y := 0; y < tc.height; y++ {
+			for x := 0; x < 8; x++ {
+				i := offset + y*stride + x
+				if got[i] != want[i] {
+					t.Fatalf("%s sample (%d,%d) = %d, want %d", tc.name, x, y, got[i], want[i])
+				}
+			}
+		}
+	}
+}
+
 func TestH264Pred4x4AngularModes(t *testing.T) {
 	const stride = 12
 	const offset = 3*stride + 3

@@ -236,6 +236,10 @@ int main(void)
     print_pred8("pred8dc128", pred8x8_128_dc_8_c);
     print_pred8("pred8dc127", pred8x8_127_dc_8_c);
     print_pred8("pred8dc129", pred8x8_129_dc_8_c);
+    print_pred8("pred8mc_l0t", pred8x8_mad_cow_dc_l0t_8_c);
+    print_pred8("pred8mc_0lt", pred8x8_mad_cow_dc_0lt_8_c);
+    print_pred8("pred8mc_l00", pred8x8_mad_cow_dc_l00_8_c);
+    print_pred8("pred8mc_0l0", pred8x8_mad_cow_dc_0l0_8_c);
     print_pred8("pred8plane", pred8x8_plane_8_c);
 
     print_pred8x16("pred8x16v", pred8x16_vertical_8_c);
@@ -244,6 +248,10 @@ int main(void)
     print_pred8x16("pred8x16ldc", pred8x16_left_dc_8_c);
     print_pred8x16("pred8x16tdc", pred8x16_top_dc_8_c);
     print_pred8x16("pred8x16dc128", pred8x16_128_dc_8_c);
+    print_pred8x16("pred8x16mc_l0t", pred8x16_mad_cow_dc_l0t_8_c);
+    print_pred8x16("pred8x16mc_0lt", pred8x16_mad_cow_dc_0lt_8_c);
+    print_pred8x16("pred8x16mc_l00", pred8x16_mad_cow_dc_l00_8_c);
+    print_pred8x16("pred8x16mc_0l0", pred8x16_mad_cow_dc_0l0_8_c);
     print_pred8x16("pred8x16plane", pred8x16_plane_8_c);
 
     print_pred8l_cases("pred8ldc128", pred8x8l_128_dc_8_c);
@@ -446,6 +454,10 @@ func h264PredictionOracleWant(t *testing.T) string {
 		{"pred8dc128", h264Pred8x8DC128},
 		{"pred8dc127", h264Pred8x8DC127},
 		{"pred8dc129", h264Pred8x8DC129},
+		{"pred8mc_l0t", h264Pred8x8MadCowDCL0T},
+		{"pred8mc_0lt", h264Pred8x8MadCowDC0LT},
+		{"pred8mc_l00", h264Pred8x8MadCowDCL00},
+		{"pred8mc_0l0", h264Pred8x8MadCowDC0L0},
 		{"pred8plane", h264Pred8x8Plane},
 	} {
 		printPredOracleWant(t, &b, c.label, c.fn, 16, 16, 4*16+4, 8, 8)
@@ -460,6 +472,10 @@ func h264PredictionOracleWant(t *testing.T) string {
 		{"pred8x16ldc", h264Pred8x16LeftDC},
 		{"pred8x16tdc", h264Pred8x16TopDC},
 		{"pred8x16dc128", h264Pred8x16DC128},
+		{"pred8x16mc_l0t", h264Pred8x16MadCowDCL0T},
+		{"pred8x16mc_0lt", h264Pred8x16MadCowDC0LT},
+		{"pred8x16mc_l00", h264Pred8x16MadCowDCL00},
+		{"pred8x16mc_0l0", h264Pred8x16MadCowDC0L0},
 		{"pred8x16plane", h264Pred8x16Plane},
 	} {
 		printPredOracleWant(t, &b, c.label, c.fn, 16, 24, 4*16+4, 8, 16)

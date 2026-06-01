@@ -27,6 +27,9 @@ const (
 	intraPred8x8LeftDC         = 4
 	intraPred8x8TopDC          = 5
 	intraPred8x8AlzheimerL0TDC = 7
+	intraPred8x8Alzheimer0LTDC = 8
+	intraPred8x8AlzheimerL00DC = 9
+	intraPred8x8Alzheimer0L0DC = 10
 )
 
 func predIntraMode(cache *[h264IntraPredModeCacheSize]int8, n int) (int8, error) {
