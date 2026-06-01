@@ -17,6 +17,24 @@ import (
 
 const defaultH264CorpusManifest = "testdata/h264/corpus/manifest.jsonl"
 
+func h264CorpusManifestPaths() []string {
+	if manifests := os.Getenv("GOH264_CORPUS_MANIFESTS"); manifests != "" {
+		var paths []string
+		for _, path := range filepath.SplitList(manifests) {
+			if path != "" {
+				paths = append(paths, path)
+			}
+		}
+		if len(paths) != 0 {
+			return paths
+		}
+	}
+	if manifest := os.Getenv("GOH264_CORPUS_MANIFEST"); manifest != "" {
+		return []string{manifest}
+	}
+	return []string{defaultH264CorpusManifest}
+}
+
 type h264CorpusEntry struct {
 	ID            string   `json:"id"`
 	Path          string   `json:"path"`
@@ -34,10 +52,15 @@ type h264CorpusEntry struct {
 }
 
 func TestH264CorpusManifest(t *testing.T) {
-	manifest := os.Getenv("GOH264_CORPUS_MANIFEST")
-	if manifest == "" {
-		manifest = defaultH264CorpusManifest
+	for _, manifest := range h264CorpusManifestPaths() {
+		manifest := manifest
+		t.Run(filepath.Base(manifest), func(t *testing.T) {
+			testH264CorpusManifest(t, manifest)
+		})
 	}
+}
+
+func testH264CorpusManifest(t *testing.T, manifest string) {
 	entries := readH264CorpusManifest(t, manifest)
 	if len(entries) == 0 {
 		t.Fatalf("%s: no corpus entries", manifest)
@@ -72,6 +95,24 @@ func TestH264CorpusManifest(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestH264CorpusManifestPaths(t *testing.T) {
+	t.Setenv("GOH264_CORPUS_MANIFEST", "")
+	t.Setenv("GOH264_CORPUS_MANIFESTS", "")
+	if got := h264CorpusManifestPaths(); len(got) != 1 || got[0] != defaultH264CorpusManifest {
+		t.Fatalf("default manifests = %v, want %s", got, defaultH264CorpusManifest)
+	}
+
+	t.Setenv("GOH264_CORPUS_MANIFEST", "one.jsonl")
+	if got := h264CorpusManifestPaths(); len(got) != 1 || got[0] != "one.jsonl" {
+		t.Fatalf("single manifest = %v, want one.jsonl", got)
+	}
+
+	t.Setenv("GOH264_CORPUS_MANIFESTS", strings.Join([]string{"one.jsonl", "two.jsonl"}, string(os.PathListSeparator)))
+	if got := h264CorpusManifestPaths(); len(got) != 2 || got[0] != "one.jsonl" || got[1] != "two.jsonl" {
+		t.Fatalf("manifest list = %v, want one.jsonl/two.jsonl", got)
 	}
 }
 

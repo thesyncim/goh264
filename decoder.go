@@ -1305,12 +1305,12 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 		KeyFrame:                       src.KeyFrame,
 		YStride:                        src.LumaStride,
 		CStride:                        src.ChromaStride,
-		Y:                              src.Y,
-		Cb:                             src.Cb,
-		Cr:                             src.Cr,
-		Y16:                            src.Y16,
-		Cb16:                           src.Cb16,
-		Cr16:                           src.Cr16,
+		Y:                              append([]byte(nil), src.Y...),
+		Cb:                             append([]byte(nil), src.Cb...),
+		Cr:                             append([]byte(nil), src.Cr...),
+		Y16:                            append([]uint16(nil), src.Y16...),
+		Cb16:                           append([]uint16(nil), src.Cb16...),
+		Cr16:                           append([]uint16(nil), src.Cr16...),
 		SideData:                       frameSideDataFromH264(src.SideData, src.TimeScale, src.NumUnitsInTick),
 	}
 }

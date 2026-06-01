@@ -294,7 +294,7 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkGuard
 		return result, err
 	}
 	if rejectUnsupportedHighB {
-		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != nil {
+		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &subMBType, 0, 0); err != nil {
 			return result, err
 		}
 	}
@@ -439,7 +439,7 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	mb.ChromaQP = chromaQP
 	mb.CBPTable = cbpTable
 	if in.RejectUnsupportedHighB {
-		if err := validateHighFrameSliceMacroblockForReconstruct(&SliceHeader{SliceTypeNoS: in.SliceTypeNoS}, mb.MBType, mb.CBP, mb.CBPTable); err != nil {
+		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(&SliceHeader{SliceTypeNoS: in.SliceTypeNoS}, mb.MBType, &mb.SubMBType, mb.CBP, mb.CBPTable); err != nil {
 			return result, err
 		}
 	}

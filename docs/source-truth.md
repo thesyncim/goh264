@@ -88,11 +88,11 @@ P over those P-skip/P16x16 L0 lanes, and the first High 10 4:2:0
 deblock-enabled 32x32 IDR/P subset. The exact High 10 4:2:0
 frame-only deblock-disabled non-direct B16x16 bidirectional lane, top-level
 temporal/spatial B_Direct lane resolving to B16x16, and temporal/spatial
-B-skip lane are now the only B-slice lanes opened, with neutral B weighting
-only, proved by the CAVLC/CABAC rawvideo hashes below. Partitioned P, P intra
-macroblocks, B 8x8/direct-sub, implicit weighted B, partitioned B,
-broader high deblocking, unproved depth/chroma combinations, and MBAFF remain
-outside the supported boundary.
+B-skip lane are opened for CAVLC/CABAC; the CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub
+lane is also opened with CBP zero and neutral B weighting, proved by the
+rawvideo hashes below. Partitioned P, P intra macroblocks, implicit weighted B,
+partitioned B, broader high deblocking, unproved depth/chroma combinations, and
+MBAFF remain outside the supported boundary.
 
 The public high-depth raw output helper surface follows FFmpeg rawvideo byte
 layout. `decoder.go` `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`,
@@ -212,6 +212,21 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
   `4ae312697d364153195deec6da9a1973` (spatial CAVLC),
   `74a9b632842600c57c0e20c03800c772` (temporal CABAC), and
   `961a79bdc2278420951d4662a1a2c2f3` (spatial CABAC)
+- true High 10 4:2:0 deblock-disabled 16x16 CAVLC/CABAC
+  B 8x8/B_SUB_4x4 direct-sub
+  rawvideo frame MD5s for temporal/spatial:
+  `d73be6c1b3e4082e402d67d810323786`,
+  `d73be6c1b3e4082e402d67d810323786`,
+  `d73be6c1b3e4082e402d67d810323786`; concatenated rawvideo MD5
+  `bed8c5ab899fe974cae09585e60b151f`; Annex B MD5s
+  `737b17dbc09f1d038fabccad1308afd4` (B8x8 temporal CAVLC),
+  `87dc52d6a6ca8d0309c3bf064ab36eeb` (B8x8 spatial CAVLC),
+  `c1abf23eeb9ccb84465e8b701886c9e8` (B_SUB_4x4 temporal CAVLC),
+  `33bafb77f946ce2d9fe1168e8f9de609` (B_SUB_4x4 spatial CAVLC),
+  `ac402e6f18e176ba51da9899b3285e66` (B8x8 temporal CABAC),
+  `70b723a521824437321dca37b6b4f335` (B8x8 spatial CABAC),
+  `56fbd77d91f0ce2e22d485e77c98a491` (B_SUB_4x4 temporal CABAC), and
+  `3f567a5a22de5ae171658d71264a83f5` (B_SUB_4x4 spatial CABAC)
 - true High 10 4:2:0 deblock-enabled 32x32 IDR/P rawvideo frame MD5s
   for CAVLC/CABAC:
   `ba8f5dc7f864b5cd854ee7d30e89fde1`,
@@ -257,8 +272,9 @@ High 10 non-direct B16x16 CAVLC/CABAC fixtures are accepted packet and frame-MD5
 proof for the exact B16x16 bidirectional subset only; the High 10
 temporal/spatial direct B16x16 fixtures add top-level B_Direct proof for both
 entropy modes, and the High 10 temporal/spatial B-skip fixtures add skip-run/
-skip-flag direct-motion proof for both entropy modes without opening direct-sub,
-implicit weighted B, or partitioned B.
+skip-flag direct-motion proof for both entropy modes. The High 10 CAVLC
+B 8x8/B_SUB_4x4 direct-sub fixtures open the direct-sub no-residual lane without
+opening CABAC direct-sub public bitstreams, implicit weighted B, or partitioned B.
 Configured B-frame sample
 tests additionally decode one access unit per call and
 then use the public delayed-frame flush to drain retained future P pictures,
@@ -369,6 +385,18 @@ FFmpeg `yuv420p10le` rawvideo MD5 parity. The fixtures keep direct-sub,
 implicit weighted B, partitioned B, broader high deblocking, and broader
 chroma/depth outside the supported boundary.
 
+The High 10 CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub fixtures are one-macroblock
+static IBP streams derived from the matching High 10 B-skip shape by replacing the B slice
+macroblock payload with `mb_skip_run=0`, B_8x8 type, four direct sub-MB types,
+and CBP zero. The CABAC pair uses a synthesized CABAC body
+`be27feed80` for `mb_skip_flag=0`, B_8x8, four B_Direct_8x8 sub-MBs, CBP
+zero, and end-of-slice termination. The B_SUB_4x4 pair flips only the SPS
+`direct_8x8_inference_flag` bit to 0. They prove the high CAVLC direct-sub
+and CABAC direct-sub entropy-to-state paths, FFmpeg-shaped temporal/spatial direct sub-motion,
+uint16 motion compensation, delayed output, Annex B, AVC/NALFF, configured AVC,
+sample-by-sample decode, public flush, and FFmpeg `yuv420p10le` rawvideo MD5
+parity.
+
 The CAVLC and CABAC B 8x8 direct-sub fixtures are committed as 64x64 Annex B
 bitstreams under `testdata/h264/`; they cover both spatial and temporal direct
 prediction for sub-macroblocks across Annex B, AVC/NALFF, configured AVC,
@@ -453,18 +481,22 @@ Included:
 - Public High 10 4:2:0 deblock-disabled CAVLC/CABAC temporal/spatial B-skip
   decode through the high raw helper surface, with Annex B, AVC, configured
   AVC, sample-by-sample flush, and FFmpeg rawvideo oracle proof.
+- Public High 10 4:2:0 deblock-disabled CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub
+  decode through the high raw helper surface, with Annex B, AVC, configured
+  AVC, sample-by-sample flush, and FFmpeg rawvideo oracle proof.
 - Public High 10 4:2:0 deblock-enabled CAVLC/CABAC 32x32 IDR/P decode
   through the high raw helper surface, covered by Annex B, AVC/NALFF,
   configured AVC, and FFmpeg rawvideo oracle proof.
 - Manifest-driven H.264 corpus runner `decoder_corpus_test.go`, with default
   JSONL entries in `testdata/h264/corpus/manifest.jsonl` and external corpus
-  override through `GOH264_CORPUS_MANIFEST`. Decode-ok rows require bitstream,
-  per-frame raw, and concatenated rawvideo MD5s; unsupported rows must name guard
-  tags and assert `ErrUnsupported`. The committed manifest now file-backs the
+  override through `GOH264_CORPUS_MANIFEST` or a path-list through
+  `GOH264_CORPUS_MANIFESTS`. Decode-ok rows require bitstream, per-frame raw, and
+  concatenated rawvideo MD5s; unsupported rows must name guard tags and assert
+  `ErrUnsupported`. The committed manifest now file-backs the
   local 8-bit B direct-sub vectors plus the proved High 10 4:2:0 IDR/P,
   residual P16x16, explicit weighted P16x16, non-direct B16x16,
-  temporal/spatial direct B16x16, temporal/spatial B-skip, and deblock-enabled
-  32x32 IDR/P vectors.
+  temporal/spatial direct B16x16, temporal/spatial B-skip, CAVLC/CABAC
+  B 8x8/B_SUB_4x4 direct-sub, and deblock-enabled 32x32 IDR/P vectors.
 - Decoder benchmark harness `cmd/goh264bench`, including Go decode/raw-output
   timing, raw MD5 reporting, allocation counters, repeated samples/statistics,
   machine-readable input/host/VCS/FFmpeg metadata, Go raw pixel-format reporting,
@@ -472,6 +504,10 @@ Included:
   rawvideo baseline over the same input with explicit timed-scope caveats, and a
   manifest benchmark mode that runs decode-ok corpus rows only after bitstream
   MD5, raw shape, and rawvideo MD5 oracle checks pass.
+- Production readiness corpus/benchmark plan in `docs/production-readiness.md`,
+  naming external manifest tiers, command-profile recipes, benchstat-friendly
+  output shape, allocation-gate fields, and FFmpeg CLI comparator caveats without
+  widening the decoder's supported surface.
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:
@@ -484,10 +520,11 @@ Excluded unless directly required by decoder parity:
 - Public high-bit-depth decode beyond the proved High 10 deblock-disabled I,
   P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P,
   exact non-direct plus temporal/spatial direct B16x16, temporal/spatial
-  B-skip, and deblock-enabled 32x32 IDR/P subsets remains explicitly
-  unsupported. P intra macroblocks, B 8x8/direct-sub, implicit weighted B,
-  partitioned B, partitioned P, broader high deblocking, additional
+  B-skip, CAVLC/CABAC B 8x8/B_SUB_4x4 direct-sub, and deblock-enabled 32x32
+  IDR/P subsets remains explicitly unsupported. P intra macroblocks, implicit
+  weighted B, partitioned B, partitioned P, broader high deblocking, additional
   depth/chroma fixtures, and MBAFF remain later lanes.
 - Full conformance/testvector corpus passing and production benchmark claims
   remain pending until curated external corpora are added and manifest benchmark
-  reports cover stable larger clips with a fair in-process/native baseline.
+  reports cover stable larger clips with profile presets, benchstat-friendly
+  output, allocation gates, and a fair in-process/native baseline.

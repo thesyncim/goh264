@@ -37,16 +37,70 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsBDirectSkip(t *test
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsB8x8DirectSubNoResidual(t *testing.T) {
+	sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+	mbType := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+
+	for _, tt := range []struct {
+		name string
+		sub  [4]uint32
+	}{
+		{
+			name: "direct 8x8 inference",
+			sub: [4]uint32{
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+			},
+		},
+		{
+			name: "direct sub 4x4",
+			sub: [4]uint32{
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+			},
+		},
+		{
+			name: "spatial direct sub 4x4",
+			sub: [4]uint32{
+				MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &tt.sub, 0, 0); err != nil {
+				t.Fatalf("validate high B direct-sub err = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoundaries(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
 	bSlice := &SliceHeader{SliceTypeNoS: PictureTypeB}
 	pSkip := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
 	bSkip := MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
+	bDirectSubCarrier := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	bDirectSub := [4]uint32{
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+	}
+	bMixedDirectSub := bDirectSub
+	bMixedDirectSub[2] = MBType16x16 | MBTypeP0L0
 
 	tests := []struct {
 		name     string
 		sh       *SliceHeader
 		mbType   uint32
+		sub      *[4]uint32
 		cbp      int
 		cbpTable int
 		want     error
@@ -74,10 +128,15 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b direct skip cbp table", sh: bSlice, mbType: bSkip, cbpTable: 1, want: ErrUnsupported},
 		{name: "b direct skip unresolved", sh: bSlice, mbType: MBTypeDirect2 | MBTypeL0L1 | MBTypeSkip, want: ErrUnsupported},
 		{name: "b direct skip partition", sh: bSlice, mbType: MBType8x8 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip, want: ErrUnsupported},
+		{name: "b direct sub without sub types", sh: bSlice, mbType: bDirectSubCarrier, want: ErrUnsupported},
+		{name: "b direct sub cbp", sh: bSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1, want: ErrUnsupported},
+		{name: "b direct sub cbp table", sh: bSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbpTable: 1, want: ErrUnsupported},
+		{name: "b mixed direct sub", sh: bSlice, mbType: bDirectSubCarrier, sub: &bMixedDirectSub, want: ErrUnsupported},
+		{name: "b top-level direct 8x8 remains guarded", sh: bSlice, mbType: MBType8x8 | MBTypeL0L1 | MBTypeDirect2, sub: &bDirectSub, want: ErrUnsupported},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := validateHighFrameSliceMacroblockForReconstruct(tt.sh, tt.mbType, tt.cbp, tt.cbpTable); err != tt.want {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(tt.sh, tt.mbType, tt.sub, tt.cbp, tt.cbpTable); err != tt.want {
 				t.Fatalf("validate err = %v, want %v", err, tt.want)
 			}
 		})
