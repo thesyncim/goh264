@@ -42,6 +42,11 @@ The H.264 prediction oracle compiles the pinned `libavcodec/h264pred_template.c`
 and compares 8-bit luma/chroma prediction outputs, including FFmpeg's 4:2:0 and
 4:2:2 mad-cow unavailable-neighbor chroma DC predictors.
 
+The H.264 DSP oracle compiles the pinned `libavcodec/h264dsp_template.c` and
+`libavcodec/h264addpx_template.c`, comparing 8-bit reference kernels plus the
+high-bit-depth add-pixels fallback, 9/10/12/14-bit weighted prediction cases,
+and selected high-bit-depth deblocking variants.
+
 The `ffprobe` header oracle now compares public `StreamInfo` SPS VUI sample
 aspect ratio and timing rate for the black16 stream in addition to profile,
 level, dimensions, and pixel format.
