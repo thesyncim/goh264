@@ -10,7 +10,7 @@ ffec16cb43486e123fb6b86906110b49f07abd757181b3284d3d5ea03e4211314054fff7cb079d9f
 00000001419a212f0ea1c3c1f40f1c01961d5ab4fe7ef7fc04c9189eb57c20003e01c6ba111220003d1090c1cae78951f2ab83e3cf9c7342b6f00071c14b8e9eab2957a103326c7f3f36d03f
 `
 
-func TestDecodeConfiguredAVCHigh10RetainsReferenceUntilUnsupportedP(t *testing.T) {
+func TestDecodeConfiguredAVCHigh10RetainsReferenceForResidualP(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16High10CAVLCReferenceBoundaryAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
 	if len(samples) != 2 {
@@ -35,7 +35,9 @@ func TestDecodeConfiguredAVCHigh10RetainsReferenceUntilUnsupportedP(t *testing.T
 	}
 	assertHigh10FrameMD5Strings(t, []*Frame{first}, []string{"fd302f00e365b8502c44005ea308c468"})
 
-	if _, err := dec.DecodeConfiguredAVC(samples[1]); err != ErrUnsupported {
-		t.Fatalf("P sample with retained reference err = %v, want ErrUnsupported", err)
+	second, err := dec.DecodeConfiguredAVC(samples[1])
+	if err != nil {
+		t.Fatalf("P sample with retained reference decode: %v", err)
 	}
+	assertHigh10FrameMD5Strings(t, []*Frame{second}, []string{"df16162e1c5420c45702aee7bb936b15"})
 }

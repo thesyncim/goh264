@@ -299,6 +299,18 @@ func high10InterFixtureCases() []struct {
 				"c356cd5790ea90f599ad5c2230869f06",
 			},
 		},
+		{
+			name:    "cavlc-p16x16-residual",
+			hex:     high10ResidualCAVLCP16x16AnnexBHex,
+			rawSize: high10ResidualCAVLCFrameRawSize,
+			want:    high10ResidualCAVLCFrameMD5,
+		},
+		{
+			name:    "cabac-p16x16-residual",
+			hex:     high10CABACP16x16ResidualAnnexBHex,
+			rawSize: high10CABACP16x16ResidualRawFrameSize,
+			want:    high10CABACP16x16ResidualFrameMD5,
+		},
 	}
 }
 

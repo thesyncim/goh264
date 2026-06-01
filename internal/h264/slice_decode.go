@@ -370,11 +370,11 @@ func validateHighFrameSliceMacroblockForReconstruct(sh *SliceHeader, mbType uint
 	default:
 		return ErrUnsupported
 	}
-	if cbp != 0 || cbpTable != 0 || isIntra(mbType) {
+	if cbp < 0 || cbpTable < 0 || isIntra(mbType) {
 		return ErrUnsupported
 	}
 	if isSkip(mbType) {
-		if mbType == MBType16x16|MBTypeP0L0|MBTypeP1L0|MBTypeSkip {
+		if mbType == MBType16x16|MBTypeP0L0|MBTypeP1L0|MBTypeSkip && cbp == 0 && cbpTable == 0 {
 			return nil
 		}
 		return ErrUnsupported

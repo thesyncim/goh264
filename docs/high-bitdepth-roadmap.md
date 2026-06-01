@@ -21,15 +21,16 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
 - QP/dequant tables are sized to `qpMaxNum == 87`, so 14-bit QP storage exists.
   Slice parsing computes `maxQP` from `BitDepthLuma`; the public simple decode
   path now dispatches high-bit-depth CAVLC/CABAC slices for the proved High 10
-  4:2:0 deblock-disabled I subset and the newly proved P-skip/P16x16
-  no-residual subset.
+  4:2:0 deblock-disabled I subset, P-skip/P16x16 no-residual subset, and exact
+  P16x16 L0 residual subset.
 - `internal/h264/simple_decode.go` now represents decoded frames with either
   byte planes (`DecodedFrame.Y/Cb/Cr`) or uint16 planes
   (`DecodedFrame.Y16/Cb16/Cr16`). `newSimpleDecodedFrame` allocates high planes
   for 9/10/12/14-bit SPS values and validates them through
   `picturePlanesHigh()`. `decodeSimpleNALUnitsWithState` routes high pictures
   through a separate uint16 slice loop when validation proves a High 10 4:2:0
-  I slice or no-residual P-slice with deblocking disabled.
+  I slice, no-residual P-slice, or exact P16x16 L0 residual P-slice with
+  deblocking disabled.
 - `decoder.go` exposes public `Frame.Y16/Cb16/Cr16`, `BytesPerSample`,
   `RawPixelFormat`, `RawYUVSize`, `AppendRawYUV16`, and
   `AppendRawYUVBytesLE` alongside the existing 8-bit `Frame.Y/Cb/Cr` and
@@ -46,16 +47,19 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
   surface and internal high-bit-depth IntraPCM/intra/inter reconstruction
   helpers for 4:2:0, 4:2:2, and 4:4:4. The public simple slice loop now calls
   the high path for deblock-disabled I pictures and High 10 P-skip/P16x16
-  no-residual pictures; residual P/B motion and high deblocking/border-exchange
-  modes remain at the unsupported boundary.
+  no-residual pictures plus exact P16x16 L0 residual pictures; weighted or
+  partitioned residual P, B motion, and high deblocking/border-exchange modes
+  remain at the unsupported boundary.
 - `internal/h264/motion_comp_high.go` now mirrors the 8-bit `hl_motion`
   call-site layer over uint16 planes. It covers standard and weighted
   macroblock partitions, 4:2:0/4:2:2 chroma MC, 4:4:4 qpel-shaped Cb/Cr, and
   uint16 edge-emulation scratch in sample units.
 - `internal/h264/reconstruct_high.go` now consumes high motion internally for
   inter macroblocks. The public simple slice path now admits the High 10
-  P-skip/P16x16 no-residual lane while residual P, weighted P, B, high deblock,
-  and broader high-depth/chroma combinations remain guarded.
+  P-skip/P16x16 no-residual lane plus exact High 10 4:2:0 frame-only,
+  unweighted, deblock-disabled P16x16 L0 residual slices for CAVLC and CABAC.
+  Weighted P, partitioned P, P intra macroblocks, B slices, high deblocking,
+  other chroma/depth combinations, and MBAFF remain guarded.
 - `internal/h264/loop_filter.go` ports the generic frame-picture loop-filter
   strength and call-site wiring for 8-bit planes. High-bit-depth DSP kernels
   exist in `dsp.go`, but the frame filter still validates `BitDepthLuma == 8`
@@ -100,13 +104,13 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
 | Area | Current state | Remaining high-bit-depth work |
 | --- | --- | --- |
 | SPS/PPS/slice metadata | High bit depths parse; PPS/dequant tables cover 9/10/12/14; slice QP uses bit-depth max. | Preserve this behavior while removing simple-path high-bit-depth rejects only when the matching high decode path exists. |
-| Entropy-to-state | CAVLC/CABAC frame-MB handoff, residuals, motion caches, direct motion, and high IntraPCM payload sizing exist; high CAVLC/CABAC slice loops now carry deblock-disabled I pictures and the proved High 10 P-skip/P16x16 no-residual subset through reconstruction. | Add high-specific regression cases where QP exceeds 51 and continue from no-residual P into residual P/B motion only with matching public proof. |
-| Internal frame storage | `DecodedFrame` now has uint16 high planes, `newSimpleDecodedFrame` allocates them for 9/10/12/14-bit SPS values, `picturePlanesHigh()` validates them, the simple DPB can expose `RefsHigh`, and public `Frame` can carry `Y16/Cb16/Cr16`. | Keep residual high P, high B, high deblocking, GBR, and unproved depth/chroma combinations guarded until matching bitstream oracles land. |
+| Entropy-to-state | CAVLC/CABAC frame-MB handoff, residuals, motion caches, direct motion, and high IntraPCM payload sizing exist; high CAVLC/CABAC slice loops now carry deblock-disabled I pictures plus proved High 10 P-skip/P16x16 no-residual and exact P16x16 L0 residual subsets through reconstruction. | Add high-specific regression cases where QP exceeds 51 only with matching public proof, then continue to weighted P, partitioned P, and B with separate oracles. |
+| Internal frame storage | `DecodedFrame` now has uint16 high planes, `newSimpleDecodedFrame` allocates them for 9/10/12/14-bit SPS values, `picturePlanesHigh()` validates them, the simple DPB can expose `RefsHigh`, and public `Frame` can carry `Y16/Cb16/Cr16`. | Keep residual high P outside the next exact P16x16 L0 lane, high B, high deblocking, GBR, and unproved depth/chroma combinations guarded until matching bitstream oracles land. |
 | Intra reconstruction | Internal high IntraPCM/intra16x16/intra4x4/intra8x8 call sites exist and are oracle-covered; the simple high slice path now decodes deblock-disabled High 10 4:2:0 CAVLC/CABAC IDR/I fixtures through public output. | Broaden intra coverage to 12/14-bit, 4:2:2/4:4:4, IntraPCM/lossless variants, and then mixed I/P/B streams after broader high motion is public. |
-| Inter/motion reconstruction | 8-bit `hl_motion` is integrated for P/B, weighted P, implicit B, direct B, and 4:4:4 planes. High `h264HLMotionFrame*` is now ported for internal MB-level 4:2:0/4:2:2/4:4:4 motion, explicit/implicit weighting, and edge emulation; High 10 P-skip/P16x16 no-residual is now wired through public slice/frame output. | Continue to residual P and public high B bitstreams after adding matching bitstream/oracle proof. |
+| Inter/motion reconstruction | 8-bit `hl_motion` is integrated for P/B, weighted P, implicit B, direct B, and 4:4:4 planes. High `h264HLMotionFrame*` is now ported for internal MB-level 4:2:0/4:2:2/4:4:4 motion, explicit/implicit weighting, and edge emulation; High 10 P-skip/P16x16 no-residual and exact P16x16 L0 residual are now wired through public slice/frame output. | Partitioned P, weighted P, P intra, high B, high deblocking, other chroma/depth, and MBAFF stay guarded until each gets bitstream/oracle proof. |
 | Loop filter integration | 8-bit frame-picture strength/call-site integration works post-frame for the simple path; high deblock kernels exist. | Add high frame-picture filter wiring over uint16 planes, source-shaped high threshold indexing, chroma 4:2:0/4:2:2 and 4:4:4 edge dispatch, and high bitstream fixtures with deblocking enabled. |
-| Public output | Public `Frame` exposes `Y16/Cb16/Cr16`, `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`, `AppendRawYUV16`, and `AppendRawYUVBytesLE`; `AppendRawYUV` remains 8-bit-only; High 10 deblock-disabled I output and no-residual P-skip/P16x16 output are proved against FFmpeg rawvideo MD5s. | Keep residual P, weighted P, B, high deblocking, GBR, and unproved chroma/depth combinations guarded until matching bitstream oracles land. |
-| Oracle fixtures | Kernel oracles cover high primitives; public frame-MD5 fixtures cover 8-bit High-profile streams, true High 10 CAVLC/CABAC deblock-disabled IDR/I fixtures, and true High 10 IDR/P P-skip/P16x16 no-residual fixtures across Annex B/AVC/configured surfaces. | Build the next true high-bit-depth fixture ladder in the same style for residual P, weighted P, and B pictures. |
+| Public output | Public `Frame` exposes `Y16/Cb16/Cr16`, `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`, `AppendRawYUV16`, and `AppendRawYUVBytesLE`; `AppendRawYUV` remains 8-bit-only; High 10 deblock-disabled I output, no-residual P-skip/P16x16 output, and exact P16x16 L0 residual output are proved against FFmpeg rawvideo MD5s. | Keep weighted P, partitioned P, B, high deblocking, GBR, MBAFF, and unproved chroma/depth combinations guarded. |
+| Oracle fixtures | Kernel oracles cover high primitives; public frame-MD5 fixtures cover 8-bit High-profile streams, true High 10 CAVLC/CABAC deblock-disabled IDR/I fixtures, true High 10 IDR/P P-skip/P16x16 no-residual fixtures, and true High 10 exact P16x16 L0 residual fixtures across Annex B/AVC/configured surfaces. | Build the next oracle targets for weighted P, partitioned P, and B pictures without widening the current guard. |
 
 ## Internal Frame And Plane Work
 
@@ -148,8 +152,9 @@ Completed ref-facing storage rules:
 
 The high-bit-depth public decode guard is now narrowed rather than blanket:
 deblock-disabled High 10 4:2:0 I slices plus P-skip/P16x16 no-residual slices
-may reach public output, while residual P, weighted P, B, high deblocking, and
-unproved depth/chroma combinations remain guarded.
+and exact P16x16 L0 residual slices may reach public output, while weighted P,
+partitioned P, P intra macroblocks, B, high deblocking, and unproved
+depth/chroma combinations remain guarded.
 Storage tests should continue to assert high plane allocation, plane sizes,
 strides, chroma sizing for `chroma_format_idc` 0/1/2/3, crop geometry, public
 helper error behavior, and no change in 8-bit frame MD5s.
@@ -218,20 +223,23 @@ Completed MB-level pieces:
 Remaining slice/frame pieces:
 
 - Keep high ref-list construction wired through the simple slice path for the
-  proved High 10 P-skip/P16x16 no-residual lane.
-- Extend high CAVLC/CABAC frame slices next into residual P only with focused
-  bitstream oracles.
-- Keep the narrowed public high-bit-depth guards for residual P, weighted P, B,
-  high deblock, and unproved chroma/depth modes until each path passes a
-  framemd5/rawvideo oracle.
+  proved High 10 P-skip/P16x16 no-residual and exact P16x16 residual lanes.
+- High CAVLC/CABAC frame slices now extend into residual P only for High 10
+  4:2:0 frame-only, unweighted, deblock-disabled exact P16x16 L0 macroblocks.
+  This proves residual IDCT/add after uint16 motion prediction without admitting
+  partitioned or weighted P.
+- Keep the narrowed public high-bit-depth guards for residual P outside this
+  exact lane, weighted P, B, high deblock, and unproved chroma/depth modes until
+  each path passes a framemd5/rawvideo oracle.
 
 Suggested safe-point order:
 
 1. High P-skip/P16x16 with no residual and deblocking disabled. Done for High
    10 4:2:0 CAVLC/CABAC with public Annex B, AVC, configured AVC, and FFmpeg
    frame-MD5 proof.
-2. High P inter with residual add and 8x8-DCT/non-8x8-DCT cases. This proves
-   inter residual IDCT over predicted uint16 planes.
+2. High 10 4:2:0 exact P16x16 L0 residual, frame-only, unweighted, and
+   deblock-disabled. Done for CAVLC/CABAC with public Annex B, AVC, configured
+   AVC, sample-by-sample configured decode, and FFmpeg rawvideo/framemd5 proof.
 3. High explicit weighted P. This proves high luma/chroma weight dispatch and
    sample clipping.
 4. High non-direct B with explicit L0/L1 refs. This proves bidirectional avg and
@@ -328,9 +336,10 @@ practice and appends only luma samples.
 
 The high-bit-depth public decode guard is removed only for proved subsets:
 High 10 4:2:0 deblock-disabled I pictures and High 10 4:2:0 deblock-disabled
-P-skip/P16x16 no-residual pictures. Every later inter/deblock/chroma-depth safe
-point should compare the public output helper against FFmpeg frame MD5s before
-broadening the guard again.
+P-skip/P16x16 no-residual pictures plus High 10 4:2:0 frame-only unweighted
+deblock-disabled exact P16x16 L0 residual pictures. Every later
+inter/deblock/chroma-depth safe point should compare the public output helper
+against FFmpeg frame MD5s before broadening the guard again.
 
 ## Oracle And Fixture Plan
 
@@ -357,7 +366,8 @@ Minimum fixture ladder:
 
 1. High-depth IDR/I, CAVLC and CABAC, deblocking disabled.
 2. High-depth IntraPCM and qscale-0/lossless cases.
-3. High-depth IDR/P with P-skip/P16x16 no-residual first, then residual inter.
+3. High-depth IDR/P with P-skip/P16x16 no-residual first, then exact P16x16 L0
+   residual before any partitioned or weighted P.
 4. High-depth explicit weighted P.
 5. High-depth explicit non-direct B.
 6. High-depth temporal and spatial direct B.
@@ -397,33 +407,44 @@ surface.
    - Done for High 10 4:2:0 deblock-disabled P-skip/P16x16:
      high refs, high motion scratch, CAVLC/CABAC frame-slice handoff, P-skip
      write-back, and high P16x16 motion reconstruction.
-   - Guard: `validateSimpleFrameSliceDecodeInputsHigh` opens only this P subset
-     and the per-MB guard rejects weighted P, residual P, partitioned P, B, and
-     deblocking-enabled pictures.
+   - Guard after the residual safe point: weighted P, residual partitioned P,
+     P intra macroblocks, B, high deblocking, and unproved depth/chroma
+     combinations remain unsupported.
    - Tests/proof: Annex B, explicit AVC/NALFF, configured AVC,
      sample-by-sample configured decode, internal CAVLC/CABAC P-skip/P16x16
      tests, and opt-in FFmpeg framemd5 oracle checks.
 
-5. **Wire High Weighted P**
+5. **Wire High 10 P-Slice P16x16 Residual**
+   - Done for High 10 4:2:0 frame-only, unweighted, deblock-disabled exact
+     P16x16 L0 residual slices for CAVLC and CABAC.
+   - The per-MB high guard now admits only this residual MB shape, residual high
+     reconstruction runs through the public slice loop, and residual fixtures
+     cover Annex B, explicit AVC/NALFF, configured AVC, sample-by-sample
+     configured decode, and FFmpeg oracle checks.
+   - Guard: weighted P, 16x8/8x16/8x8 partitions, P intra macroblocks, B,
+     high deblocking, other chroma/depth combinations, and MBAFF remain
+     unsupported.
+
+6. **Wire High Weighted P**
    - Add high explicit weight dispatch through public decode.
    - Tests: luma/chroma weight cases with clipping-sensitive samples.
 
-6. **Wire High B Motion**
+7. **Wire High B Motion**
    - Add high standard bidirectional avg, direct B, direct-sub, and implicit
      weight coverage.
    - Tests: non-direct B, temporal/spatial direct B, B 8x8/B_SUB_4x4 direct-sub,
      implicit weighted B, delayed output and flush.
 
-7. **Wire High Loop Filter**
+8. **Wire High Loop Filter**
    - Add high threshold tables/indexing and high edge application.
    - Tests: deblock-enabled 4:2:0, 4:2:2, 4:4:4, plus disabled-filter controls.
 
-8. **Broaden Packet Surfaces**
+9. **Broaden Packet Surfaces**
    - Mirror the current 8-bit fixture matrix for high-bit-depth streams:
      Annex B, AVC/NALFF, configured AVC, sample-by-sample configured decode,
      generic packet intake, side-data-new-extradata retention, and delayed flush.
 
-9. **Performance And Cleanup**
+10. **Performance And Cleanup**
    - Run allocation checks and benchmarks after scalar parity.
    - Only then consider shared abstractions or SIMD dispatch.
 
