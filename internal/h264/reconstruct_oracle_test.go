@@ -265,6 +265,23 @@ static void init_residual_420_high(int32_t *mb, int32_t *luma_dc, uint8_t *nnz)
     mb[32 * 16 + 2] = -6;
 }
 
+static void init_residual_inter_420_high(int32_t *mb, int32_t *luma_dc, uint8_t *nnz)
+{
+    memset(mb, 0, 48 * 16 * sizeof(*mb));
+    memset(luma_dc, 0, 16 * sizeof(*luma_dc));
+    memset(nnz, 0, NNZ_SIZE);
+
+    nnz[scan8[0]] = 2;
+    mb[0] = 128;
+    mb[1] = -16;
+
+    nnz[scan8[CHROMA_DC_BLOCK_INDEX + 0]] = 1;
+    mb[16 * 16 + 0] = 3;
+    mb[16 * 16 + 16] = 1;
+    mb[16 * 16 + 32] = -2;
+    mb[16 * 16 + 48] = 4;
+}
+
 static void init_residual_422_high(int32_t *mb, int32_t *luma_dc, uint8_t *nnz)
 {
     init_residual_420_high(mb, luma_dc, nnz);
@@ -737,6 +754,47 @@ static void run_intra16x16_high_420_10(void)
     print_mb_high("intra16x16_high_420_10", &dst, mb_x, mb_y);
 }
 
+static void run_inter_p16x16_high_420_10(void)
+{
+    PicHigh dst, ref;
+    int offset[48];
+    int32_t mb[48 * 16];
+    int32_t luma_dc[16];
+    uint8_t nnz[NNZ_SIZE];
+    uint8_t *dest[2];
+    const int mb_x = 1, mb_y = 1;
+    const int luma_stride_bytes = LUMA_STRIDE * (int)sizeof(uint16_t);
+    init_pic_high(&dst, 1, 9);
+    init_pic_high(&ref, 1, 77);
+    const int chroma_stride_bytes = dst.chroma_stride * (int)sizeof(uint16_t);
+    init_offsets_high(offset, LUMA_STRIDE, dst.chroma_stride);
+    init_residual_inter_420_high(mb, luma_dc, nnz);
+
+    for (int y = 0; y < 16; y++)
+        memcpy(pic_high_y(&dst, mb_x, mb_y) + y * LUMA_STRIDE,
+               pic_high_y(&ref, mb_x, mb_y) + y * LUMA_STRIDE,
+               16 * sizeof(uint16_t));
+    for (int y = 0; y < 8; y++) {
+        memcpy(pic_high_cb(&dst, mb_x, mb_y) + y * dst.chroma_stride,
+               pic_high_cb(&ref, mb_x, mb_y) + y * ref.chroma_stride,
+               8 * sizeof(uint16_t));
+        memcpy(pic_high_cr(&dst, mb_x, mb_y) + y * dst.chroma_stride,
+               pic_high_cr(&ref, mb_x, mb_y) + y * ref.chroma_stride,
+               8 * sizeof(uint16_t));
+    }
+
+    ff_h264_idct_add16_10_c((uint8_t *)pic_high_y(&dst, mb_x, mb_y),
+                            offset, (int16_t *)mb, luma_stride_bytes, nnz);
+    if (nnz[scan8[CHROMA_DC_BLOCK_INDEX + 0]])
+        ff_h264_chroma_dc_dequant_idct_10_c((int16_t *)(mb + 16 * 16), 64);
+    if (nnz[scan8[CHROMA_DC_BLOCK_INDEX + 1]])
+        ff_h264_chroma_dc_dequant_idct_10_c((int16_t *)(mb + 32 * 16), 64);
+    dest[0] = (uint8_t *)pic_high_cb(&dst, mb_x, mb_y);
+    dest[1] = (uint8_t *)pic_high_cr(&dst, mb_x, mb_y);
+    ff_h264_idct_add8_10_c(dest, offset, (int16_t *)mb, chroma_stride_bytes, nnz);
+    print_mb_high("inter_p16x16_high_420_10", &dst, mb_x, mb_y);
+}
+
 static void run_intra4x4_high_420_10(void)
 {
     PicHigh dst;
@@ -936,6 +994,7 @@ int main(void)
     run_intra_pcm_high_422_12();
     run_intra_pcm_high_444_14();
     run_intra16x16_high_420_10();
+    run_inter_p16x16_high_420_10();
     run_intra4x4_high_420_10();
     run_intra8x8_high_422_12();
     run_intra4x4_420();
@@ -1118,6 +1177,7 @@ func h264ReconstructOracleWant(t *testing.T) string {
 	appendH264ReconstructOracleIntraPCMHigh(t, &b, "intra_pcm_high_422_12", 2, 12, 21, h264ReconstructIntraPCMHigh(2, 12, 49))
 	appendH264ReconstructOracleIntraPCMHigh(t, &b, "intra_pcm_high_444_14", 3, 14, 23, h264ReconstructIntraPCMHigh(3, 14, 57))
 	appendH264ReconstructOracleIntra16x16High(t, &b, "intra16x16_high_420_10", 1, 10, 17, int32(intraPred8x8Horizontal), int8(intraPred8x8Vertical), h264ReconstructResidual420())
+	appendH264ReconstructOracleInterP16x16High(t, &b, "inter_p16x16_high_420_10")
 	appendH264ReconstructOracleIntra4x4High(t, &b, "intra4x4_high_420_10", 1, 10, 17, int32(intraPred8x8DC), 0xffff, 0xeeff, h264ReconstructResidualIntra4x4())
 	appendH264ReconstructOracleIntra8x8High(t, &b, "intra8x8_high_422_12", 2, 12, 31, int32(intraPred8x8Plane), 0xffff, 0xffff, h264ReconstructResidualIntra8x8())
 	appendH264ReconstructOracleIntra4x4(t, &b, "intra4x4_420", 1, 17, int32(intraPred8x8DC), 0xffff, 0xeeff, h264ReconstructResidualIntra4x4())
@@ -1183,6 +1243,34 @@ func appendH264ReconstructOracleIntra16x16High(t *testing.T, b *strings.Builder,
 		PPS:                cavlcFlatQMulPPS(),
 		Residual:           &residual,
 		BitDepth:           bitDepth,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	printH264MotionCompMBHigh(b, label, dst, 1, 1)
+}
+
+func appendH264ReconstructOracleInterP16x16High(t *testing.T, b *strings.Builder, label string) {
+	const bitDepth = 10
+	dst := makeH264ReconstructHighPicture(1, 9)
+	ref := makeH264ReconstructHighPicture(1, 77)
+	refs := [2][]*h264PicturePlanesHigh{{ref}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+	residual := h264ReconstructResidualInter420()
+	if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHigh{
+		MBType:        MBType16x16 | MBTypeP0L0,
+		MBX:           1,
+		MBY:           1,
+		CBP:           0x21,
+		QScale:        18,
+		ChromaQP:      [2]uint8{18, 18},
+		ListCount:     1,
+		PPS:           cavlcFlatQMulPPS(),
+		Residual:      &residual,
+		Motion:        &cache,
+		Refs:          refs,
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+		BitDepth:      bitDepth,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -28,8 +28,13 @@ type h264FrameMBReconstructInputHigh struct {
 	Intra4x4PredCache   *[h264IntraPredModeCacheSize]int8
 	TopLeftAvailable    uint16
 	TopRightAvailable   uint16
+	ListCount           int
 	PPS                 *PPS
 	Residual            *cavlcResidualContext
+	Motion              *macroblockMotionCache
+	Refs                [2][]*h264PicturePlanesHigh
+	PredWeight          *PredWeightTable
+	MotionScratch       *h264MotionCompScratchHigh
 	TransformBypass     bool
 	DeblockingFilter    bool
 	ConstrainedIntra444 bool
@@ -80,11 +85,21 @@ func h264HLDecodeFrameMacroblockHigh(dst *h264PicturePlanesHigh, in h264FrameMBR
 	if in.PPS == nil || in.Residual == nil {
 		return ErrInvalidData
 	}
-	if !isIntra(in.MBType) {
-		return ErrUnsupported
-	}
-	if err := h264HLDecodeFrameIntraPredictHigh(dst, dstY, dstCb, dstCr, &blockOffset, in); err != nil {
-		return err
+	if isIntra(in.MBType) {
+		if err := h264HLDecodeFrameIntraPredictHigh(dst, dstY, dstCb, dstCr, &blockOffset, in); err != nil {
+			return err
+		}
+	} else {
+		if in.Motion == nil {
+			return ErrInvalidData
+		}
+		if in.PredWeight != nil {
+			if err := h264HLMotionFrameWeightedHigh(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.PredWeight, in.MotionScratch, in.BitDepth); err != nil {
+				return err
+			}
+		} else if err := h264HLMotionFrameWithScratchHigh(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch, in.BitDepth); err != nil {
+			return err
+		}
 	}
 
 	profileIDC := h264ProfileIDCFromPPS(in.PPS)
@@ -107,15 +122,25 @@ func h264HLDecodeFrameMacroblock444High(dst *h264PicturePlanesHigh, dstY int, ds
 	if in.PPS == nil || in.Residual == nil {
 		return ErrInvalidData
 	}
-	if !isIntra(in.MBType) {
-		return ErrUnsupported
-	}
 	dest := [3][]uint16{dst.Y, dst.Cb, dst.Cr}
 	offset := [3]int{dstY, dstCb, dstCr}
 	stride := [3]int{dst.LumaStride, dst.ChromaStride, dst.ChromaStride}
 	profileIDC := h264ProfileIDCFromPPS(in.PPS)
-	for p := 0; p < 3; p++ {
-		if err := h264HLDecodeFrameIntraPredictLumaPlaneHigh(dest[p], offset[p], stride[p], blockOffset, in, p); err != nil {
+	if isIntra(in.MBType) {
+		for p := 0; p < 3; p++ {
+			if err := h264HLDecodeFrameIntraPredictLumaPlaneHigh(dest[p], offset[p], stride[p], blockOffset, in, p); err != nil {
+				return err
+			}
+		}
+	} else {
+		if in.Motion == nil {
+			return ErrInvalidData
+		}
+		if in.PredWeight != nil {
+			if err := h264HLMotionFrameWeightedHigh(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.PredWeight, in.MotionScratch, in.BitDepth); err != nil {
+				return err
+			}
+		} else if err := h264HLMotionFrameWithScratchHigh(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch, in.BitDepth); err != nil {
 			return err
 		}
 	}

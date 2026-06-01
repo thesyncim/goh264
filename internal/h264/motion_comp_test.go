@@ -232,6 +232,30 @@ func makeH264MotionCompPicture(chromaFormatIDC int, seed int) *h264PicturePlanes
 	return p
 }
 
+func makeH264MotionCompPictureHigh(chromaFormatIDC int, bitDepth int, seed int) *h264PicturePlanesHigh {
+	chromaStride := h264MotionCompTestChromaStride
+	if chromaFormatIDC == 3 {
+		chromaStride = h264MotionCompTestLumaStride
+	}
+	p := &h264PicturePlanesHigh{
+		Y:               make([]uint16, h264MotionCompTestLumaStride*h264MotionCompTestMBHeight*16),
+		LumaStride:      h264MotionCompTestLumaStride,
+		ChromaStride:    chromaStride,
+		MBWidth:         h264MotionCompTestMBWidth,
+		MBHeight:        h264MotionCompTestMBHeight,
+		ChromaFormatIDC: chromaFormatIDC,
+	}
+	fillH264MotionCompPlaneHigh(p.Y, seed, bitDepth)
+	if chromaFormatIDC != 0 {
+		_, chromaHeight := h264ChromaFrameSize(p.MBWidth, p.MBHeight, chromaFormatIDC)
+		p.Cb = make([]uint16, chromaStride*chromaHeight)
+		p.Cr = make([]uint16, chromaStride*chromaHeight)
+		fillH264MotionCompPlaneHigh(p.Cb, seed+29, bitDepth)
+		fillH264MotionCompPlaneHigh(p.Cr, seed+71, bitDepth)
+	}
+	return p
+}
+
 func makeH264MotionCompTightPicture(chromaFormatIDC int, seed int) *h264PicturePlanes {
 	chromaWidth, chromaHeight := h264ChromaFrameSize(1, 1, chromaFormatIDC)
 	p := &h264PicturePlanes{
@@ -265,7 +289,34 @@ func makeH264MotionCompScratch(p *h264PicturePlanes) *h264MotionCompScratch {
 	return s
 }
 
+func makeH264MotionCompScratchHigh(p *h264PicturePlanesHigh) *h264MotionCompScratchHigh {
+	s := &h264MotionCompScratchHigh{
+		Y:    make([]uint16, p.LumaStride*16),
+		Edge: make([]uint16, h264MotionCompScratchEdgeSizeHigh(p)),
+	}
+	if p.ChromaFormatIDC != 0 {
+		_, chromaHeight := h264ChromaFrameSize(1, 1, p.ChromaFormatIDC)
+		s.Cb = make([]uint16, p.ChromaStride*chromaHeight)
+		s.Cr = make([]uint16, p.ChromaStride*chromaHeight)
+	}
+	return s
+}
+
 func h264MotionCompScratchEdgeSize(p *h264PicturePlanes) int {
+	luma := h264EdgeScratchSize(p.LumaStride, 16+5, 16+5)
+	chroma := 0
+	if p.ChromaFormatIDC == 1 || p.ChromaFormatIDC == 2 {
+		chroma = h264EdgeScratchSize(p.ChromaStride, 9, 8*p.ChromaFormatIDC+1)
+	} else if p.ChromaFormatIDC == 3 {
+		chroma = h264EdgeScratchSize(p.ChromaStride, 16+5, 16+5)
+	}
+	if chroma > luma {
+		return chroma
+	}
+	return luma
+}
+
+func h264MotionCompScratchEdgeSizeHigh(p *h264PicturePlanesHigh) int {
 	luma := h264EdgeScratchSize(p.LumaStride, 16+5, 16+5)
 	chroma := 0
 	if p.ChromaFormatIDC == 1 || p.ChromaFormatIDC == 2 {
@@ -306,7 +357,27 @@ func fillH264MotionCompPlane(p []uint8, seed int) {
 	}
 }
 
+func fillH264MotionCompPlaneHigh(p []uint16, seed int, bitDepth int) {
+	mask := (1 << bitDepth) - 1
+	for i := range p {
+		p[i] = uint16((seed + i*13 + (i>>4)*7) & mask)
+	}
+}
+
 func requireH264BlockEqual(t *testing.T, got []uint8, want []uint8, stride int, gotOff int, wantOff int, width int, height int) {
+	t.Helper()
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			g := got[gotOff+y*stride+x]
+			w := want[wantOff+y*stride+x]
+			if g != w {
+				t.Fatalf("block[%d,%d] = %d, want %d", x, y, g, w)
+			}
+		}
+	}
+}
+
+func requireH264BlockEqualHigh(t *testing.T, got []uint16, want []uint16, stride int, gotOff int, wantOff int, width int, height int) {
 	t.Helper()
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {

@@ -57,12 +57,18 @@ The H.264 reconstruction oracle compiles pinned prediction and IDCT templates
 and compares source-shaped macroblock reconstruction fixtures, including
 10-bit 4:2:0, 12-bit 4:2:2, and 14-bit 4:4:4 high-bit-depth IntraPCM payload
 unpacking into uint16 planes plus high-bit-depth intra16x16, intra4x4, and
-intra8x8 prediction/IDCT/dequant call-site fixtures.
+intra8x8 prediction/IDCT/dequant call-site fixtures and a 10-bit 4:2:0
+inter P16x16 motion-then-residual reconstruction fixture.
 
 The H.264 chroma MC and qpel oracles compile the pinned
 `libavcodec/h264chroma_template.c` and `libavcodec/h264qpel_template.c`,
 comparing 8-bit fixtures plus 9/10/12/14-bit high-bit-depth put/avg variants
 across supported widths and fractional-pel positions.
+
+The H.264 motion-compensation call-site oracle compiles the pinned qpel,
+chroma, weighting, and edge-emulation templates and compares 8-bit plus
+10/12-bit high-bit-depth `hl_motion`/weighted fixtures over 4:2:0, 4:2:2, and
+4:4:4 macroblock partitions.
 
 The `ffprobe` header oracle now compares public `StreamInfo` SPS VUI sample
 aspect ratio and timing rate for the black16 stream in addition to profile,

@@ -68,6 +68,45 @@ func TestH264HLDecodeFrameMacroblockInterP16x16MotionThenResidual(t *testing.T) 
 	}
 }
 
+func TestH264HLDecodeFrameMacroblockHighInterP16x16MotionThenResidual(t *testing.T) {
+	const bitDepth = 10
+	dst := makeH264MotionCompPictureHigh(1, bitDepth, 9)
+	ref := makeH264MotionCompPictureHigh(1, bitDepth, 77)
+	refs := [2][]*h264PicturePlanesHigh{{ref}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+	cache.MV[0][h264Scan8[0]] = [2]int16{0, 0}
+	residual := h264ReconstructResidualInter420()
+
+	const mbX = 1
+	const mbY = 1
+	yOff := mbY*16*dst.LumaStride + mbX*16
+	refSample := ref.Y[yOff]
+	if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHigh{
+		MBType:        MBType16x16 | MBTypeP0L0,
+		MBX:           mbX,
+		MBY:           mbY,
+		CBP:           0x21,
+		QScale:        18,
+		ChromaQP:      [2]uint8{18, 18},
+		ListCount:     1,
+		PPS:           cavlcFlatQMulPPS(),
+		Residual:      &residual,
+		Motion:        &cache,
+		Refs:          refs,
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+		BitDepth:      bitDepth,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[yOff] == refSample {
+		t.Fatalf("high inter luma sample stayed at pure motion-comp value %d", refSample)
+	}
+	if residual.MB[0] != 0 || residual.MB[16*16] != 0 {
+		t.Fatalf("high inter residual blocks were not cleared after reconstruction: %d/%d", residual.MB[0], residual.MB[16*16])
+	}
+}
+
 func TestH264HLDecodeFrameMacroblockIntraPCMReconstructs420(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
 	pcm := h264ReconstructIntraPCM(1, 33)
