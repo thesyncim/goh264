@@ -57,6 +57,7 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - High 4:4:4 Predictive CABAC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `8539237f1ecaf659fa36c0f76cde8815`, `6f594f9f9f10d12a399d54882ce6c8e5`, `5e4250996d28cff7f2e85b95d78995ff`, `452f232c9a94da5220babd530117a395`
 - deblock-enabled High 4:4:4 Predictive 32x32 CAVLC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `e6522cb7daa4278fa238f995daea8594`, `274c8ec306ee4705f93c3cc6bdedc948`, `d42015040093bf782173b1d8d00a5b74`, `9d93f36ffaeb8caa764f2b06240ba5d7`
 - deblock-enabled High 4:4:4 Predictive 32x32 CABAC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `df7f5b803f967fcd46070b2b182c3805`, `5bc16fb5ebe5c3021e77c7c82c34127c`, `5e0f2020cfefc09d993a68c2963ad8ed`, `f14846abbb44addf3e1ce0e66394b683`
+- qp=0 High 4:4:4 Predictive CAVLC/CABAC `testsrc2` IDR/P yuv420p lossless rawvideo frame MD5s: `69fcf25f35e829e5a3d96cbaaf22bbb6`, `8563271dc08ef4ed388ebc1f7016834c`, `1a054a3901101da0f6b6c58d8e71bbdb`, `a0addb72f5ea0957ef8a05b782f0e9ff`
 - same `testsrc2` encode with loop filter disabled: `b729e0367dccdfd707a7ea0c6e68c06e`
 - dimensions: `16x16` and `32x32`
 - frame payload size: `256` bytes (`gray`/`chroma_format_idc == 0`), `384` or `1536` bytes (`yuv420p`), `512` bytes (`yuv422p`), and `768` or `3072` bytes (`yuv444p`)
@@ -67,16 +68,20 @@ default Go tests compare the same rawvideo MD5s through explicit `nal_length_siz
 values 2, 3, and 4. The configured AVC tests additionally build FFmpeg-style
 `avcC` extradata from SPS/PPS NAL units, remove those parameter sets from the
 packet payload, and prove the separated-config CAVLC ref-list, CABAC IDR/P,
-High 4:2:2 CAVLC/CABAC, High 4:4:4 Predictive CAVLC/CABAC, and monochrome
-CAVLC/CABAC packets against the same frame MD5s both as bundled packets and as
-successive single-frame sample packets that require DPB reference state to
-survive across public decoder calls. Monochrome native FFmpeg oracle checks
+High 4:2:2 CAVLC/CABAC, High 4:4:4 Predictive CAVLC/CABAC, monochrome
+CAVLC/CABAC, and qp=0 lossless CAVLC/CABAC packets against the same frame MD5s
+both as bundled packets and as successive single-frame sample packets that
+require DPB reference state to survive across public decoder calls. Monochrome
+native FFmpeg oracle checks
 request `-pix_fmt gray` so the frame-MD5 surface compares only the luma plane
 represented by `chroma_format_idc == 0`. The 16x16 High 4:4:4 Predictive
 fixtures carry `disable_deblocking_filter_idc == 1`; the 32x32 High 4:4:4
 Predictive fixtures keep deblocking enabled and prove the simple 8-bit
 frame-picture loop filter over luma-shaped Cb/Cr planes and inter-macroblock
-edges.
+edges. The lossless fixtures carry `qpprime_y_zero_transform_bypass_flag` and
+`8x8dct=0`, which keeps the oracle focused on qscale-0 scan selection,
+add-pixels reconstruction, and lossless vertical/horizontal pred-add paths over
+the simple progressive IDR/P subset.
 
 Reference-picture unit coverage now includes FFmpeg's progressive frame-picture
 long-term P-list behavior: default long refs after short refs, ref-list

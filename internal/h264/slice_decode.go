@@ -153,7 +153,7 @@ func validateSimpleFrameSliceDecodeInputs(m *macroblockTables, dst *h264PictureP
 	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
 		return ErrUnsupported
 	}
-	if sh.SPS.TransformBypass != 0 || sh.SPS.BitDepthLuma != 8 {
+	if sh.SPS.BitDepthLuma != 8 {
 		return ErrUnsupported
 	}
 	if sh.QScale > qpMaxNum {
@@ -193,6 +193,7 @@ func h264FrameMBReconstructInputFromCAVLC(sh *SliceHeader, cur sliceMacroblockCu
 		Refs:               in.Refs,
 		PredWeight:         in.PredWeight,
 		MotionScratch:      in.MotionScratch,
+		TransformBypass:    sh.SPS.TransformBypass != 0 && mb.QScale == 0,
 		IntraPCM:           mb.IntraPCM,
 	}
 }
@@ -219,6 +220,7 @@ func h264FrameMBReconstructInputFromCABAC(sh *SliceHeader, cur sliceMacroblockCu
 		Refs:               in.Refs,
 		PredWeight:         in.PredWeight,
 		MotionScratch:      in.MotionScratch,
+		TransformBypass:    sh.SPS.TransformBypass != 0 && mb.QScale == 0,
 		IntraPCM:           mb.IntraPCM,
 	}
 }

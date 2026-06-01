@@ -257,6 +257,20 @@ var h264ZigzagScanCAVLC = transposeScan4(h264ZigzagScan)
 var h264FieldScanCAVLC = transposeScan4(h264FieldScan)
 var h264ZigzagScan8x8CAVLC = transposeScan8(h264ZigzagScan8x8CAVLCRaw)
 
+func h264CAVLCScansForQScale(sps *SPS, qscale int) ([]uint8, []uint8) {
+	if sps != nil && sps.TransformBypass != 0 && qscale == 0 {
+		return h264ZigzagScan[:], h264ZigzagScan8x8CAVLCRaw[:]
+	}
+	return h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:]
+}
+
+func h264CABACScansForQScale(sps *SPS, qscale int) ([]uint8, []uint8) {
+	if sps != nil && sps.TransformBypass != 0 && qscale == 0 {
+		return h264ZigzagScan[:], h264ZigzagDirect[:]
+	}
+	return h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:]
+}
+
 var h264DefaultScaling4 = [2][16]uint8{
 	{6, 13, 20, 28, 13, 20, 28, 32, 20, 28, 32, 37, 28, 32, 37, 42},
 	{10, 14, 20, 24, 14, 20, 24, 27, 20, 24, 27, 30, 24, 27, 30, 34},

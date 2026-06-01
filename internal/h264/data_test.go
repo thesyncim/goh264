@@ -96,6 +96,15 @@ func TestScanTables(t *testing.T) {
 	if h264ZigzagScan8x8CAVLC[1] != 9 || h264ZigzagScan8x8CAVLC[7] != 56 || h264ZigzagScan8x8CAVLC[63] != 63 {
 		t.Fatalf("zigzag8x8 cavlc spots = %d %d %d", h264ZigzagScan8x8CAVLC[1], h264ZigzagScan8x8CAVLC[7], h264ZigzagScan8x8CAVLC[63])
 	}
+	sps := &SPS{TransformBypass: 1}
+	scan, scan8x8 := h264CAVLCScansForQScale(sps, 0)
+	if scan[1] != 1 || scan8x8[7] != 7 {
+		t.Fatalf("q0 cavlc scans = %d %d, want untransposed spots", scan[1], scan8x8[7])
+	}
+	scan, scan8x8 = h264CABACScansForQScale(sps, 0)
+	if scan[1] != 1 || scan8x8[2] != 8 {
+		t.Fatalf("q0 cabac scans = %d %d, want direct spots", scan[1], scan8x8[2])
+	}
 	if h264ChromaDCScan != ([4]uint8{0, 16, 32, 48}) {
 		t.Fatalf("chroma dc scan = %v", h264ChromaDCScan)
 	}

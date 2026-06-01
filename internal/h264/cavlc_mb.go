@@ -322,19 +322,20 @@ func (c *cavlcResidualContext) decodeCAVLCResidualPayload(gb *bitReader, pps *PP
 			return qscale, chromaQP, cbpTable, ErrUnsupported
 		}
 
-		ret, err := c.decodeLumaResidual(gb, pps, h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:], mbType, cbp, 0, qscale)
+		scan, scan8x8 := h264CAVLCScansForQScale(sps, qscale)
+		ret, err := c.decodeLumaResidual(gb, pps, scan, scan8x8, mbType, cbp, 0, qscale)
 		if err != nil {
 			return qscale, chromaQP, cbpTable, err
 		}
 		cbpTable |= ret << 12
 		if sps.ChromaFormatIDC == 3 {
-			if _, err := c.decodeLumaResidual(gb, pps, h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:], mbType, cbp, 1, int(chromaQP[0])); err != nil {
+			if _, err := c.decodeLumaResidual(gb, pps, scan, scan8x8, mbType, cbp, 1, int(chromaQP[0])); err != nil {
 				return qscale, chromaQP, cbpTable, err
 			}
-			if _, err := c.decodeLumaResidual(gb, pps, h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:], mbType, cbp, 2, int(chromaQP[1])); err != nil {
+			if _, err := c.decodeLumaResidual(gb, pps, scan, scan8x8, mbType, cbp, 2, int(chromaQP[1])); err != nil {
 				return qscale, chromaQP, cbpTable, err
 			}
-		} else if err := c.decodeChromaResidual(gb, pps, h264ZigzagScanCAVLC[:], mbType, cbp, int32(sps.ChromaFormatIDC), chromaQP); err != nil {
+		} else if err := c.decodeChromaResidual(gb, pps, scan, mbType, cbp, int32(sps.ChromaFormatIDC), chromaQP); err != nil {
 			return qscale, chromaQP, cbpTable, err
 		}
 		return qscale, chromaQP, cbpTable, nil
