@@ -78,6 +78,48 @@ func TestPredTemporalDirect8x8FromColocatedShape(t *testing.T) {
 	}
 }
 
+func TestPredTemporalDirectWithout8x8InferenceUsesSub4x4Motion(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType8x8|MBTypeP0L0|MBTypeP1L0)
+	for i8 := 0; i8 < 4; i8++ {
+		col.tables.RefIndex[0][i8] = 0
+	}
+	for i4, mv := range [4][2]int16{{4, 0}, {0, 6}, {2, 4}, {8, 2}} {
+		setColocatedSub4x4MV(t, col.tables, 0, 0, i4, 0, mv)
+	}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr}},
+			{{frame: col}},
+		},
+		CurPOC:             2,
+		Direct8x8Inference: false,
+	})
+	if err != nil {
+		t.Fatalf("temporal direct without 8x8 inference failed: %v", err)
+	}
+	if !is8x8(mbType) || !isDirect(mbType) {
+		t.Fatalf("mbType = %#x, want direct 8x8 carrier", mbType)
+	}
+	wantSub := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2
+	for i8 := 0; i8 < 4; i8++ {
+		if sub[i8] != wantSub {
+			t.Fatalf("sub[%d] = %#x, want B_SUB_4x4 %#x", i8, sub[i8], wantSub)
+		}
+	}
+	wantL0 := [4][2]int16{{2, 0}, {0, 3}, {1, 2}, {4, 1}}
+	wantL1 := [4][2]int16{{-2, 0}, {0, -3}, {-1, -2}, {-4, -1}}
+	for i4 := 0; i4 < 4; i4++ {
+		dst := h264Scan8[i4]
+		if cache.MV[0][dst] != wantL0[i4] || cache.MV[1][dst] != wantL1[i4] {
+			t.Fatalf("i4=%d mvs = %v/%v, want %v/%v", i4, cache.MV[0][dst], cache.MV[1][dst], wantL0[i4], wantL1[i4])
+		}
+	}
+}
+
 func TestPredSpatialDirect16x16UsesNeighborMedian(t *testing.T) {
 	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
 	col.tables.RefIndex[0][0] = 0
@@ -200,6 +242,61 @@ func TestPredSpatialDirect8x8SameMotionCollapsesTo16x16(t *testing.T) {
 	}
 }
 
+func TestPredSpatialDirectWithout8x8InferenceKeepsPartialSub4x4ColZero(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType8x8|MBTypeP0L0|MBTypeP1L0)
+	for i8 := 0; i8 < 4; i8++ {
+		col.tables.RefIndex[0][i8] = 0
+	}
+	for i4, mv := range [4][2]int16{{0, 0}, {1, -1}, {4, 0}, {0, 4}} {
+		setColocatedSub4x4MV(t, col.tables, 0, 0, i4, 0, mv)
+	}
+
+	var cache macroblockMotionCache
+	base := int(h264Scan8[0])
+	for list := 0; list < 2; list++ {
+		cache.Ref[list][base-1] = 0
+		cache.Ref[list][base-8] = 0
+		cache.Ref[list][base+4-8] = 0
+		cache.MV[list][base-1] = [2]int16{4, 4}
+		cache.MV[list][base-8] = [2]int16{4, 4}
+		cache.MV[list][base+4-8] = [2]int16{4, 4}
+	}
+
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr}},
+			{{frame: col}},
+		},
+		DirectSpatialMVPred: true,
+		Direct8x8Inference:  false,
+		X264Build:           165,
+	})
+	if err != nil {
+		t.Fatalf("spatial direct without 8x8 inference failed: %v", err)
+	}
+	wantSub := MBType8x8 | MBTypeL0L1 | MBTypeDirect2
+	if sub[0] != wantSub {
+		t.Fatalf("sub[0] = %#x, want partial B_SUB_4x4 %#x", sub[0], wantSub)
+	}
+	if !is8x8(mbType) || !isDirect(mbType) {
+		t.Fatalf("mbType = %#x, want direct 8x8 carrier", mbType)
+	}
+	for _, i4 := range []int{0, 1} {
+		dst := h264Scan8[i4]
+		if cache.MV[0][dst] != ([2]int16{}) || cache.MV[1][dst] != ([2]int16{}) {
+			t.Fatalf("i4=%d col-zero mvs = %v/%v, want zero", i4, cache.MV[0][dst], cache.MV[1][dst])
+		}
+	}
+	for _, i4 := range []int{2, 3} {
+		dst := h264Scan8[i4]
+		if cache.MV[0][dst] != ([2]int16{4, 4}) || cache.MV[1][dst] != ([2]int16{4, 4}) {
+			t.Fatalf("i4=%d nonzero mvs = %v/%v, want neighbor mv", i4, cache.MV[0][dst], cache.MV[1][dst])
+		}
+	}
+}
+
 func TestWriteBackCAVLCFrameBSkipTemporalDirect(t *testing.T) {
 	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
 	col.tables.RefIndex[0][0] = 0
@@ -276,4 +373,18 @@ func newTemporalDirectTestTables(t *testing.T, colType uint32) (*macroblockTable
 	}
 	colTables.MacroblockTyp[0] = colType
 	return m, col, idr
+}
+
+func setColocatedSub4x4MV(t *testing.T, m *macroblockTables, mbXY int, i8 int, i4 int, list int, mv [2]int16) {
+	t.Helper()
+	if m == nil || i8 < 0 || i8 > 3 || i4 < 0 || i4 > 3 || list < 0 || list > 1 {
+		t.Fatal("invalid colocated sub4x4 test input")
+	}
+	x8 := i8 & 1
+	y8 := i8 >> 1
+	index := int(m.MB2BXY[mbXY]) + x8*2 + (i4 & 1) + (y8*2+(i4>>1))*m.BStride
+	if index < 0 || index >= len(m.MotionVal[list]) {
+		t.Fatalf("motion index %d out of range", index)
+	}
+	m.MotionVal[list][index] = mv
 }

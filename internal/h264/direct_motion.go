@@ -26,10 +26,6 @@ func (m *macroblockTables) predDirectMotionFrame(cache *macroblockMotionCache, m
 	if len(ctx.RefEntries[0]) == 0 || len(ctx.RefEntries[1]) == 0 || ctx.RefEntries[1][0].frame == nil {
 		return ErrUnsupported
 	}
-	if !ctx.Direct8x8Inference {
-		return ErrUnsupported
-	}
-
 	col := ctx.RefEntries[1][0].frame
 	colTables := col.tables
 	if colTables == nil || colTables.MBWidth != m.MBWidth || colTables.MBHeight != m.MBHeight || colTables.BStride != m.BStride {
@@ -59,6 +55,9 @@ func (m *macroblockTables) predDirectMotionFrame(cache *macroblockMotionCache, m
 	if !isB8x8 && (mbTypeCol&(MBType16x8|MBType8x16)) != 0 {
 		*mbType |= MBTypeL0L1 | MBTypeDirect2 | (mbTypeCol & (MBType16x8 | MBType8x16))
 	} else {
+		if !ctx.Direct8x8Inference {
+			directSubType = MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2
+		}
 		*mbType |= MBType8x8 | MBTypeL0L1
 	}
 	return predTemporalDirect8x8(cache, colTables, mbXY, *mbType, directSubType, subMBType, ctx, isB8x8)
@@ -108,6 +107,9 @@ func predSpatialDirectMotionFrame(cache *macroblockMotionCache, col *macroblockT
 	} else if !isB8x8 && (mbTypeCol&(MBType16x8|MBType8x16)) != 0 {
 		*mbType |= MBTypeDirect2 | (mbTypeCol & (MBType16x8 | MBType8x16))
 	} else {
+		if !ctx.Direct8x8Inference {
+			directSubType = (directSubType &^ MBType16x16) | MBType8x8
+		}
 		*mbType |= MBType8x8
 	}
 
@@ -191,7 +193,7 @@ func predSpatialDirect8x8(cache *macroblockMotionCache, col *macroblockTables, m
 		fillMotionRectangle(&cache.MV[1], base, 2, 2, 8, mv[1])
 		fillRefRectangle(&cache.Ref[0], base, 2, 2, 8, ref[0])
 		fillRefRectangle(&cache.Ref[1], base, 2, 2, 8, ref[1])
-		if spatialDirectColZero(col, mbXY, i8, ctx) {
+		if isSub8x8(directSubType) && spatialDirectColZero(col, mbXY, i8, ctx) {
 			if ref[0] == 0 {
 				fillMotionRectangle(&cache.MV[0], base, 2, 2, 8, [2]int16{})
 			}
@@ -199,6 +201,29 @@ func predSpatialDirect8x8(cache *macroblockMotionCache, col *macroblockTables, m
 				fillMotionRectangle(&cache.MV[1], base, 2, 2, 8, [2]int16{})
 			}
 			n += 4
+		} else if isSub4x4(directSubType) {
+			list, ok := spatialDirectColZeroList(col, mbXY, i8, ctx)
+			if ok {
+				m := 0
+				for i4 := 0; i4 < 4; i4++ {
+					mvCol, ok := spatialDirectColocatedSub4x4MV(col, mbXY, i8, i4, list)
+					if !ok || absInt(int(mvCol[0])) > 1 || absInt(int(mvCol[1])) > 1 {
+						continue
+					}
+					dst := h264Scan8[4*i8+i4]
+					if ref[0] == 0 {
+						cache.MV[0][dst] = [2]int16{}
+					}
+					if ref[1] == 0 {
+						cache.MV[1][dst] = [2]int16{}
+					}
+					m++
+				}
+				if m&3 == 0 {
+					subMBType[i8] = (subMBType[i8] &^ MBType8x8) | MBType16x16
+				}
+				n += m
+			}
 		}
 	}
 	if !wasB8x8 && n&15 == 0 {
@@ -208,28 +233,58 @@ func predSpatialDirect8x8(cache *macroblockMotionCache, col *macroblockTables, m
 }
 
 func spatialDirectColZero(col *macroblockTables, mbXY int, i8 int, ctx h264DirectMotionContext) bool {
-	if col == nil || i8 < 0 || i8 > 3 || isIntra(col.MacroblockTyp[mbXY]) || len(ctx.RefEntries[1]) == 0 || ctx.RefEntries[1][0].long {
+	list, ok := spatialDirectColZeroList(col, mbXY, i8, ctx)
+	if !ok {
 		return false
+	}
+	mv, ok := spatialDirectColocatedSub8x8MV(col, mbXY, i8, list)
+	return ok && absInt(int(mv[0])) <= 1 && absInt(int(mv[1])) <= 1
+}
+
+func spatialDirectColZeroList(col *macroblockTables, mbXY int, i8 int, ctx h264DirectMotionContext) (int, bool) {
+	if col == nil || i8 < 0 || i8 > 3 || mbXY < 0 || mbXY >= len(col.MacroblockTyp) ||
+		isIntra(col.MacroblockTyp[mbXY]) || len(ctx.RefEntries[1]) == 0 || ctx.RefEntries[1][0].long {
+		return 0, false
 	}
 	refIndex := 4*mbXY + i8
 	if refIndex < 0 || refIndex >= len(col.RefIndex[0]) || refIndex >= len(col.RefIndex[1]) {
-		return false
+		return 0, false
+	}
+	if col.RefIndex[0][refIndex] == 0 {
+		return 0, true
+	}
+	if col.RefIndex[0][refIndex] < 0 && col.RefIndex[1][refIndex] == 0 && ctx.X264Build > 33 {
+		return 1, true
+	}
+	return 0, false
+}
+
+func spatialDirectColocatedSub8x8MV(col *macroblockTables, mbXY int, i8 int, list int) ([2]int16, bool) {
+	var mv [2]int16
+	if col == nil || list < 0 || list > 1 || i8 < 0 || i8 > 3 || mbXY < 0 || mbXY >= len(col.MB2BXY) {
+		return mv, false
 	}
 	x8 := i8 & 1
 	y8 := i8 >> 1
 	mvIndex := int(col.MB2BXY[mbXY]) + x8*3 + y8*3*col.BStride
-	if mvIndex < 0 || mvIndex >= len(col.MotionVal[0]) || mvIndex >= len(col.MotionVal[1]) {
-		return false
+	if mvIndex < 0 || mvIndex >= len(col.MotionVal[list]) {
+		return mv, false
 	}
-	if col.RefIndex[0][refIndex] == 0 {
-		mv := col.MotionVal[0][mvIndex]
-		return absInt(int(mv[0])) <= 1 && absInt(int(mv[1])) <= 1
+	return col.MotionVal[list][mvIndex], true
+}
+
+func spatialDirectColocatedSub4x4MV(col *macroblockTables, mbXY int, i8 int, i4 int, list int) ([2]int16, bool) {
+	var mv [2]int16
+	if col == nil || list < 0 || list > 1 || i8 < 0 || i8 > 3 || i4 < 0 || i4 > 3 || mbXY < 0 || mbXY >= len(col.MB2BXY) {
+		return mv, false
 	}
-	if col.RefIndex[0][refIndex] < 0 && col.RefIndex[1][refIndex] == 0 && ctx.X264Build > 33 {
-		mv := col.MotionVal[1][mvIndex]
-		return absInt(int(mv[0])) <= 1 && absInt(int(mv[1])) <= 1
+	x8 := i8 & 1
+	y8 := i8 >> 1
+	mvIndex := int(col.MB2BXY[mbXY]) + x8*2 + (i4 & 1) + (y8*2+(i4>>1))*col.BStride
+	if mvIndex < 0 || mvIndex >= len(col.MotionVal[list]) {
+		return mv, false
 	}
-	return false
+	return col.MotionVal[list][mvIndex], true
 }
 
 func minRefAsUnsigned(a int8, b int8, c int8) int8 {
@@ -288,7 +343,7 @@ func predTemporalDirect8x8(cache *macroblockMotionCache, col *macroblockTables, 
 			fillMotionRectangle(&cache.MV[1], base, 2, 2, 8, [2]int16{})
 			continue
 		}
-		ref0, mvCol, err := temporalDirectColocatedRefAndMV(col, mbXY, i8, ctx)
+		ref0, list, err := temporalDirectColocatedRefList(col, mbXY, i8, ctx)
 		if err != nil {
 			return err
 		}
@@ -296,45 +351,98 @@ func predTemporalDirect8x8(cache *macroblockMotionCache, col *macroblockTables, 
 		if err != nil {
 			return err
 		}
-		mv0, mv1 := temporalDirectScaleMV(scale, mvCol)
 		fillRefRectangle(&cache.Ref[0], base, 2, 2, 8, ref0)
-		fillMotionRectangle(&cache.MV[0], base, 2, 2, 8, mv0)
-		fillMotionRectangle(&cache.MV[1], base, 2, 2, 8, mv1)
+		if isSub8x8(directSubType) {
+			mvCol, err := temporalDirectColocatedSub8x8MV(col, mbXY, i8, list)
+			if err != nil {
+				return err
+			}
+			mv0, mv1 := temporalDirectScaleMV(scale, mvCol)
+			fillMotionRectangle(&cache.MV[0], base, 2, 2, 8, mv0)
+			fillMotionRectangle(&cache.MV[1], base, 2, 2, 8, mv1)
+			continue
+		}
+		for i4 := 0; i4 < 4; i4++ {
+			mvCol, err := temporalDirectColocatedSub4x4MV(col, mbXY, i8, i4, list)
+			if err != nil {
+				return err
+			}
+			mv0, mv1 := temporalDirectScaleMV(scale, mvCol)
+			dst := h264Scan8[4*i8+i4]
+			cache.MV[0][dst] = mv0
+			cache.MV[1][dst] = mv1
+		}
 	}
 	return nil
 }
 
 func temporalDirectColocatedRefAndMV(col *macroblockTables, mbXY int, i8 int, ctx h264DirectMotionContext) (int8, [2]int16, error) {
 	var mv [2]int16
+	ref0, list, err := temporalDirectColocatedRefList(col, mbXY, i8, ctx)
+	if err != nil {
+		return 0, mv, err
+	}
+	mv, err = temporalDirectColocatedSub8x8MV(col, mbXY, i8, list)
+	return ref0, mv, err
+}
+
+func temporalDirectColocatedRefList(col *macroblockTables, mbXY int, i8 int, ctx h264DirectMotionContext) (int8, int, error) {
 	if col == nil || i8 < 0 || i8 > 3 {
-		return 0, mv, ErrInvalidData
+		return 0, 0, ErrInvalidData
 	}
 	refIndex := 4*mbXY + i8
 	if err := checkRange(len(col.RefIndex[0]), refIndex, 1); err != nil {
-		return 0, mv, err
-	}
-	x8 := i8 & 1
-	y8 := i8 >> 1
-	mvIndex := int(col.MB2BXY[mbXY]) + x8*3 + y8*3*col.BStride
-	if err := checkRange(len(col.MotionVal[0]), mvIndex, 1); err != nil {
-		return 0, mv, err
+		return 0, 0, err
 	}
 
 	ref := col.RefIndex[0][refIndex]
 	list := 0
 	if ref < 0 {
 		if err := checkRange(len(col.RefIndex[1]), refIndex, 1); err != nil {
-			return 0, mv, err
+			return 0, 0, err
 		}
 		ref = col.RefIndex[1][refIndex]
 		list = 1
 	}
 	ref0, err := temporalDirectMapColToList0(ctx, list, ref)
 	if err != nil {
-		return 0, mv, err
+		return 0, 0, err
 	}
-	mv = col.MotionVal[list][mvIndex]
-	return ref0, mv, nil
+	return ref0, list, nil
+}
+
+func temporalDirectColocatedSub8x8MV(col *macroblockTables, mbXY int, i8 int, list int) ([2]int16, error) {
+	var mv [2]int16
+	if col == nil || i8 < 0 || i8 > 3 || list < 0 || list > 1 {
+		return mv, ErrInvalidData
+	}
+	if err := checkRange(len(col.MB2BXY), mbXY, 1); err != nil {
+		return mv, err
+	}
+	x8 := i8 & 1
+	y8 := i8 >> 1
+	mvIndex := int(col.MB2BXY[mbXY]) + x8*3 + y8*3*col.BStride
+	if err := checkRange(len(col.MotionVal[list]), mvIndex, 1); err != nil {
+		return mv, err
+	}
+	return col.MotionVal[list][mvIndex], nil
+}
+
+func temporalDirectColocatedSub4x4MV(col *macroblockTables, mbXY int, i8 int, i4 int, list int) ([2]int16, error) {
+	var mv [2]int16
+	if col == nil || i8 < 0 || i8 > 3 || i4 < 0 || i4 > 3 || list < 0 || list > 1 {
+		return mv, ErrInvalidData
+	}
+	if err := checkRange(len(col.MB2BXY), mbXY, 1); err != nil {
+		return mv, err
+	}
+	x8 := i8 & 1
+	y8 := i8 >> 1
+	mvIndex := int(col.MB2BXY[mbXY]) + x8*2 + (i4 & 1) + (y8*2+(i4>>1))*col.BStride
+	if err := checkRange(len(col.MotionVal[list]), mvIndex, 1); err != nil {
+		return mv, err
+	}
+	return col.MotionVal[list][mvIndex], nil
 }
 
 func temporalDirectMapColToList0(ctx h264DirectMotionContext, list int, ref int8) (int8, error) {

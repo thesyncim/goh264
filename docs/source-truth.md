@@ -120,7 +120,10 @@ The CAVLC and CABAC B 8x8 direct-sub fixtures are committed as 64x64 Annex B
 bitstreams under `testdata/h264/`; they cover both spatial and temporal direct
 prediction for sub-macroblocks across Annex B, AVC/NALFF, configured AVC,
 sample-by-sample flush behavior, and native FFmpeg frame-MD5 oracle checks. The
-CAVLC candidates also prove the FFmpeg `ff_h264_slice_context_init` internal
+paired B_SUB_4x4 fixtures are derived from the same streams by flipping only
+the SPS `direct_8x8_inference_flag` bit to 0, which keeps the payload stable
+while exercising FFmpeg's `h264_direct.c` direct-subdivision branch. The CAVLC
+candidates also prove the FFmpeg `ff_h264_slice_context_init` internal
 right-edge `ref_cache` sentinels needed by `fetch_diagonal_mv` for B 8x8
 subpartition prediction.
 

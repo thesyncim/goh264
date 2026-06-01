@@ -418,6 +418,36 @@ func bFrameFixtureCases() []bFrameFixtureCase {
 			},
 		},
 		{
+			name:      "64/cavlc-b4x4-spatial-direct-sub",
+			file:      "testdata/h264/cavlc_b4x4_spatial_direct_sub.h264",
+			frameSize: 6144,
+			want: []string{
+				"1b726009bdfbaba5cc8167a44bdab748",
+				"1ce1cfea1c4486ffd7a21eb9d72f2c9a",
+				"abb8b105f6d3697ecb371caa74077f80",
+				"add02fa66d669d4c1a408d5cc69c9dbf",
+			},
+			retainedFlushWant: []string{
+				"1b726009bdfbaba5cc8167a44bdab748",
+				"abb8b105f6d3697ecb371caa74077f80",
+			},
+		},
+		{
+			name:      "64/cavlc-b4x4-temporal-direct-sub",
+			file:      "testdata/h264/cavlc_b4x4_temporal_direct_sub.h264",
+			frameSize: 6144,
+			want: []string{
+				"1b726009bdfbaba5cc8167a44bdab748",
+				"1f4a06041e90069af886925de0b18b22",
+				"abb8b105f6d3697ecb371caa74077f80",
+				"add02fa66d669d4c1a408d5cc69c9dbf",
+			},
+			retainedFlushWant: []string{
+				"1b726009bdfbaba5cc8167a44bdab748",
+				"abb8b105f6d3697ecb371caa74077f80",
+			},
+		},
+		{
 			name:      "64/cabac-b8x8-spatial-direct-sub",
 			file:      "testdata/h264/cabac_b8x8_spatial_direct_sub.h264",
 			frameSize: 6144,
@@ -435,6 +465,36 @@ func bFrameFixtureCases() []bFrameFixtureCase {
 		{
 			name:      "64/cabac-b8x8-temporal-direct-sub",
 			file:      "testdata/h264/cabac_b8x8_temporal_direct_sub.h264",
+			frameSize: 6144,
+			want: []string{
+				"22bb7fe7a4aca7a1787c5718a9d44db8",
+				"8a589e2d5be830ebee0fadca20018973",
+				"5e211d19fa1a31c72a8745437edee153",
+				"ce460e840a2648b112ca2a2f7dd53a51",
+			},
+			retainedFlushWant: []string{
+				"22bb7fe7a4aca7a1787c5718a9d44db8",
+				"5e211d19fa1a31c72a8745437edee153",
+			},
+		},
+		{
+			name:      "64/cabac-b4x4-spatial-direct-sub",
+			file:      "testdata/h264/cabac_b4x4_spatial_direct_sub.h264",
+			frameSize: 6144,
+			want: []string{
+				"22bb7fe7a4aca7a1787c5718a9d44db8",
+				"7540cc3e8724970545310329e1fbdee2",
+				"5e211d19fa1a31c72a8745437edee153",
+				"ce460e840a2648b112ca2a2f7dd53a51",
+			},
+			retainedFlushWant: []string{
+				"22bb7fe7a4aca7a1787c5718a9d44db8",
+				"5e211d19fa1a31c72a8745437edee153",
+			},
+		},
+		{
+			name:      "64/cabac-b4x4-temporal-direct-sub",
+			file:      "testdata/h264/cabac_b4x4_temporal_direct_sub.h264",
 			frameSize: 6144,
 			want: []string{
 				"22bb7fe7a4aca7a1787c5718a9d44db8",
