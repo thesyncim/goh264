@@ -36,6 +36,22 @@ const testsrc16High10CABACIAnnexBHex = `
 4db2c2914c68a350879b8251f7ebaeb99c68e2a4efc25611bebd2813f9db93bff574d9d38d
 `
 
+const gray16High10CAVLCPSkipAnnexBHex = `
+00000001676e000aa6cb4f6022000003000200000300041e244d400000000168ce01ccb22c0000016588843a118a00021031c000a47000298000000001419a2294
+`
+
+const gray16High10CABACPSkipAnnexBHex = `
+00000001676e000aa6cb4f6022000003000200000300041e244d400000000168ee01ccb22c0000016588843afeee82be0523c4c4d2b7e100000001419a235ffef0
+`
+
+const step32x16High10CAVLCP16x16NoResidualAnnexBHex = `
+00000001676e000aa6cb45d80880000003008000000301078913500000000168ce01ccb20000016588843a26280004e4b26280007cd58000000001419a22b0101fe0
+`
+
+const step32x16High10CABACP16x16NoResidualAnnexBHex = `
+00000001676e000aa6cb45d80880000003008000000301078913500000000168ee01ccb20000016588843afef7d4b7ccb2eea3c2b55181f9b5586100000001419a235faa092ccffad67ffc
+`
+
 func TestDecodeAnnexBHigh10IntraFrames(t *testing.T) {
 	for _, tt := range high10IntraFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
@@ -77,6 +93,77 @@ func TestDecodeAVCWithConfigurationRecordHigh10IntraFrames(t *testing.T) {
 	}
 }
 
+func TestDecodeAnnexBHigh10InterFrames(t *testing.T) {
+	for _, tt := range high10InterFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			frames, err := NewDecoder().DecodeAnnexBFrames(decodeHexFixture(t, tt.hex))
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertHigh10FrameMD5Strings(t, frames, tt.want)
+		})
+	}
+}
+
+func TestDecodeAVCHigh10InterFrames(t *testing.T) {
+	for _, tt := range high10InterFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+				}
+				assertHigh10FrameMD5Strings(t, frames, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecodeAVCWithConfigurationRecordHigh10InterFrames(t *testing.T) {
+	for _, tt := range high10InterFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
+				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
+				}
+				assertHigh10FrameMD5Strings(t, frames, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecodeConfiguredAVCAcrossSamplesHigh10InterFrames(t *testing.T) {
+	for _, tt := range high10InterFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
+				if len(samples) != len(tt.want) {
+					t.Fatalf("nalLengthSize=%d: samples = %d, want %d", nalLengthSize, len(samples), len(tt.want))
+				}
+
+				dec := NewDecoder()
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
+				}
+				var frames []*Frame
+				for i, sample := range samples {
+					frame, err := dec.DecodeConfiguredAVC(sample)
+					if err != nil {
+						t.Fatalf("nalLengthSize=%d sample[%d]: %v", nalLengthSize, i, err)
+					}
+					frames = append(frames, frame)
+				}
+				assertHigh10FrameMD5Strings(t, frames, tt.want)
+			}
+		})
+	}
+}
+
 func TestFFmpegFrameMD5OracleHigh10Intra(t *testing.T) {
 	if os.Getenv("GOH264_ORACLE") != "1" {
 		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
@@ -108,6 +195,39 @@ func TestFFmpegFrameMD5OracleHigh10Intra(t *testing.T) {
 	}
 }
 
+func TestFFmpegFrameMD5OracleHigh10Inter(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	for _, tt := range high10InterFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeTempH264(t, decodeHexFixture(t, tt.hex))
+			cmd := exec.Command("ffmpeg",
+				"-v", "error",
+				"-f", "h264",
+				"-i", path,
+				"-an", "-sn", "-dn",
+				"-f", "framemd5",
+				"-",
+			)
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("ffmpeg framemd5: %v", err)
+			}
+			for i, hash := range tt.want {
+				line := []byte(fmt.Sprintf("0, %10d, %10d,        1, %8d, %s", i, i, tt.rawSize, hash))
+				if !bytes.Contains(out, line) {
+					t.Fatalf("frame[%d] missing %q in framemd5:\n%s", i, line, out)
+				}
+			}
+		})
+	}
+}
+
 func high10IntraFixtureCases() []struct {
 	name string
 	hex  string
@@ -127,6 +247,57 @@ func high10IntraFixtureCases() []struct {
 			name: "cabac",
 			hex:  testsrc16High10CABACIAnnexBHex,
 			md5:  "38ed4870a1ba82aeb0c45b09d67e3e2a",
+		},
+	}
+}
+
+func high10InterFixtureCases() []struct {
+	name    string
+	hex     string
+	rawSize int
+	want    []string
+} {
+	return []struct {
+		name    string
+		hex     string
+		rawSize int
+		want    []string
+	}{
+		{
+			name:    "cavlc-pskip",
+			hex:     gray16High10CAVLCPSkipAnnexBHex,
+			rawSize: 768,
+			want: []string{
+				"87e217773d3e8b548fdf2002955cfcb9",
+				"87e217773d3e8b548fdf2002955cfcb9",
+			},
+		},
+		{
+			name:    "cabac-pskip",
+			hex:     gray16High10CABACPSkipAnnexBHex,
+			rawSize: 768,
+			want: []string{
+				"87e217773d3e8b548fdf2002955cfcb9",
+				"87e217773d3e8b548fdf2002955cfcb9",
+			},
+		},
+		{
+			name:    "cavlc-p16x16-no-residual",
+			hex:     step32x16High10CAVLCP16x16NoResidualAnnexBHex,
+			rawSize: 1536,
+			want: []string{
+				"e0f04baf1c5940cf72857345ca05bbee",
+				"c356cd5790ea90f599ad5c2230869f06",
+			},
+		},
+		{
+			name:    "cabac-p16x16-no-residual",
+			hex:     step32x16High10CABACP16x16NoResidualAnnexBHex,
+			rawSize: 1536,
+			want: []string{
+				"e0f04baf1c5940cf72857345ca05bbee",
+				"c356cd5790ea90f599ad5c2230869f06",
+			},
 		},
 	}
 }
@@ -159,8 +330,12 @@ func assertHigh10FrameMD5Strings(t *testing.T, frames []*Frame, want []string) {
 		if err != nil {
 			t.Fatalf("frame[%d] AppendRawYUVBytesLE: %v", i, err)
 		}
-		if len(raw) != 768 {
-			t.Fatalf("frame[%d] raw len = %d, want 768", i, len(raw))
+		rawSize, err := frame.RawYUVSize()
+		if err != nil {
+			t.Fatalf("frame[%d] RawYUVSize: %v", i, err)
+		}
+		if len(raw) != rawSize {
+			t.Fatalf("frame[%d] raw len = %d, want %d", i, len(raw), rawSize)
 		}
 		sum := md5.Sum(raw)
 		if got := hex.EncodeToString(sum[:]); got != want[i] {

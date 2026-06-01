@@ -66,6 +66,9 @@ func (m *macroblockTables) decodeFrameSliceDataHigh(gb *bitReader, dst *h264Pict
 	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	if highFrameSlicePUsesWeightedPredTable(sh, in.PredWeight) {
+		return result, ErrUnsupported
+	}
 	if sh.PPS.CABAC == 0 {
 		return m.decodeCAVLCFrameSliceHigh(gb, dst, sh, in)
 	}
@@ -142,6 +145,9 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	if highFrameSlicePUsesWeightedPredTable(sh, in.PredWeight) {
+		return result, ErrUnsupported
+	}
 	cur, err := newSliceMacroblockCursor(m, sh)
 	if err != nil {
 		return result, err
@@ -152,6 +158,9 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 		var work frameMacroblockDecodeWork
 		mb, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWork(gb, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
 		if err != nil {
+			return result, err
+		}
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mb.MBType, mb.CBP, mb.CBPTable); err != nil {
 			return result, err
 		}
 		if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHighFromCAVLC(sh, cur, mb, &work, in)); err != nil {
@@ -219,6 +228,9 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	if highFrameSlicePUsesWeightedPredTable(sh, in.PredWeight) {
+		return result, ErrUnsupported
+	}
 	cur, err := newSliceMacroblockCursor(m, sh)
 	if err != nil {
 		return result, err
@@ -229,6 +241,9 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 		var work frameMacroblockDecodeWork
 		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
 		if err != nil {
+			return result, err
+		}
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mb.MBType, mb.CBP, mb.CBPTable); err != nil {
 			return result, err
 		}
 		if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHighFromCABAC(sh, cur, mb, &work, in)); err != nil {
@@ -297,7 +312,13 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	if sh.SPS.ChromaFormatIDC != 1 {
 		return ErrUnsupported
 	}
-	if sh.SliceTypeNoS != PictureTypeI {
+	switch sh.SliceTypeNoS {
+	case PictureTypeI:
+	case PictureTypeP:
+		if highFrameSlicePUsesWeightedPred(sh) {
+			return ErrUnsupported
+		}
+	default:
 		return ErrUnsupported
 	}
 	if sh.DeblockingFilter != 0 {
@@ -316,6 +337,52 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 		return ErrInvalidData
 	}
 	return nil
+}
+
+func highFrameSlicePUsesWeightedPred(sh *SliceHeader) bool {
+	if sh == nil || sh.SliceTypeNoS != PictureTypeP {
+		return false
+	}
+	if sh.PPS != nil && sh.PPS.WeightedPred != 0 {
+		return true
+	}
+	return sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0
+}
+
+func highFrameSlicePUsesWeightedPredTable(sh *SliceHeader, pwt *PredWeightTable) bool {
+	if sh == nil || sh.SliceTypeNoS != PictureTypeP {
+		return false
+	}
+	if highFrameSlicePUsesWeightedPred(sh) {
+		return true
+	}
+	return pwt != nil && (pwt.UseWeight != 0 || pwt.UseWeightChroma != 0)
+}
+
+func validateHighFrameSliceMacroblockForReconstruct(sh *SliceHeader, mbType uint32, cbp int, cbpTable int) error {
+	if sh == nil {
+		return ErrInvalidData
+	}
+	switch sh.SliceTypeNoS {
+	case PictureTypeI:
+		return nil
+	case PictureTypeP:
+	default:
+		return ErrUnsupported
+	}
+	if cbp != 0 || cbpTable != 0 || isIntra(mbType) {
+		return ErrUnsupported
+	}
+	if isSkip(mbType) {
+		if mbType == MBType16x16|MBTypeP0L0|MBTypeP1L0|MBTypeSkip {
+			return nil
+		}
+		return ErrUnsupported
+	}
+	if mbType == MBType16x16|MBTypeP0L0 {
+		return nil
+	}
+	return ErrUnsupported
 }
 
 func h264SimpleFrameSliceDecodeSupportsBitDepth(bitDepth int32) bool {

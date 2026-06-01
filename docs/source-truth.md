@@ -81,9 +81,11 @@ for 8-bit frames and uint16 `Y16/Cb16/Cr16` planes for high frames. This is a
 storage and narrow public-decode safe point: `internal/h264/simple_dpb.go` can
 expose high ref-list views over those uint16 planes, and
 `decodeSimpleNALUnitsWithState` dispatches high CAVLC/CABAC slices only for the
-proved High 10 4:2:0 deblock-disabled intra subset. High P/B slices, high
-deblocking, and unproved depth/chroma combinations remain guarded until their
-uint16 slice paths have matching oracles.
+proved High 10 4:2:0 deblock-disabled I subset and the proved High 10 4:2:0
+deblock-disabled P-skip/P16x16 no-residual subset for both CAVLC and CABAC.
+Residual P, weighted P, B slices, high deblocking, and unproved depth/chroma
+combinations remain guarded until their uint16 slice paths have matching
+oracles.
 
 The public high-depth raw output helper surface follows FFmpeg rawvideo byte
 layout. `decoder.go` `RawPixelFormat`, `RawYUVSize`, `BytesPerSample`,
@@ -130,6 +132,12 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - true High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/I rawvideo frame MD5s:
   `fd302f00e365b8502c44005ea308c468`,
   `38ed4870a1ba82aeb0c45b09d67e3e2a`
+- true High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/P P-skip rawvideo frame
+  MD5s: `87e217773d3e8b548fdf2002955cfcb9`,
+  `87e217773d3e8b548fdf2002955cfcb9`
+- true High 10 4:2:0 deblock-disabled CAVLC/CABAC 32x16 IDR/P P16x16
+  no-residual rawvideo frame MD5s: `e0f04baf1c5940cf72857345ca05bbee`,
+  `c356cd5790ea90f599ad5c2230869f06`
 - 16x16 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `4296e3dc95829cc27071a8685a428494`, `36f5a9b9064709ee891652e8f4e06992`, `aa778b981f96d21489196f6a0faa0959`
 - 16x16 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `fef9831ddd54882d715ceb50c382efde`, `4b6a7f1c59198ae9b8e31ef4de333e42`
 - 16x16 temporal-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `dca1bb7607ebcd45d700a7b7f9feb2f6`, `6248c3284f9d89ac6346701f8f226ba8`, `0e1be965e4fb7e790038cda9d21845cf`
@@ -155,13 +163,13 @@ values 2, 3, and 4. The configured AVC tests additionally build FFmpeg-style
 packet payload, and prove the separated-config CAVLC ref-list, CABAC IDR/P,
 High 4:2:0 32x32 8x8-DCT CAVLC/CABAC, High 4:2:2 CAVLC/CABAC,
 High 4:4:4 Predictive CAVLC/CABAC, true High 10 4:2:0 deblock-disabled
-CAVLC/CABAC IDR/I, monochrome CAVLC/CABAC, and qp=0 lossless CAVLC/CABAC
-packets against the same frame MD5s
+CAVLC/CABAC IDR/I and P-skip/P16x16 no-residual, monochrome CAVLC/CABAC, and
+qp=0 lossless CAVLC/CABAC packets against the same frame MD5s
 both as bundled packets and as successive single-frame sample packets that
 require DPB reference state to survive across public decoder calls. Native
 FFmpeg framemd5 oracle checks cover the 32x32 High 4:2:0 8x8-DCT fixtures in
-addition to the true High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/I fixtures
-and the 16x16/32x32 families listed below. The
+addition to the true High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/I and
+P-skip/P16x16 no-residual fixtures and the 16x16/32x32 families listed below. The
 configured B-frame sample tests additionally decode one access unit per call and
 then use the public delayed-frame flush to drain retained future P pictures,
 covering FFmpeg's `last_pocs`/`has_b_frames` reorder inference and signaled VUI
@@ -307,6 +315,10 @@ Included:
 - Public High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/I decode through the
   high raw helper surface, covered by Annex B, AVC/NALFF, configured AVC, and
   FFmpeg rawvideo MD5 oracle tests
+- Public High 10 4:2:0 deblock-disabled CAVLC/CABAC IDR/P P-skip and P16x16
+  no-residual decode through the high raw helper surface, covered by Annex B,
+  AVC/NALFF, configured AVC, configured sample-by-sample decode, and FFmpeg
+  rawvideo MD5 oracle tests
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:
@@ -316,6 +328,7 @@ Excluded unless directly required by decoder parity:
 - FFmpeg muxer/demuxer/filter frontends
 - Hardware acceleration backends
 - Non-H.264 codecs
-- Public high-bit-depth decode beyond the proved High 10 deblock-disabled I
-  subset remains explicitly unsupported until high P/B, high deblocking, and
-  additional depth/chroma fixtures land
+- Public high-bit-depth decode beyond the proved High 10 deblock-disabled I and
+  P-skip/P16x16 no-residual subsets remains explicitly unsupported; residual P,
+  weighted P, high B, high deblocking, and additional depth/chroma fixtures
+  remain later lanes

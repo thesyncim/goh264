@@ -248,6 +248,145 @@ func TestDecodeCAVLCFrameSliceReconstructsPSkip(t *testing.T) {
 	}
 }
 
+func TestDecodeCAVLCFrameSliceHighReconstructsPSkipFromRef(t *testing.T) {
+	const bitDepth = 10
+	m, dst, sh, ref := h264HighPFrameSliceDecodeFixture(t, bitDepth)
+	gb := newBitReader(cavlcBitString("010"))
+
+	got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{
+		SliceNum:      21,
+		Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	})
+	if err != nil {
+		t.Fatalf("decode high cavlc pskip slice failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one skipped MB frame end", got)
+	}
+	assertH264SliceDecodeHighRef(t, "cavlc high pskip", dst, ref)
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	if m.MacroblockTyp[0] != wantType || m.CBPTable[0] != 0 || m.QScaleTable[0] != uint8(sh.QScale) || m.SliceTable[0] != 21 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	if gb.bitPos != 3 {
+		t.Fatalf("consumed %d bits, want 3", gb.bitPos)
+	}
+}
+
+func TestDecodeCABACFrameSliceHighReconstructsPSkipFromRef(t *testing.T) {
+	const bitDepth = 10
+	m, dst, sh, ref := h264HighPFrameSliceDecodeFixture(t, bitDepth)
+	sh.PPS.CABAC = 1
+	src := &scriptedCABACSource{
+		bits:  []int{1},
+		terms: []int{1},
+	}
+
+	got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{
+		SliceNum:      22,
+		Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	})
+	if err != nil {
+		t.Fatalf("decode high cabac pskip slice failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one skipped MB frame end", got)
+	}
+	assertH264SliceDecodeHighRef(t, "cabac high pskip", dst, ref)
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	if m.MacroblockTyp[0] != wantType || m.CBPTable[0] != 0 || m.QScaleTable[0] != uint8(sh.QScale) || m.SliceTable[0] != 22 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	wantIndexes(t, src, []int{11})
+}
+
+func TestDecodeCAVLCFrameSliceHighReconstructsP16x16NoResidualFromRef(t *testing.T) {
+	const bitDepth = 10
+	m, dst, sh, ref := h264HighPFrameSliceDecodeFixture(t, bitDepth)
+	gb := newBitReader(cavlcBitString("11111"))
+
+	got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{
+		SliceNum:      23,
+		Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	})
+	if err != nil {
+		t.Fatalf("decode high cavlc p16x16 slice failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one P16x16 MB frame end", got)
+	}
+	assertH264SliceDecodeHighRef(t, "cavlc high p16x16", dst, ref)
+	wantType := MBType16x16 | MBTypeP0L0
+	if m.MacroblockTyp[0] != wantType || m.CBPTable[0] != 0 || m.QScaleTable[0] != uint8(sh.QScale) || m.SliceTable[0] != 23 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	if gb.bitPos != 5 {
+		t.Fatalf("consumed %d bits, want 5", gb.bitPos)
+	}
+}
+
+func TestDecodeCABACFrameSliceHighReconstructsP16x16NoResidualFromRef(t *testing.T) {
+	const bitDepth = 10
+	m, dst, sh, ref := h264HighPFrameSliceDecodeFixture(t, bitDepth)
+	sh.PPS.CABAC = 1
+	src := &scriptedCABACSource{
+		bits: []int{
+			0,
+			0, 0, 0,
+			0, 0,
+			0, 0, 0, 0,
+			0,
+		},
+		terms: []int{1},
+	}
+
+	got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{
+		SliceNum:      24,
+		Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	})
+	if err != nil {
+		t.Fatalf("decode high cabac p16x16 slice failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one P16x16 MB frame end", got)
+	}
+	assertH264SliceDecodeHighRef(t, "cabac high p16x16", dst, ref)
+	wantType := MBType16x16 | MBTypeP0L0
+	if m.MacroblockTyp[0] != wantType || m.CBPTable[0] != 0 || m.QScaleTable[0] != uint8(sh.QScale) || m.SliceTable[0] != 24 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	wantIndexes(t, src, []int{11, 14, 15, 16, 40, 47, 73, 74, 75, 76, 77})
+}
+
+func TestDecodeCAVLCFrameSliceHighRejectsWeightedPBeforeEntropy(t *testing.T) {
+	const bitDepth = 10
+	m, dst, sh, ref := h264HighPFrameSliceDecodeFixture(t, bitDepth)
+	sh.PPS.WeightedPred = 1
+	pwt := h264MotionCompTestPWT(1)
+	pwt.UseWeight = 1
+	gb := newBitReader(cavlcBitString("010"))
+
+	_, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{
+		SliceNum:      25,
+		Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+		PredWeight:    &pwt,
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	})
+	if err != ErrUnsupported {
+		t.Fatalf("decode err = %v, want ErrUnsupported", err)
+	}
+	if gb.bitPos != 0 {
+		t.Fatalf("bit reader consumed %d bits, want 0", gb.bitPos)
+	}
+	if m.MacroblockTyp[0] != 0 || m.SliceTable[0] != ^uint16(0) {
+		t.Fatalf("tables type/slice = %#x/%#x, want untouched", m.MacroblockTyp[0], m.SliceTable[0])
+	}
+}
+
 func TestDecodeCAVLCFrameSliceAllowsDeblockingFlag(t *testing.T) {
 	m, err := newMacroblockTables(1, 1, 1)
 	if err != nil {
@@ -319,4 +458,25 @@ func assertH264SliceDecodePCM(t *testing.T, dst *h264PicturePlanes, mbX int, mbY
 	}
 	assertH264Rows(t, "slice pcm cb", dst.Cb, cbOff, dst.ChromaStride, 8, blockH, pcm[256:], 8)
 	assertH264Rows(t, "slice pcm cr", dst.Cr, crOff, dst.ChromaStride, 8, blockH, pcm[256+8*blockH:], 8)
+}
+
+func h264HighPFrameSliceDecodeFixture(t *testing.T, bitDepth int32) (*macroblockTables, *h264PicturePlanesHigh, *SliceHeader, *h264PicturePlanesHigh) {
+	t.Helper()
+
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
+	sh.QScale = 24
+	sh.RefCount = [2]uint32{1, 0}
+	ref := makeH264SliceDecodePictureHigh(1, 1, 1)
+	fillH264MotionCompPlaneHigh(ref.Y, 73, int(bitDepth))
+	fillH264MotionCompPlaneHigh(ref.Cb, 91, int(bitDepth))
+	fillH264MotionCompPlaneHigh(ref.Cr, 119, int(bitDepth))
+	return m, dst, sh, ref
+}
+
+func assertH264SliceDecodeHighRef(t *testing.T, label string, dst *h264PicturePlanesHigh, ref *h264PicturePlanesHigh) {
+	t.Helper()
+
+	assertH264RowsHigh(t, label+" y", dst.Y, 0, dst.LumaStride, 16, 16, ref.Y, ref.LumaStride)
+	assertH264RowsHigh(t, label+" cb", dst.Cb, 0, dst.ChromaStride, 8, 8, ref.Cb, ref.ChromaStride)
+	assertH264RowsHigh(t, label+" cr", dst.Cr, 0, dst.ChromaStride, 8, 8, ref.Cr, ref.ChromaStride)
 }
