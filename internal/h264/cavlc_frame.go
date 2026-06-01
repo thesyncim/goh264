@@ -24,28 +24,30 @@ type cavlcFrameMacroblockInput struct {
 }
 
 type cavlcFrameMacroblockResult struct {
-	MBType            uint32
-	CBP               int
-	CBPTable          int
-	QScale            int
-	ChromaQP          [2]uint8
-	ChromaPred        int32
-	TopLeftAvailable  uint16
-	TopRightAvailable uint16
-	Neighbors         macroblockDecodeNeighbors
-	Intra             cavlcMacroblockSyntax
-	Inter             cavlcInterMacroblockSyntax
-	IntraPCM          []byte
-	IsIntra           bool
-	IsInter           bool
-	Skipped           bool
+	MBType              uint32
+	CBP                 int
+	CBPTable            int
+	QScale              int
+	MBFieldDecodingFlag int32
+	ChromaQP            [2]uint8
+	ChromaPred          int32
+	TopLeftAvailable    uint16
+	TopRightAvailable   uint16
+	Neighbors           macroblockDecodeNeighbors
+	Intra               cavlcMacroblockSyntax
+	Inter               cavlcInterMacroblockSyntax
+	IntraPCM            []byte
+	IsIntra             bool
+	IsInter             bool
+	Skipped             bool
 }
 
 const cavlcMBSkipRunUnset int32 = -1
 
 type cavlcFrameSliceState struct {
-	MBSkipRun int32
-	QScale    int
+	MBSkipRun           int32
+	QScale              int
+	MBFieldDecodingFlag int32
 }
 
 func newCAVLCFrameSliceState(qscale int) cavlcFrameSliceState {
@@ -70,11 +72,17 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb
 	if m == nil || gb == nil || sh == nil || sh.PPS == nil || sh.SPS == nil || state == nil || work == nil {
 		return result, ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
+	if sh.PictureStructure != PictureFrame {
 		return result, ErrUnsupported
 	}
 	if sh.QScale > qpMaxNum || state.MBSkipRun < cavlcMBSkipRunUnset || state.QScale < 0 || state.QScale > qpMaxNum {
 		return result, ErrInvalidData
+	}
+
+	frameMBAFF := sh.SPS.MBAFF != 0
+	mbY := mbXY / m.MBStride
+	if frameMBAFF && (mbY&1) != 0 {
+		return result, ErrUnsupported
 	}
 
 	if sh.SliceTypeNoS != PictureTypeI {
@@ -90,9 +98,36 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb
 		}
 		if state.MBSkipRun > 0 {
 			state.MBSkipRun--
+			if frameMBAFF {
+				if (mbY&1) == 0 && state.MBSkipRun == 0 {
+					flag, err := gb.readBit()
+					if err != nil {
+						return result, err
+					}
+					state.MBFieldDecodingFlag = int32(flag)
+					result.MBFieldDecodingFlag = int32(flag)
+					if flag != 0 {
+						result.MBType = MBTypeInterlaced
+					}
+				}
+				return result, ErrUnsupported
+			}
 			return m.writeBackCAVLCFrameSkipMacroblockWithDirectWorkGuard(sh, state.QScale, mbXY, sliceNum, direct, work, rejectUnsupportedHighB)
 		}
 		state.MBSkipRun = cavlcMBSkipRunUnset
+	}
+
+	if frameMBAFF {
+		flag, err := gb.readBit()
+		if err != nil {
+			return result, err
+		}
+		state.MBFieldDecodingFlag = int32(flag)
+		result.MBFieldDecodingFlag = int32(flag)
+		if flag != 0 {
+			result.MBType = MBTypeInterlaced
+		}
+		return result, ErrUnsupported
 	}
 
 	result, err := m.decodeCAVLCFrameMacroblockWithWork(gb, cavlcFrameMacroblockInput{
