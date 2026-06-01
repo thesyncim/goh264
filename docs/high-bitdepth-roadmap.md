@@ -10,6 +10,7 @@ does not by itself admit public streams.
   weights when deblocking is disabled.
 - High10 selected B/direct/implicit-weighted lanes and selected deblock-enabled
   IDR/P/B lanes.
+- High10 CAVLC temporal B8x8 direct-sub with visible luma residual.
 - High10 CAVLC/CABAC slice-boundary IDR/P.
 - High12 CAVLC IDR/I IntraPCM.
 
@@ -19,7 +20,7 @@ Hashes and row IDs live in `testdata/h264/corpus/manifest.jsonl`.
 
 | Priority | Lane |
 | --- | --- |
-| 1 | Residual-bearing direct-sub B |
+| 1 | CABAC/implicit/deblock direct-sub residual variants |
 | 2 | High B deblock residual partitions |
 | 3 | Broader 12-bit / first 14-bit streams |
 | 4 | MBAFF/field pictures |
@@ -30,6 +31,7 @@ separate guard axes unless one oracle proves the combination.
 ## Still Guarded
 
 P IntraPCM, P 8x8-DCT intra, deblock-enabled weighted partitioned P, mixed
-direct/explicit B8x8, residual direct-sub B, unproved partitioned implicit B
-variants, chroma/B-slice slice-boundary modes, broader 12/14-bit, GBR/RGB,
-field/MBAFF, FMO, threading/SIMD, and row border exchange.
+direct/explicit B8x8, CABAC/implicit/deblock direct-sub residual variants,
+unproved partitioned implicit B variants, chroma/B-slice slice-boundary modes,
+broader 12/14-bit, GBR/RGB, field/MBAFF, FMO, threading/SIMD, and row border
+exchange.

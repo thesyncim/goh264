@@ -17,6 +17,7 @@ type cabacFrameMacroblockInput struct {
 	RefCount               [2]uint32
 	DCT8x8Allowed          bool
 	DirectSpatialMVPred    bool
+	DeblockingFilter       int32
 	Direct                 h264DirectMotionContext
 	PPS                    *PPS
 	SPS                    *SPS
@@ -96,6 +97,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		RefCount:               sh.RefCount,
 		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
+		DeblockingFilter:       sh.DeblockingFilter,
 		Direct:                 direct,
 		PPS:                    sh.PPS,
 		SPS:                    sh.SPS,
@@ -439,7 +441,13 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	mb.ChromaQP = chromaQP
 	mb.CBPTable = cbpTable
 	if in.RejectUnsupportedHighB {
-		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(&SliceHeader{SliceTypeNoS: in.SliceTypeNoS, PPS: in.PPS}, mb.MBType, &mb.SubMBType, mb.CBP, mb.CBPTable); err != nil {
+		sh := &SliceHeader{
+			SliceTypeNoS:     in.SliceTypeNoS,
+			DeblockingFilter: in.DeblockingFilter,
+			PPS:              in.PPS,
+			SPS:              in.SPS,
+		}
+		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.SubMBType, mb.CBP, mb.CBPTable); err != nil {
 			return result, err
 		}
 	}

@@ -16,5 +16,6 @@ Status values: `translated`, `partially translated`, `stubbed`, `replaced`, or
 | public decoder/output | `decoder.go`, `simple_decode.go` | partially translated | corpus, MD5 | full delayed-output pending |
 | High10 weighted partitioned P | weighted P fixtures/tests | translated | macroblock proof, corpus, MD5 | frame-only 4:2:0 deblock-disabled only |
 | High10 CABAC slice-boundary IDR/P | slice-boundary fixture/tests | translated | corpus, FFmpeg MD5 | frame-only 4:2:0 IDR/P only |
+| High10 CAVLC direct-sub residual B | direct-sub residual fixture/tests | translated | macroblock proof, corpus, FFmpeg MD5 | temporal B8x8 4:2:0 only |
 | corpus/benchmark harness | `decoder_corpus_test.go`, `cmd/goh264bench`, manifest | replaced | corpus, bench smoke | FATE/JVT import and in-process baseline pending |
 | remaining H.264 decoder behavior | guards | stubbed | none | P IntraPCM, MBAFF, FMO, threading, broad ER/SIMD, unproved high lanes |

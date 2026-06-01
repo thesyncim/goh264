@@ -9,8 +9,8 @@ Scope is decoder-only.
   `894da5ca7d742e4429ffb2af534fcda0103ef593`.
 - Decodes the fixture-proved progressive Annex B/AVC subset: 8-bit IDR/P/B
   plus selected High10/High12 lanes.
-- Latest lane: High10 4:2:0 frame-only, `disable_deblocking_filter_idc == 2`
-  slice-boundary IDR/P for CAVLC and CABAC.
+- Latest lane: High10 CAVLC temporal B8x8 direct-sub with visible luma
+  residual, FFmpeg rawvideo-MD5 proved.
 - Still not a general libavcodec replacement: field/MBAFF, FMO, broad error
   resilience, threading/SIMD, full delayed output, broad 12/14-bit streams, and
   unproved high-bit-depth feature combinations remain guarded.

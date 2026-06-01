@@ -538,7 +538,7 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 		if isHighB16x16DirectMacroblock(mbType) {
 			return nil
 		}
-		if isHighB8x8DirectSubMacroblock(mbType, subMBType) && cbp == 0 && cbpTable == 0 {
+		if isHighB8x8DirectSubMacroblock(mbType, subMBType) && (!isHighBImplicitWeighted(sh) || cbp == 0 && cbpTable == 0) {
 			return nil
 		}
 		if isHighBExplicitPartitionedMacroblock(mbType, subMBType) &&
