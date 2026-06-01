@@ -21,6 +21,7 @@ type high10PartitionedBFixture struct {
 	name              string
 	file              string
 	cabac             int32
+	deblockingFilter  int32
 	weightedBipredIDC uint32
 	refCount          [2]uint32
 	wantSlices        []int32
@@ -400,6 +401,117 @@ func high10PartitionedBFixtures() []high10PartitionedBFixture {
 			},
 			rawVideoMD5: "2306e0d4cd6e403f86776208ccd87c3f",
 		},
+		{
+			name:              "implicit-deblock-cavlc-b16x8",
+			file:              "high10_partitioned_implicit_weight_b_deblock_b16x8_cavlc.h264",
+			deblockingFilter:  1,
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        206,
+			annexBMD5:         "bff70b73784de5b54ebc89d825be781d",
+			frameMD5: []string{
+				"9570db7f92854146eadcc3957be6d270",
+				"0de994fbc787cc9e354041ecce3fdd0e",
+				"d6171b07f049f9bfa97568481d5c8d9d",
+				"65d16f5c3629cec7d94f270affb515e2",
+				"d005979c10c72526ff99388e06193f1c",
+			},
+			rawVideoMD5: "ce1499b723a2463f097dcbaa82ef88f9",
+		},
+		{
+			name:              "implicit-deblock-cabac-b16x8",
+			file:              "high10_partitioned_implicit_weight_b_deblock_b16x8_cabac.h264",
+			cabac:             1,
+			deblockingFilter:  1,
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        195,
+			annexBMD5:         "5bc300f4a7660f99611569d24be3c67a",
+			frameMD5: []string{
+				"02f9ac80c4a2cd773011cad7ccd6ecba",
+				"7674c59097f3640cdae50743d968c7be",
+				"8e24af2c2559a21c423b6d733399d6a5",
+				"65d16f5c3629cec7d94f270affb515e2",
+				"d005979c10c72526ff99388e06193f1c",
+			},
+			rawVideoMD5: "d5dc1d436914f2815eb00bcba1b1ac14",
+		},
+		{
+			name:              "implicit-deblock-cavlc-b8x16",
+			file:              "high10_partitioned_implicit_weight_b_deblock_b8x16_cavlc.h264",
+			deblockingFilter:  1,
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        216,
+			annexBMD5:         "2ff41684aee3f31b0f62d00391f7d45a",
+			frameMD5: []string{
+				"eb4a60270b6233d28dc8418d50ca6b4d",
+				"a6dd816bb125d86385e307ccff3e9adc",
+				"0bcc4d628ee4ebd33fba195469aefe8d",
+				"8973252a29ca2ad29d03a51c03cd36f9",
+				"02fc60d34c12e58ae9a576515bace1ac",
+			},
+			rawVideoMD5: "0ed4ad2f961f74d5a860b2aadef5f667",
+		},
+		{
+			name:              "implicit-deblock-cabac-b8x16",
+			file:              "high10_partitioned_implicit_weight_b_deblock_b8x16_cabac.h264",
+			cabac:             1,
+			deblockingFilter:  1,
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        197,
+			annexBMD5:         "8bbc78473ea2d8a97bd7485f66dc0f52",
+			frameMD5: []string{
+				"e7d203bec8af43abb7ccf00c20daf3d0",
+				"314125962988a819636c8d261aaa86f9",
+				"a2a76f9401e1a2e0841c901e8f7f44de",
+				"e6f4672ae8b8b2a9532503fee24f7fad",
+				"40f1ee0aa76da7ca8f9b7fe0bf9e052d",
+			},
+			rawVideoMD5: "93441085702db4f988978350cab69119",
+		},
+		{
+			name:              "implicit-deblock-cavlc-b8x8",
+			file:              "high10_partitioned_implicit_weight_b_deblock_b8x8_cavlc.h264",
+			deblockingFilter:  1,
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        292,
+			annexBMD5:         "e7fd4fa5d7e352cdd60ebbcbf5499026",
+			frameMD5: []string{
+				"92ee8f26a66cbf9ec8ea654a22762e94",
+				"6e654a6170477e0cccabe38b52a449cc",
+				"726c63d619559ea32017c49a0e8a9a9f",
+				"5567bcfcdb8fcad2ff456e922e538235",
+				"7ba69fd6ddc4b1987a431b2dce1a6694",
+			},
+			rawVideoMD5: "758eb51ab3fa142adaaafb4ca7871eff",
+		},
+		{
+			name:              "implicit-deblock-cabac-b8x8",
+			file:              "high10_partitioned_implicit_weight_b_deblock_b8x8_cabac.h264",
+			cabac:             1,
+			deblockingFilter:  1,
+			weightedBipredIDC: 2,
+			refCount:          [2]uint32{1, 1},
+			wantSlices:        []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			annexBSize:        236,
+			annexBMD5:         "4d9d0a6130711cb19e276dfe690ccc19",
+			frameMD5: []string{
+				"92ee8f26a66cbf9ec8ea654a22762e94",
+				"ae4bb3e8d65bf5f9220a8b746cdd13a9",
+				"d46fb13bdf0c45d39a38bf8e5de846f1",
+				"5567bcfcdb8fcad2ff456e922e538235",
+				"6d444e43c2bc194f7c5876575181a40e",
+			},
+			rawVideoMD5: "88e5b24a139b6bc30cf9d879b1f34c56",
+		},
 	}
 }
 
@@ -493,8 +605,8 @@ func assertHigh10PartitionedBFixtureSyntax(t *testing.T, data []byte, tt high10P
 			if err != nil {
 				t.Fatal(err)
 			}
-			if sh.PictureStructure != h264.PictureFrame || sh.DeblockingFilter != 0 {
-				t.Fatalf("slice picture/deblock = %d/%d, want frame/disabled", sh.PictureStructure, sh.DeblockingFilter)
+			if sh.PictureStructure != h264.PictureFrame || sh.DeblockingFilter != tt.deblockingFilterValue() {
+				t.Fatalf("slice picture/deblock = %d/%d, want frame/%d", sh.PictureStructure, sh.DeblockingFilter, tt.deblockingFilterValue())
 			}
 			switch sh.SliceTypeNoS {
 			case h264.PictureTypeI:
@@ -541,6 +653,13 @@ func (tt high10PartitionedBFixture) ppsRefCount() [2]uint32 {
 		return tt.refCount
 	}
 	return [2]uint32{2, 1}
+}
+
+func (tt high10PartitionedBFixture) deblockingFilterValue() int32 {
+	if tt.deblockingFilter != 0 {
+		return tt.deblockingFilter
+	}
+	return 0
 }
 
 func (tt high10PartitionedBFixture) sliceTypes() []int32 {

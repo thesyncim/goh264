@@ -168,6 +168,41 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsB16x16Deblocking(t 
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsImplicitPartitionedBDeblocking(t *testing.T) {
+	bExplicitSub := [4]uint32{
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L1,
+	}
+	for _, tt := range []struct {
+		name     string
+		pps      *PPS
+		mbType   uint32
+		sub      *[4]uint32
+		cbp      int
+		cbpTable int
+	}{
+		{name: "cavlc b16x8", pps: &PPS{WeightedBipredIDC: 2}, mbType: MBType16x8 | MBTypeP0L1 | MBTypeP1L0},
+		{name: "cabac b16x8", pps: &PPS{CABAC: 1, WeightedBipredIDC: 2}, mbType: MBType16x8 | MBTypeP0L1 | MBTypeP1L0},
+		{name: "cavlc b8x16", pps: &PPS{WeightedBipredIDC: 2}, mbType: MBType8x16 | MBTypeP0L1 | MBTypeP1L0},
+		{name: "cabac b8x16", pps: &PPS{CABAC: 1, WeightedBipredIDC: 2}, mbType: MBType8x16 | MBTypeP0L1 | MBTypeP1L0},
+		{name: "cavlc b8x8 residual", pps: &PPS{WeightedBipredIDC: 2}, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, sub: &bExplicitSub, cbp: 0x5, cbpTable: 0x5005},
+		{name: "cabac b8x8 residual", pps: &PPS{CABAC: 1, WeightedBipredIDC: 2}, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, sub: &bExplicitSub, cbp: 0x5, cbpTable: 0x5},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sh := &SliceHeader{
+				SliceTypeNoS:     PictureTypeB,
+				DeblockingFilter: 1,
+				PPS:              tt.pps,
+			}
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, tt.mbType, tt.sub, tt.cbp, tt.cbpTable); err != nil {
+				t.Fatalf("validate high implicit partitioned B deblock err = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoundaries(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
 	bSlice := &SliceHeader{SliceTypeNoS: PictureTypeB}
@@ -243,7 +278,8 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b deblock skip remains guarded", sh: bDeblockSlice, mbType: bSkip, want: ErrUnsupported},
 		{name: "b deblock partitioned remains guarded", sh: bDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
 		{name: "b deblock cabac partitioned remains guarded", sh: bCABACDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
-		{name: "b deblock implicit weighted partitioned remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, want: ErrUnsupported},
+		{name: "b deblock implicit weighted partitioned residual remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1, want: ErrUnsupported},
+		{name: "b deblock implicit weighted direct sub remains guarded", sh: bImplicitDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, want: ErrUnsupported},
 		{name: "b deblock implicit weighted remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, want: ErrUnsupported},
 	}
 	for _, tt := range tests {

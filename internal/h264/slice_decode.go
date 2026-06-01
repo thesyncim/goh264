@@ -398,23 +398,32 @@ func validateHighFrameSliceDeblockingScope(sh *SliceHeader) error {
 	return nil
 }
 
-func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32) error {
+func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32, subMBType *[4]uint32, cbp int, cbpTable int) error {
 	if sh == nil || sh.SliceTypeNoS != PictureTypeB || sh.DeblockingFilter == 0 {
 		return nil
 	}
 	if sh.PPS == nil {
 		return ErrInvalidData
 	}
-	if sh.DeblockingFilter == 1 &&
-		!isHighBImplicitWeighted(sh) &&
-		(isHighB16x16ExplicitMacroblock(mbType) || isHighB16x16DirectMacroblock(mbType)) {
-		return nil
+	if sh.DeblockingFilter == 1 {
+		if !isHighBImplicitWeighted(sh) &&
+			(isHighB16x16ExplicitMacroblock(mbType) || isHighB16x16DirectMacroblock(mbType)) {
+			return nil
+		}
+		if isHighBImplicitWeighted(sh) {
+			if isHighB16x8Or8x16ExplicitMacroblock(mbType) && cbp == 0 && cbpTable == 0 {
+				return nil
+			}
+			if isHighB8x8ExplicitSubMacroblock(mbType, subMBType) {
+				return nil
+			}
+		}
 	}
 	return ErrUnsupported
 }
 
-func validateHighFrameSliceBMacroblockScope(sh *SliceHeader, mbType uint32) error {
-	if err := validateHighFrameSliceBDeblockingMacroblock(sh, mbType); err != nil {
+func validateHighFrameSliceBMacroblockScope(sh *SliceHeader, mbType uint32, subMBType *[4]uint32, cbp int, cbpTable int) error {
+	if err := validateHighFrameSliceBDeblockingMacroblock(sh, mbType, subMBType, cbp, cbpTable); err != nil {
 		return err
 	}
 	return nil
@@ -498,7 +507,7 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 		return ErrUnsupported
 	}
 	if sh.SliceTypeNoS == PictureTypeB {
-		if err := validateHighFrameSliceBMacroblockScope(sh, mbType); err != nil {
+		if err := validateHighFrameSliceBMacroblockScope(sh, mbType, subMBType, cbp, cbpTable); err != nil {
 			return err
 		}
 		if isSkip(mbType) {
