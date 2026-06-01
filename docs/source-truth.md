@@ -58,6 +58,8 @@ The embedded smoke bitstreams currently have these decoded-frame oracles:
 - deblock-enabled High 4:4:4 Predictive 32x32 CAVLC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `e6522cb7daa4278fa238f995daea8594`, `274c8ec306ee4705f93c3cc6bdedc948`, `d42015040093bf782173b1d8d00a5b74`, `9d93f36ffaeb8caa764f2b06240ba5d7`
 - deblock-enabled High 4:4:4 Predictive 32x32 CABAC `testsrc2` IDR/P yuv444p rawvideo frame MD5s: `df7f5b803f967fcd46070b2b182c3805`, `5bc16fb5ebe5c3021e77c7c82c34127c`, `5e0f2020cfefc09d993a68c2963ad8ed`, `f14846abbb44addf3e1ce0e66394b683`
 - qp=0 High 4:4:4 Predictive CAVLC/CABAC `testsrc2` IDR/P yuv420p lossless rawvideo frame MD5s: `69fcf25f35e829e5a3d96cbaaf22bbb6`, `8563271dc08ef4ed388ebc1f7016834c`, `1a054a3901101da0f6b6c58d8e71bbdb`, `a0addb72f5ea0957ef8a05b782f0e9ff`
+- 16x16 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `4296e3dc95829cc27071a8685a428494`, `36f5a9b9064709ee891652e8f4e06992`, `aa778b981f96d21489196f6a0faa0959`
+- 16x16 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `f5c89cbdd198348f67b10b9e7cc511a7`, `fef9831ddd54882d715ceb50c382efde`, `4b6a7f1c59198ae9b8e31ef4de333e42`
 - 32x32 no-skip non-direct B-frame CAVLC `testsrc2` yuv420p rawvideo frame MD5s: `2a9d9acd3e52356ad072de93fdbaca3d`, `96107676801850afd8aed8546397e3bf`, `3967b8bfe3a3a8cde4bc22334008eb1f`
 - 32x32 no-skip non-direct B-frame CABAC `testsrc2` yuv420p rawvideo frame MD5s: `88a962a713f37e05f375eee6ee9f385b`, `a165d65aadbe1410829a22df4459539b`, `8d39f667da04571db61fc68919a64ade`
 - same `testsrc2` encode with loop filter disabled: `b729e0367dccdfd707a7ea0c6e68c06e`
@@ -85,14 +87,14 @@ edges. The lossless fixtures carry `qpprime_y_zero_transform_bypass_flag` and
 add-pixels reconstruction, and lossless vertical/horizontal pred-add paths over
 the simple progressive IDR/P subset.
 
-The non-direct B fixtures use `testsrc2=size=32x32:rate=1:duration=3` with
+The non-direct B fixtures use `testsrc2=size=16x16` and `testsrc2=size=32x32`
+at `rate=1:duration=3` with
 `bframes=1:b-adapt=0:b-pyramid=0:direct=none:no-skip=1:weightp=0:no-deblock=1`
 and either `cabac=0` or `cabac=1`. They intentionally prove POC-backed B list0
 and list1 construction, explicit L0/L1 motion, display-order output, Annex B,
-AVC/NALFF, and one-shot configured AVC paths while avoiding B-direct/skip and
-non-neutral implicit weighting. A smaller 16-wide B fixture is deferred until the
-qpel/chroma edge-emulation scratch path is refactored to handle block widths
-larger than the reference stride.
+AVC/NALFF, one-shot configured AVC paths, and qpel/chroma edge emulation when
+the reference stride is smaller than FFmpeg's edge block width, while avoiding
+B-direct/skip and non-neutral implicit weighting.
 
 Reference-picture unit coverage now includes FFmpeg's progressive frame-picture
 long-term P-list behavior: default long refs after short refs, ref-list

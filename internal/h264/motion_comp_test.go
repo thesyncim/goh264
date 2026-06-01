@@ -189,6 +189,25 @@ func TestH264HLMotionFrameEdgeEmulationRequiresScratch(t *testing.T) {
 	}
 }
 
+func TestH264HLMotionFrameEdgeEmulationAllowsWideBlockOnTightStride(t *testing.T) {
+	dst := makeH264MotionCompTightPicture(1, 5)
+	ref := makeH264MotionCompTightPicture(1, 15)
+	refs := [2][]*h264PicturePlanes{{ref}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+	cache.MV[0][h264Scan8[0]] = [2]int16{1, 0}
+
+	if err := h264HLMotionFrameWithScratch(dst, refs, &cache, MBType16x16|MBTypeP0L0, [4]uint32{}, 0, 0, 1, makeH264MotionCompScratch(dst)); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[0] != 18 {
+		t.Fatalf("tight-stride edge luma sample = %d, want 18", dst.Y[0])
+	}
+	if dst.Cb[0] != 46 || dst.Cr[0] != 88 {
+		t.Fatalf("tight-stride edge chroma samples = %d/%d, want 46/88", dst.Cb[0], dst.Cr[0])
+	}
+}
+
 func makeH264MotionCompPicture(chromaFormatIDC int, seed int) *h264PicturePlanes {
 	chromaStride := h264MotionCompTestChromaStride
 	if chromaFormatIDC == 3 {
@@ -213,6 +232,26 @@ func makeH264MotionCompPicture(chromaFormatIDC int, seed int) *h264PicturePlanes
 	return p
 }
 
+func makeH264MotionCompTightPicture(chromaFormatIDC int, seed int) *h264PicturePlanes {
+	chromaWidth, chromaHeight := h264ChromaFrameSize(1, 1, chromaFormatIDC)
+	p := &h264PicturePlanes{
+		Y:               make([]uint8, 16*16),
+		LumaStride:      16,
+		ChromaStride:    chromaWidth,
+		MBWidth:         1,
+		MBHeight:        1,
+		ChromaFormatIDC: chromaFormatIDC,
+	}
+	fillH264MotionCompPlane(p.Y, seed)
+	if chromaFormatIDC != 0 {
+		p.Cb = make([]uint8, chromaWidth*chromaHeight)
+		p.Cr = make([]uint8, chromaWidth*chromaHeight)
+		fillH264MotionCompPlane(p.Cb, seed+29)
+		fillH264MotionCompPlane(p.Cr, seed+71)
+	}
+	return p
+}
+
 func makeH264MotionCompScratch(p *h264PicturePlanes) *h264MotionCompScratch {
 	s := &h264MotionCompScratch{
 		Y:    make([]uint8, p.LumaStride*16),
@@ -227,12 +266,12 @@ func makeH264MotionCompScratch(p *h264PicturePlanes) *h264MotionCompScratch {
 }
 
 func h264MotionCompScratchEdgeSize(p *h264PicturePlanes) int {
-	luma := p.LumaStride * (16 + 5)
+	luma := h264EdgeScratchSize(p.LumaStride, 16+5, 16+5)
 	chroma := 0
 	if p.ChromaFormatIDC == 1 || p.ChromaFormatIDC == 2 {
-		chroma = p.ChromaStride * (8*p.ChromaFormatIDC + 1)
+		chroma = h264EdgeScratchSize(p.ChromaStride, 9, 8*p.ChromaFormatIDC+1)
 	} else if p.ChromaFormatIDC == 3 {
-		chroma = p.ChromaStride * (16 + 5)
+		chroma = h264EdgeScratchSize(p.ChromaStride, 16+5, 16+5)
 	}
 	if chroma > luma {
 		return chroma

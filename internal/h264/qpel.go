@@ -14,7 +14,11 @@ func h264AvgH264QpelMC(dst []uint8, dstOffset int, src []uint8, srcOffset int, s
 }
 
 func h264QpelMC(dst []uint8, dstOffset int, src []uint8, srcOffset int, stride int, size int, mx int, my int, avg bool) error {
-	if err := checkH264QpelArgs(dst, dstOffset, src, srcOffset, stride, size, mx, my); err != nil {
+	return h264QpelMCStrides(dst, dstOffset, stride, src, srcOffset, stride, size, mx, my, avg)
+}
+
+func h264QpelMCStrides(dst []uint8, dstOffset int, dstStride int, src []uint8, srcOffset int, srcStride int, size int, mx int, my int, avg bool) error {
+	if err := checkH264QpelArgs(dst, dstOffset, dstStride, src, srcOffset, srcStride, size, mx, my); err != nil {
 		return err
 	}
 	var pred [16 * 16]uint8
@@ -23,66 +27,66 @@ func h264QpelMC(dst []uint8, dstOffset int, src []uint8, srcOffset int, stride i
 
 	switch my*4 + mx {
 	case 0:
-		h264QpelCopyPred(&pred, src, srcOffset, stride, size)
+		h264QpelCopyPred(&pred, src, srcOffset, srcStride, size)
 	case 1:
-		h264QpelHPred(&a, src, srcOffset, stride, size, 0)
-		h264QpelCopyPred(&b, src, srcOffset, stride, size)
+		h264QpelHPred(&a, src, srcOffset, srcStride, size, 0)
+		h264QpelCopyPred(&b, src, srcOffset, srcStride, size)
 		h264QpelAvgPred(&pred, &b, &a, size)
 	case 2:
-		h264QpelHPred(&pred, src, srcOffset, stride, size, 0)
+		h264QpelHPred(&pred, src, srcOffset, srcStride, size, 0)
 	case 3:
-		h264QpelHPred(&a, src, srcOffset, stride, size, 0)
-		h264QpelCopyPred(&b, src, srcOffset+1, stride, size)
+		h264QpelHPred(&a, src, srcOffset, srcStride, size, 0)
+		h264QpelCopyPred(&b, src, srcOffset+1, srcStride, size)
 		h264QpelAvgPred(&pred, &b, &a, size)
 	case 4:
-		h264QpelVPred(&a, src, srcOffset, stride, size, 0)
-		h264QpelCopyPred(&b, src, srcOffset, stride, size)
+		h264QpelVPred(&a, src, srcOffset, srcStride, size, 0)
+		h264QpelCopyPred(&b, src, srcOffset, srcStride, size)
 		h264QpelAvgPred(&pred, &b, &a, size)
 	case 5:
-		h264QpelHPred(&a, src, srcOffset, stride, size, 0)
-		h264QpelVPred(&b, src, srcOffset, stride, size, 0)
+		h264QpelHPred(&a, src, srcOffset, srcStride, size, 0)
+		h264QpelVPred(&b, src, srcOffset, srcStride, size, 0)
 		h264QpelAvgPred(&pred, &a, &b, size)
 	case 6:
-		h264QpelHPred(&a, src, srcOffset, stride, size, 0)
-		h264QpelHVPred(&b, src, srcOffset, stride, size)
+		h264QpelHPred(&a, src, srcOffset, srcStride, size, 0)
+		h264QpelHVPred(&b, src, srcOffset, srcStride, size)
 		h264QpelAvgPred(&pred, &a, &b, size)
 	case 7:
-		h264QpelHPred(&a, src, srcOffset, stride, size, 0)
-		h264QpelVPred(&b, src, srcOffset+1, stride, size, 0)
+		h264QpelHPred(&a, src, srcOffset, srcStride, size, 0)
+		h264QpelVPred(&b, src, srcOffset+1, srcStride, size, 0)
 		h264QpelAvgPred(&pred, &a, &b, size)
 	case 8:
-		h264QpelVPred(&pred, src, srcOffset, stride, size, 0)
+		h264QpelVPred(&pred, src, srcOffset, srcStride, size, 0)
 	case 9:
-		h264QpelVPred(&a, src, srcOffset, stride, size, 0)
-		h264QpelHVPred(&b, src, srcOffset, stride, size)
+		h264QpelVPred(&a, src, srcOffset, srcStride, size, 0)
+		h264QpelHVPred(&b, src, srcOffset, srcStride, size)
 		h264QpelAvgPred(&pred, &a, &b, size)
 	case 10:
-		h264QpelHVPred(&pred, src, srcOffset, stride, size)
+		h264QpelHVPred(&pred, src, srcOffset, srcStride, size)
 	case 11:
-		h264QpelVPred(&a, src, srcOffset+1, stride, size, 0)
-		h264QpelHVPred(&b, src, srcOffset, stride, size)
+		h264QpelVPred(&a, src, srcOffset+1, srcStride, size, 0)
+		h264QpelHVPred(&b, src, srcOffset, srcStride, size)
 		h264QpelAvgPred(&pred, &a, &b, size)
 	case 12:
-		h264QpelVPred(&a, src, srcOffset, stride, size, 0)
-		h264QpelCopyPred(&b, src, srcOffset+stride, stride, size)
+		h264QpelVPred(&a, src, srcOffset, srcStride, size, 0)
+		h264QpelCopyPred(&b, src, srcOffset+srcStride, srcStride, size)
 		h264QpelAvgPred(&pred, &b, &a, size)
 	case 13:
-		h264QpelHPred(&a, src, srcOffset, stride, size, 1)
-		h264QpelVPred(&b, src, srcOffset, stride, size, 0)
+		h264QpelHPred(&a, src, srcOffset, srcStride, size, 1)
+		h264QpelVPred(&b, src, srcOffset, srcStride, size, 0)
 		h264QpelAvgPred(&pred, &a, &b, size)
 	case 14:
-		h264QpelHPred(&a, src, srcOffset, stride, size, 1)
-		h264QpelHVPred(&b, src, srcOffset, stride, size)
+		h264QpelHPred(&a, src, srcOffset, srcStride, size, 1)
+		h264QpelHVPred(&b, src, srcOffset, srcStride, size)
 		h264QpelAvgPred(&pred, &a, &b, size)
 	case 15:
-		h264QpelHPred(&a, src, srcOffset, stride, size, 1)
-		h264QpelVPred(&b, src, srcOffset+1, stride, size, 0)
+		h264QpelHPred(&a, src, srcOffset, srcStride, size, 1)
+		h264QpelVPred(&b, src, srcOffset+1, srcStride, size, 0)
 		h264QpelAvgPred(&pred, &a, &b, size)
 	default:
 		return ErrInvalidData
 	}
 
-	h264QpelStorePred(dst, dstOffset, stride, &pred, size, avg)
+	h264QpelStorePred(dst, dstOffset, dstStride, &pred, size, avg)
 	return nil
 }
 
@@ -160,21 +164,24 @@ func h264QpelStorePred(dst []uint8, dstOffset int, stride int, pred *[16 * 16]ui
 	}
 }
 
-func checkH264QpelArgs(dst []uint8, dstOffset int, src []uint8, srcOffset int, stride int, size int, mx int, my int) error {
-	if dstOffset < 0 || srcOffset < 0 || stride <= 0 || mx < 0 || mx >= 4 || my < 0 || my >= 4 {
+func checkH264QpelArgs(dst []uint8, dstOffset int, dstStride int, src []uint8, srcOffset int, srcStride int, size int, mx int, my int) error {
+	if dstOffset < 0 || srcOffset < 0 || dstStride <= 0 || srcStride <= 0 || mx < 0 || mx >= 4 || my < 0 || my >= 4 {
 		return ErrInvalidData
 	}
 	if size != 2 && size != 4 && size != 8 && size != 16 {
 		return ErrInvalidData
 	}
-	dstMax := dstOffset + (size-1)*stride + size - 1
+	if dstStride < size || srcStride < size {
+		return ErrInvalidData
+	}
+	dstMax := dstOffset + (size-1)*dstStride + size - 1
 	if dstMax >= len(dst) {
 		return ErrInvalidData
 	}
 
 	minX, minY, maxX, maxY := h264QpelSourceBounds(size, mx, my)
-	minIndex := srcOffset + minY*stride + minX
-	maxIndex := srcOffset + maxY*stride + maxX
+	minIndex := srcOffset + minY*srcStride + minX
+	maxIndex := srcOffset + maxY*srcStride + maxX
 	if minIndex < 0 || maxIndex >= len(src) {
 		return ErrInvalidData
 	}

@@ -337,10 +337,13 @@ func newH264MotionCompScratchForFrame(f *DecodedFrame) *h264MotionCompScratch {
 	if f == nil {
 		return nil
 	}
-	edge := 20*f.LumaStride + 21
+	edge := h264EdgeScratchSize(f.LumaStride, 16+5, 16+5)
 	if f.ChromaFormatIDC != 0 {
 		chromaBlockH := 8*f.ChromaFormatIDC + 1
-		chromaEdge := (chromaBlockH-1)*f.ChromaStride + 9
+		chromaEdge := h264EdgeScratchSize(f.ChromaStride, 9, chromaBlockH)
+		if f.ChromaFormatIDC == 3 {
+			chromaEdge = h264EdgeScratchSize(f.ChromaStride, 16+5, 16+5)
+		}
 		if chromaEdge > edge {
 			edge = chromaEdge
 		}

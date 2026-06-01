@@ -38,7 +38,11 @@ func h264AvgH264ChromaMC8(dst []uint8, src []uint8, stride int, height int, x in
 }
 
 func h264ChromaMC(dst []uint8, src []uint8, stride int, height int, x int, y int, width int, avg bool) error {
-	if err := checkChromaMCArgs(dst, src, stride, height, x, y, width); err != nil {
+	return h264ChromaMCStrides(dst, src, stride, stride, height, x, y, width, avg)
+}
+
+func h264ChromaMCStrides(dst []uint8, src []uint8, dstStride int, srcStride int, height int, x int, y int, width int, avg bool) error {
+	if err := checkChromaMCArgs(dst, src, dstStride, srcStride, height, x, y, width); err != nil {
 		return err
 	}
 	a := (8 - x) * (8 - y)
@@ -48,32 +52,35 @@ func h264ChromaMC(dst []uint8, src []uint8, stride int, height int, x int, y int
 
 	if d != 0 {
 		for i := 0; i < height; i++ {
-			row := i * stride
-			next := row + stride
+			dstRow := i * dstStride
+			srcRow := i * srcStride
+			next := srcRow + srcStride
 			for j := 0; j < width; j++ {
-				v := a*int(src[row+j]) + b*int(src[row+j+1]) +
+				v := a*int(src[srcRow+j]) + b*int(src[srcRow+j+1]) +
 					c*int(src[next+j]) + d*int(src[next+j+1])
-				h264ChromaMCStore(dst, row+j, v, avg)
+				h264ChromaMCStore(dst, dstRow+j, v, avg)
 			}
 		}
 	} else if b+c != 0 {
 		e := b + c
 		step := 1
 		if c != 0 {
-			step = stride
+			step = srcStride
 		}
 		for i := 0; i < height; i++ {
-			row := i * stride
+			dstRow := i * dstStride
+			srcRow := i * srcStride
 			for j := 0; j < width; j++ {
-				v := a*int(src[row+j]) + e*int(src[row+step+j])
-				h264ChromaMCStore(dst, row+j, v, avg)
+				v := a*int(src[srcRow+j]) + e*int(src[srcRow+step+j])
+				h264ChromaMCStore(dst, dstRow+j, v, avg)
 			}
 		}
 	} else {
 		for i := 0; i < height; i++ {
-			row := i * stride
+			dstRow := i * dstStride
+			srcRow := i * srcStride
 			for j := 0; j < width; j++ {
-				h264ChromaMCStore(dst, row+j, a*int(src[row+j]), avg)
+				h264ChromaMCStore(dst, dstRow+j, a*int(src[srcRow+j]), avg)
 			}
 		}
 	}
@@ -89,24 +96,29 @@ func h264ChromaMCStore(dst []uint8, offset int, v int, avg bool) {
 	dst[offset] = pred
 }
 
-func checkChromaMCArgs(dst []uint8, src []uint8, stride int, height int, x int, y int, width int) error {
-	if stride <= 0 || height < 0 || x < 0 || x >= 8 || y < 0 || y >= 8 {
+func checkChromaMCArgs(dst []uint8, src []uint8, dstStride int, srcStride int, height int, x int, y int, width int) error {
+	if dstStride <= 0 || srcStride <= 0 || height < 0 || x < 0 || x >= 8 || y < 0 || y >= 8 {
 		return ErrInvalidData
 	}
 	if width != 1 && width != 2 && width != 4 && width != 8 {
 		return ErrInvalidData
 	}
+	if dstStride < width || srcStride < width {
+		return ErrInvalidData
+	}
 	if height == 0 {
 		return nil
 	}
-	dstNeeded := (height-1)*stride + width
+	dstNeeded := (height-1)*dstStride + width
 	srcNeeded := dstNeeded
 	if x != 0 && y != 0 {
-		srcNeeded = height*stride + width + 1
+		srcNeeded = height*srcStride + width + 1
 	} else if x != 0 {
-		srcNeeded = (height-1)*stride + width + 1
+		srcNeeded = (height-1)*srcStride + width + 1
 	} else if y != 0 {
-		srcNeeded = height*stride + width
+		srcNeeded = height*srcStride + width
+	} else {
+		srcNeeded = (height-1)*srcStride + width
 	}
 	if len(dst) < dstNeeded || len(src) < srcNeeded {
 		return ErrInvalidData
