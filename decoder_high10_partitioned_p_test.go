@@ -20,6 +20,7 @@ type high10PartitionedPFixture struct {
 	name         string
 	path         string
 	cabac        int32
+	weighted     bool
 	bitstreamMD5 string
 	rawVideoMD5  string
 	frameMD5     []string
@@ -248,6 +249,35 @@ func high10PartitionedPFixtures() []high10PartitionedPFixture {
 				"03d3a4917e5158912f0472553cd143a8",
 			},
 		},
+		{
+			name:         "weighted-cavlc",
+			path:         "testdata/h264/high10_weighted_partitioned_p_cavlc.h264",
+			weighted:     true,
+			bitstreamMD5: "beef107bee6bf1560ca46706a19deb3d",
+			rawVideoMD5:  "de7c3027f1c8967f92c30782d356ab45",
+			frameMD5: []string{
+				"206e7a7a20a362c37b89ad4538db1ab9",
+				"8e52768b6ae70aeef15c9ed9f0144165",
+				"5dbe745d8d0fd254db46ae65cd7a7799",
+				"340d98bfece7354be2a2114979c124e0",
+				"442597be98d297fc3611930e116554d4",
+			},
+		},
+		{
+			name:         "weighted-cabac",
+			path:         "testdata/h264/high10_weighted_partitioned_p_cabac.h264",
+			cabac:        1,
+			weighted:     true,
+			bitstreamMD5: "ae88c99e3202f9a6d9c045868210a364",
+			rawVideoMD5:  "7944a19fe843a899856ff2d24381f79e",
+			frameMD5: []string{
+				"206e7a7a20a362c37b89ad4538db1ab9",
+				"f751694d20b5b4fc7a7cdf05aa01c379",
+				"4b5ebed49101b07193ec6279bea3c59c",
+				"0d82cbf526a25679ec75fbabea7629fd",
+				"df01406ab3b43d769225eb67b8092055",
+			},
+		},
 	}
 }
 
@@ -275,6 +305,8 @@ func assertHigh10PartitionedPFixtureSyntax(t *testing.T, data []byte, tt high10P
 	var ppsList [256]*h264.PPS
 	var gotVCL []h264.NALUnit
 	var gotSlices []int32
+	var weightedPSlices int
+	var weightedChromaPSlices int
 	for _, nal := range nals {
 		switch nal.Type {
 		case h264.NALSPS:
@@ -294,10 +326,15 @@ func assertHigh10PartitionedPFixtureSyntax(t *testing.T, data []byte, tt high10P
 			if err != nil {
 				t.Fatal(err)
 			}
-			if pps.CABAC != tt.cabac || pps.Transform8x8Mode != 0 || pps.WeightedPred != 0 ||
+			wantWeightedPred := int32(0)
+			if tt.weighted {
+				wantWeightedPred = 1
+			}
+			if pps.CABAC != tt.cabac || pps.Transform8x8Mode != 0 || pps.WeightedPred != wantWeightedPred ||
 				pps.WeightedBipredIDC != 0 || pps.RefCount[0] != 1 || pps.RefCount[1] != 1 {
-				t.Fatalf("PPS cabac/8x8/weights/refs = %d/%d/%d/%d/%d/%d, want %d/no-8x8/unweighted/ref=1",
-					pps.CABAC, pps.Transform8x8Mode, pps.WeightedPred, pps.WeightedBipredIDC, pps.RefCount[0], pps.RefCount[1], tt.cabac)
+				t.Fatalf("PPS cabac/8x8/weights/refs = %d/%d/%d/%d/%d/%d, want %d/no-8x8/weighted=%d/ref=1",
+					pps.CABAC, pps.Transform8x8Mode, pps.WeightedPred, pps.WeightedBipredIDC, pps.RefCount[0], pps.RefCount[1],
+					tt.cabac, wantWeightedPred)
 			}
 			ppsList[pps.PPSID] = pps
 		case h264.NALSEI:
@@ -309,8 +346,18 @@ func assertHigh10PartitionedPFixtureSyntax(t *testing.T, data []byte, tt high10P
 			if sh.PictureStructure != h264.PictureFrame || sh.DeblockingFilter != 0 {
 				t.Fatalf("slice picture/deblock = %d/%d, want frame/disabled", sh.PictureStructure, sh.DeblockingFilter)
 			}
-			if sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
-				t.Fatalf("slice weights = %d/%d, want unweighted P", sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma)
+			if sh.SliceTypeNoS == h264.PictureTypeP {
+				if tt.weighted {
+					if sh.PredWeightTable.UseWeight == 0 {
+						t.Fatalf("P slice weights = %d/%d, want explicit luma weight", sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma)
+					}
+					weightedPSlices++
+					if sh.PredWeightTable.UseWeightChroma != 0 {
+						weightedChromaPSlices++
+					}
+				} else if sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
+					t.Fatalf("slice weights = %d/%d, want unweighted P", sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma)
+				}
 			}
 			gotVCL = append(gotVCL, nal)
 			gotSlices = append(gotSlices, sh.SliceTypeNoS)
@@ -335,6 +382,14 @@ func assertHigh10PartitionedPFixtureSyntax(t *testing.T, data []byte, tt high10P
 	for i := 1; i < len(gotSlices); i++ {
 		if gotSlices[i] != h264.PictureTypeP {
 			t.Fatalf("slice[%d] = %d, want P", i, gotSlices[i])
+		}
+	}
+	if tt.weighted {
+		if weightedPSlices != len(gotSlices)-1 {
+			t.Fatalf("weighted P slices = %d, want %d", weightedPSlices, len(gotSlices)-1)
+		}
+		if weightedChromaPSlices == 0 {
+			t.Fatalf("weighted fixture has no chroma-weighted P slices")
 		}
 	}
 }

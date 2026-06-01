@@ -142,8 +142,8 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 		}
 		mbType := MBType16x8 | MBTypeP0L0 | MBTypeP1L0
 
-		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 1, 1); err != ErrUnsupported {
-			t.Fatalf("partitioned high P validate err = %v, want ErrUnsupported", err)
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 1, 1); err != nil {
+			t.Fatalf("weighted partitioned high P validate err = %v, want nil", err)
 		}
 	})
 

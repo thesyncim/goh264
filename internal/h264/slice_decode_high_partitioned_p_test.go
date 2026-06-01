@@ -7,6 +7,14 @@ import "testing"
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsPartitionedP(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
 	cabacP := &SliceHeader{SliceTypeNoS: PictureTypeP, PPS: &PPS{CABAC: 1}}
+	weightedP := &SliceHeader{
+		SliceTypeNoS: PictureTypeP,
+		PPS:          &PPS{WeightedPred: 1},
+		PredWeightTable: PredWeightTable{
+			UseWeight:       1,
+			UseWeightChroma: 1,
+		},
+	}
 	p8x8Sub := [4]uint32{
 		MBType16x16 | MBTypeP0L0,
 		MBType16x8 | MBTypeP0L0,
@@ -29,6 +37,8 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsPartitionedP(t *tes
 		{name: "p8x8 ref0 residual", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeRef0, sub: &p8x8Sub, cbp: 4, cbpTable: 4},
 		{name: "cabac p16x8 residual", sh: cabacP, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1},
 		{name: "cabac p8x8 residual", sh: cabacP, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0, sub: &p8x8Sub, cbp: 4, cbpTable: 4},
+		{name: "weighted p16x8 residual", sh: weightedP, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1},
+		{name: "weighted p8x8 residual", sh: weightedP, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0, sub: &p8x8Sub, cbp: 4, cbpTable: 4},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(tt.sh, tt.mbType, tt.sub, tt.cbp, tt.cbpTable); err != nil {
@@ -40,13 +50,6 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsPartitionedP(t *tes
 
 func TestValidateHighFrameSliceMacroblockForReconstructRejectsUnsupportedPartitionedP(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
-	weightedP := &SliceHeader{
-		SliceTypeNoS: PictureTypeP,
-		PPS:          &PPS{WeightedPred: 1},
-		PredWeightTable: PredWeightTable{
-			UseWeight: 1,
-		},
-	}
 	p8x8Sub := [4]uint32{
 		MBType16x16 | MBTypeP0L0,
 		MBType16x16 | MBTypeP0L0,
@@ -64,7 +67,6 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsUnsupportedPartiti
 		cbp      int
 		cbpTable int
 	}{
-		{name: "weighted p16x8", sh: weightedP, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0},
 		{name: "p8x8 without sub types", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0},
 		{name: "p8x8 invalid sub type", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0, sub: &invalidSub},
 		{name: "p16x8 8x8 dct", sh: pSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT},

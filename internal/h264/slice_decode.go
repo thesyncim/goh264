@@ -570,7 +570,7 @@ func isHighPIntraMacroblock(mbType uint32) bool {
 }
 
 func isHighPPartitionedMacroblock(sh *SliceHeader, mbType uint32, subMBType *[4]uint32) bool {
-	if sh == nil || sh.SliceTypeNoS != PictureTypeP || isHighPWeighted(sh) || mbType&MBType8x8DCT != 0 {
+	if sh == nil || sh.SliceTypeNoS != PictureTypeP || mbType&MBType8x8DCT != 0 {
 		return false
 	}
 	switch mbType {
