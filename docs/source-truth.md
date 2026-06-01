@@ -77,7 +77,11 @@ packet payload, and prove the separated-config CAVLC ref-list, CABAC IDR/P,
 High 4:2:2 CAVLC/CABAC, High 4:4:4 Predictive CAVLC/CABAC, monochrome
 CAVLC/CABAC, and qp=0 lossless CAVLC/CABAC packets against the same frame MD5s
 both as bundled packets and as successive single-frame sample packets that
-require DPB reference state to survive across public decoder calls. Monochrome
+require DPB reference state to survive across public decoder calls. The
+configured B-frame sample tests additionally decode one access unit per call and
+then use the public delayed-frame flush to drain retained future P pictures,
+covering FFmpeg's `last_pocs`/`has_b_frames` reorder inference for streams that
+do not signal `num_reorder_frames` in VUI. Monochrome
 native FFmpeg oracle checks
 request `-pix_fmt gray` so the frame-MD5 surface compares only the luma plane
 represented by `chroma_format_idc == 0`. The 16x16 High 4:4:4 Predictive
@@ -106,8 +110,9 @@ long-term P-list behavior: default long refs after short refs, ref-list
 modification op `2`, IDR/non-IDR long-term marking, short-to-long moves,
 long-to-unused removal, max-long pruning, reset, mixed short/long sliding
 window accounting, POC type 0 frame ordering, B-list sorting around current POC,
-identical B-list swapping, B list1 reordering, and delayed display-output
-draining. A native long-ref bitstream oracle is still pending.
+identical B-list swapping, B list1 reordering, FFmpeg `last_pocs` POC-gap
+reorder-delay inference, and delayed display-output draining. A native long-ref
+bitstream oracle is still pending.
 
 ## Decoder Boundary
 

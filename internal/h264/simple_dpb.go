@@ -19,6 +19,8 @@ type simpleFrameDPB struct {
 	poc               simplePOCContext
 	delayed           []*DecodedFrame
 	hasBFrames        int
+	lastPOCs          [h264MaxDPBFrames]int32
+	lastPOCsInit      bool
 	nextOutputedPOC   int32
 	nextOutputedValid bool
 }
@@ -48,6 +50,7 @@ func (d *simpleFrameDPB) reset() {
 		d.poc.reset()
 		d.delayed = d.delayed[:0]
 		d.hasBFrames = 0
+		d.resetLastPOCs()
 		d.nextOutputedPOC = 0
 		d.nextOutputedValid = false
 	}
@@ -83,6 +86,7 @@ func (d *simpleFrameDPB) initFramePOC(frame *DecodedFrame, sh *SliceHeader, nalR
 	if sh.NALType == NALIDRSlice {
 		d.resetRefs()
 		d.poc.reset()
+		d.resetLastPOCs()
 	}
 	d.poc.frameNum = int32(sh.FrameNum)
 	d.poc.pocLSB = int32(sh.POCLSB)
@@ -645,12 +649,7 @@ func (d *simpleFrameDPB) holdOutputFrame(frame *DecodedFrame, sh *SliceHeader) e
 	if d == nil || frame == nil || sh == nil || sh.SPS == nil {
 		return ErrInvalidData
 	}
-	if sh.SPS.NumReorderFrames > int32(d.hasBFrames) {
-		d.hasBFrames = int(sh.SPS.NumReorderFrames)
-	}
-	if sh.SliceTypeNoS == PictureTypeB && d.hasBFrames < 1 {
-		d.hasBFrames = 1
-	}
+	d.updateReorderDelay(frame, sh)
 	if d.hasBFrames > h264MaxDPBFrames {
 		return ErrUnsupported
 	}
@@ -659,6 +658,61 @@ func (d *simpleFrameDPB) holdOutputFrame(frame *DecodedFrame, sh *SliceHeader) e
 	}
 	d.delayed = append(d.delayed, frame)
 	return nil
+}
+
+// updateReorderDelay mirrors FFmpeg n8.0.1 libavcodec/h264_slice.c
+// h264_select_output_frame's dynamic has_b_frames / last_pocs logic.
+func (d *simpleFrameDPB) updateReorderDelay(frame *DecodedFrame, sh *SliceHeader) {
+	if sh.SPS.BitstreamRestrictionFlag != 0 && sh.SPS.NumReorderFrames > int32(d.hasBFrames) {
+		d.hasBFrames = int(sh.SPS.NumReorderFrames)
+	}
+
+	outOfOrder := d.notePOCReorder(frame.poc, sh.SliceTypeNoS == PictureTypeB)
+	if outOfOrder == h264MaxDPBFrames {
+		d.resetLastPOCs()
+		d.lastPOCs[0] = frame.poc
+		frame.mmcoReset = true
+		return
+	}
+	if d.hasBFrames < outOfOrder && sh.SPS.BitstreamRestrictionFlag == 0 {
+		d.hasBFrames = outOfOrder
+	}
+}
+
+func (d *simpleFrameDPB) notePOCReorder(curPOC int32, isB bool) int {
+	d.ensureLastPOCs()
+	i := 0
+	for ; ; i++ {
+		if i == h264MaxDPBFrames || curPOC < d.lastPOCs[i] {
+			if i != 0 {
+				d.lastPOCs[i-1] = curPOC
+			}
+			break
+		} else if i != 0 {
+			d.lastPOCs[i-1] = d.lastPOCs[i]
+		}
+	}
+	outOfOrder := h264MaxDPBFrames - i
+	if isB || (d.lastPOCs[h264MaxDPBFrames-2] > math.MinInt32 &&
+		int64(d.lastPOCs[h264MaxDPBFrames-1])-int64(d.lastPOCs[h264MaxDPBFrames-2]) > 2) {
+		if outOfOrder < 1 {
+			outOfOrder = 1
+		}
+	}
+	return outOfOrder
+}
+
+func (d *simpleFrameDPB) ensureLastPOCs() {
+	if !d.lastPOCsInit {
+		d.resetLastPOCs()
+	}
+}
+
+func (d *simpleFrameDPB) resetLastPOCs() {
+	for i := range d.lastPOCs {
+		d.lastPOCs[i] = math.MinInt32
+	}
+	d.lastPOCsInit = true
 }
 
 func (d *simpleFrameDPB) drainOutputFrames(flush bool) ([]*DecodedFrame, error) {

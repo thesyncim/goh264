@@ -62,6 +62,13 @@ func (d *SimpleDecoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*Deco
 	return d.DecodeNALUnits(nals)
 }
 
+func (d *SimpleDecoder) FlushDelayedFrames() ([]*DecodedFrame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	return d.dpb.drainOutputFrames(true)
+}
+
 func (d *SimpleDecoder) DecodeAVCFramesWithConfig(data []byte, cfg AVCDecoderConfigurationRecord) ([]*DecodedFrame, error) {
 	if err := d.StoreAVCDecoderConfiguration(cfg); err != nil {
 		return nil, err

@@ -132,6 +132,85 @@ func TestDecodeConfiguredAVCTestsrcBFrames(t *testing.T) {
 	}
 }
 
+func TestDecodeConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
+	for _, tt := range bFrameFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
+				if len(samples) != len(tt.want) {
+					t.Fatalf("nalLengthSize=%d: samples = %d, want %d", nalLengthSize, len(samples), len(tt.want))
+				}
+
+				dec := NewDecoder()
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
+				}
+
+				var frames []*Frame
+				for i, sample := range samples {
+					out, err := dec.DecodeConfiguredAVCFrames(sample)
+					if err != nil {
+						t.Fatalf("nalLengthSize=%d sample[%d]: %v", nalLengthSize, i, err)
+					}
+					frames = append(frames, out...)
+				}
+				out, err := dec.FlushDelayedFrames()
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d flush: %v", nalLengthSize, err)
+				}
+				frames = append(frames, out...)
+				assertFrameMD5Strings(t, frames, tt.want)
+
+				out, err = dec.FlushDelayedFrames()
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d second flush: %v", nalLengthSize, err)
+				}
+				if len(out) != 0 {
+					t.Fatalf("nalLengthSize=%d second flush frames = %d, want 0", nalLengthSize, len(out))
+				}
+			}
+		})
+	}
+}
+
+func TestDecodeConfiguredAVCTestsrcBFramesFlushRetainedReferenceSample(t *testing.T) {
+	for _, tt := range bFrameFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := decodeHexFixture(t, tt.hex)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
+				if len(samples) < 2 {
+					t.Fatalf("nalLengthSize=%d: samples = %d, want at least 2", nalLengthSize, len(samples))
+				}
+
+				dec := NewDecoder()
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
+				}
+				frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d first sample: %v", nalLengthSize, err)
+				}
+				assertFrameMD5Strings(t, frames, tt.want[:1])
+
+				frames, err = dec.DecodeConfiguredAVCFrames(samples[1])
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d second sample: %v", nalLengthSize, err)
+				}
+				if len(frames) != 0 {
+					t.Fatalf("nalLengthSize=%d second sample frames = %d, want retained future reference", nalLengthSize, len(frames))
+				}
+				frames, err = dec.FlushDelayedFrames()
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d flush: %v", nalLengthSize, err)
+				}
+				assertFrameMD5Strings(t, frames, tt.want[len(tt.want)-1:])
+			}
+		})
+	}
+}
+
 func TestFFmpegFrameMD5OracleTestsrcBFrames(t *testing.T) {
 	if os.Getenv("GOH264_ORACLE") != "1" {
 		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")

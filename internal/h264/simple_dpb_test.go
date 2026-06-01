@@ -228,6 +228,7 @@ func TestSimpleFrameDPBDisablesSymmetricImplicitBWeights(t *testing.T) {
 
 func TestSimpleFrameDPBDelaysBOutputUntilFlush(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
+	sps.BitstreamRestrictionFlag = 1
 	sps.NumReorderFrames = 1
 	var dpb simpleFrameDPB
 	dpb.reset()
@@ -259,6 +260,63 @@ func TestSimpleFrameDPBDelaysBOutputUntilFlush(t *testing.T) {
 	}
 	if len(out) != 1 || out[0] != idr {
 		t.Fatalf("output after P = %v, want IDR %p", out, idr)
+	}
+
+	if err := dpb.holdOutputFrame(b, simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeB, 2, 2)); err != nil {
+		t.Fatal(err)
+	}
+	out, err = dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != b {
+		t.Fatalf("output after B = %v, want B %p", out, b)
+	}
+
+	out, err = dpb.drainOutputFrames(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != p {
+		t.Fatalf("flush output = %v, want P %p", out, p)
+	}
+}
+
+func TestSimpleFrameDPBInfersReorderDelayFromPOCGap(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	var dpb simpleFrameDPB
+	dpb.reset()
+	idr := simpleDPBTestFrame(sps, 0)
+	idr.poc = 0
+	idr.keyFrame = true
+	p := simpleDPBTestFrame(sps, 1)
+	p.poc = 4
+	b := simpleDPBTestFrame(sps, 2)
+	b.poc = 2
+
+	if err := dpb.holdOutputFrame(idr, simpleDPBTestPOCHeader(sps, NALIDRSlice, PictureTypeI, 0, 0)); err != nil {
+		t.Fatal(err)
+	}
+	out, err := dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != idr {
+		t.Fatalf("output after IDR = %v, want IDR %p", out, idr)
+	}
+
+	if err := dpb.holdOutputFrame(p, simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeP, 1, 4)); err != nil {
+		t.Fatal(err)
+	}
+	out, err = dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("output after P = %d frames, want inferred delay", len(out))
+	}
+	if dpb.hasBFrames != 1 {
+		t.Fatalf("hasBFrames after POC gap = %d, want 1", dpb.hasBFrames)
 	}
 
 	if err := dpb.holdOutputFrame(b, simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeB, 2, 2)); err != nil {

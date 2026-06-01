@@ -127,6 +127,17 @@ func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	return framesFromH264(frames), nil
 }
 
+func (d *Decoder) FlushDelayedFrames() ([]*Frame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	frames, err := d.simple.FlushDelayedFrames()
+	if err != nil {
+		return nil, err
+	}
+	return framesFromH264(frames), nil
+}
+
 func (d *Decoder) DecodeAVCWithConfigurationRecord(config []byte, data []byte) (*Frame, error) {
 	frames, err := d.DecodeAVCFramesWithConfigurationRecord(config, data)
 	if err != nil {
