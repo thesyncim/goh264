@@ -7,6 +7,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -926,7 +927,7 @@ func TestFFprobeOracleBlack16(t *testing.T) {
 	cmd := exec.Command("ffprobe",
 		"-v", "error",
 		"-select_streams", "v:0",
-		"-show_entries", "stream=codec_name,profile,width,height,level,pix_fmt",
+		"-show_entries", "stream=codec_name,profile,width,height,level,pix_fmt,sample_aspect_ratio,r_frame_rate",
 		"-of", "json",
 		path,
 	)
@@ -943,6 +944,8 @@ func TestFFprobeOracleBlack16(t *testing.T) {
 			Height    int    `json:"height"`
 			Level     int    `json:"level"`
 			PixFmt    string `json:"pix_fmt"`
+			SAR       string `json:"sample_aspect_ratio"`
+			FrameRate string `json:"r_frame_rate"`
 		} `json:"streams"`
 	}
 	if err := json.Unmarshal(out, &probe); err != nil {
@@ -952,7 +955,8 @@ func TestFFprobeOracleBlack16(t *testing.T) {
 		t.Fatalf("ffprobe streams = %d", len(probe.Streams))
 	}
 
-	info, err := NewDecoder().ParseHeadersAnnexB(data)
+	dec := NewDecoder()
+	info, err := dec.ParseHeadersAnnexB(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -962,6 +966,17 @@ func TestFFprobeOracleBlack16(t *testing.T) {
 	}
 	if stream.Profile != info.Profile || stream.Width != info.Width || stream.Height != info.Height || stream.Level != int(info.LevelIDC) {
 		t.Fatalf("oracle %+v, go %+v", stream, info)
+	}
+	if dec.sps[0] == nil {
+		t.Fatal("SPS 0 was not retained")
+	}
+	if stream.SAR != ratioColonString(dec.sps[0].VUI.SARNum, dec.sps[0].VUI.SARDen) {
+		t.Fatalf("oracle SAR %s, go %d:%d", stream.SAR, dec.sps[0].VUI.SARNum, dec.sps[0].VUI.SARDen)
+	}
+	if dec.sps[0].TimingInfoPresentFlag != 0 {
+		if stream.FrameRate != ratioSlashString(int64(dec.sps[0].TimeScale), int64(dec.sps[0].NumUnitsInTick)) {
+			t.Fatalf("oracle r_frame_rate %s, go timing %d/%d", stream.FrameRate, dec.sps[0].TimeScale, dec.sps[0].NumUnitsInTick)
+		}
 	}
 }
 
@@ -1026,6 +1041,37 @@ func TestFFprobeOracleHigh422(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ratioColonString(num int32, den int32) string {
+	if den == 0 {
+		den = 1
+	}
+	return fmt.Sprintf("%d:%d", num, den)
+}
+
+func ratioSlashString(num int64, den int64) string {
+	if den == 0 {
+		den = 1
+	}
+	g := gcdInt64(num, den)
+	return fmt.Sprintf("%d/%d", num/g, den/g)
+}
+
+func gcdInt64(a int64, b int64) int64 {
+	if a < 0 {
+		a = -a
+	}
+	if b < 0 {
+		b = -b
+	}
+	for b != 0 {
+		a, b = b, a%b
+	}
+	if a == 0 {
+		return 1
+	}
+	return a
 }
 
 func TestFFmpegFrameMD5OracleBlack16(t *testing.T) {

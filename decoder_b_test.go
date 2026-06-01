@@ -188,24 +188,27 @@ func TestDecodeConfiguredAVCTestsrcBFramesFlushRetainedReferenceSample(t *testin
 				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
-				frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+				var frames []*Frame
+				out, err := dec.DecodeConfiguredAVCFrames(samples[0])
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d first sample: %v", nalLengthSize, err)
 				}
-				assertFrameMD5Strings(t, frames, tt.want[:1])
+				frames = append(frames, out...)
 
-				frames, err = dec.DecodeConfiguredAVCFrames(samples[1])
+				out, err = dec.DecodeConfiguredAVCFrames(samples[1])
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d second sample: %v", nalLengthSize, err)
 				}
-				if len(frames) != 0 {
-					t.Fatalf("nalLengthSize=%d second sample frames = %d, want retained future reference", nalLengthSize, len(frames))
+				frames = append(frames, out...)
+				if len(frames) >= 2 {
+					t.Fatalf("nalLengthSize=%d first two samples frames = %d, want retained future reference before flush", nalLengthSize, len(frames))
 				}
-				frames, err = dec.FlushDelayedFrames()
+				out, err = dec.FlushDelayedFrames()
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d flush: %v", nalLengthSize, err)
 				}
-				assertFrameMD5Strings(t, frames, tt.want[len(tt.want)-1:])
+				frames = append(frames, out...)
+				assertFrameMD5Strings(t, frames, []string{tt.want[0], tt.want[len(tt.want)-1]})
 			}
 		})
 	}

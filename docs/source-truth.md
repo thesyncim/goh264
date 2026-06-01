@@ -38,6 +38,10 @@ pinned FFmpeg `libavcodec/cabac.c` and `cabac_functions.h` from
 `.upstream/ffmpeg-n8.0.1` in a temporary directory and compares primitive traces
 against the Go port.
 
+The `ffprobe` header oracle now compares the parsed SPS VUI sample aspect ratio
+and timing rate for the black16 stream in addition to profile, level,
+dimensions, and pixel format.
+
 The embedded smoke bitstreams currently have these decoded-frame oracles:
 
 - single-IDR rawvideo frame MD5: `8aaefe0adcea094cfb5161a060bab4e2`
@@ -80,8 +84,8 @@ both as bundled packets and as successive single-frame sample packets that
 require DPB reference state to survive across public decoder calls. The
 configured B-frame sample tests additionally decode one access unit per call and
 then use the public delayed-frame flush to drain retained future P pictures,
-covering FFmpeg's `last_pocs`/`has_b_frames` reorder inference for streams that
-do not signal `num_reorder_frames` in VUI. Monochrome
+covering FFmpeg's `last_pocs`/`has_b_frames` reorder inference and signaled VUI
+reorder-depth handling. Monochrome
 native FFmpeg oracle checks
 request `-pix_fmt gray` so the frame-MD5 surface compares only the luma plane
 represented by `chroma_format_idc == 0`. The 16x16 High 4:4:4 Predictive
@@ -113,6 +117,12 @@ window accounting, POC type 0 frame ordering, B-list sorting around current POC,
 identical B-list swapping, B list1 reordering, FFmpeg `last_pocs` POC-gap
 reorder-delay inference, and delayed display-output draining. A native long-ref
 bitstream oracle is still pending.
+
+SPS unit coverage includes source-shaped VUI/HRD bitstreams with Extended_SAR,
+video signal/color description, chroma sample location, timing info, NAL HRD
+state, pic-struct signaling, bitstream restriction, invalid HRD CPB counts,
+invalid `num_reorder_frames`, and FFmpeg's derived reorder fallback when no
+bitstream restriction is present.
 
 ## Decoder Boundary
 
