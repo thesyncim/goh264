@@ -177,10 +177,20 @@ type H2645SEIMasteringDisplay struct {
 	MinLuminance     uint32
 }
 
+type AVMasteringDisplayMetadata struct {
+	Present          int32
+	DisplayPrimaries [3][2]uint16
+	WhitePoint       [2]uint16
+	MaxLuminance     uint32
+	MinLuminance     uint32
+	HasPrimaries     int32
+	HasLuminance     int32
+}
+
 type H2645SEIContentLight struct {
 	Present                 int32
-	MaxContentLightLevel    uint16
-	MaxPicAverageLightLevel uint16
+	MaxContentLightLevel    uint32
+	MaxPicAverageLightLevel uint32
 }
 
 func (h *H264SEIContext) Reset() {
@@ -889,8 +899,8 @@ func (h *H2645SEIContentLight) decodeContentLight(payload []byte) error {
 	if len(payload) < 4 {
 		return ErrInvalidData
 	}
-	h.MaxContentLightLevel = readBE16(payload)
-	h.MaxPicAverageLightLevel = readBE16(payload[2:])
+	h.MaxContentLightLevel = uint32(readBE16(payload))
+	h.MaxPicAverageLightLevel = uint32(readBE16(payload[2:]))
 	h.Present = 2
 	return nil
 }

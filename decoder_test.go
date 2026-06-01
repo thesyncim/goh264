@@ -5,6 +5,7 @@ package goh264
 import (
 	"bytes"
 	"crypto/md5"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -567,6 +568,65 @@ func TestDecodePacketFramesPacketSideDataMapsToFrame(t *testing.T) {
 	}
 }
 
+func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
+	primaries := [3][2]uint16{{30000, 35000}, {10000, 20000}, {15000, 25000}}
+	white := [2]uint16{15635, 16450}
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{
+			{Type: PacketSideDataAmbientViewingEnvironment, Data: decoderPacketAmbientViewingSideData(12345, 25000, 16667)},
+			{Type: PacketSideDataMasteringDisplayMetadata, Data: decoderPacketMasteringDisplaySideData(primaries, white, 10000000, 100, true, true)},
+			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(4000, 300)},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	side := frame.SideData
+	if side.AmbientViewing == nil || side.AmbientViewing.AmbientIlluminance != 12345 ||
+		side.AmbientViewing.AmbientLightX != 25000 || side.AmbientViewing.AmbientLightY != 16667 {
+		t.Fatalf("packet ambient viewing = %+v", side.AmbientViewing)
+	}
+	if side.MasteringDisplay == nil ||
+		side.MasteringDisplay.DisplayPrimaries != primaries ||
+		side.MasteringDisplay.WhitePoint != white ||
+		side.MasteringDisplay.MaxLuminance != 10000000 ||
+		side.MasteringDisplay.MinLuminance != 100 ||
+		!side.MasteringDisplay.HasPrimaries || !side.MasteringDisplay.HasLuminance {
+		t.Fatalf("packet mastering display = %+v", side.MasteringDisplay)
+	}
+	if side.ContentLight == nil || side.ContentLight.MaxContentLightLevel != 4000 ||
+		side.ContentLight.MaxPicAverageLightLevel != 300 {
+		t.Fatalf("packet content light = %+v", side.ContentLight)
+	}
+}
+
+func TestPacketGlobalSideDataRejectsNonExactRationals(t *testing.T) {
+	ambient := decoderPacketAmbientViewingSideData(12345, 25000, 16667)
+	binary.LittleEndian.PutUint32(ambient[4:8], 7)
+	mastering := decoderPacketMasteringDisplaySideData(
+		[3][2]uint16{{30000, 35000}, {10000, 20000}, {15000, 25000}},
+		[2]uint16{15635, 16450},
+		10000000,
+		100,
+		true,
+		true,
+	)
+	binary.LittleEndian.PutUint32(mastering[4:8], 7)
+
+	side := packetFrameSideDataFromPacket([]PacketSideData{
+		{Type: PacketSideDataAmbientViewingEnvironment, Data: ambient},
+		{Type: PacketSideDataMasteringDisplayMetadata, Data: mastering},
+	})
+	if side.AmbientViewing.Present != 0 {
+		t.Fatalf("ambient side data with non-exact rational was accepted: %+v", side.AmbientViewing)
+	}
+	if side.MasteringMetadata.Present != 0 {
+		t.Fatalf("mastering side data with non-exact rational was accepted: %+v", side.MasteringMetadata)
+	}
+}
+
 func TestDecodePacketFramesPacketSideDataMergesWithSEIInFFmpegOrder(t *testing.T) {
 	base := replaceAnnexBSPS(t, decodeHexFixture(t, black16AnnexBHex), decoderSPSNALWithPicStructVUI())
 	data := prependAnnexBNAL(base, decoderTestSEINAL(
@@ -599,6 +659,44 @@ func TestDecodePacketFramesPacketSideDataMergesWithSEIInFFmpegOrder(t *testing.T
 	}
 	if got, want := frame.SideData.S12MTimecodes, []uint32{0x40345607}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("frame s12m timecodes = %08x, want %08x", got, want)
+	}
+}
+
+func TestDecodePacketFramesGlobalPacketSideDataDoesNotReplaceCodedSEI(t *testing.T) {
+	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeAmbientViewingEnvironment, payload: decoderSEIAmbientViewingPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeMasteringDisplayColourVolume, payload: decoderSEIMasteringDisplayPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeContentLightLevelInfo, payload: []byte{0x03, 0xe8, 0x00, 0xfa}},
+	))
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: data,
+		SideData: []PacketSideData{
+			{Type: PacketSideDataAmbientViewingEnvironment, Data: decoderPacketAmbientViewingSideData(1, 2, 3)},
+			{Type: PacketSideDataMasteringDisplayMetadata, Data: decoderPacketMasteringDisplaySideData(
+				[3][2]uint16{{10, 20}, {30, 40}, {50, 60}}, [2]uint16{70, 80}, 900000, 90, true, true,
+			)},
+			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(9, 8)},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	side := frame.SideData
+	if side.AmbientViewing == nil || side.AmbientViewing.AmbientIlluminance != 12345 ||
+		side.AmbientViewing.AmbientLightX != 25000 || side.AmbientViewing.AmbientLightY != 16667 {
+		t.Fatalf("coded ambient viewing = %+v", side.AmbientViewing)
+	}
+	if side.MasteringDisplay == nil ||
+		side.MasteringDisplay.DisplayPrimaries != [3][2]uint16{{30000, 35000}, {10000, 20000}, {15000, 25000}} ||
+		side.MasteringDisplay.WhitePoint != [2]uint16{15635, 16450} ||
+		side.MasteringDisplay.MaxLuminance != 10000000 ||
+		side.MasteringDisplay.MinLuminance != 100 {
+		t.Fatalf("coded mastering display = %+v", side.MasteringDisplay)
+	}
+	if side.ContentLight == nil || side.ContentLight.MaxContentLightLevel != 1000 ||
+		side.ContentLight.MaxPicAverageLightLevel != 250 {
+		t.Fatalf("coded content light = %+v", side.ContentLight)
 	}
 }
 
@@ -957,6 +1055,104 @@ func TestS12MTimecodePackingMatchesNativeFFmpegOracle(t *testing.T) {
 		t.Fatalf("oracle mismatch\nC:\n%s\nGo:\n%s", got, want)
 	}
 }
+
+func TestPacketGlobalSideDataLayoutMatchesNativeFFmpegOracle(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native FFmpeg packet side-data oracle")
+	}
+	cc := os.Getenv("CC")
+	if cc == "" {
+		cc = "cc"
+	}
+	if _, err := exec.LookPath(cc); err != nil {
+		t.Skip("C compiler not available")
+	}
+	root := decoderRepoRoot(t)
+	upstream := filepath.Join(root, ".upstream", "ffmpeg-n8.0.1")
+	if _, err := os.Stat(filepath.Join(upstream, "libavcodec", "packet.h")); err != nil {
+		t.Skipf("pinned upstream cache not available: %v", err)
+	}
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "libavutil"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "libavutil", "avconfig.h"), []byte(strings.Join([]string{
+		"#define AV_HAVE_BIGENDIAN 0",
+		"#define AV_HAVE_FAST_UNALIGNED 1",
+		"",
+	}, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(dir, "packet_side_data_oracle.c")
+	bin := filepath.Join(dir, "packet_side_data_oracle")
+	if err := os.WriteFile(src, []byte(packetGlobalSideDataOracleC), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(cc, "-std=c99", "-Wall", "-Wextra", "-I"+dir, "-I"+upstream, src, "-o", bin).CombinedOutput(); err != nil {
+		t.Fatalf("compile packet side-data oracle: %v\n%s", err, out)
+	}
+	out, err := exec.Command(bin).Output()
+	if err != nil {
+		t.Fatalf("run packet side-data oracle: %v", err)
+	}
+	got := strings.TrimSpace(string(out))
+	want := strings.Join([]string{
+		fmt.Sprintf("%d %d %d", PacketSideDataMasteringDisplayMetadata, PacketSideDataContentLightLevel, PacketSideDataAmbientViewingEnvironment),
+		"8 8 0 4 24 88 0 48 64 72 80 84",
+	}, "\n")
+	if got != want {
+		t.Fatalf("packet side-data oracle mismatch\nC:\n%s\nGo:\n%s", got, want)
+	}
+}
+
+func decoderRepoRoot(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(wd, ".upstream", "ffmpeg-n8.0.1")); err == nil {
+			return wd
+		}
+		parent := filepath.Dir(wd)
+		if parent == wd {
+			t.Skip("repo root with pinned upstream cache not found")
+		}
+		wd = parent
+	}
+}
+
+const packetGlobalSideDataOracleC = `
+#include <stddef.h>
+#include <stdio.h>
+
+#include "libavcodec/packet.h"
+#include "libavutil/ambient_viewing_environment.h"
+#include "libavutil/mastering_display_metadata.h"
+
+int main(void)
+{
+    printf("%d %d %d\n",
+           AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
+           AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
+           AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT);
+    printf("%zu %zu %zu %zu %zu %zu %zu %zu %zu %zu %zu %zu\n",
+           sizeof(AVRational),
+           sizeof(AVContentLightMetadata),
+           offsetof(AVContentLightMetadata, MaxCLL),
+           offsetof(AVContentLightMetadata, MaxFALL),
+           sizeof(AVAmbientViewingEnvironment),
+           sizeof(AVMasteringDisplayMetadata),
+           offsetof(AVMasteringDisplayMetadata, display_primaries),
+           offsetof(AVMasteringDisplayMetadata, white_point),
+           offsetof(AVMasteringDisplayMetadata, min_luminance),
+           offsetof(AVMasteringDisplayMetadata, max_luminance),
+           offsetof(AVMasteringDisplayMetadata, has_primaries),
+           offsetof(AVMasteringDisplayMetadata, has_luminance));
+    return 0;
+}
+`
 
 const timecodeOracleC = `
 #include <stdint.h>
@@ -2262,6 +2458,53 @@ func decoderSEIMasteringDisplayPayload() []byte {
 		0x00, 0x98, 0x96, 0x80,
 		0x00, 0x00, 0x00, 0x64,
 	}
+}
+
+func decoderPacketAmbientViewingSideData(illuminance uint32, lightX uint16, lightY uint16) []byte {
+	var out []byte
+	out = appendDecoderAVRationalLE(out, illuminance, 10000)
+	out = appendDecoderAVRationalLE(out, uint32(lightX), 50000)
+	out = appendDecoderAVRationalLE(out, uint32(lightY), 50000)
+	return out
+}
+
+func decoderPacketMasteringDisplaySideData(primaries [3][2]uint16, white [2]uint16, maxLuminance uint32, minLuminance uint32, hasPrimaries bool, hasLuminance bool) []byte {
+	var out []byte
+	for i := range primaries {
+		for j := range primaries[i] {
+			out = appendDecoderAVRationalLE(out, uint32(primaries[i][j]), 50000)
+		}
+	}
+	for i := range white {
+		out = appendDecoderAVRationalLE(out, uint32(white[i]), 50000)
+	}
+	out = appendDecoderAVRationalLE(out, minLuminance, 10000)
+	out = appendDecoderAVRationalLE(out, maxLuminance, 10000)
+	out = appendDecoderBoolInt32LE(out, hasPrimaries)
+	out = appendDecoderBoolInt32LE(out, hasLuminance)
+	return out
+}
+
+func decoderPacketContentLightSideData(maxCLL uint32, maxFALL uint32) []byte {
+	out := make([]byte, 8)
+	binary.LittleEndian.PutUint32(out[:4], maxCLL)
+	binary.LittleEndian.PutUint32(out[4:8], maxFALL)
+	return out
+}
+
+func appendDecoderAVRationalLE(dst []byte, numerator uint32, denominator uint32) []byte {
+	var buf [8]byte
+	binary.LittleEndian.PutUint32(buf[:4], numerator)
+	binary.LittleEndian.PutUint32(buf[4:8], denominator)
+	return append(dst, buf[:]...)
+}
+
+func appendDecoderBoolInt32LE(dst []byte, v bool) []byte {
+	var buf [4]byte
+	if v {
+		binary.LittleEndian.PutUint32(buf[:], 1)
+	}
+	return append(dst, buf[:]...)
 }
 
 func decoderSEIFilmGrainPayload() []byte {

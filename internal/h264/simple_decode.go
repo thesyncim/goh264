@@ -65,6 +65,7 @@ type DecodedFrameSideData struct {
 	AlternativeTransfer  H2645SEIAlternativeTransfer
 	AmbientViewing       H2645SEIAmbientViewingEnvironment
 	FilmGrain            H2645SEIFilmGrainCharacteristics
+	MasteringMetadata    AVMasteringDisplayMetadata
 	MasteringDisplay     H2645SEIMasteringDisplay
 	ContentLight         H2645SEIContentLight
 }
@@ -386,6 +387,15 @@ func mergePacketSideDataIntoDecodedFrame(dst *DecodedFrameSideData, src DecodedF
 	}
 	if len(src.S12MTimecodes) != 0 && dst.PictureTiming.TimecodeCount == 0 {
 		dst.S12MTimecodes = append([]uint32(nil), src.S12MTimecodes...)
+	}
+	if src.AmbientViewing.Present != 0 && dst.AmbientViewing.Present == 0 {
+		dst.AmbientViewing = src.AmbientViewing
+	}
+	if src.MasteringMetadata.Present != 0 && dst.MasteringDisplay.Present == 0 && dst.MasteringMetadata.Present == 0 {
+		dst.MasteringMetadata = src.MasteringMetadata
+	}
+	if src.ContentLight.Present != 0 && dst.ContentLight.Present == 0 {
+		dst.ContentLight = src.ContentLight
 	}
 }
 

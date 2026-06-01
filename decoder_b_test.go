@@ -222,10 +222,16 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	for i, sample := range samples {
 		out, err := dec.DecodePacketFrames(Packet{
 			Data: sample,
-			SideData: []PacketSideData{{
-				Type: PacketSideDataA53ClosedCaptions,
-				Data: []byte{byte(i + 1)},
-			}},
+			SideData: []PacketSideData{
+				{
+					Type: PacketSideDataA53ClosedCaptions,
+					Data: []byte{byte(i + 1)},
+				},
+				{
+					Type: PacketSideDataContentLightLevel,
+					Data: decoderPacketContentLightSideData(uint32(100+i), uint32(10+i)),
+				},
+			},
 		})
 		if err != nil {
 			t.Fatalf("sample[%d]: %v", i, err)
@@ -244,12 +250,16 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	})
 
 	want := [][]byte{{0x01}, {0x03}, {0x02}}
+	wantCLL := []uint32{100, 102, 101}
 	if len(frames) != len(want) {
 		t.Fatalf("frames = %d, want %d", len(frames), len(want))
 	}
 	for i, frame := range frames {
 		if got := frame.SideData.A53ClosedCaptions; !bytes.Equal(got, want[i]) {
 			t.Fatalf("frame[%d] packet a53 = %x, want %x", i, got, want[i])
+		}
+		if frame.SideData.ContentLight == nil || frame.SideData.ContentLight.MaxContentLightLevel != wantCLL[i] {
+			t.Fatalf("frame[%d] packet content light = %+v, want max CLL %d", i, frame.SideData.ContentLight, wantCLL[i])
 		}
 	}
 }

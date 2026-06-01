@@ -102,10 +102,15 @@ extradata and repeated side data across sample-by-sample P-frame decode without
 resetting DPB reference state. The same public packet surface maps
 `AV_PKT_DATA_A53_CC`, `AV_PKT_DATA_AFD`, and
 `AV_PKT_DATA_S12M_TIMECODE` onto decoded frame side data as frames are allocated,
-so packet side data follows delayed B-frame output. The tests cover FFmpeg's
-first-matching packet entry, H.264's packet-first A53/AFD ordering, and S12M
-coded-timecode replacement when picture-timing exports a timecode, while
-preserving the rawvideo MD5. Public frame side-data tests prepend synthetic
+so packet side data follows delayed B-frame output. The same path maps
+FFmpeg's global video metadata packet side data for mastering display, content
+light, and ambient viewing environment, using the native struct layout and
+exact AVRational scaling into the public H.264/H.274 metadata units. The tests
+cover FFmpeg's first-matching packet entry, H.264's packet-first A53/AFD
+ordering, S12M coded-timecode replacement when picture-timing exports a
+timecode, coded-SEI precedence over global packet HDR/ambient metadata, and
+delayed B-frame carriage, while preserving the rawvideo MD5. Public frame
+side-data tests prepend synthetic
 leading SEI to the black16 fixture and prove the decoded frame retains x264
 user-data, A53 closed captions, active-format description, recovery point,
 green metadata, display orientation, frame packing, alternative transfer,
@@ -217,7 +222,7 @@ Included:
 - H.264 NAL headers and RBSP handling
 - SPS VUI public metadata for SAR, video range/format, colorimetry, chroma location, and timing
 - Picture-timing-derived `repeat_pict`, interlaced, top-field-first, SMPTE 12M timecode, and key-frame public frame metadata for the simple frame-picture path
-- Decoded frame SEI side data for the translated subset, including registered ITU-T T.35 ATSC AFD/A53 captions, stereo3D, display matrix, mastering-display validity, ambient viewing environment, and H.274 film grain characteristics
+- Decoded frame SEI side data for the translated subset, including registered ITU-T T.35 ATSC AFD/A53 captions, stereo3D, display matrix, mastering-display validity, content light, ambient viewing environment, and H.274 film grain characteristics
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:

@@ -56,10 +56,13 @@ type AVCDecoderConfiguration struct {
 type PacketSideDataType uint8
 
 const (
-	PacketSideDataNewExtradata      PacketSideDataType = 1
-	PacketSideDataA53ClosedCaptions PacketSideDataType = 23
-	PacketSideDataActiveFormat      PacketSideDataType = 26
-	PacketSideDataS12MTimecode      PacketSideDataType = 30
+	PacketSideDataNewExtradata              PacketSideDataType = 1
+	PacketSideDataMasteringDisplayMetadata  PacketSideDataType = 20
+	PacketSideDataContentLightLevel         PacketSideDataType = 22
+	PacketSideDataA53ClosedCaptions         PacketSideDataType = 23
+	PacketSideDataActiveFormat              PacketSideDataType = 26
+	PacketSideDataS12MTimecode              PacketSideDataType = 30
+	PacketSideDataAmbientViewingEnvironment PacketSideDataType = 35
 )
 
 type PacketSideData struct {
@@ -220,8 +223,8 @@ type MasteringDisplay struct {
 }
 
 type ContentLight struct {
-	MaxContentLightLevel    uint16
-	MaxPicAverageLightLevel uint16
+	MaxContentLightLevel    uint32
+	MaxPicAverageLightLevel uint32
 }
 
 type Frame struct {
@@ -634,6 +637,21 @@ func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameS
 	if side, ok := packetSideDataGet(sideData, PacketSideDataS12MTimecode); ok {
 		out.S12MTimecodes = s12mTimecodesFromPacketSideData(side.Data)
 	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataAmbientViewingEnvironment); ok {
+		if ambient, ok := ambientViewingFromPacketSideData(side.Data); ok {
+			out.AmbientViewing = ambient
+		}
+	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataMasteringDisplayMetadata); ok {
+		if mastering, ok := masteringDisplayFromPacketSideData(side.Data); ok {
+			out.MasteringMetadata = mastering
+		}
+	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataContentLightLevel); ok {
+		if light, ok := contentLightFromPacketSideData(side.Data); ok {
+			out.ContentLight = light
+		}
+	}
 	return out
 }
 
@@ -651,6 +669,122 @@ func s12mTimecodesFromPacketSideData(data []byte) []uint32 {
 		out[i] = binary.LittleEndian.Uint32(data[off : off+4])
 	}
 	return out
+}
+
+func ambientViewingFromPacketSideData(data []byte) (h264.H2645SEIAmbientViewingEnvironment, bool) {
+	const (
+		ambientViewingStructSize = 3 * avRationalSize
+		illuminanceDen           = 10000
+		chromaDen                = 50000
+	)
+	if len(data) < ambientViewingStructSize {
+		return h264.H2645SEIAmbientViewingEnvironment{}, false
+	}
+	illuminance, ok := avRationalToScaledUint32(data, 0, illuminanceDen)
+	if !ok {
+		return h264.H2645SEIAmbientViewingEnvironment{}, false
+	}
+	x, ok := avRationalToScaledUint32(data, avRationalSize, chromaDen)
+	if !ok || x > 0xffff {
+		return h264.H2645SEIAmbientViewingEnvironment{}, false
+	}
+	y, ok := avRationalToScaledUint32(data, 2*avRationalSize, chromaDen)
+	if !ok || y > 0xffff {
+		return h264.H2645SEIAmbientViewingEnvironment{}, false
+	}
+	return h264.H2645SEIAmbientViewingEnvironment{
+		Present:            1,
+		AmbientIlluminance: illuminance,
+		AmbientLightX:      uint16(x),
+		AmbientLightY:      uint16(y),
+	}, true
+}
+
+func masteringDisplayFromPacketSideData(data []byte) (h264.AVMasteringDisplayMetadata, bool) {
+	const (
+		masteringDisplayStructSize = 88
+		chromaDen                  = 50000
+		lumaDen                    = 10000
+		hasPrimariesOffset         = 80
+		hasLuminanceOffset         = 84
+	)
+	if len(data) < masteringDisplayStructSize {
+		return h264.AVMasteringDisplayMetadata{}, false
+	}
+	out := h264.AVMasteringDisplayMetadata{
+		Present:      1,
+		HasPrimaries: int32(binary.LittleEndian.Uint32(data[hasPrimariesOffset : hasPrimariesOffset+4])),
+		HasLuminance: int32(binary.LittleEndian.Uint32(data[hasLuminanceOffset : hasLuminanceOffset+4])),
+	}
+	pos := 0
+	if out.HasPrimaries != 0 {
+		for i := range out.DisplayPrimaries {
+			for j := range out.DisplayPrimaries[i] {
+				v, ok := avRationalToScaledUint32(data, pos, chromaDen)
+				if !ok || v > 0xffff {
+					return h264.AVMasteringDisplayMetadata{}, false
+				}
+				out.DisplayPrimaries[i][j] = uint16(v)
+				pos += avRationalSize
+			}
+		}
+		for i := range out.WhitePoint {
+			v, ok := avRationalToScaledUint32(data, pos, chromaDen)
+			if !ok || v > 0xffff {
+				return h264.AVMasteringDisplayMetadata{}, false
+			}
+			out.WhitePoint[i] = uint16(v)
+			pos += avRationalSize
+		}
+	} else {
+		pos = 8 * avRationalSize
+	}
+	if out.HasLuminance != 0 {
+		minLuminance, ok := avRationalToScaledUint32(data, pos, lumaDen)
+		if !ok {
+			return h264.AVMasteringDisplayMetadata{}, false
+		}
+		maxLuminance, ok := avRationalToScaledUint32(data, pos+avRationalSize, lumaDen)
+		if !ok {
+			return h264.AVMasteringDisplayMetadata{}, false
+		}
+		out.MinLuminance = minLuminance
+		out.MaxLuminance = maxLuminance
+	}
+	return out, true
+}
+
+func contentLightFromPacketSideData(data []byte) (h264.H2645SEIContentLight, bool) {
+	if len(data) < 8 {
+		return h264.H2645SEIContentLight{}, false
+	}
+	return h264.H2645SEIContentLight{
+		Present:                 1,
+		MaxContentLightLevel:    binary.LittleEndian.Uint32(data[:4]),
+		MaxPicAverageLightLevel: binary.LittleEndian.Uint32(data[4:8]),
+	}, true
+}
+
+const avRationalSize = 8
+
+func avRationalToScaledUint32(data []byte, off int, scale int64) (uint32, bool) {
+	if off < 0 || off+avRationalSize > len(data) || scale <= 0 {
+		return 0, false
+	}
+	num := int64(int32(binary.LittleEndian.Uint32(data[off : off+4])))
+	den := int64(int32(binary.LittleEndian.Uint32(data[off+4 : off+8])))
+	if num < 0 || den <= 0 {
+		return 0, false
+	}
+	scaled := num * scale
+	if scaled%den != 0 {
+		return 0, false
+	}
+	value := scaled / den
+	if value < 0 || value > int64(^uint32(0)) {
+		return 0, false
+	}
+	return uint32(value), true
 }
 
 func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
@@ -820,6 +954,9 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 	if src.FilmGrain.Present != 0 {
 		out.FilmGrain = filmGrainFromH264(src.FilmGrain)
 	}
+	if src.MasteringMetadata.Present != 0 {
+		out.MasteringDisplay = masteringDisplayFromPacketMetadata(src.MasteringMetadata)
+	}
 	if src.MasteringDisplay.Present != 0 {
 		out.MasteringDisplay = masteringDisplayFromH264(src.MasteringDisplay)
 	}
@@ -830,6 +967,17 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 		}
 	}
 	return out
+}
+
+func masteringDisplayFromPacketMetadata(src h264.AVMasteringDisplayMetadata) *MasteringDisplay {
+	return &MasteringDisplay{
+		DisplayPrimaries: src.DisplayPrimaries,
+		WhitePoint:       src.WhitePoint,
+		MaxLuminance:     src.MaxLuminance,
+		MinLuminance:     src.MinLuminance,
+		HasPrimaries:     src.HasPrimaries != 0,
+		HasLuminance:     src.HasLuminance != 0,
+	}
 }
 
 func s12mTimecodesFromPictureTiming(src h264.H264SEIPictureTiming, timeScale uint32, numUnitsInTick uint32, x264Build int32) []uint32 {
