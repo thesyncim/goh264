@@ -276,12 +276,13 @@ func TestHigh10PartitionedBDeblockFixtureMacroblockSyntax(t *testing.T) {
 
 func TestHigh10BSkipAndDirectSubDeblockFixtureMacroblockSyntax(t *testing.T) {
 	for _, tt := range []struct {
-		name          string
-		file          string
-		cabac         int32
-		directSpatial bool
-		direct8x8     bool
-		wantDirectSub bool
+		name              string
+		file              string
+		cabac             int32
+		weightedBipredIDC uint32
+		directSpatial     bool
+		direct8x8         bool
+		wantDirectSub     bool
 	}{
 		{name: "bskip temporal cavlc", file: "high10_bskip_deblock_temporal_cavlc.h264", direct8x8: true},
 		{name: "bskip temporal cabac", file: "high10_bskip_deblock_temporal_cabac.h264", cabac: 1, direct8x8: true},
@@ -295,6 +296,14 @@ func TestHigh10BSkipAndDirectSubDeblockFixtureMacroblockSyntax(t *testing.T) {
 		{name: "direct-sub b4x4 temporal cabac", file: "high10_cabac_b4x4_temporal_direct_sub_deblock.h264", cabac: 1, wantDirectSub: true},
 		{name: "direct-sub b4x4 spatial cavlc", file: "high10_cavlc_b4x4_spatial_direct_sub_deblock.h264", directSpatial: true, wantDirectSub: true},
 		{name: "direct-sub b4x4 spatial cabac", file: "high10_cabac_b4x4_spatial_direct_sub_deblock.h264", cabac: 1, directSpatial: true, wantDirectSub: true},
+		{name: "implicit direct-sub b8x8 temporal cavlc", file: "high10_implicit_weight_cavlc_b8x8_temporal_direct_sub_deblock.h264", weightedBipredIDC: 2, direct8x8: true, wantDirectSub: true},
+		{name: "implicit direct-sub b8x8 temporal cabac", file: "high10_implicit_weight_cabac_b8x8_temporal_direct_sub_deblock.h264", cabac: 1, weightedBipredIDC: 2, direct8x8: true, wantDirectSub: true},
+		{name: "implicit direct-sub b8x8 spatial cavlc", file: "high10_implicit_weight_cavlc_b8x8_spatial_direct_sub_deblock.h264", weightedBipredIDC: 2, directSpatial: true, direct8x8: true, wantDirectSub: true},
+		{name: "implicit direct-sub b8x8 spatial cabac", file: "high10_implicit_weight_cabac_b8x8_spatial_direct_sub_deblock.h264", cabac: 1, weightedBipredIDC: 2, directSpatial: true, direct8x8: true, wantDirectSub: true},
+		{name: "implicit direct-sub b4x4 temporal cavlc", file: "high10_implicit_weight_cavlc_b4x4_temporal_direct_sub_deblock.h264", weightedBipredIDC: 2, wantDirectSub: true},
+		{name: "implicit direct-sub b4x4 temporal cabac", file: "high10_implicit_weight_cabac_b4x4_temporal_direct_sub_deblock.h264", cabac: 1, weightedBipredIDC: 2, wantDirectSub: true},
+		{name: "implicit direct-sub b4x4 spatial cavlc", file: "high10_implicit_weight_cavlc_b4x4_spatial_direct_sub_deblock.h264", weightedBipredIDC: 2, directSpatial: true, wantDirectSub: true},
+		{name: "implicit direct-sub b4x4 spatial cabac", file: "high10_implicit_weight_cabac_b4x4_spatial_direct_sub_deblock.h264", cabac: 1, weightedBipredIDC: 2, directSpatial: true, wantDirectSub: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "h264", tt.file))
@@ -333,10 +342,15 @@ func TestHigh10BSkipAndDirectSubDeblockFixtureMacroblockSyntax(t *testing.T) {
 					if sh.SliceTypeNoS != PictureTypeB {
 						continue
 					}
+					wantImplicit := tt.weightedBipredIDC == 2
 					if sh.DeblockingFilter != 1 || sh.PPS == nil || sh.PPS.CABAC != tt.cabac ||
-						isHighBImplicitWeighted(sh) || (sh.DirectSpatialMVPred != 0) != tt.directSpatial {
-						t.Fatalf("B slice deblock/cabac/implicit/direct = %d/%v/%t/%d, want cabac=%d neutral direct=%t",
-							sh.DeblockingFilter, sh.PPS, isHighBImplicitWeighted(sh), sh.DirectSpatialMVPred, tt.cabac, tt.directSpatial)
+						sh.PPS.WeightedBipredIDC != tt.weightedBipredIDC ||
+						isHighBImplicitWeighted(sh) != wantImplicit || (sh.DirectSpatialMVPred != 0) != tt.directSpatial ||
+						sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
+						t.Fatalf("B slice deblock/cabac/weighted/implicit/direct/weights = %d/%v/%d/%t/%d/%d/%d, want cabac=%d weighted_bipred_idc=%d implicit=%t direct=%t no serialized weights",
+							sh.DeblockingFilter, sh.PPS, sh.PPS.WeightedBipredIDC, isHighBImplicitWeighted(sh), sh.DirectSpatialMVPred,
+							sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma,
+							tt.cabac, tt.weightedBipredIDC, wantImplicit, tt.directSpatial)
 					}
 
 					got := decodeHigh10BDeblockFixtureMacroblocksWithDirect8x8(t, sh, &payload, tt.cabac != 0, 1, tt.directSpatial, tt.direct8x8)[0]

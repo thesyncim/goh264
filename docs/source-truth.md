@@ -97,12 +97,12 @@ CAVLC/CABAC non-direct and top-level direct B16x16 deblock-enabled lanes, mixed-
 Intra4x4/Intra16x16 lane, CAVLC/CABAC partitioned P16x8/P8x16/P8x8 lane,
 neutral and implicit-weighted partitioned B16x8/B8x16/B8x8 deblock-enabled lanes,
 implicit-weighted B16x16 deblock-enabled lane,
-neutral B-skip and B 8x8/B_SUB_4x4 direct-sub deblock-enabled lanes,
+neutral B-skip plus neutral/implicit-weighted B 8x8/B_SUB_4x4 direct-sub deblock-enabled lanes,
 and High 4:4:4 Predictive-compatible yuv420p12le CAVLC IDR/I IntraPCM lane
 are opened for the proved surfaces below. P IntraPCM, P 8x8-DCT intra,
 weighted partitioned P, mixed direct/explicit B8x8, residual-bearing direct-sub
 B, broader partitioned implicit weighted B outside the proved B16x8/B8x16/B8x8
-shapes, implicit-weighted or residual direct-sub high B deblocking,
+shapes, residual-bearing direct-sub high B deblocking,
 CABAC/chroma/B-slice public high slice-boundary mode, broader 12-bit and all
 14-bit public high bitstreams, and MBAFF remain outside the supported boundary.
 
@@ -627,16 +627,16 @@ consumption, uint16 motion compensation, delayed output, Annex B, AVC/NALFF,
 configured AVC, sample-by-sample decode, public flush, corpus manifest rows,
 and FFmpeg `yuv420p10le` rawvideo MD5 parity for explicit non-direct
 partitioned B without opening mixed direct/explicit B8x8, residual-bearing
-direct-sub, implicit weighting, or implicit-weighted or residual direct-sub
-high B deblocking.
+direct-sub, implicit weighting, or residual-bearing direct-sub high B
+deblocking.
 
 The High 10 CAVLC/CABAC partitioned implicit weighted B fixtures combine the
 explicit B16x8, B8x16, and B8x8 partition shapes with `weighted_bipred_idc == 2`,
 one L0/L1 ref per B slice, temporal direct flag disabled, and deblocking
 disabled. They prove DPB-fed implicit bipred weighting through uint16 motion
 compensation for partitioned B while still excluding mixed direct/explicit
-B8x8, residual-bearing direct-sub, and implicit-weighted or residual direct-sub
-high B deblocking.
+B8x8, residual-bearing direct-sub, and residual-bearing direct-sub high B
+deblocking.
 
 The CAVLC and CABAC B 8x8 direct-sub fixtures are committed as 64x64 Annex B
 bitstreams under `testdata/h264/`; they cover both spatial and temporal direct
@@ -790,14 +790,14 @@ Excluded unless directly required by decoder parity:
   P16x8/P8x16/P8x8, CAVLC/CABAC non-direct/direct B16x16 high deblocking,
   implicit-weighted B16x16 high deblocking,
   neutral and implicit-weighted partitioned B16x8/B8x16/B8x8 high deblocking,
-  neutral B-skip and B 8x8/B_SUB_4x4 direct-sub high deblocking,
+  neutral B-skip plus neutral/implicit-weighted B 8x8/B_SUB_4x4 direct-sub high deblocking,
   deblock-enabled 4:2:0 32x32 IDR/P, CAVLC-only High10 4:2:0
   slice-boundary deblocking IDR/P, High 4:4:4 Predictive-compatible
   yuv420p12le CAVLC IDR/I IntraPCM, and deblock-enabled 4:2:2/4:4:4 32x32 IDR/P subsets
   remains explicitly unsupported. In particular, P IntraPCM,
   P 8x8-DCT intra, weighted partitioned P, mixed direct/explicit B8x8,
   residual-bearing direct-sub B, broader partitioned implicit weighted B beyond
-  the proved B16x8/B8x16/B8x8 shapes, implicit-weighted or residual direct-sub high B deblocking,
+  the proved B16x8/B8x16/B8x8 shapes, residual-bearing direct-sub high B deblocking,
   CABAC/chroma/B-slice public high slice-boundary mode, broader 12-bit and all
   14-bit public high bitstreams, and MBAFF remain later lanes.
 - Full conformance/testvector corpus passing and production benchmark claims

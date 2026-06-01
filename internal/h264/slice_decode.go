@@ -433,6 +433,9 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32,
 			if isHighB8x8ExplicitSubMacroblock(mbType, subMBType) {
 				return nil
 			}
+			if isHighB8x8DirectSubMacroblock(mbType, subMBType) && cbp == 0 && cbpTable == 0 {
+				return nil
+			}
 		}
 	}
 	return ErrUnsupported

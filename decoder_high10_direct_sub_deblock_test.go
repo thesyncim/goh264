@@ -27,13 +27,14 @@ var high10DirectSubDeblockFrameMD5 = []string{
 }
 
 type high10DirectSubDeblockFixture struct {
-	name          string
-	file          string
-	cabac         int32
-	directSpatial int32
-	direct8x8     int32
-	annexBSize    int
-	annexBMD5     string
+	name              string
+	file              string
+	cabac             int32
+	weightedBipredIDC uint32
+	directSpatial     int32
+	direct8x8         int32
+	annexBSize        int
+	annexBMD5         string
 }
 
 func TestHigh10DirectSubDeblockFixtureSyntax(t *testing.T) {
@@ -293,6 +294,82 @@ func high10DirectSubDeblockFixtures() []high10DirectSubDeblockFixture {
 			annexBSize:    74,
 			annexBMD5:     "600c53594971dfac2c41f630785a6790",
 		},
+		{
+			name:              "implicit-cavlc-b8x8-temporal",
+			file:              "high10_implicit_weight_cavlc_b8x8_temporal_direct_sub_deblock.h264",
+			weightedBipredIDC: 2,
+			directSpatial:     0,
+			direct8x8:         1,
+			annexBSize:        66,
+			annexBMD5:         "c2a8a3772b13c14edc65bdfbfec7f163",
+		},
+		{
+			name:              "implicit-cabac-b8x8-temporal",
+			file:              "high10_implicit_weight_cabac_b8x8_temporal_direct_sub_deblock.h264",
+			cabac:             1,
+			weightedBipredIDC: 2,
+			directSpatial:     0,
+			direct8x8:         1,
+			annexBSize:        74,
+			annexBMD5:         "8533d0791ce508eac1c937e467be4cdc",
+		},
+		{
+			name:              "implicit-cavlc-b8x8-spatial",
+			file:              "high10_implicit_weight_cavlc_b8x8_spatial_direct_sub_deblock.h264",
+			weightedBipredIDC: 2,
+			directSpatial:     1,
+			direct8x8:         1,
+			annexBSize:        66,
+			annexBMD5:         "fbb6747c4e45b8df212b12e5b460a144",
+		},
+		{
+			name:              "implicit-cabac-b8x8-spatial",
+			file:              "high10_implicit_weight_cabac_b8x8_spatial_direct_sub_deblock.h264",
+			cabac:             1,
+			weightedBipredIDC: 2,
+			directSpatial:     1,
+			direct8x8:         1,
+			annexBSize:        74,
+			annexBMD5:         "b3370e5a49ad956ac44aa1401e16fa32",
+		},
+		{
+			name:              "implicit-cavlc-b4x4-temporal",
+			file:              "high10_implicit_weight_cavlc_b4x4_temporal_direct_sub_deblock.h264",
+			weightedBipredIDC: 2,
+			directSpatial:     0,
+			direct8x8:         0,
+			annexBSize:        66,
+			annexBMD5:         "573b75bd19d44bbcf61137a03a9235ad",
+		},
+		{
+			name:              "implicit-cabac-b4x4-temporal",
+			file:              "high10_implicit_weight_cabac_b4x4_temporal_direct_sub_deblock.h264",
+			cabac:             1,
+			weightedBipredIDC: 2,
+			directSpatial:     0,
+			direct8x8:         0,
+			annexBSize:        74,
+			annexBMD5:         "64fd307051fa62ce382cbf5dacf893ae",
+		},
+		{
+			name:              "implicit-cavlc-b4x4-spatial",
+			file:              "high10_implicit_weight_cavlc_b4x4_spatial_direct_sub_deblock.h264",
+			weightedBipredIDC: 2,
+			directSpatial:     1,
+			direct8x8:         0,
+			annexBSize:        66,
+			annexBMD5:         "b091749f36abfad1e06c302cad8b5f90",
+		},
+		{
+			name:              "implicit-cabac-b4x4-spatial",
+			file:              "high10_implicit_weight_cabac_b4x4_spatial_direct_sub_deblock.h264",
+			cabac:             1,
+			weightedBipredIDC: 2,
+			directSpatial:     1,
+			direct8x8:         0,
+			annexBSize:        74,
+			annexBMD5:         "8cd327d0c9088a8a08fb5be9d3e0a766",
+		},
 	}
 }
 
@@ -372,11 +449,11 @@ func assertHigh10DirectSubDeblockFixtureSyntax(t *testing.T, data []byte, tt hig
 				t.Fatal(err)
 			}
 			if pps.CABAC != tt.cabac || pps.Transform8x8Mode != 0 || pps.WeightedPred != 0 ||
-				pps.WeightedBipredIDC != 0 || pps.RefCount[0] != 2 || pps.RefCount[1] != 1 ||
+				pps.WeightedBipredIDC != tt.weightedBipredIDC || pps.RefCount[0] != 2 || pps.RefCount[1] != 1 ||
 				pps.DeblockingFilterParametersPresent != 1 {
-				t.Fatalf("PPS cabac/8x8/weights/refs/deblock = %d/%d/%d/%d/%d/%d/%d, want cabac=%d no-8x8 unweighted refs=2/1 deblock params",
+				t.Fatalf("PPS cabac/8x8/weights/refs/deblock = %d/%d/%d/%d/%d/%d/%d, want cabac=%d no-8x8 weighted_bipred_idc=%d refs=2/1 deblock params",
 					pps.CABAC, pps.Transform8x8Mode, pps.WeightedPred, pps.WeightedBipredIDC,
-					pps.RefCount[0], pps.RefCount[1], pps.DeblockingFilterParametersPresent, tt.cabac)
+					pps.RefCount[0], pps.RefCount[1], pps.DeblockingFilterParametersPresent, tt.cabac, tt.weightedBipredIDC)
 			}
 			ppsList[pps.PPSID] = pps
 		case h264.NALIDRSlice, h264.NALSlice:
@@ -400,10 +477,11 @@ func assertHigh10DirectSubDeblockFixtureSyntax(t *testing.T, data []byte, tt hig
 				}
 			case h264.PictureTypeB:
 				if sh.ListCount != 2 || sh.RefCount[0] != 1 || sh.RefCount[1] != 1 || sh.DeblockingFilter != 1 ||
+					sh.PPS == nil || sh.PPS.WeightedBipredIDC != tt.weightedBipredIDC ||
 					sh.DirectSpatialMVPred != tt.directSpatial ||
 					sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
-					t.Fatalf("B slice lists/refs/deblock/direct/weights = %d/%v/%d/%d/%d/%d, want L0/L1 refs=1/1 deblock-enabled direct=%d unweighted",
-						sh.ListCount, sh.RefCount, sh.DeblockingFilter, sh.DirectSpatialMVPred, sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma, tt.directSpatial)
+					t.Fatalf("B slice lists/refs/deblock/implicit/direct/weights = %d/%v/%d/%v/%d/%d/%d, want L0/L1 refs=1/1 deblock-enabled weighted_bipred_idc=%d direct=%d no serialized weights",
+						sh.ListCount, sh.RefCount, sh.DeblockingFilter, sh.PPS, sh.DirectSpatialMVPred, sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma, tt.weightedBipredIDC, tt.directSpatial)
 				}
 				assertHigh10DirectSubDeblockPayload(t, nal.Raw, tt)
 			default:
