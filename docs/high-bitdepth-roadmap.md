@@ -130,25 +130,30 @@ exercise 8-bit High/High 4:2:2/High 4:4:4 syntax and reconstruction.
 ## Conformance And Benchmarking
 
 The committed fixtures are regression oracles, not a complete conformance
-suite. Add a corpus runner that can execute H.264 conformance/testvector sets
-without weakening existing unsupported-feature guards. Each newly passing corpus
-class should update this roadmap and the translation ledger with the exact
-profiles, chroma formats, bit depths, picture structures, and unsupported
-features still excluded.
+suite. The first corpus runner lives in `decoder_corpus_test.go` and reads
+`testdata/h264/corpus/manifest.jsonl` by default, or an external manifest through
+`GOH264_CORPUS_MANIFEST`. It can execute file-backed H.264 testvector sets
+without weakening existing unsupported-feature guards: decode-ok rows require
+bitstream, per-frame raw, and concatenated rawvideo MD5s, while unsupported rows
+must name guard tags and assert `ErrUnsupported`. Each newly passing corpus class
+should update this roadmap and the translation ledger with the exact profiles,
+chroma formats, bit depths, picture structures, and unsupported features still
+excluded.
 
 Benchmarking starts with `cmd/goh264bench`, which reads the compressed input
 outside the timed region, warms up, decodes with a fresh Go decoder per
 iteration, optionally materializes raw YUV bytes and MD5s them, reports
 frames/sec, MiB/sec, and Go allocation counters, and can run an FFmpeg rawvideo
-CLI baseline over the same input. It is not yet a production benchmark report:
-the FFmpeg path includes process startup and CLI I/O per timed iteration, and
-the harness still needs repeated-run statistics, corpus mode, and
-machine-readable provenance. Fair comparisons must record the input MD5, command
-flags, FFmpeg version, thread count, output pixel format, raw-output mode, CPU,
-OS, Go version, VCS revision/dirty state, and whether the comparison is CLI
-FFmpeg or an in-process libavcodec baseline. Tiny embedded fixtures are useful
-smoke tests, but throughput comparisons should use stable larger clips from the
-same testvector corpus.
+CLI baseline over the same input. The harness now emits a JSON report envelope
+with input MD5/size, Go/OS/CPU/GOMAXPROCS, module and VCS state, FFmpeg version,
+repeated samples, mean/median/min/max/stddev/CV timing, raw pixel format, raw
+MD5, and machine-readable timing-scope flags. FFmpeg raw output defaults to the
+Go raw pixel format for MD5 parity, but the FFmpeg path is still labeled as a
+CLI baseline because it includes process startup, CLI demux/parser setup, file
+reads, and stdout pipe cost per timed iteration. Tiny embedded fixtures are
+useful smoke tests, but production throughput comparisons still need stable
+larger clips from the same testvector corpus and a suite/corpus benchmark mode
+or equivalent report aggregation.
 
 ## Gap Ledger
 
@@ -453,6 +458,9 @@ Fixture principles:
   as `yuv420p10le`, `yuv422p12le`, and `yuv444p14le`.
 - Keep opt-in native oracle tests behind `GOH264_ORACLE=1`, but default tests
   should use committed bitstreams plus known MD5s once a fixture is accepted.
+- Add accepted file-backed vectors to `testdata/h264/corpus/manifest.jsonl`, or
+  run external manifests with `GOH264_CORPUS_MANIFEST=/path/to/manifest.jsonl`.
+  Relative paths resolve from the manifest directory.
 - Where local encoder support is uncertain, first add an oracle-probe note/test
   that skips cleanly if the local FFmpeg/x264 cannot generate the requested
   high-bit-depth stream.

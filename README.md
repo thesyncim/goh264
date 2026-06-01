@@ -7,9 +7,9 @@ The port is intentionally decoder-only. Encoder, muxer, filter, and unrelated co
 Current safe point:
 
 - Upstream source truth is pinned to FFmpeg `n8.0.1`, commit `894da5ca7d742e4429ffb2af534fcda0103ef593`.
-- The active Go slice covers Annex B and AVC/NALFF length-prefixed NAL splitting, AVC decoder configuration record (`avcC`) SPS/PPS extradata parsing, FFmpeg-shaped packet auto-detection for public `Decode`/`DecodeFrames` entrypoints, public packet side-data plumbing for `AV_PKT_DATA_NEW_EXTRADATA`, display matrix, Stereo3D, spherical mapping, ICC profile, Dynamic HDR10+ bytes, LCEVC bytes, A53 captions, AFD, S12M timecode, mastering-display metadata, content-light metadata, ambient-viewing-environment metadata, and 3D reference display metadata, simple 8-bit progressive frame-picture decode through IDR/P/B output with DPB/reorder/weighted/direct-motion support, CAVLC/CABAC frame-MB entropy-to-state handoff, 8-bit reconstruction/deblocking, high-bit-depth 9/10/12/14 IDCT/prediction/qpel/chroma/weight/deblock kernels, source-shaped 8-bit and high-bit-depth frame-MB motion-compensation dispatch, internal high-bit-depth frame storage and IntraPCM/intra/inter macroblock reconstruction helpers over uint16 planes, and public High 10 deblock-disabled I-frame output through the value-preserving high raw helpers.
-- This safe point wires the high-bit-depth simple slice loop for deblock-disabled intra pictures, exposes public High 10 4:2:0 CAVLC/CABAC IDR/I fixture parity through Annex B, explicit AVC/NALFF, and configured AVC public surfaces, and preserves `AppendRawYUV` as 8-bit-only while `AppendRawYUVBytesLE` carries 10-bit rawvideo bytes.
-- Public high-bit-depth H.264 decode is still intentionally narrow: High 10 deblock-disabled intra frame pictures are covered, while high P/B slices, high deblocking, field/MBAFF motion-compensation remapping and reference-progress waits, field/MBAFF implicit B weights, field/gap/error-resilience MMCO behavior, SIMD transform and DSP variants, complete SEI timing/interlace behavior, remaining packet side-data types, full libavcodec delayed-output semantics beyond the simple progressive public path, threading, and broad public decode beyond the simple progressive frame-picture subset are not yet implemented.
+- The active Go slice covers Annex B and AVC/NALFF length-prefixed packet intake, `avcC` SPS/PPS extradata, FFmpeg-shaped packet auto-detection, translated packet/frame side-data plumbing for the documented subset, simple 8-bit progressive frame-picture IDR/P/B output with DPB/reorder/weighted/direct-motion support, CAVLC/CABAC frame-MB entropy-to-state handoff, 8-bit reconstruction/deblocking, high-bit-depth 9/10/12/14 scalar kernels, high-bit-depth frame storage, and public High 10 4:2:0 deblock-disabled I/P plus selected B lanes through value-preserving raw helpers.
+- Current High 10 public decode includes deblock-disabled I, P-skip/P16x16 no-residual, exact P16x16 L0 residual, explicit weighted P16x16, exact non-direct B16x16, temporal/spatial direct B16x16, and temporal/spatial B-skip fixtures across Annex B, AVC/NALFF, configured AVC, sample-by-sample flush, and FFmpeg rawvideo oracle surfaces.
+- Public high-bit-depth H.264 decode is still intentionally narrow: high P intra/partitioned P, high B 8x8/direct-sub, implicit weighted high B, partitioned high B, high deblocking, field/MBAFF, FMO, broad error resilience, threading, SIMD dispatch, and full libavcodec delayed-output semantics remain future lanes.
 
 Run the default tests:
 
@@ -21,6 +21,22 @@ Run tests that call the pinned native oracle tools available on this machine:
 
 ```sh
 GOH264_ORACLE=1 go test ./...
+```
+
+Run the manifest-driven corpus runner with the committed seed manifest, or with
+an external conformance/testvector manifest:
+
+```sh
+go test . -run TestH264CorpusManifest
+GOH264_CORPUS_MANIFEST=/path/to/manifest.jsonl go test . -run TestH264CorpusManifest
+```
+
+Run the benchmark harness with repeated samples and an FFmpeg CLI rawvideo
+baseline. The JSON report includes input, host, VCS, timing-scope, raw pixel
+format, and per-repeat statistics:
+
+```sh
+go run ./cmd/goh264bench -input testdata/h264/cavlc_b8x8_spatial_direct_sub.h264 -iters 5 -repeats 5 -ffmpeg -json
 ```
 
 Fetch the pinned upstream source snapshot into the ignored local cache:

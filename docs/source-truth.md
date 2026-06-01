@@ -445,11 +445,16 @@ Included:
 - Public High 10 4:2:0 deblock-disabled CAVLC/CABAC temporal/spatial B-skip
   decode through the high raw helper surface, with Annex B, AVC, configured
   AVC, sample-by-sample flush, and FFmpeg rawvideo oracle proof.
+- Manifest-driven H.264 corpus runner `decoder_corpus_test.go`, with default
+  JSONL entries in `testdata/h264/corpus/manifest.jsonl` and external corpus
+  override through `GOH264_CORPUS_MANIFEST`. Decode-ok rows require bitstream,
+  per-frame raw, and concatenated rawvideo MD5s; unsupported rows must name guard
+  tags and assert `ErrUnsupported`.
 - Decoder benchmark harness `cmd/goh264bench`, including Go decode/raw-output
-  timing, raw MD5 reporting, allocation counters, and an optional FFmpeg CLI
-  rawvideo baseline over the same input. It is a useful smoke/perf harness; the
-  fuller state-of-the-art benchmark surface still needs corpus mode, repeated-run
-  statistics, machine-readable provenance, and explicit CLI-baseline caveats.
+  timing, raw MD5 reporting, allocation counters, repeated samples/statistics,
+  machine-readable input/host/VCS/FFmpeg metadata, Go raw pixel-format reporting,
+  FFmpeg `-pix_fmt` auto-selection for raw-MD5 parity, and an optional FFmpeg CLI
+  rawvideo baseline over the same input with explicit timed-scope caveats.
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:
@@ -467,5 +472,5 @@ Excluded unless directly required by decoder parity:
   implicit weighted B, partitioned B, partitioned P, high deblocking,
   additional depth/chroma fixtures, and MBAFF remain later lanes.
 - Full conformance/testvector corpus passing and production benchmark claims
-  remain pending until a manifest-driven corpus runner and fair benchmark report
-  metadata land.
+  remain pending until curated external corpora are added and benchmark corpus
+  mode or an equivalent suite runner reports stable larger-clip results.
