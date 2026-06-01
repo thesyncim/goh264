@@ -308,6 +308,11 @@ func (m *macroblockTables) decodeCAVLCFrameInterMacroblock(gb *bitReader, in cav
 		if err := m.predDirectMotionFrame(motion, in.MBXY, &mb.MBType, &mb.SubMBType, in.Direct); err != nil {
 			return result, err
 		}
+	} else if in.SliceTypeNoS == PictureTypeB && mb.PartitionCount == 4 && hasDirectSubMBType(&mb.SubMBType) {
+		if err := m.predDirectMotionFrame(motion, in.MBXY, &mb.MBType, &mb.SubMBType, in.Direct); err != nil {
+			return result, err
+		}
+		markDirectSubRefsUnavailable(motion)
 	}
 	if err := m.writeBackCAVLCInterMacroblock(in.MBXY, &mb, residual, motion, listCount, in.SliceTypeNoS, in.SliceNum); err != nil {
 		return result, err

@@ -194,9 +194,6 @@ func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterType(gb *bitReade
 				return mb, ErrInvalidData
 			}
 			info := h264BSubMBTypeInfo[subType]
-			if isDirect(info.Type) {
-				return mb, ErrUnsupported
-			}
 			mb.SubPartitionCount[i] = info.PartitionCount
 			mb.SubMBType[i] = info.Type
 		}

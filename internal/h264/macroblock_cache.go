@@ -426,6 +426,7 @@ func (m *macroblockTables) fillMotionDecodeCaches(cache *macroblockMotionCache, 
 	if cache == nil || m == nil || n.ListCount < 0 || n.ListCount > 2 {
 		return ErrInvalidData
 	}
+	initMotionDecodeCacheSentinels(cache)
 	if !(isInter(n.MBType) || (isDirect(n.MBType) && n.DirectSpatialMVPred)) {
 		return nil
 	}
@@ -530,6 +531,17 @@ func (m *macroblockTables) fillMotionDecodeCaches(cache *macroblockMotionCache, 
 		}
 	}
 	return nil
+}
+
+func initMotionDecodeCacheSentinels(cache *macroblockMotionCache) {
+	if cache == nil {
+		return
+	}
+	for list := 0; list < 2; list++ {
+		cache.Ref[list][h264Scan8[5]+1] = h264PartNotAvailable
+		cache.Ref[list][h264Scan8[7]+1] = h264PartNotAvailable
+		cache.Ref[list][h264Scan8[13]+1] = h264PartNotAvailable
+	}
 }
 
 func (m *macroblockTables) copyTopMotion(cache *macroblockMotionCache, topXY int, list int, base int) error {

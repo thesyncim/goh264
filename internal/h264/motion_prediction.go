@@ -332,15 +332,13 @@ func fillCAVLCInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacro
 }
 
 func fillCAVLCSubInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacroblockSyntax, listCount int) error {
-	for i := 0; i < 4; i++ {
-		if isDirect(mb.SubMBType[i]) {
-			return ErrUnsupported
-		}
-	}
-
 	for list := 0; list < listCount; list++ {
 		for i := 0; i < 4; i++ {
 			start := int(h264Scan8[4*i])
+			if isDirect(mb.SubMBType[i]) {
+				cache.Ref[list][start] = cache.Ref[list][start+1]
+				continue
+			}
 			ref := h264ListNotUsed
 			if isDir(mb.SubMBType[i], 0, list) {
 				ref = int8(mb.Ref[list][i])

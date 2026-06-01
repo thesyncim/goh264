@@ -166,3 +166,44 @@ func TestDecodeCAVLCInterB8x8SubMacroblockNoResidual(t *testing.T) {
 		t.Fatalf("cbp/consumed = %d/%d, want 0/30", mb.CBP, gb.bitPos)
 	}
 }
+
+func TestDecodeCAVLCInterB8x8DirectSubMacroblockNoResidual(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, Direct8x8InferenceFlag: 1}
+	var ctx cavlcResidualContext
+	gb := newBitReader(cavlcBitString("000010111101001100100111111111"))
+
+	mb, err := ctx.decodeCAVLCInterBMacroblock(&gb, pps, sps, 16, [2]uint32{1, 1}, true)
+	if err != nil {
+		t.Fatalf("decode inter b8x8 direct-sub mb failed: %v", err)
+	}
+	if mb.MBType != (MBType8x8|MBTypeP0L0|MBTypeP0L1|MBTypeP1L0|MBTypeP1L1) || mb.PartitionCount != 4 {
+		t.Fatalf("type/partitions = %#x/%d", mb.MBType, mb.PartitionCount)
+	}
+	wantSub := [4]uint32{
+		MBTypeDirect2,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+	}
+	for i := 0; i < 4; i++ {
+		if mb.SubMBType[i] != wantSub[i] {
+			t.Fatalf("sub[%d] type = %#x, want %#x", i, mb.SubMBType[i], wantSub[i])
+		}
+		if isDirect(mb.SubMBType[i]) {
+			if mb.Ref[0][i] != -1 || mb.Ref[1][i] != -1 || mb.MVD[0][4*i] != ([2]int32{}) || mb.MVD[1][4*i] != ([2]int32{}) {
+				t.Fatalf("direct sub[%d] ref/mvd = %v/%v %v/%v", i, mb.Ref[0][i], mb.Ref[1][i], mb.MVD[0][4*i], mb.MVD[1][4*i])
+			}
+			continue
+		}
+		if isDir(mb.SubMBType[i], 0, 0) && mb.Ref[0][i] != 0 {
+			t.Fatalf("sub[%d] ref0 = %d, want 0", i, mb.Ref[0][i])
+		}
+		if isDir(mb.SubMBType[i], 0, 1) && mb.Ref[1][i] != 0 {
+			t.Fatalf("sub[%d] ref1 = %d, want 0", i, mb.Ref[1][i])
+		}
+	}
+	if mb.CBP != 0 || gb.bitPos != 30 {
+		t.Fatalf("cbp/consumed = %d/%d, want 0/30", mb.CBP, gb.bitPos)
+	}
+}

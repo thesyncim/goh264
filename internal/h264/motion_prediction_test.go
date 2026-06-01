@@ -226,3 +226,44 @@ func TestFillCAVLCSubInterMotionCache8x8(t *testing.T) {
 		t.Fatalf("8x8 sub mv = %v/%v/%v/%v", cache.MV[0][base], cache.MV[0][base+1], cache.MV[0][base+8], cache.MV[0][base+9])
 	}
 }
+
+func TestInitMotionDecodeCacheSentinels(t *testing.T) {
+	var cache macroblockMotionCache
+	initMotionDecodeCacheSentinels(&cache)
+	for list := 0; list < 2; list++ {
+		for _, idx := range []uint8{h264Scan8[5] + 1, h264Scan8[7] + 1, h264Scan8[13] + 1} {
+			if cache.Ref[list][idx] != h264PartNotAvailable {
+				t.Fatalf("list %d sentinel %d = %d, want PART_NOT_AVAILABLE", list, idx, cache.Ref[list][idx])
+			}
+		}
+	}
+}
+
+func TestFillCAVLCSubInterMotionCacheUsesFFmpegDiagonalSentinel(t *testing.T) {
+	var cache macroblockMotionCache
+	initMotionDecodeCacheSentinels(&cache)
+
+	mb := cavlcInterMacroblockSyntax{}
+	mb.MBType = MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	mb.PartitionCount = 4
+	mb.SubMBType = [4]uint32{
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L1,
+	}
+	mb.SubPartitionCount = [4]uint8{1, 1, 1, 1}
+	mb.Ref[0] = [4]int32{0, 0, 0, -1}
+	mb.Ref[1] = [4]int32{0, 0, 0, 0}
+	mb.MVD[1][0] = [2]int32{0, 40}
+	mb.MVD[1][4] = [2]int32{-7, 40}
+	mb.MVD[1][8] = [2]int32{0, -22}
+	mb.MVD[1][12] = [2]int32{-9, -16}
+
+	if err := fillCAVLCInterMotionCache(&cache, &mb, 2); err != nil {
+		t.Fatal(err)
+	}
+	if got := cache.MV[1][h264Scan8[12]]; got != ([2]int16{-9, 24}) {
+		t.Fatalf("sub3 list1 mv = %v, want [-9 24]", got)
+	}
+}

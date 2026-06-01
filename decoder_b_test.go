@@ -388,6 +388,36 @@ func bFrameFixtureCases() []bFrameFixtureCase {
 			},
 		},
 		{
+			name:      "64/cavlc-b8x8-spatial-direct-sub",
+			file:      "testdata/h264/cavlc_b8x8_spatial_direct_sub.h264",
+			frameSize: 6144,
+			want: []string{
+				"1b726009bdfbaba5cc8167a44bdab748",
+				"1ce1cfea1c4486ffd7a21eb9d72f2c9a",
+				"abb8b105f6d3697ecb371caa74077f80",
+				"add02fa66d669d4c1a408d5cc69c9dbf",
+			},
+			retainedFlushWant: []string{
+				"1b726009bdfbaba5cc8167a44bdab748",
+				"abb8b105f6d3697ecb371caa74077f80",
+			},
+		},
+		{
+			name:      "64/cavlc-b8x8-temporal-direct-sub",
+			file:      "testdata/h264/cavlc_b8x8_temporal_direct_sub.h264",
+			frameSize: 6144,
+			want: []string{
+				"1b726009bdfbaba5cc8167a44bdab748",
+				"1f4a06041e90069af886925de0b18b22",
+				"abb8b105f6d3697ecb371caa74077f80",
+				"add02fa66d669d4c1a408d5cc69c9dbf",
+			},
+			retainedFlushWant: []string{
+				"1b726009bdfbaba5cc8167a44bdab748",
+				"abb8b105f6d3697ecb371caa74077f80",
+			},
+		},
+		{
 			name:      "64/cabac-b8x8-spatial-direct-sub",
 			file:      "testdata/h264/cabac_b8x8_spatial_direct_sub.h264",
 			frameSize: 6144,
