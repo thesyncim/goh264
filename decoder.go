@@ -66,11 +66,13 @@ type Packet struct {
 
 type FrameSideData struct {
 	UserDataUnregistered [][]byte
+	A53ClosedCaptions    []byte
 	X264Build            int
 	PictureTiming        *PictureTiming
 	RecoveryPoint        *RecoveryPoint
 	BufferingPeriod      *BufferingPeriod
 	GreenMetadata        *GreenMetadata
+	ActiveFormat         *ActiveFormat
 	FramePacking         *FramePackingArrangement
 	DisplayOrientation   *DisplayOrientation
 	AlternativeTransfer  *AlternativeTransfer
@@ -114,6 +116,10 @@ type GreenMetadata struct {
 	PercentAlphaPointDeblockingInstance uint8
 	XSDMetricType                       uint8
 	XSDMetricValue                      uint16
+}
+
+type ActiveFormat struct {
+	Description uint8
 }
 
 type FramePackingArrangement struct {
@@ -614,6 +620,7 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
 	out := FrameSideData{
 		UserDataUnregistered: cloneByteSlices(src.UserDataUnregistered),
+		A53ClosedCaptions:    append([]byte(nil), src.A53ClosedCaptions...),
 		X264Build:            int(src.X264Build),
 	}
 	if src.PictureTiming.Present != 0 {
@@ -659,6 +666,9 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData) FrameSideData {
 			XSDMetricType:                       src.GreenMetadata.XSDMetricType,
 			XSDMetricValue:                      src.GreenMetadata.XSDMetricValue,
 		}
+	}
+	if src.AFD.Present != 0 {
+		out.ActiveFormat = &ActiveFormat{Description: src.AFD.ActiveFormatDescription}
 	}
 	if src.FramePacking.Present != 0 {
 		out.FramePacking = &FramePackingArrangement{

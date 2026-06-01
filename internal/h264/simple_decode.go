@@ -50,11 +50,13 @@ type DecodedFrame struct {
 
 type DecodedFrameSideData struct {
 	UserDataUnregistered [][]uint8
+	A53ClosedCaptions    []uint8
 	X264Build            int32
 	PictureTiming        H264SEIPictureTiming
 	RecoveryPoint        H264SEIRecoveryPoint
 	BufferingPeriod      H264SEIBufferingPeriod
 	GreenMetadata        H264SEIGreenMetadata
+	AFD                  H2645SEIAFD
 	FramePacking         H2645SEIFramePacking
 	DisplayOrientation   H2645SEIDisplayOrientation
 	AlternativeTransfer  H2645SEIAlternativeTransfer
@@ -341,11 +343,13 @@ func decodedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
 	}
 	return DecodedFrameSideData{
 		UserDataUnregistered: cloneByteSlices(sei.Common.Unregistered.Data),
+		A53ClosedCaptions:    append([]uint8(nil), sei.Common.A53Caption.Data...),
 		X264Build:            sei.Common.Unregistered.X264Build,
 		PictureTiming:        sei.PictureTiming,
 		RecoveryPoint:        sei.RecoveryPoint,
 		BufferingPeriod:      sei.BufferingPeriod,
 		GreenMetadata:        sei.GreenMetadata,
+		AFD:                  sei.Common.AFD,
 		FramePacking:         sei.Common.FramePacking,
 		DisplayOrientation:   sei.Common.DisplayOrientation,
 		AlternativeTransfer:  sei.Common.AlternativeTransfer,

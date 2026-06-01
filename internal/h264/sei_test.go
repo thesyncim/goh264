@@ -3,6 +3,7 @@
 package h264
 
 import (
+	"bytes"
 	"math/bits"
 	"testing"
 )
@@ -26,6 +27,8 @@ func TestDecodeSEIMessages(t *testing.T) {
 		seiTestMessage{typ: seiTypePicTiming, payload: seiPictureTimingPayload()},
 		seiTestMessage{typ: seiTypeRecoveryPoint, payload: seiRecoveryPointPayload()},
 		seiTestMessage{typ: seiTypeGreenMetadata, payload: []byte{0, 2, 0x01, 0x23, 1, 2, 3, 4}},
+		seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: seiRegisteredAFDPayload(0x0f)},
+		seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: seiRegisteredA53Payload([]byte{0x04, 0x05, 0x06, 0x07, 0x08, 0x09})},
 		seiTestMessage{typ: seiTypeUserDataUnregistered, payload: seiUnregisteredPayload()},
 		seiTestMessage{typ: seiTypeDisplayOrientation, payload: seiDisplayOrientationPayload()},
 		seiTestMessage{typ: seiTypeFramePackingArrangement, payload: seiFramePackingPayload()},
@@ -72,6 +75,12 @@ func TestDecodeSEIMessages(t *testing.T) {
 		ctx.GreenMetadata.PercentNonZeroMacroblocks != 1 || ctx.GreenMetadata.PercentIntraCodedMacroblocks != 2 ||
 		ctx.GreenMetadata.PercentSixTapFiltering != 3 || ctx.GreenMetadata.PercentAlphaPointDeblockingInstance != 4 {
 		t.Fatalf("green metadata = %+v", ctx.GreenMetadata)
+	}
+	if ctx.Common.AFD.Present != 1 || ctx.Common.AFD.ActiveFormatDescription != 0x0f {
+		t.Fatalf("afd = %+v", ctx.Common.AFD)
+	}
+	if got, want := ctx.Common.A53Caption.Data, []byte{0x04, 0x05, 0x06, 0x07, 0x08, 0x09}; !bytes.Equal(got, want) {
+		t.Fatalf("a53 caption = %x, want %x", got, want)
 	}
 	if len(ctx.Common.Unregistered.Data) != 1 || ctx.Common.Unregistered.X264Build != 165 {
 		t.Fatalf("unregistered = count %d x264 %d", len(ctx.Common.Unregistered.Data), ctx.Common.Unregistered.X264Build)
@@ -142,6 +151,27 @@ func TestDecodeSEIBufferingPeriodMissingSPSIsNonFatalMasterError(t *testing.T) {
 	}
 }
 
+func TestDecodeSEIRegisteredA53CaptionsMergeAcrossMessages(t *testing.T) {
+	ctx, err := DecodeSEI(buildSEIRBSP(
+		seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: seiRegisteredA53Payload([]byte{0x01, 0x02, 0x03})},
+		seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: seiRegisteredA53Payload([]byte{0x04, 0x05, 0x06})},
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ctx.Common.A53Caption.Data, []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}; !bytes.Equal(got, want) {
+		t.Fatalf("a53 caption = %x, want %x", got, want)
+	}
+}
+
+func TestDecodeSEIRegisteredA53RejectsTruncatedCCData(t *testing.T) {
+	payload := seiRegisteredA53Payload([]byte{0x01, 0x02, 0x03})
+	payload = payload[:len(payload)-1]
+	if _, err := DecodeSEI(buildSEIRBSP(seiTestMessage{typ: seiTypeUserDataRegisteredITUTT35, payload: payload}), nil); err != ErrInvalidData {
+		t.Fatalf("err = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestDecodeSimpleNALUnitsParsesLeadingSEI(t *testing.T) {
 	var spsList [maxSPSCount]*SPS
 	var ppsList [maxPPSCount]*PPS
@@ -173,6 +203,12 @@ func TestDecodedFrameSideDataFromSEICopiesUserData(t *testing.T) {
 	side := decodedFrameSideDataFromSEI(ctx)
 	if side.X264Build != 165 || len(side.UserDataUnregistered) != 1 {
 		t.Fatalf("side unregistered = build %d count %d", side.X264Build, len(side.UserDataUnregistered))
+	}
+	ctx.Common.A53Caption.Data = []uint8{1, 2, 3}
+	side = decodedFrameSideDataFromSEI(ctx)
+	ctx.Common.A53Caption.Data[0] ^= 0xff
+	if got, want := side.A53ClosedCaptions, []uint8{1, 2, 3}; !bytes.Equal(got, want) {
+		t.Fatalf("side a53 = %x, want %x", got, want)
 	}
 	ctx.Common.Unregistered.Data[0][0] ^= 0xff
 	if side.UserDataUnregistered[0][0] == ctx.Common.Unregistered.Data[0][0] {
@@ -245,6 +281,21 @@ func seiRecoveryPointPayload() []byte {
 	b.writeBit(0)
 	b.writeBits(2, 2)
 	return b.bytes()
+}
+
+func seiRegisteredA53Payload(cc []byte) []byte {
+	if len(cc)%3 != 0 {
+		panic("A53 test payload must contain whole three-byte CC entries")
+	}
+	out := []byte{ituTT35CountryCodeUS, 0x00, 0x31, 'G', 'A', '9', '4', a53UserDataTypeCodeCaption}
+	out = append(out, 0x40|uint8(len(cc)/3), 0xff)
+	out = append(out, cc...)
+	out = append(out, 0xff)
+	return out
+}
+
+func seiRegisteredAFDPayload(description uint8) []byte {
+	return []byte{ituTT35CountryCodeUS, 0x00, 0x31, 'D', 'T', 'G', '1', 0x40, description}
 }
 
 func seiDisplayOrientationPayload() []byte {

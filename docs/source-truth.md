@@ -98,14 +98,15 @@ before packet NAL splitting, covering both `avcC` and Annex B parameter-set
 extradata and repeated side data across sample-by-sample P-frame decode without
 resetting DPB reference state. Public frame side-data tests prepend synthetic
 leading SEI to the black16 fixture and prove the decoded frame retains x264
-user-data, recovery point, green metadata, display orientation, frame packing,
-alternative transfer, mastering display, and content-light metadata while
-preserving the rawvideo MD5. Public picture-timing tests use a pic-struct-present
-SPS and synthetic leading SEI to prove decoded `Frame` exposes FFmpeg-shaped
-`repeat_pict`, interlaced, and top-field-first metadata while preserving the
-rawvideo MD5. Public rich-VUI tests synthesize a valid SPS and prove
-`StreamInfo` exposes FFmpeg-normalized SAR, video full-range signaling, color
-primaries/transfer/matrix, chroma location, and timing fields.
+user-data, A53 closed captions, active-format description, recovery point,
+green metadata, display orientation, frame packing, alternative transfer,
+mastering display, and content-light metadata while preserving the rawvideo MD5.
+Public picture-timing tests use a pic-struct-present SPS and synthetic leading
+SEI to prove decoded `Frame` exposes FFmpeg-shaped `repeat_pict`, interlaced,
+and top-field-first metadata while preserving the rawvideo MD5. Public rich-VUI
+tests synthesize a valid SPS and prove `StreamInfo` exposes FFmpeg-normalized
+SAR, video full-range signaling, color primaries/transfer/matrix, chroma
+location, and timing fields.
 Monochrome
 native FFmpeg oracle checks
 request `-pix_fmt gray` so the frame-MD5 surface compares only the luma plane
@@ -162,13 +163,15 @@ bitstream restriction is present.
 SEI unit coverage includes FFmpeg-shaped SEI payload type/size accumulation,
 extended type/size headers, strict truncated-payload rejection, non-fatal
 buffering-period missing-SPS master errors, picture-timing HRD/pic-struct
-timecode processing, buffering-period CPB delay extraction, recovery point,
-green metadata, x264 unregistered user data, display orientation, frame
-packing, alternative transfer, mastering display, and content light messages.
-The simple decoder now parses leading SEI NALs into decoder state while keeping
-SEI parser failures non-fatal, matching FFmpeg's default behavior without
-`AV_EF_EXPLODE`, and applies the simple frame-picture portion of FFmpeg
-`h264_export_frame_props` for picture-timing frame flags.
+timecode processing, buffering-period CPB delay extraction, registered ITU-T
+T.35 ATSC AFD/A53 closed-caption parsing including multi-message A53 merge and
+truncated-caption rejection, recovery point, green metadata, x264 unregistered
+user data, display orientation, frame packing, alternative transfer, mastering
+display, and content light messages. The simple decoder now parses leading SEI
+NALs into decoder state while keeping SEI parser failures non-fatal, matching
+FFmpeg's default behavior without `AV_EF_EXPLODE`, and applies the simple
+frame-picture portion of FFmpeg `h264_export_frame_props` for picture-timing
+frame flags.
 
 ## Decoder Boundary
 
@@ -180,6 +183,7 @@ Included:
 - H.264 NAL headers and RBSP handling
 - SPS VUI public metadata for SAR, video range/format, colorimetry, chroma location, and timing
 - Picture-timing-derived `repeat_pict`, interlaced, and top-field-first public frame flags for the simple frame-picture path
+- Registered ITU-T T.35 ATSC AFD and A53 closed-caption decoded frame side data
 - SPS/PPS, slice headers, entropy decode, macroblock decode, prediction, inverse transforms, loop filtering, reference picture management, and frame output as the port advances
 
 Excluded unless directly required by decoder parity:

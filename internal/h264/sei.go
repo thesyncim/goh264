@@ -8,6 +8,7 @@ package h264
 const (
 	seiTypeBufferingPeriod              = 0
 	seiTypePicTiming                    = 1
+	seiTypeUserDataRegisteredITUTT35    = 4
 	seiTypeUserDataUnregistered         = 5
 	seiTypeRecoveryPoint                = 6
 	seiTypeGreenMetadata                = 56
@@ -26,6 +27,12 @@ const (
 	h264SEIPicStructBottomTopBottom = 6
 	h264SEIPicStructFrameDoubling   = 7
 	h264SEIPicStructFrameTripling   = 8
+
+	ituTT35CountryCodeUS       = 0xb5
+	ituTT35ProviderCodeATSC    = 0x0031
+	ituTT35UserIdentifierDTG1  = 0x44544731
+	ituTT35UserIdentifierGA94  = 0x47413934
+	a53UserDataTypeCodeCaption = 0x03
 )
 
 var seiNumClockTSTable = [9]uint8{1, 1, 1, 2, 2, 3, 3, 2, 3}
@@ -83,12 +90,23 @@ type H264SEIGreenMetadata struct {
 }
 
 type H2645SEI struct {
+	A53Caption          H2645SEIA53Caption
+	AFD                 H2645SEIAFD
 	Unregistered        H2645SEIUnregistered
 	FramePacking        H2645SEIFramePacking
 	DisplayOrientation  H2645SEIDisplayOrientation
 	AlternativeTransfer H2645SEIAlternativeTransfer
 	MasteringDisplay    H2645SEIMasteringDisplay
 	ContentLight        H2645SEIContentLight
+}
+
+type H2645SEIA53Caption struct {
+	Data []uint8
+}
+
+type H2645SEIAFD struct {
+	Present                 int32
+	ActiveFormatDescription uint8
 }
 
 type H2645SEIUnregistered struct {
@@ -137,6 +155,8 @@ func (h *H264SEIContext) Reset() {
 	if h == nil {
 		return
 	}
+	h.Common.A53Caption.Data = nil
+	h.Common.AFD.Present = 0
 	h.Common.Unregistered.Data = nil
 	h.Common.Unregistered.X264Build = 0
 	h.RecoveryPoint.RecoveryFrameCount = -1
@@ -217,6 +237,8 @@ func (h *H264SEIContext) decodeMessage(payloadType int, payload []byte, spsList 
 		return h.BufferingPeriod.decodeBufferingPeriod(payload, spsList)
 	case seiTypeGreenMetadata:
 		return h.GreenMetadata.decodeGreenMetadata(payload)
+	case seiTypeUserDataRegisteredITUTT35:
+		return h.Common.decodeRegisteredUserData(payload)
 	case seiTypeUserDataUnregistered:
 		return h.Common.Unregistered.decodeUnregisteredUserData(payload)
 	case seiTypeDisplayOrientation:
@@ -483,6 +505,79 @@ func (h *H264SEIGreenMetadata) decodeGreenMetadata(payload []byte) error {
 		h.XSDMetricType = payload[pos]
 		h.XSDMetricValue = readBE16(payload[pos+1:])
 	}
+	return nil
+}
+
+func (h *H2645SEI) decodeRegisteredUserData(payload []byte) error {
+	if len(payload) < 3 {
+		return ErrInvalidData
+	}
+	pos := 0
+	countryCode := payload[pos]
+	pos++
+	if countryCode == 0xff {
+		if len(payload)-pos < 3 {
+			return ErrInvalidData
+		}
+		pos++
+	}
+	providerCode := readBE16(payload[pos:])
+	pos += 2
+
+	if countryCode == ituTT35CountryCodeUS && providerCode == ituTT35ProviderCodeATSC {
+		if len(payload)-pos < 4 {
+			return ErrInvalidData
+		}
+		userIdentifier := readBE32(payload[pos:])
+		pos += 4
+		switch userIdentifier {
+		case ituTT35UserIdentifierDTG1:
+			return h.AFD.decodeRegisteredUserDataAFD(payload[pos:])
+		case ituTT35UserIdentifierGA94:
+			return h.A53Caption.decodeRegisteredUserDataClosedCaption(payload[pos:])
+		}
+	}
+	return nil
+}
+
+func (h *H2645SEIAFD) decodeRegisteredUserDataAFD(payload []byte) error {
+	if len(payload) <= 0 {
+		return ErrInvalidData
+	}
+	flag := payload[0]&0x40 != 0
+	if flag {
+		if len(payload) <= 1 {
+			return ErrInvalidData
+		}
+		h.ActiveFormatDescription = payload[1] & 0x0f
+		h.Present = 1
+	}
+	return nil
+}
+
+func (h *H2645SEIA53Caption) decodeRegisteredUserDataClosedCaption(payload []byte) error {
+	if len(payload) < 3 {
+		return ErrInvalidData
+	}
+	if payload[0] != a53UserDataTypeCodeCaption {
+		return nil
+	}
+	if payload[1]&0x40 == 0 {
+		return nil
+	}
+	ccCount := int(payload[1] & 0x1f)
+	if ccCount == 0 {
+		return nil
+	}
+	ccBytes := ccCount * 3
+	if ccBytes >= len(payload)-3 {
+		return ErrInvalidData
+	}
+	maxInt := int(^uint(0) >> 1)
+	if len(h.Data) > maxInt-ccBytes {
+		return ErrInvalidData
+	}
+	h.Data = append(h.Data, payload[3:3+ccBytes]...)
 	return nil
 }
 

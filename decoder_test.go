@@ -536,6 +536,8 @@ func TestDecodePacketFramesNewExtradataAnnexB(t *testing.T) {
 
 func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0e)},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x04, 0x05, 0x06})},
 		decoderSEITestMessage{typ: decoderSEITypeRecoveryPoint, payload: decoderSEIRecoveryPointPayload()},
 		decoderSEITestMessage{typ: decoderSEITypeGreenMetadata, payload: []byte{0, 2, 0x01, 0x23, 1, 2, 3, 4}},
 		decoderSEITestMessage{typ: decoderSEITypeDisplayOrientation, payload: decoderSEIDisplayOrientationPayload()},
@@ -562,6 +564,12 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 	}
 	if side.RecoveryPoint == nil || side.RecoveryPoint.RecoveryFrameCount != 4 {
 		t.Fatalf("recovery point = %+v", side.RecoveryPoint)
+	}
+	if side.ActiveFormat == nil || side.ActiveFormat.Description != 0x0e {
+		t.Fatalf("active format = %+v", side.ActiveFormat)
+	}
+	if got, want := side.A53ClosedCaptions, []byte{0x04, 0x05, 0x06}; !bytes.Equal(got, want) {
+		t.Fatalf("a53 captions = %x, want %x", got, want)
 	}
 	if side.GreenMetadata == nil || side.GreenMetadata.NumSeconds != 0x0123 ||
 		side.GreenMetadata.PercentIntraCodedMacroblocks != 2 {
@@ -1619,6 +1627,7 @@ func TestFFmpegFrameMD5OracleTestsrc16High422(t *testing.T) {
 
 const (
 	decoderSEITypePicTiming                    = 1
+	decoderSEITypeUserDataRegisteredITUTT35    = 4
 	decoderSEITypeRecoveryPoint                = 6
 	decoderSEITypeGreenMetadata                = 56
 	decoderSEITypeFramePackingArrangement      = 45
@@ -1735,6 +1744,21 @@ func decoderSEIPictureTimingPayload(picStruct uint32) []byte {
 }
 
 var decoderSEINumClockTSTable = [9]uint8{1, 1, 1, 2, 2, 3, 3, 2, 3}
+
+func decoderSEIRegisteredA53Payload(cc []byte) []byte {
+	if len(cc)%3 != 0 {
+		panic("A53 test payload must contain whole three-byte CC entries")
+	}
+	out := []byte{0xb5, 0x00, 0x31, 'G', 'A', '9', '4', 0x03}
+	out = append(out, 0x40|uint8(len(cc)/3), 0xff)
+	out = append(out, cc...)
+	out = append(out, 0xff)
+	return out
+}
+
+func decoderSEIRegisteredAFDPayload(description uint8) []byte {
+	return []byte{0xb5, 0x00, 0x31, 'D', 'T', 'G', '1', 0x40, description}
+}
 
 func decoderSEIRecoveryPointPayload() []byte {
 	var b decoderSEIBitBuilder
