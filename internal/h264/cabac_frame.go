@@ -14,6 +14,7 @@ type cabacFrameMacroblockInput struct {
 	SliceTypeNoS           int32
 	QScale                 int
 	LastQScaleDiff         int
+	MBFieldDecodingFlag    int32
 	RefCount               [2]uint32
 	DCT8x8Allowed          bool
 	DirectSpatialMVPred    bool
@@ -25,28 +26,31 @@ type cabacFrameMacroblockInput struct {
 }
 
 type cabacFrameMacroblockResult struct {
-	MBType            uint32
-	CBP               int
-	CBPTable          int
-	QScale            int
-	LastQScaleDiff    int
-	ChromaQP          [2]uint8
-	ChromaPred        int32
-	TopLeftAvailable  uint16
-	TopRightAvailable uint16
-	Neighbors         macroblockDecodeNeighbors
-	Intra             cavlcMacroblockSyntax
-	Inter             cavlcInterMacroblockSyntax
-	IntraPCM          []byte
-	IsIntra           bool
-	IsInter           bool
-	Skipped           bool
+	MBType              uint32
+	CBP                 int
+	CBPTable            int
+	QScale              int
+	LastQScaleDiff      int
+	MBFieldDecodingFlag int32
+	ChromaQP            [2]uint8
+	ChromaPred          int32
+	TopLeftAvailable    uint16
+	TopRightAvailable   uint16
+	Neighbors           macroblockDecodeNeighbors
+	Intra               cavlcMacroblockSyntax
+	Inter               cavlcInterMacroblockSyntax
+	IntraPCM            []byte
+	IsIntra             bool
+	IsInter             bool
+	Skipped             bool
 }
 
 type cabacFrameSliceState struct {
-	QScale         int
-	LastQScaleDiff int
-	PrevMBSkipped  bool
+	QScale              int
+	LastQScaleDiff      int
+	PrevMBSkipped       bool
+	NextMBSkipped       bool
+	MBFieldDecodingFlag int32
 }
 
 func (m *macroblockTables) decodeCABACFrameSliceMacroblock(src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16) (cabacFrameMacroblockResult, error) {
@@ -67,25 +71,66 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 	if m == nil || src == nil || sh == nil || sh.PPS == nil || sh.SPS == nil || state == nil || work == nil {
 		return result, ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame || sh.SPS.MBAFF != 0 {
+	if sh.PictureStructure != PictureFrame {
 		return result, ErrUnsupported
 	}
 	if sh.QScale > qpMaxNum || state.QScale < 0 || state.QScale > qpMaxNum {
 		return result, ErrInvalidData
 	}
 
+	frameMBAFF := sh.SPS.MBAFF != 0
+	mbX := mbXY % m.MBStride
+	mbY := mbXY / m.MBStride
+	if frameMBAFF && (mbY&1) != 0 {
+		return result, ErrUnsupported
+	}
+
 	if sh.SliceTypeNoS != PictureTypeI {
-		skip, err := m.decodeCABACMBSkip(src, mbXY, sh.SliceTypeNoS, sliceNum)
+		var skip bool
+		var err error
+		if frameMBAFF {
+			skip, err = m.decodeCABACMBSkipMBAFF(src, mbXY, mbX, mbY, sh.SliceTypeNoS, sliceNum, state.MBFieldDecodingFlag)
+		} else {
+			skip, err = m.decodeCABACMBSkip(src, mbXY, sh.SliceTypeNoS, sliceNum)
+		}
 		if err != nil {
 			return result, err
 		}
 		if skip {
 			state.PrevMBSkipped = true
 			state.LastQScaleDiff = 0
+			if frameMBAFF {
+				next, err := m.decodeCABACMBSkipMBAFF(src, mbXY+m.MBStride, mbX, mbY+1, sh.SliceTypeNoS, sliceNum, state.MBFieldDecodingFlag)
+				if err != nil {
+					return result, err
+				}
+				state.NextMBSkipped = next
+				if !next {
+					flag, err := m.decodeCABACFieldDecodingFlag(src, mbXY, mbX, sliceNum, state.MBFieldDecodingFlag != 0)
+					if err != nil {
+						return result, err
+					}
+					state.MBFieldDecodingFlag = flag
+					result.MBFieldDecodingFlag = flag
+				}
+				return result, ErrUnsupported
+			}
 			return m.writeBackCABACFrameSkipMacroblockWithDirectWorkGuard(sh, state.QScale, mbXY, sliceNum, direct, work, rejectUnsupportedHighB)
 		}
 	}
 	state.PrevMBSkipped = false
+	if frameMBAFF {
+		flag, err := m.decodeCABACFieldDecodingFlag(src, mbXY, mbX, sliceNum, state.MBFieldDecodingFlag != 0)
+		if err != nil {
+			return result, err
+		}
+		state.MBFieldDecodingFlag = flag
+		result.MBFieldDecodingFlag = flag
+		if flag != 0 {
+			result.MBType = MBTypeInterlaced
+		}
+		return result, ErrUnsupported
+	}
 
 	result, err := m.decodeCABACFrameMacroblockWithWork(src, cabacFrameMacroblockInput{
 		MBXY:                   mbXY,
@@ -94,6 +139,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		SliceTypeNoS:           sh.SliceTypeNoS,
 		QScale:                 state.QScale,
 		LastQScaleDiff:         state.LastQScaleDiff,
+		MBFieldDecodingFlag:    state.MBFieldDecodingFlag,
 		RefCount:               sh.RefCount,
 		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
@@ -125,6 +171,11 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 	}
 	if in.QScale < 0 || in.QScale > qpMaxNum {
 		return result, ErrInvalidData
+	}
+	if in.MBFieldDecodingFlag != 0 {
+		result.MBFieldDecodingFlag = in.MBFieldDecodingFlag
+		result.MBType = MBTypeInterlaced
+		return result, ErrUnsupported
 	}
 	*work = frameMacroblockDecodeWork{}
 
@@ -212,6 +263,50 @@ func (m *macroblockTables) decodeCABACMBSkip(src cabacSyntaxSource, mbXY int, sl
 		ctx++
 	}
 	if m.sameSlice(topXY, sliceNum) && !isSkip(m.MacroblockTyp[topXY]) {
+		ctx++
+	}
+	if sliceTypeNoS == PictureTypeB {
+		ctx += 13
+	} else if sliceTypeNoS != PictureTypeP {
+		return false, ErrInvalidData
+	}
+	return src.get(11+ctx) != 0, nil
+}
+
+func (m *macroblockTables) decodeCABACMBSkipMBAFF(src cabacSyntaxSource, mbXY int, mbX int, mbY int, sliceTypeNoS int32, sliceNum uint16, mbFieldDecodingFlag int32) (bool, error) {
+	if m == nil || src == nil || mbX < 0 || mbY < 0 {
+		return false, ErrInvalidData
+	}
+	if err := m.checkCodedMBXY(mbXY); err != nil {
+		return false, err
+	}
+	if sliceNum == ^uint16(0) {
+		return false, ErrInvalidData
+	}
+	mbPairXY := mbX + (mbY&^1)*m.MBStride
+	mbaXY := mbPairXY - 1
+	if (mbY&1) != 0 &&
+		m.sameSlice(mbaXY, sliceNum) &&
+		(mbFieldDecodingFlag != 0) == (m.MacroblockTyp[mbaXY]&MBTypeInterlaced != 0) {
+		mbaXY += m.MBStride
+	}
+	var mbbXY int
+	if mbFieldDecodingFlag != 0 {
+		mbbXY = mbPairXY - m.MBStride
+		if (mbY&1) == 0 &&
+			m.sameSlice(mbbXY, sliceNum) &&
+			m.MacroblockTyp[mbbXY]&MBTypeInterlaced != 0 {
+			mbbXY -= m.MBStride
+		}
+	} else {
+		mbbXY = mbX + (mbY-1)*m.MBStride
+	}
+
+	ctx := 0
+	if m.sameSlice(mbaXY, sliceNum) && !isSkip(m.MacroblockTyp[mbaXY]) {
+		ctx++
+	}
+	if m.sameSlice(mbbXY, sliceNum) && !isSkip(m.MacroblockTyp[mbbXY]) {
 		ctx++
 	}
 	if sliceTypeNoS == PictureTypeB {
