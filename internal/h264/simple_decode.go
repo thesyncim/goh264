@@ -72,6 +72,8 @@ type DecodedFrameSideData struct {
 	MasteringDisplay     H2645SEIMasteringDisplay
 	ContentLight         H2645SEIContentLight
 	ICCProfile           []uint8
+	DynamicHDR10Plus     []uint8
+	LCEVC                []uint8
 	ReferenceDisplays    AV3DReferenceDisplaysInfo
 }
 
@@ -413,6 +415,12 @@ func mergePacketSideDataIntoDecodedFrame(dst *DecodedFrameSideData, src DecodedF
 	}
 	if len(src.ICCProfile) != 0 && len(dst.ICCProfile) == 0 {
 		dst.ICCProfile = append([]uint8(nil), src.ICCProfile...)
+	}
+	if len(src.DynamicHDR10Plus) != 0 && len(dst.DynamicHDR10Plus) == 0 {
+		dst.DynamicHDR10Plus = append([]uint8(nil), src.DynamicHDR10Plus...)
+	}
+	if len(src.LCEVC) != 0 && len(dst.LCEVC) == 0 {
+		dst.LCEVC = append([]uint8(nil), src.LCEVC...)
 	}
 	if src.ReferenceDisplays.Present != 0 && dst.ReferenceDisplays.Present == 0 {
 		dst.ReferenceDisplays = cloneReferenceDisplays(src.ReferenceDisplays)

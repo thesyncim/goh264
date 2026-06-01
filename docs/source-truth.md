@@ -104,10 +104,11 @@ resetting DPB reference state. The same public packet surface maps
 `AV_PKT_DATA_S12M_TIMECODE` onto decoded frame side data as frames are allocated,
 so packet side data follows delayed B-frame output. The same path maps
 FFmpeg's global video metadata packet side data for display matrix, Stereo3D,
-spherical mapping, ICC profile, mastering display, content light, ambient
+spherical mapping, ICC profile, Dynamic HDR10+, LCEVC, mastering display, content light, ambient
 viewing environment, and 3D reference displays, using the native struct layouts
 and exact AVRational scaling into the public H.264/H.274 metadata units where
-applicable. The tests cover FFmpeg's first-matching packet entry, H.264's
+applicable; Dynamic HDR10+ and LCEVC are preserved as opaque byte side data.
+The tests cover FFmpeg's first-matching packet entry, H.264's
 packet-first A53/AFD/display/stereo ordering, S12M coded-timecode replacement
 when picture-timing exports a timecode, coded-SEI precedence over global packet
 HDR/ambient metadata, native variable-entry 3D reference display parsing, and
@@ -220,7 +221,7 @@ Included:
 - H.264 AVC/NALFF length-prefixed packet parsing when the caller supplies `nal_length_size`
 - H.264 packet side-data handling for `AV_PKT_DATA_NEW_EXTRADATA`-style
   parameter-set updates plus A53 captions, AFD, display matrix, Stereo3D,
-  spherical mapping, ICC profile, SMPTE 12M timecode, mastering display,
+  spherical mapping, ICC profile, Dynamic HDR10+, LCEVC, SMPTE 12M timecode, mastering display,
   content light, ambient viewing environment, and 3D reference display
   packet-to-frame mapping
 - H.264 NAL headers and RBSP handling

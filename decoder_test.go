@@ -573,6 +573,8 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	white := [2]uint16{15635, 16450}
 	matrix := [9]int32{65536, 0, 0, 0, -65536, 0, 123, 456, 1 << 30}
 	iccProfile := []byte{0x00, 0x00, 0x02, 0x10, 'a', 'c', 's', 'p'}
+	dynamicHDR10Plus := []byte{0x4c, 0x01, 0x02, 0x03, 0x80}
+	lcevc := []byte{0x7e, 0x01, 0x00, 0x03, 0x02, 0x7f}
 	frame, err := NewDecoder().DecodePacket(Packet{
 		Data: decodeHexFixture(t, black16AnnexBHex),
 		SideData: []PacketSideData{
@@ -589,6 +591,8 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 			{Type: PacketSideDataMasteringDisplayMetadata, Data: decoderPacketMasteringDisplaySideData(primaries, white, 10000000, 100, true, true)},
 			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(4000, 300)},
 			{Type: PacketSideDataICCProfile, Data: iccProfile},
+			{Type: PacketSideDataDynamicHDR10Plus, Data: dynamicHDR10Plus},
+			{Type: PacketSideDataLCEVC, Data: lcevc},
 			{Type: PacketSideData3DReferenceDisplays, Data: decoderPacketReferenceDisplaysSideData(
 				12, true, 9,
 				[]ReferenceDisplay{{
@@ -654,6 +658,14 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	iccProfile[0] = 0xff
 	if got, want := side.ICCProfile, []byte{0x00, 0x00, 0x02, 0x10, 'a', 'c', 's', 'p'}; !bytes.Equal(got, want) {
 		t.Fatalf("packet icc profile = %x, want %x", got, want)
+	}
+	dynamicHDR10Plus[0] = 0xff
+	if got, want := side.DynamicHDR10Plus, []byte{0x4c, 0x01, 0x02, 0x03, 0x80}; !bytes.Equal(got, want) {
+		t.Fatalf("packet dynamic hdr10+ = %x, want %x", got, want)
+	}
+	lcevc[0] = 0xff
+	if got, want := side.LCEVC, []byte{0x7e, 0x01, 0x00, 0x03, 0x02, 0x7f}; !bytes.Equal(got, want) {
+		t.Fatalf("packet lcevc = %x, want %x", got, want)
 	}
 	if side.ReferenceDisplays == nil ||
 		side.ReferenceDisplays.PrecRefDisplayWidth != 12 ||
@@ -1216,7 +1228,7 @@ func TestPacketGlobalSideDataLayoutMatchesNativeFFmpegOracle(t *testing.T) {
 	}
 	got := strings.TrimSpace(string(out))
 	want := strings.Join([]string{
-		fmt.Sprintf("%d %d %d %d %d %d %d %d", PacketSideDataDisplayMatrix, PacketSideDataStereo3D, PacketSideDataMasteringDisplayMetadata, PacketSideDataSpherical, PacketSideDataContentLightLevel, PacketSideDataICCProfile, PacketSideDataAmbientViewingEnvironment, PacketSideData3DReferenceDisplays),
+		fmt.Sprintf("%d %d %d %d %d %d %d %d %d %d", PacketSideDataDisplayMatrix, PacketSideDataStereo3D, PacketSideDataMasteringDisplayMetadata, PacketSideDataSpherical, PacketSideDataContentLightLevel, PacketSideDataICCProfile, PacketSideDataDynamicHDR10Plus, PacketSideDataAmbientViewingEnvironment, PacketSideDataLCEVC, PacketSideData3DReferenceDisplays),
 		"8 8 0 4 24 88 0 48 64 72 80 84",
 		"36 36 0 4 8 12 16 20 28",
 		"0 1 2 3 4 5 6 7 8 0 1 2 3 1",
@@ -1262,14 +1274,16 @@ const packetGlobalSideDataOracleC = `
 
 int main(void)
 {
-    printf("%d %d %d %d %d %d %d %d\n",
+    printf("%d %d %d %d %d %d %d %d %d %d\n",
            AV_PKT_DATA_DISPLAYMATRIX,
            AV_PKT_DATA_STEREO3D,
            AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
            AV_PKT_DATA_SPHERICAL,
            AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
            AV_PKT_DATA_ICC_PROFILE,
+           AV_PKT_DATA_DYNAMIC_HDR10_PLUS,
            AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT,
+           AV_PKT_DATA_LCEVC,
            AV_PKT_DATA_3D_REFERENCE_DISPLAYS);
     printf("%zu %zu %zu %zu %zu %zu %zu %zu %zu %zu %zu %zu\n",
            sizeof(AVRational),

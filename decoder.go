@@ -66,7 +66,9 @@ const (
 	PacketSideDataActiveFormat              PacketSideDataType = 26
 	PacketSideDataICCProfile                PacketSideDataType = 28
 	PacketSideDataS12MTimecode              PacketSideDataType = 30
+	PacketSideDataDynamicHDR10Plus          PacketSideDataType = 31
 	PacketSideDataAmbientViewingEnvironment PacketSideDataType = 35
+	PacketSideDataLCEVC                     PacketSideDataType = 37
 	PacketSideData3DReferenceDisplays       PacketSideDataType = 38
 )
 
@@ -100,6 +102,8 @@ type FrameSideData struct {
 	MasteringDisplay     *MasteringDisplay
 	ContentLight         *ContentLight
 	ICCProfile           []byte
+	DynamicHDR10Plus     []byte
+	LCEVC                []byte
 	ReferenceDisplays    *ReferenceDisplaysInfo
 }
 
@@ -738,6 +742,12 @@ func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameS
 	if side, ok := packetSideDataGet(sideData, PacketSideDataICCProfile); ok && len(side.Data) != 0 {
 		out.ICCProfile = append([]uint8(nil), side.Data...)
 	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataDynamicHDR10Plus); ok && len(side.Data) != 0 {
+		out.DynamicHDR10Plus = append([]uint8(nil), side.Data...)
+	}
+	if side, ok := packetSideDataGet(sideData, PacketSideDataLCEVC); ok && len(side.Data) != 0 {
+		out.LCEVC = append([]uint8(nil), side.Data...)
+	}
 	if side, ok := packetSideDataGet(sideData, PacketSideData3DReferenceDisplays); ok {
 		if displays, ok := referenceDisplaysFromPacketSideData(side.Data); ok {
 			out.ReferenceDisplays = displays
@@ -1167,6 +1177,12 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 	}
 	if len(src.ICCProfile) != 0 {
 		out.ICCProfile = append([]byte(nil), src.ICCProfile...)
+	}
+	if len(src.DynamicHDR10Plus) != 0 {
+		out.DynamicHDR10Plus = append([]byte(nil), src.DynamicHDR10Plus...)
+	}
+	if len(src.LCEVC) != 0 {
+		out.LCEVC = append([]byte(nil), src.LCEVC...)
 	}
 	if src.ReferenceDisplays.Present != 0 {
 		out.ReferenceDisplays = referenceDisplaysFromPacketSideDataValue(src.ReferenceDisplays)

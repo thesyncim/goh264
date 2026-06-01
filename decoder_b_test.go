@@ -235,6 +235,14 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 					Type: PacketSideDataDisplayMatrix,
 					Data: decoderPacketDisplayMatrixSideData([9]int32{int32(i + 1), 0, 0, 0, 65536, 0, 0, 0, 1 << 30}),
 				},
+				{
+					Type: PacketSideDataDynamicHDR10Plus,
+					Data: []byte{0xd0, byte(i + 1), 0x80},
+				},
+				{
+					Type: PacketSideDataLCEVC,
+					Data: []byte{0xe0, byte(i + 1), 0x00, 0x03, 0x01},
+				},
 			},
 		})
 		if err != nil {
@@ -255,6 +263,8 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 
 	want := [][]byte{{0x01}, {0x03}, {0x02}}
 	wantCLL := []uint32{100, 102, 101}
+	wantHDR10Plus := [][]byte{{0xd0, 0x01, 0x80}, {0xd0, 0x03, 0x80}, {0xd0, 0x02, 0x80}}
+	wantLCEVC := [][]byte{{0xe0, 0x01, 0x00, 0x03, 0x01}, {0xe0, 0x03, 0x00, 0x03, 0x01}, {0xe0, 0x02, 0x00, 0x03, 0x01}}
 	if len(frames) != len(want) {
 		t.Fatalf("frames = %d, want %d", len(frames), len(want))
 	}
@@ -267,6 +277,12 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 		}
 		if frame.SideData.DisplayOrientation == nil || frame.SideData.DisplayOrientation.Matrix[0] != int32(want[i][0]) {
 			t.Fatalf("frame[%d] packet display matrix = %+v", i, frame.SideData.DisplayOrientation)
+		}
+		if got := frame.SideData.DynamicHDR10Plus; !bytes.Equal(got, wantHDR10Plus[i]) {
+			t.Fatalf("frame[%d] packet dynamic hdr10+ = %x, want %x", i, got, wantHDR10Plus[i])
+		}
+		if got := frame.SideData.LCEVC; !bytes.Equal(got, wantLCEVC[i]) {
+			t.Fatalf("frame[%d] packet lcevc = %x, want %x", i, got, wantLCEVC[i])
 		}
 	}
 }
