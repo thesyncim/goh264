@@ -103,14 +103,20 @@ func TestAnnotateFFmpegPeerQuality(t *testing.T) {
 	ff := benchResult{RawOutput: true, RawMD5: "abc", BytesPerIter: 10}
 	goResult := benchResult{RawOutput: true, RawMD5: "abc", BytesPerIter: 10}
 	annotateFFmpegPeerQuality(&ff, goResult)
+	if ff.PeerQualityStatus != "rawvideo-md5-match-goh264" || ff.PeerQualityMetric != "rawvideo-md5" || ff.PeerQualityReference != "goh264-rawvideo" {
+		t.Fatalf("peer quality = %q/%q/%q, want Go rawvideo match",
+			ff.PeerQualityStatus, ff.PeerQualityMetric, ff.PeerQualityReference)
+	}
 	if ff.ParityStatus != "rawvideo-md5-match-goh264" {
-		t.Fatalf("parity = %q, want match", ff.ParityStatus)
+		t.Fatalf("fallback parity = %q, want peer match before an external oracle is attached", ff.ParityStatus)
 	}
 
 	ff.RawMD5 = "def"
+	ff.ParityStatus = ""
 	annotateFFmpegPeerQuality(&ff, goResult)
-	if ff.ParityStatus != "rawvideo-md5-mismatch-goh264" || ff.ErrorClass != "raw-md5-mismatch" {
-		t.Fatalf("mismatch status/class = %q/%q, want raw md5 mismatch", ff.ParityStatus, ff.ErrorClass)
+	if ff.PeerQualityStatus != "rawvideo-md5-mismatch-goh264" || ff.ParityStatus != "rawvideo-md5-mismatch-goh264" || ff.ErrorClass != "raw-md5-mismatch" {
+		t.Fatalf("mismatch peer/parity/class = %q/%q/%q, want raw md5 mismatch",
+			ff.PeerQualityStatus, ff.ParityStatus, ff.ErrorClass)
 	}
 }
 
@@ -625,17 +631,24 @@ func TestAnnotateBenchResultWithOracle(t *testing.T) {
 		Source:      "FFmpeg FATE h264-conformance",
 	}
 	result := benchResult{
-		Name:           "goh264",
-		FramesPerIter:  2,
-		BytesPerIter:   32,
-		RawPixelFormat: "yuv420p",
-		RawMD5:         "ffeeddccbbaa99887766554433221100",
+		Name:                 "goh264",
+		FramesPerIter:        2,
+		BytesPerIter:         32,
+		RawPixelFormat:       "yuv420p",
+		RawMD5:               "ffeeddccbbaa99887766554433221100",
+		PeerQualityStatus:    "rawvideo-md5-match-goh264",
+		PeerQualityMetric:    "rawvideo-md5",
+		PeerQualityReference: "goh264-rawvideo",
 	}
 	if err := annotateBenchResultWithOracle(&result, entry); err != nil {
 		t.Fatalf("annotate oracle: %v", err)
 	}
 	if result.EntryID != entry.ID || result.ExpectedBytes != 32 || result.ParityStatus != "rawvideo-md5-ok" {
 		t.Fatalf("annotated result = %+v", result)
+	}
+	if result.PeerQualityStatus != "rawvideo-md5-match-goh264" || result.PeerQualityReference != "goh264-rawvideo" {
+		t.Fatalf("peer quality after oracle annotation = %q/%q, want preserved",
+			result.PeerQualityStatus, result.PeerQualityReference)
 	}
 	if result.Source != entry.Source || len(result.FeatureTags) != len(entry.FeatureTags) {
 		t.Fatalf("annotated metadata = source %q tags %v, want %q/%v", result.Source, result.FeatureTags, entry.Source, entry.FeatureTags)

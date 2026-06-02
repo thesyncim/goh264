@@ -65,60 +65,63 @@ type benchMetadata struct {
 }
 
 type benchResult struct {
-	Name              string                 `json:"name"`
-	EntryID           string                 `json:"entry_id,omitempty"`
-	Input             string                 `json:"input"`
-	Iterations        int                    `json:"iterations"`
-	Repeats           int                    `json:"repeats"`
-	Warmup            int                    `json:"warmup"`
-	RawOutput         bool                   `json:"raw_output"`
-	RawPixelFormat    string                 `json:"raw_pixel_format,omitempty"`
-	FFmpegPixelFmt    string                 `json:"ffmpeg_pixel_format,omitempty"`
-	FramesPerIter     int                    `json:"frames_per_iter,omitempty"`
-	InputBytesPerIter int64                  `json:"input_bytes_per_iter,omitempty"`
-	BytesPerIter      int64                  `json:"bytes_per_iter,omitempty"`
-	TotalFrames       int                    `json:"total_frames,omitempty"`
-	TotalBytes        int64                  `json:"total_bytes,omitempty"`
-	ElapsedMS         float64                `json:"elapsed_ms"`
-	MeanElapsedMS     float64                `json:"mean_elapsed_ms,omitempty"`
-	MedianElapsedMS   float64                `json:"median_elapsed_ms,omitempty"`
-	MinElapsedMS      float64                `json:"min_elapsed_ms,omitempty"`
-	MaxElapsedMS      float64                `json:"max_elapsed_ms,omitempty"`
-	StddevElapsedMS   float64                `json:"stddev_elapsed_ms,omitempty"`
-	CVElapsed         float64                `json:"cv_elapsed,omitempty"`
-	FPS               float64                `json:"fps,omitempty"`
-	MiBPerSec         float64                `json:"mib_per_sec,omitempty"`
-	NSPerFrame        float64                `json:"ns_per_frame,omitempty"`
-	NSPerInputByte    float64                `json:"ns_per_input_byte,omitempty"`
-	NSPerRawByte      float64                `json:"ns_per_raw_byte,omitempty"`
-	AllocBytes        uint64                 `json:"alloc_bytes,omitempty"`
-	Allocs            uint64                 `json:"allocs,omitempty"`
-	RawMD5            string                 `json:"raw_md5,omitempty"`
-	ExpectedRawMD5    string                 `json:"expected_raw_md5,omitempty"`
-	ExpectedPixFmt    string                 `json:"expected_raw_pixel_format,omitempty"`
-	ExpectedFrames    int                    `json:"expected_frames_per_iter,omitempty"`
-	ExpectedBytes     int64                  `json:"expected_bytes_per_iter,omitempty"`
-	ParityStatus      string                 `json:"parity_status,omitempty"`
-	QualityStatus     string                 `json:"quality_status,omitempty"`
-	QualityMetric     string                 `json:"quality_metric,omitempty"`
-	QualityReference  string                 `json:"quality_reference,omitempty"`
-	ErrorClass        string                 `json:"error_class,omitempty"`
-	Surfaces          []string               `json:"surfaces,omitempty"`
-	FeatureTags       []string               `json:"feature_tags,omitempty"`
-	Source            string                 `json:"source,omitempty"`
-	Command           string                 `json:"command,omitempty"`
-	ProcessPerIter    bool                   `json:"process_per_iter"`
-	InputReadTimed    bool                   `json:"input_read_timed"`
-	StdoutPipeTimed   bool                   `json:"stdout_pipe_timed"`
-	BaselineKind      string                 `json:"baseline_kind"`
-	BackendKind       string                 `json:"backend_kind,omitempty"`
-	CPUFlags          string                 `json:"cpu_flags,omitempty"`
-	ComparisonLane    string                 `json:"comparison_lane,omitempty"`
-	Skipped           bool                   `json:"skipped,omitempty"`
-	Error             string                 `json:"error,omitempty"`
-	Notes             []string               `json:"notes,omitempty"`
-	Samples           []benchSample          `json:"samples,omitempty"`
-	FrameDiagnostics  []benchFrameDiagnostic `json:"frame_diagnostics,omitempty"`
+	Name                 string                 `json:"name"`
+	EntryID              string                 `json:"entry_id,omitempty"`
+	Input                string                 `json:"input"`
+	Iterations           int                    `json:"iterations"`
+	Repeats              int                    `json:"repeats"`
+	Warmup               int                    `json:"warmup"`
+	RawOutput            bool                   `json:"raw_output"`
+	RawPixelFormat       string                 `json:"raw_pixel_format,omitempty"`
+	FFmpegPixelFmt       string                 `json:"ffmpeg_pixel_format,omitempty"`
+	FramesPerIter        int                    `json:"frames_per_iter,omitempty"`
+	InputBytesPerIter    int64                  `json:"input_bytes_per_iter,omitempty"`
+	BytesPerIter         int64                  `json:"bytes_per_iter,omitempty"`
+	TotalFrames          int                    `json:"total_frames,omitempty"`
+	TotalBytes           int64                  `json:"total_bytes,omitempty"`
+	ElapsedMS            float64                `json:"elapsed_ms"`
+	MeanElapsedMS        float64                `json:"mean_elapsed_ms,omitempty"`
+	MedianElapsedMS      float64                `json:"median_elapsed_ms,omitempty"`
+	MinElapsedMS         float64                `json:"min_elapsed_ms,omitempty"`
+	MaxElapsedMS         float64                `json:"max_elapsed_ms,omitempty"`
+	StddevElapsedMS      float64                `json:"stddev_elapsed_ms,omitempty"`
+	CVElapsed            float64                `json:"cv_elapsed,omitempty"`
+	FPS                  float64                `json:"fps,omitempty"`
+	MiBPerSec            float64                `json:"mib_per_sec,omitempty"`
+	NSPerFrame           float64                `json:"ns_per_frame,omitempty"`
+	NSPerInputByte       float64                `json:"ns_per_input_byte,omitempty"`
+	NSPerRawByte         float64                `json:"ns_per_raw_byte,omitempty"`
+	AllocBytes           uint64                 `json:"alloc_bytes,omitempty"`
+	Allocs               uint64                 `json:"allocs,omitempty"`
+	RawMD5               string                 `json:"raw_md5,omitempty"`
+	ExpectedRawMD5       string                 `json:"expected_raw_md5,omitempty"`
+	ExpectedPixFmt       string                 `json:"expected_raw_pixel_format,omitempty"`
+	ExpectedFrames       int                    `json:"expected_frames_per_iter,omitempty"`
+	ExpectedBytes        int64                  `json:"expected_bytes_per_iter,omitempty"`
+	ParityStatus         string                 `json:"parity_status,omitempty"`
+	QualityStatus        string                 `json:"quality_status,omitempty"`
+	QualityMetric        string                 `json:"quality_metric,omitempty"`
+	QualityReference     string                 `json:"quality_reference,omitempty"`
+	PeerQualityStatus    string                 `json:"peer_quality_status,omitempty"`
+	PeerQualityMetric    string                 `json:"peer_quality_metric,omitempty"`
+	PeerQualityReference string                 `json:"peer_quality_reference,omitempty"`
+	ErrorClass           string                 `json:"error_class,omitempty"`
+	Surfaces             []string               `json:"surfaces,omitempty"`
+	FeatureTags          []string               `json:"feature_tags,omitempty"`
+	Source               string                 `json:"source,omitempty"`
+	Command              string                 `json:"command,omitempty"`
+	ProcessPerIter       bool                   `json:"process_per_iter"`
+	InputReadTimed       bool                   `json:"input_read_timed"`
+	StdoutPipeTimed      bool                   `json:"stdout_pipe_timed"`
+	BaselineKind         string                 `json:"baseline_kind"`
+	BackendKind          string                 `json:"backend_kind,omitempty"`
+	CPUFlags             string                 `json:"cpu_flags,omitempty"`
+	ComparisonLane       string                 `json:"comparison_lane,omitempty"`
+	Skipped              bool                   `json:"skipped,omitempty"`
+	Error                string                 `json:"error,omitempty"`
+	Notes                []string               `json:"notes,omitempty"`
+	Samples              []benchSample          `json:"samples,omitempty"`
+	FrameDiagnostics     []benchFrameDiagnostic `json:"frame_diagnostics,omitempty"`
 }
 
 type benchSample struct {
@@ -276,6 +279,12 @@ func main() {
 					fmt.Printf(" vs %s", r.QualityReference)
 				}
 			}
+			if r.PeerQualityStatus != "" {
+				fmt.Printf(", peer quality %s", r.PeerQualityStatus)
+				if r.PeerQualityReference != "" {
+					fmt.Printf(" vs %s", r.PeerQualityReference)
+				}
+			}
 			if r.ParityStatus != "" && r.ParityStatus != r.QualityStatus {
 				fmt.Printf(", parity %s", r.ParityStatus)
 			}
@@ -340,6 +349,12 @@ func main() {
 			fmt.Printf(", quality %s", r.QualityStatus)
 			if r.QualityReference != "" {
 				fmt.Printf(" vs %s", r.QualityReference)
+			}
+		}
+		if r.PeerQualityStatus != "" {
+			fmt.Printf(", peer quality %s", r.PeerQualityStatus)
+			if r.PeerQualityReference != "" {
+				fmt.Printf(" vs %s", r.PeerQualityReference)
 			}
 		}
 		if r.ParityStatus != "" && r.ParityStatus != r.QualityStatus {
@@ -564,7 +579,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 			meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli-fair-cpu-lanes"
 		}
 	}
-	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes preflight both FFmpeg -cpuflags 0 and native/default CPU dispatch. FFmpeg timing remains a process-per-iteration CLI baseline."
+	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes preflight both FFmpeg -cpuflags 0 and native/default CPU dispatch. Primary quality_status is the manifest rawvideo oracle when available; peer_quality_status records each FFmpeg lane's rawvideo match or mismatch against the Go lane. FFmpeg timing remains a process-per-iteration CLI baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
 }
 
@@ -1332,11 +1347,19 @@ func annotateFFmpegPeerQuality(result *benchResult, goResult benchResult) {
 	if result == nil || !result.RawOutput || result.RawMD5 == "" || goResult.RawMD5 == "" {
 		return
 	}
+	result.PeerQualityMetric = "rawvideo-md5"
+	result.PeerQualityReference = "goh264-rawvideo"
 	if result.RawMD5 == goResult.RawMD5 && result.BytesPerIter == goResult.BytesPerIter {
-		result.ParityStatus = "rawvideo-md5-match-goh264"
+		result.PeerQualityStatus = "rawvideo-md5-match-goh264"
+		if result.ParityStatus == "" {
+			result.ParityStatus = result.PeerQualityStatus
+		}
 		return
 	}
-	result.ParityStatus = "rawvideo-md5-mismatch-goh264"
+	result.PeerQualityStatus = "rawvideo-md5-mismatch-goh264"
+	if result.ParityStatus == "" {
+		result.ParityStatus = result.PeerQualityStatus
+	}
 	result.ErrorClass = "raw-md5-mismatch"
 	result.Notes = append(result.Notes,
 		fmt.Sprintf("quality mismatch versus Go output: ffmpeg md5=%s bytes=%d, go md5=%s bytes=%d",
@@ -1823,7 +1846,7 @@ func benchmarkMetadata(input string, data []byte, opts benchOptions) benchMetada
 		}
 		meta.FFmpegVersion = ffmpegVersion(opts.ffmpegBin)
 		meta.FFmpegCPUFlags = ffmpegMetadataCPUFlags(opts)
-		meta.FairnessPolicy = "Single-input mode reports Go and FFmpeg timing samples with explicit backend_kind/cpu_flags fields. FFmpeg result quality is compared against the Go rawvideo byte count and raw-MD5 when -raw=true; manifest mode is required for an external rawvideo oracle. FFmpeg timing remains a process-per-iteration CLI baseline."
+		meta.FairnessPolicy = "Single-input mode reports Go and FFmpeg timing samples with explicit backend_kind/cpu_flags fields. FFmpeg peer_quality_status is compared against the Go rawvideo byte count and raw-MD5 when -raw=true; manifest mode is required for an external rawvideo oracle quality_status. FFmpeg timing remains a process-per-iteration CLI baseline."
 	}
 	return meta
 }

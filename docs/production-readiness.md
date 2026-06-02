@@ -16,8 +16,9 @@ scripts/h264-red-vector.sh mbaff        # exits non-zero at first divergent raw 
 go run ./cmd/goh264bench -manifest testdata/h264/realvectors/manifest.jsonl -filter canl4 -iters 10 -repeats 5 -warmup 2 -ffmpeg -fair-cpu-lanes -ffmpeg-threads 1 -strict-pix-fmt -json
 ```
 
-Benchmark JSON reports selected/green/known-red counts plus backend kind, CPU
-flags, comparison lane, and raw-MD5 quality status. Use `-fair-cpu-lanes` for
-both `pure-c-vs-pure-go` and `native-cpu-vs-go-backend`. Pending: JVT/FATE bulk
-manifests, allocation gates, benchstat/profile output, larger performance
-corpus, and in-process libavcodec benchmark baseline.
+Benchmark JSON reports selected/green/known-red counts, backend kind, CPU flags,
+comparison lane, oracle `quality_status`, and FFmpeg-vs-Go
+`peer_quality_status`. Use `-fair-cpu-lanes` for both `pure-c-vs-pure-go` and
+`native-cpu-vs-go-backend`. Pending: bulk manifests, allocation gates,
+benchstat/profile output, larger performance corpus, and in-process libavcodec
+baseline.
