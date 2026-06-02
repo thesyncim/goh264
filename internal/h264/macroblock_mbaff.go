@@ -30,9 +30,11 @@ func (m *macroblockTables) fillFrameMacroblockDecodeCachesEntropy(intraCache *[h
 	}
 
 	if isInter(in.MBType) || (isDirect(in.MBType) && in.DirectSpatialMVPred) {
-		if err := m.fillMotionDecodeCaches(motion, neighbors.motionNeighbors(in.MBType, in.ListCount, in.SliceTypeNoS, in.CABAC, in.DirectSpatialMVPred)); err != nil {
+		motionNeighbors := neighbors.motionNeighbors(in.MBType, in.ListCount, in.SliceTypeNoS, in.CABAC, in.DirectSpatialMVPred)
+		if err := m.fillMotionDecodeCaches(motion, motionNeighbors); err != nil {
 			return result, err
 		}
+		h264MapMBAFFMotionNeighbors(motion, motionNeighbors)
 	}
 	return result, nil
 }
@@ -189,4 +191,42 @@ func (m *macroblockTables) fillIntraPredModeCachesMBAFF(cache *[h264IntraPredMod
 		result.TopRightSamplesAvailable &= 0xfbff
 	}
 	return result, nil
+}
+
+func h264MapMBAFFMotionNeighbors(cache *macroblockMotionCache, n motionDecodeNeighbors) {
+	if cache == nil {
+		return
+	}
+	for list := 0; list < n.ListCount && list < 2; list++ {
+		if !usesList(n.MBType, list) {
+			continue
+		}
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])-1-8, n.TopLeftType, n.MBType)
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])+0-8, n.TopType, n.MBType)
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])+1-8, n.TopType, n.MBType)
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])+2-8, n.TopType, n.MBType)
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])+3-8, n.TopType, n.MBType)
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])+4-8, n.TopRightType, n.MBType)
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])-1+0*8, n.LeftType[h264LeftTop], n.MBType)
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])-1+1*8, n.LeftType[h264LeftTop], n.MBType)
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])-1+2*8, n.LeftType[h264LeftBot], n.MBType)
+		h264MapMBAFFMotionNeighbor(cache, list, int(h264Scan8[0])-1+3*8, n.LeftType[h264LeftBot], n.MBType)
+	}
+}
+
+func h264MapMBAFFMotionNeighbor(cache *macroblockMotionCache, list int, idx int, neighborType uint32, mbType uint32) {
+	if idx < 0 || idx >= h264MotionCacheSize || list < 0 || list > 1 || cache.Ref[list][idx] < 0 {
+		return
+	}
+	mbField := mbType&MBTypeInterlaced != 0
+	neighborField := neighborType&MBTypeInterlaced != 0
+	if mbField && !neighborField {
+		cache.Ref[list][idx] *= 2
+		cache.MV[list][idx][1] /= 2
+		cache.MVD[list][idx][1] >>= 1
+	} else if !mbField && neighborField {
+		cache.Ref[list][idx] >>= 1
+		cache.MV[list][idx][1] = int16(int(cache.MV[list][idx][1]) * 2)
+		cache.MVD[list][idx][1] <<= 1
+	}
 }

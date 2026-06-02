@@ -281,6 +281,68 @@ func TestFillDecodeNeighborsFrameMBAFFOddFrameLeftRemap(t *testing.T) {
 	}
 }
 
+func TestH264MapMBAFFMotionNeighborsFieldCurrentScalesFrameNeighbors(t *testing.T) {
+	var cache macroblockMotionCache
+	idxs := []int{
+		int(h264Scan8[0]) - 1 - 8,
+		int(h264Scan8[0]) + 0 - 8,
+		int(h264Scan8[0]) + 4 - 8,
+		int(h264Scan8[0]) - 1 + 0*8,
+		int(h264Scan8[0]) - 1 + 3*8,
+	}
+	for i, idx := range idxs {
+		cache.Ref[0][idx] = int8(i + 1)
+		cache.MV[0][idx] = [2]int16{int16(i), int16(10 + 2*i)}
+		cache.MVD[0][idx] = [2]uint8{uint8(i), uint8(8 + 2*i)}
+	}
+
+	h264MapMBAFFMotionNeighbors(&cache, motionDecodeNeighbors{
+		MBType:       MBTypeInterlaced | MBType16x16 | MBTypeP0L0,
+		TopType:      MBType16x16 | MBTypeP0L0,
+		TopLeftType:  MBType16x16 | MBTypeP0L0,
+		TopRightType: MBType16x16 | MBTypeP0L0,
+		LeftType:     [2]uint32{MBType16x16 | MBTypeP0L0, MBType16x16 | MBTypeP0L0},
+		ListCount:    1,
+	})
+
+	for i, idx := range idxs {
+		if cache.Ref[0][idx] != int8(2*(i+1)) || cache.MV[0][idx][1] != int16(5+i) || cache.MVD[0][idx][1] != uint8(4+i) {
+			t.Fatalf("mapped field idx %d = ref %d mvY %d mvdY %d", idx, cache.Ref[0][idx], cache.MV[0][idx][1], cache.MVD[0][idx][1])
+		}
+	}
+}
+
+func TestH264MapMBAFFMotionNeighborsFrameCurrentScalesFieldNeighbors(t *testing.T) {
+	var cache macroblockMotionCache
+	idxs := []int{
+		int(h264Scan8[0]) - 1 - 8,
+		int(h264Scan8[0]) + 0 - 8,
+		int(h264Scan8[0]) + 4 - 8,
+		int(h264Scan8[0]) - 1 + 0*8,
+		int(h264Scan8[0]) - 1 + 3*8,
+	}
+	for i, idx := range idxs {
+		cache.Ref[1][idx] = int8(2*i + 3)
+		cache.MV[1][idx] = [2]int16{int16(i), int16(5 + i)}
+		cache.MVD[1][idx] = [2]uint8{uint8(i), uint8(4 + i)}
+	}
+
+	h264MapMBAFFMotionNeighbors(&cache, motionDecodeNeighbors{
+		MBType:       MBType16x16 | MBTypeP0L1,
+		TopType:      MBTypeInterlaced | MBType16x16 | MBTypeP0L1,
+		TopLeftType:  MBTypeInterlaced | MBType16x16 | MBTypeP0L1,
+		TopRightType: MBTypeInterlaced | MBType16x16 | MBTypeP0L1,
+		LeftType:     [2]uint32{MBTypeInterlaced | MBType16x16 | MBTypeP0L1, MBTypeInterlaced | MBType16x16 | MBTypeP0L1},
+		ListCount:    2,
+	})
+
+	for i, idx := range idxs {
+		if cache.Ref[1][idx] != int8((2*i+3)>>1) || cache.MV[1][idx][1] != int16(2*(5+i)) || cache.MVD[1][idx][1] != uint8(2*(4+i)) {
+			t.Fatalf("mapped frame idx %d = ref %d mvY %d mvdY %d", idx, cache.Ref[1][idx], cache.MV[1][idx][1], cache.MVD[1][idx][1])
+		}
+	}
+}
+
 func TestFillFrameMacroblockDecodeCachesComposesResidualAndMotion(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {
