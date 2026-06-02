@@ -292,6 +292,165 @@ func TestPredTemporalDirectMapsMBAFFColocatedFieldRef(t *testing.T) {
 	}
 }
 
+func TestTemporalDirectFrameMBAFFBottomFieldColmapUsesRFieldXOR(t *testing.T) {
+	past := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 2}, frameNum: 7}
+	col := &DecodedFrame{
+		refEntries: [2][]simpleRefEntry{
+			{{frame: past, picID: past.frameNum, pictureStructure: PictureFrame, poc: past.poc}},
+		},
+	}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: past, picID: past.frameNum, pictureStructure: PictureFrame, poc: past.poc}},
+			{{frame: col, pictureStructure: PictureFrame, poc: col.poc}},
+		},
+		PictureStructure: PictureFrame,
+	}
+
+	got, err := temporalDirectMapColToList0Field(ctx, 0, 1, true, 1)
+	if err != nil {
+		t.Fatalf("bottom-field colmap failed: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("bottom-field colmap ref = %d, want visible top-field ref 1", got)
+	}
+	got, err = temporalDirectMapColToList0Field(ctx, 0, 0, true, 1)
+	if err != nil {
+		t.Fatalf("bottom-field colmap bottom ref failed: %v", err)
+	}
+	if got != 0 {
+		t.Fatalf("bottom-field colmap bottom ref = %d, want visible bottom-field ref 0", got)
+	}
+}
+
+func TestPredTemporalDirectFrameMBAFFBottomFieldUsesXoredColFieldRef(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mbXY := m.MBStride
+	past := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 30}, frameNum: 7}
+	col := &DecodedFrame{
+		poc:      20,
+		fieldPOC: [2]int32{10, 12},
+		tables:   colTables,
+		refEntries: [2][]simpleRefEntry{
+			{{frame: past, picID: past.frameNum, pictureStructure: PictureFrame, poc: past.poc}},
+		},
+	}
+	colTables.MacroblockTyp[mbXY] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colTables.RefIndex[0][4*mbXY] = 1
+	colTables.MotionVal[0][colTables.MB2BXY[mbXY]] = [2]int16{4, 2}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1 | MBTypeInterlaced
+	err = m.predDirectMotionFrame(&cache, mbXY, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: past, picID: past.frameNum, pictureStructure: PictureFrame, poc: past.poc}},
+			{{frame: col, pictureStructure: PictureFrame, poc: col.poc}},
+		},
+		CurPOC:             6,
+		CurFieldPOC:        [2]int32{4, 6},
+		PictureStructure:   PictureFrame,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("frame-MBAFF bottom temporal direct failed: %v", err)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 1 || cache.Ref[1][base] != 0 {
+		t.Fatalf("refs = %d/%d, want expanded list0 ref 1 and list1 ref 0", cache.Ref[0][base], cache.Ref[1][base])
+	}
+	if cache.MV[0][base] != ([2]int16{2, 1}) || cache.MV[1][base] != ([2]int16{-2, -1}) {
+		t.Fatalf("mvs = %v/%v, want top-field ref scaled from bottom current field", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
+func TestTemporalDirectFrameMBAFFFieldDistScaleUsesFieldPOCs(t *testing.T) {
+	past := &DecodedFrame{poc: 10, fieldPOC: [2]int32{0, 20}}
+	future := &DecodedFrame{poc: 20, fieldPOC: [2]int32{4, 40}}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: past, pictureStructure: PictureFrame, poc: past.poc}},
+			{{frame: future, pictureStructure: PictureFrame, poc: future.poc}},
+		},
+		CurPOC:           8,
+		CurFieldPOC:      [2]int32{2, 30},
+		PictureStructure: PictureFrame,
+	}
+	layout := directColocatedLayout{CurInterlaced: true, CurFieldParity: 0}
+	fieldScale, err := temporalDirectDistScaleFactorForLayout(ctx, 0, layout)
+	if err != nil {
+		t.Fatalf("field dist scale failed: %v", err)
+	}
+	if fieldScale != 128 {
+		t.Fatalf("field dist scale = %d, want 128 from top-field POCs", fieldScale)
+	}
+	frameScale, err := temporalDirectDistScaleFactor(ctx, 0)
+	if err != nil {
+		t.Fatalf("frame dist scale failed: %v", err)
+	}
+	if frameScale == fieldScale {
+		t.Fatalf("frame dist scale also = %d; test no longer distinguishes field POCs", frameScale)
+	}
+}
+
+func TestPredTemporalDirectFrameMBAFFFieldMacroblockUsesFieldScale(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	past := &DecodedFrame{poc: 10, fieldPOC: [2]int32{0, 20}}
+	col := &DecodedFrame{
+		poc:      20,
+		fieldPOC: [2]int32{4, 40},
+		tables:   colTables,
+		refEntries: [2][]simpleRefEntry{
+			{{frame: past, pictureStructure: PictureFrame, poc: past.poc}},
+		},
+	}
+	colTables.MacroblockTyp[0] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0
+	colTables.MacroblockTyp[colTables.MBStride] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0
+	colTables.RefIndex[0][0] = 0
+	colTables.MotionVal[0][colTables.MB2BXY[0]] = [2]int16{4, 4}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1 | MBTypeInterlaced
+	err = m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: past, pictureStructure: PictureFrame, poc: past.poc}},
+			{{frame: col, pictureStructure: PictureFrame, poc: col.poc}},
+		},
+		CurPOC:             8,
+		CurFieldPOC:        [2]int32{2, 30},
+		PictureStructure:   PictureFrame,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("frame-MBAFF field temporal direct failed: %v", err)
+	}
+	if !is16x8(mbType) || !isDirect(mbType) {
+		t.Fatalf("mbType = %#x, want interlaced mismatch direct 16x8", mbType)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 0 || cache.Ref[1][base] != 0 {
+		t.Fatalf("refs = %d/%d, want 0/0", cache.Ref[0][base], cache.Ref[1][base])
+	}
+	if cache.MV[0][base] != ([2]int16{2, 1}) || cache.MV[1][base] != ([2]int16{-2, -1}) {
+		t.Fatalf("mvs = %v/%v, want field-scaled temporal direct", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
 func TestPredTemporalDirectColocatedRefMapMissingFallsBackToZero(t *testing.T) {
 	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0)
 	col.tables.RefIndex[0][0] = 1

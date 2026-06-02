@@ -378,8 +378,10 @@ func (c simpleFrameRefContext) directMotionContext(frame *DecodedFrame, sh *Slic
 		x264Build = sei.Common.Unregistered.X264Build
 	}
 	var curPOC int32
+	var curFieldPOC [2]int32
 	if frame != nil {
 		curPOC = frame.poc
+		curFieldPOC = frame.fieldPOC
 		if sh != nil && sh.PictureStructure != PictureFrame {
 			if poc, err := simpleFrameCurrentPOC(frame, sh.PictureStructure); err == nil {
 				curPOC = poc
@@ -399,6 +401,7 @@ func (c simpleFrameRefContext) directMotionContext(frame *DecodedFrame, sh *Slic
 	return h264DirectMotionContext{
 		RefEntries:          c.Entries,
 		CurPOC:              curPOC,
+		CurFieldPOC:         curFieldPOC,
 		PictureStructure:    pictureStructure,
 		DirectSpatialMVPred: directSpatial,
 		Direct8x8Inference:  direct8x8,
