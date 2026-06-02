@@ -194,6 +194,9 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 	if err != nil {
 		return result, err
 	}
+	if in.FieldPicture {
+		base.MBType |= MBTypeInterlaced
+	}
 	result.MBType = base.MBType
 	if in.RejectUnsupportedHighB {
 		if err := validateHighFrameSliceBaseMacroblockForDecode(in.SliceTypeNoS, base.MBType); err != nil {
@@ -239,7 +242,7 @@ func (m *macroblockTables) decodeCABACFrameIntraPCMMacroblock(src cabacSyntaxSou
 	base.IntraPCM = pcm
 	base.QScale = 0
 	base.CBPTable = 0xf7ef
-	if err := m.writeBackCABACIntraPCMMacroblock(in.MBXY, in.SliceNum); err != nil {
+	if err := m.writeBackCABACIntraPCMMacroblock(in.MBXY, base.MBType, in.SliceNum); err != nil {
 		return result, err
 	}
 	result.MBType = base.MBType
@@ -384,6 +387,9 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkGuard(
 	}
 
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	if sh.PictureStructure != PictureFrame {
+		mbType |= MBTypeInterlaced
+	}
 	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, sh.PictureStructure != PictureFrame)
 	if err != nil {
 		return result, err
@@ -411,6 +417,9 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWork(sh *
 func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	mbType := MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
+	if sh.PictureStructure != PictureFrame {
+		mbType |= MBTypeInterlaced
+	}
 	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, sh.PictureStructure != PictureFrame)
 	if err != nil {
 		return result, err
@@ -922,30 +931,27 @@ func (c *cavlcResidualContext) decodeCABACResidualPayload(src cabacSyntaxSource,
 		chromaQP[0] = pps.ChromaQPTable[0][qscale]
 		chromaQP[1] = pps.ChromaQPTable[1][qscale]
 
-		if mbType&MBTypeInterlaced != 0 {
-			return qscale, chromaQP, cbpTable, lastQScaleDiff, ErrUnsupported
-		}
-
-		scan, scan8x8 := h264CABACScansForQScale(sps, qscale)
+		mbField := mbType&MBTypeInterlaced != 0
+		scan, scan8x8 := h264CABACScansForQScale(sps, qscale, mbField)
 		narrowDCT := sps.BitDepthLuma == 8
-		ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 0, qscale, cacheResult.LeftCBP, cacheResult.TopCBP, false, false, narrowDCT)
+		ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 0, qscale, cacheResult.LeftCBP, cacheResult.TopCBP, mbField, false, narrowDCT)
 		if err != nil {
 			return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 		}
 		cbpTable |= ret
 		if sps.ChromaFormatIDC == 3 {
-			ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 1, int(chromaQP[0]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true, narrowDCT)
+			ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 1, int(chromaQP[0]), cacheResult.LeftCBP, cacheResult.TopCBP, mbField, true, narrowDCT)
 			if err != nil {
 				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 			}
 			cbpTable |= ret
-			ret, err = c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 2, int(chromaQP[1]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true, narrowDCT)
+			ret, err = c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 2, int(chromaQP[1]), cacheResult.LeftCBP, cacheResult.TopCBP, mbField, true, narrowDCT)
 			if err != nil {
 				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 			}
 			cbpTable |= ret
 		} else {
-			ret, err := c.decodeCABACChromaResidualTyped(src, pps, scan, mbType, cbp, int32(sps.ChromaFormatIDC), chromaQP, cacheResult.LeftCBP, cacheResult.TopCBP, false, narrowDCT)
+			ret, err := c.decodeCABACChromaResidualTyped(src, pps, scan, mbType, cbp, int32(sps.ChromaFormatIDC), chromaQP, cacheResult.LeftCBP, cacheResult.TopCBP, mbField, narrowDCT)
 			if err != nil {
 				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 			}

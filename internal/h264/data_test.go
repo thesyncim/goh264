@@ -111,21 +111,28 @@ func TestScanTables(t *testing.T) {
 	if h264ZigzagScan8x8CABAC[1] != 8 || h264ZigzagScan8x8CABAC[2] != 1 || h264ZigzagScan8x8CABAC[63] != 63 {
 		t.Fatalf("zigzag8x8 cabac spots = %d %d %d", h264ZigzagScan8x8CABAC[1], h264ZigzagScan8x8CABAC[2], h264ZigzagScan8x8CABAC[63])
 	}
+	if h264FieldScan8x8CABAC[1] != 1 || h264FieldScan8x8CABAC[3] != 8 || h264FieldScan8x8CABAC[63] != 63 {
+		t.Fatalf("field8x8 cabac spots = %d %d %d", h264FieldScan8x8CABAC[1], h264FieldScan8x8CABAC[3], h264FieldScan8x8CABAC[63])
+	}
 	sps := &SPS{TransformBypass: 1}
 	scan, scan8x8 := h264CAVLCScansForQScale(sps, 0)
 	if scan[1] != 1 || scan8x8[7] != 7 {
 		t.Fatalf("q0 cavlc scans = %d %d, want untransposed spots", scan[1], scan8x8[7])
 	}
-	scan, scan8x8 = h264CABACScansForQScale(sps, 0)
+	scan, scan8x8 = h264CABACScansForQScale(sps, 0, false)
 	if scan[1] != 1 || scan8x8[2] != 8 {
 		t.Fatalf("q0 cabac scans = %d %d, want direct spots", scan[1], scan8x8[2])
 	}
-	scan, scan8x8 = h264CABACScansForQScale(sps, 26)
+	scan, scan8x8 = h264CABACScansForQScale(sps, 26, false)
 	if scan[1] != 4 || scan8x8[1] != 8 || scan8x8[2] != 1 {
 		t.Fatalf("non-q0 cabac scans = %d %d %d, want transposed zigzag/direct spots", scan[1], scan8x8[1], scan8x8[2])
 	}
 	if scan8x8[1] == h264ZigzagScan8x8CAVLC[1] {
 		t.Fatalf("non-q0 cabac 8x8 scan reused CAVLC table at index 1")
+	}
+	scan, scan8x8 = h264CABACScansForQScale(sps, 26, true)
+	if scan[1] != 1 || scan8x8[1] != 1 || scan8x8[3] != 8 {
+		t.Fatalf("field cabac scans = %d %d %d, want transposed field spots", scan[1], scan8x8[1], scan8x8[3])
 	}
 	if h264ChromaDCScan != ([4]uint8{0, 16, 32, 48}) {
 		t.Fatalf("chroma dc scan = %v", h264ChromaDCScan)

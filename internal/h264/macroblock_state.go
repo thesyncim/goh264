@@ -62,8 +62,11 @@ func (m *macroblockTables) writeBackCAVLCIntraPCMMacroblock(mbXY int, sliceNum u
 	return nil
 }
 
-func (m *macroblockTables) writeBackCABACIntraPCMMacroblock(mbXY int, sliceNum uint16) error {
-	if err := m.writeBackMacroblockTables(mbXY, MBTypeIntraPCM, 0xf7ef, 0, sliceNum); err != nil {
+func (m *macroblockTables) writeBackCABACIntraPCMMacroblock(mbXY int, mbType uint32, sliceNum uint16) error {
+	if mbType&MBTypeIntraPCM == 0 {
+		return ErrInvalidData
+	}
+	if err := m.writeBackMacroblockTables(mbXY, mbType, 0xf7ef, 0, sliceNum); err != nil {
 		return err
 	}
 	m.ChromaPred[mbXY] = 0

@@ -211,6 +211,25 @@ var h264FieldScan = [16]uint8{
 	3 + 0*4, 3 + 1*4, 3 + 2*4, 3 + 3*4,
 }
 
+var h264FieldScan8x8Raw = [64]uint8{
+	0 + 0*8, 0 + 1*8, 0 + 2*8, 1 + 0*8,
+	1 + 1*8, 0 + 3*8, 0 + 4*8, 1 + 2*8,
+	2 + 0*8, 1 + 3*8, 0 + 5*8, 0 + 6*8,
+	0 + 7*8, 1 + 4*8, 2 + 1*8, 3 + 0*8,
+	2 + 2*8, 1 + 5*8, 1 + 6*8, 1 + 7*8,
+	2 + 3*8, 3 + 1*8, 4 + 0*8, 3 + 2*8,
+	2 + 4*8, 2 + 5*8, 2 + 6*8, 2 + 7*8,
+	3 + 3*8, 4 + 1*8, 5 + 0*8, 4 + 2*8,
+	3 + 4*8, 3 + 5*8, 3 + 6*8, 3 + 7*8,
+	4 + 3*8, 5 + 1*8, 6 + 0*8, 5 + 2*8,
+	4 + 4*8, 4 + 5*8, 4 + 6*8, 4 + 7*8,
+	5 + 3*8, 6 + 1*8, 6 + 2*8, 5 + 4*8,
+	5 + 5*8, 5 + 6*8, 5 + 7*8, 6 + 3*8,
+	7 + 0*8, 7 + 1*8, 6 + 4*8, 6 + 5*8,
+	6 + 6*8, 6 + 7*8, 7 + 2*8, 7 + 3*8,
+	7 + 4*8, 7 + 5*8, 7 + 6*8, 7 + 7*8,
+}
+
 var h264ZigzagDirect = [64]uint8{
 	0, 1, 8, 16, 9, 2, 3, 10,
 	17, 24, 32, 25, 18, 11, 4, 5,
@@ -257,6 +276,7 @@ var h264ZigzagScanCAVLC = transposeScan4(h264ZigzagScan)
 var h264FieldScanCAVLC = transposeScan4(h264FieldScan)
 var h264ZigzagScan8x8CAVLC = transposeScan8(h264ZigzagScan8x8CAVLCRaw)
 var h264ZigzagScan8x8CABAC = transposeScan8(h264ZigzagDirect)
+var h264FieldScan8x8CABAC = transposeScan8(h264FieldScan8x8Raw)
 
 func h264CAVLCScansForQScale(sps *SPS, qscale int) ([]uint8, []uint8) {
 	if sps != nil && sps.TransformBypass != 0 && qscale == 0 {
@@ -265,9 +285,15 @@ func h264CAVLCScansForQScale(sps *SPS, qscale int) ([]uint8, []uint8) {
 	return h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CAVLC[:]
 }
 
-func h264CABACScansForQScale(sps *SPS, qscale int) ([]uint8, []uint8) {
+func h264CABACScansForQScale(sps *SPS, qscale int, mbField bool) ([]uint8, []uint8) {
 	if sps != nil && sps.TransformBypass != 0 && qscale == 0 {
+		if mbField {
+			return h264FieldScan[:], h264FieldScan8x8Raw[:]
+		}
 		return h264ZigzagScan[:], h264ZigzagDirect[:]
+	}
+	if mbField {
+		return h264FieldScanCAVLC[:], h264FieldScan8x8CABAC[:]
 	}
 	return h264ZigzagScanCAVLC[:], h264ZigzagScan8x8CABAC[:]
 }

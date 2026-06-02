@@ -151,15 +151,64 @@ func TestDecodeCABACFieldPictureIntraPCMMacroblockPassesMBAFFGuard(t *testing.T)
 			if err != nil {
 				t.Fatalf("decode field-picture intra pcm failed: %v", err)
 			}
-			if got.MBType != MBTypeIntraPCM || !got.IsIntra || got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 {
+			wantType := MBTypeIntraPCM | MBTypeInterlaced
+			if got.MBType != wantType || !got.IsIntra || got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 {
 				t.Fatalf("result type/intra/field = %#x/%v/%d/%d, want intra pcm field-picture without MBAFF flag", got.MBType, got.IsIntra, got.MBFieldDecodingFlag, state.MBFieldDecodingFlag)
 			}
-			if m.SliceTable[mbXY] != 6 || m.MacroblockTyp[mbXY] != MBTypeIntraPCM || m.QScaleTable[mbXY] != 0 {
+			if m.SliceTable[mbXY] != 6 || m.MacroblockTyp[mbXY] != wantType || m.QScaleTable[mbXY] != 0 {
 				t.Fatalf("tables slice/type/q = %d/%#x/%d, want 6/intra pcm/0", m.SliceTable[mbXY], m.MacroblockTyp[mbXY], m.QScaleTable[mbXY])
 			}
 			wantIndexes(t, src, []int{3})
 		})
 	}
+}
+
+func TestDecodeCABACFieldPictureResidualUsesFieldContexts(t *testing.T) {
+	m, err := newMacroblockTables(2, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sliceNum = uint16(6)
+	m.SliceTable[0] = sliceNum
+	m.MacroblockTyp[0] = MBTypeIntra4x4 | MBTypeInterlaced
+
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	src := &scriptedCABACSource{
+		bits: []int{
+			1,    // intra16x16
+			0, 0, // no luma/chroma CBP
+			0, 1, // horizontal intra16x16 pred, valid with left-only samples
+			0,       // chroma pred DC
+			0,       // qscale diff absent
+			1, 1, 1, // luma DC coded, significant, last
+			0, // coeff_abs_level_minus1 == 0
+		},
+		terms: []int{0},
+	}
+
+	got, err := m.decodeCABACFrameMacroblock(src, cabacFrameMacroblockInput{
+		MBXY:         1,
+		SliceNum:     sliceNum,
+		SliceType:    PictureTypeI,
+		SliceTypeNoS: PictureTypeI,
+		QScale:       20,
+		FieldPicture: true,
+		PPS:          pps,
+		SPS:          sps,
+	})
+	if err != nil {
+		t.Fatalf("decode field-picture cabac residual failed: %v", err)
+	}
+	wantType := MBTypeIntra16x16 | MBTypeInterlaced
+	if got.MBType != wantType || !got.IsIntra || got.CBPTable&0x100 == 0 {
+		t.Fatalf("result type/intra/cbpTable = %#x/%v/%#x, want field intra16 with luma DC", got.MBType, got.IsIntra, got.CBPTable)
+	}
+	if m.MacroblockTyp[1] != wantType {
+		t.Fatalf("written mb type = %#x, want %#x", m.MacroblockTyp[1], wantType)
+	}
+	wantIndexes(t, src, []int{3, 6, 7, 9, 10, 64, 60, 87, 277, 338, 228})
 }
 
 func TestDecodeCABACFrameMBAFFFrameMacroblockDecodesAfterFieldFlag(t *testing.T) {
