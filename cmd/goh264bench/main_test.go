@@ -5,6 +5,7 @@ package main
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -194,6 +195,34 @@ func TestBenchManifestReportsKnownRedRowsWithoutBenchmarking(t *testing.T) {
 	}
 	if notes := strings.Join(report.Results[0].Notes, "\n"); !strings.Contains(notes, `expected current failure: class=input-missing contains="missing.264"`) {
 		t.Fatalf("known-red notes = %q, want expected failure signature", notes)
+	}
+}
+
+func TestKnownRedBenchResultMarksSignatureDrift(t *testing.T) {
+	entry := benchCorpusEntry{
+		ID:          "known-red",
+		Path:        "sample.264",
+		Expect:      "decode-ok",
+		PixFmt:      "yuv420p",
+		FrameCount:  1,
+		FrameSize:   16,
+		RawVideoMD5: "00112233445566778899aabbccddeeff",
+		Surfaces:    []string{"annexb"},
+		FeatureTags: []string{"mbaff"},
+		KnownFailure: &benchKnownFailure{
+			Class:          "decode-error",
+			DetailContains: "unsupported bitstream feature",
+		},
+	}
+	result := knownRedBenchResult(entry, "sample.264", []byte{1, 2, 3}, errors.New("decode: h264: invalid data"), "failures.jsonl")
+	if result.ParityStatus != "known-red-signature-drift" {
+		t.Fatalf("parity status = %q, want known-red-signature-drift", result.ParityStatus)
+	}
+	if result.ErrorClass != "decode-error" {
+		t.Fatalf("error class = %q, want decode-error", result.ErrorClass)
+	}
+	if notes := strings.Join(result.Notes, "\n"); !strings.Contains(notes, "current failure signature drifted") {
+		t.Fatalf("notes = %q, want signature drift note", notes)
 	}
 }
 

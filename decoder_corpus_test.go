@@ -264,6 +264,55 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 	}
 }
 
+func TestH264RealVectorFailureMatrix(t *testing.T) {
+	if os.Getenv("GOH264_REAL_VECTOR_MATRIX") != "1" {
+		t.Skip("set GOH264_REAL_VECTOR_MATRIX=1 to run the public-vector pass/known-red matrix")
+	}
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
+	failureByID := h264CorpusFailureLedgerByID(t, manifest, failures)
+	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
+		manifest = filterH264CorpusEntries(manifest, filter)
+		if len(manifest) == 0 {
+			t.Fatalf("%s: no manifest entries matched GOH264_CORPUS_FILTER=%q; available filters: %s",
+				defaultH264RealVectorManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(readH264CorpusManifest(t, defaultH264RealVectorManifest)))
+		}
+	}
+
+	var green, knownRed int
+	for _, entry := range manifest {
+		entry := entry
+		t.Run(entry.ID, func(t *testing.T) {
+			validateH264CorpusEntry(t, entry)
+			if entry.Expect != "decode-ok" {
+				t.Fatalf("%s: real-vector matrix only supports decode-ok oracle rows, got %q", entry.ID, entry.Expect)
+			}
+			path := materializeH264CorpusEntry(t, defaultH264RealVectorManifest, entry)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			assertCorpusBitstreamMD5(t, entry, data)
+			matches, detail := h264CorpusAnnexBMatchesOracle(t, entry, data)
+			if failure, ok := failureByID[entry.ID]; ok {
+				knownRed++
+				if matches {
+					t.Fatalf("%s: known-red row now matches oracle; remove it from %s", entry.ID, defaultH264RealVectorFailureManifest)
+				}
+				assertH264CorpusKnownFailureStillCurrent(t, failure, detail)
+				t.Logf("known-red: %s", h264CorpusFailureDetail(failure, detail))
+				return
+			}
+			green++
+			if !matches {
+				t.Fatalf("%s: unexpected public-vector failure: %s", entry.ID, h264CorpusFailureDetail(entry, detail))
+			}
+			t.Logf("green: matched rawvideo oracle")
+		})
+	}
+	t.Logf("public-vector matrix selected=%d green=%d known-red=%d", len(manifest), green, knownRed)
+}
+
 func validateH264CorpusKnownFailure(t *testing.T, entry h264CorpusEntry) {
 	t.Helper()
 	if entry.KnownFailure == nil {
@@ -282,6 +331,31 @@ func validateH264CorpusKnownFailure(t *testing.T, entry h264CorpusEntry) {
 func h264CorpusEntryWithoutKnownFailure(entry h264CorpusEntry) h264CorpusEntry {
 	entry.KnownFailure = nil
 	return entry
+}
+
+func h264CorpusFailureLedgerByID(t *testing.T, manifest []h264CorpusEntry, failures []h264CorpusEntry) map[string]h264CorpusEntry {
+	t.Helper()
+	manifestByID := make(map[string]h264CorpusEntry, len(manifest))
+	for _, entry := range manifest {
+		manifestByID[entry.ID] = entry
+	}
+	failureByID := make(map[string]h264CorpusEntry, len(failures))
+	for _, failure := range failures {
+		validateH264CorpusEntry(t, failure)
+		validateH264CorpusKnownFailure(t, failure)
+		if _, ok := failureByID[failure.ID]; ok {
+			t.Fatalf("%s: duplicate failure-ledger id", failure.ID)
+		}
+		manifestEntry, ok := manifestByID[failure.ID]
+		if !ok {
+			t.Fatalf("%s: failure-ledger row is missing from %s", failure.ID, defaultH264RealVectorManifest)
+		}
+		if !reflect.DeepEqual(h264CorpusEntryWithoutKnownFailure(failure), h264CorpusEntryWithoutKnownFailure(manifestEntry)) {
+			t.Fatalf("%s: failure-ledger row drifted from real-vector manifest\nfailure=%+v\nmanifest=%+v", failure.ID, failure, manifestEntry)
+		}
+		failureByID[failure.ID] = failure
+	}
+	return failureByID
 }
 
 func assertH264CorpusKnownFailureStillCurrent(t *testing.T, entry h264CorpusEntry, detail string) {

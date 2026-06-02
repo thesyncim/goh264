@@ -273,6 +273,63 @@ func TestMacroblockTablesFilterFrameHighSliceBoundaryModeSkipsCrossSliceBoundary
 	}
 }
 
+func TestMacroblockTablesFilterFrameHigh422DCTHorizontalChromaOnlyEdge(t *testing.T) {
+	const (
+		stride   = 16
+		bitDepth = 10
+		qp       = 42
+	)
+	m, err := newMacroblockTables(1, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := &h264PicturePlanesHigh{
+		Y:               make([]uint16, stride*16),
+		Cb:              make([]uint16, stride*16),
+		Cr:              make([]uint16, stride*16),
+		LumaStride:      stride,
+		ChromaStride:    stride,
+		MBWidth:         1,
+		MBHeight:        1,
+		ChromaFormatIDC: 2,
+	}
+	fillHighLoopFilterHorizontalStep(dst.Y, stride, 16, 16, 4, 400, 408)
+	fillHighLoopFilterHorizontalStep(dst.Cb, stride, 16, 16, 4, 300, 308)
+	fillHighLoopFilterHorizontalStep(dst.Cr, stride, 16, 16, 4, 200, 208)
+	m.MacroblockTyp[0] = MBTypeIntra4x4 | MBType8x8DCT
+	m.CBPTable[0] = 0xf
+	m.QScaleTable[0] = qp
+	m.SliceTable[0] = 0
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     bitDepth,
+		BitDepthChroma:   bitDepth,
+		ChromaFormatIDC:  2,
+		FrameMBSOnlyFlag: 1,
+	}
+	params := []h264LoopFilterSliceParams{{
+		PPS:              pps,
+		ListCount:        1,
+		DeblockingFilter: 1,
+	}}
+	yBefore := [2]uint16{dst.Y[3*stride], dst.Y[4*stride]}
+	cbBefore := [2]uint16{dst.Cb[3*stride], dst.Cb[4*stride]}
+	crBefore := [2]uint16{dst.Cr[3*stride], dst.Cr[4*stride]}
+
+	if err := m.filterFrameHigh(dst, params); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[3*stride] != yBefore[0] || dst.Y[4*stride] != yBefore[1] {
+		t.Fatalf("High10 4:2:2 8x8-DCT horizontal luma edge filtered: %v -> [%d %d]",
+			yBefore, dst.Y[3*stride], dst.Y[4*stride])
+	}
+	if dst.Cb[3*stride] == cbBefore[0] || dst.Cb[4*stride] == cbBefore[1] ||
+		dst.Cr[3*stride] == crBefore[0] || dst.Cr[4*stride] == crBefore[1] {
+		t.Fatalf("High10 4:2:2 8x8-DCT horizontal chroma-only edge did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
+			cbBefore, dst.Cb[3*stride], dst.Cb[4*stride], crBefore, dst.Cr[3*stride], dst.Cr[4*stride])
+	}
+}
+
 func fill444LoopFilterStep(pix []uint8, stride int, edge int, left uint8, right uint8) {
 	for y := 0; y < 16; y++ {
 		row := y * stride
@@ -339,6 +396,21 @@ func setHighLoopFilterRightRegion(pix []uint16, stride int, height int, edge int
 		row := y * stride
 		for x := edge; x < stride; x++ {
 			pix[row+x] = value
+		}
+	}
+}
+
+func fillHighLoopFilterHorizontalStep(pix []uint16, stride int, width int, height int, edge int, top uint16, bottom uint16) {
+	for y := 0; y < edge; y++ {
+		row := y * stride
+		for x := 0; x < width; x++ {
+			pix[row+x] = top
+		}
+	}
+	for y := edge; y < height; y++ {
+		row := y * stride
+		for x := 0; x < width; x++ {
+			pix[row+x] = bottom
 		}
 	}
 }

@@ -773,8 +773,23 @@ func knownRedBenchResult(entry benchCorpusEntry, input string, data []byte, err 
 	if err != nil {
 		result.Error = err.Error()
 		result.ErrorClass = benchOracleFailureClass(err.Error())
+		if !benchKnownFailureStillCurrent(entry, err.Error()) {
+			result.ParityStatus = "known-red-signature-drift"
+			result.Notes = append(result.Notes, fmt.Sprintf("current failure signature drifted: class=%s detail=%q", result.ErrorClass, err.Error()))
+		}
 	}
 	return result
+}
+
+func benchKnownFailureStillCurrent(entry benchCorpusEntry, detail string) bool {
+	if entry.KnownFailure == nil {
+		return true
+	}
+	gotClass := benchOracleFailureClass(detail)
+	if gotClass != entry.KnownFailure.Class {
+		return false
+	}
+	return strings.Contains(strings.ToLower(detail), strings.ToLower(entry.KnownFailure.DetailContains))
 }
 
 func benchOracleFailureClass(detail string) string {
