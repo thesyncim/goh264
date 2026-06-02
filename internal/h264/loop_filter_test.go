@@ -68,6 +68,86 @@ func TestFillLoopFilterCachesFrameCanonicalizesBListRefs(t *testing.T) {
 	}
 }
 
+func TestH264LoopFilterRef2FramePreservesReferenceStructure(t *testing.T) {
+	ref := &DecodedFrame{}
+	other := &DecodedFrame{}
+	refs, err := h264LoopFilterRef2Frame([2][]simpleRefEntry{
+		{
+			{frame: ref, pictureStructure: PictureTopField},
+			{frame: ref, pictureStructure: PictureBottomField},
+			{frame: other, pictureStructure: PictureFrame},
+		},
+	}, map[*DecodedFrame]int8{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []int8{1, 2, 7}
+	if len(refs[0]) != len(want) {
+		t.Fatalf("ref2frame len = %d, want %d", len(refs[0]), len(want))
+	}
+	for i := range want {
+		if refs[0][i] != want[i] {
+			t.Fatalf("ref2frame[%d] = %d, want %d", i, refs[0][i], want[i])
+		}
+	}
+}
+
+func TestFillLoopFilterCachesFieldPictureKeepsSameFrameFieldRefsDistinct(t *testing.T) {
+	m, err := newMacroblockTables(1, 3, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topXY := 0
+	curXY := 2 * m.MBStride
+	mbType := MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	for _, mbXY := range []int{topXY, curXY} {
+		m.MacroblockTyp[mbXY] = mbType
+		m.QScaleTable[mbXY] = 24
+		m.SliceTable[mbXY] = 0
+	}
+	m.RefIndex[0][4*topXY+2] = 1
+	m.RefIndex[0][4*topXY+3] = 1
+
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+	}
+	ref := &DecodedFrame{}
+	ref2Frame, err := h264LoopFilterRef2Frame([2][]simpleRefEntry{
+		{
+			{frame: ref, pictureStructure: PictureTopField},
+			{frame: ref, pictureStructure: PictureBottomField},
+		},
+	}, map[*DecodedFrame]int8{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := h264LoopFilterSliceParams{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureTopField,
+		DeblockingFilter: 1,
+		Ref2Frame:        ref2Frame,
+	}
+	params := []h264LoopFilterSliceParams{p}
+
+	ctx, err := m.fillLoopFilterCachesFrame(curXY, 0, p, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> 1))
+	bS, err := m.loopFilterBoundaryStrength(&ctx, mbType, mbType, 1, maskPar0, p.ListCount, h264LoopFilterMVYLimit(mbType))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bS != [4]int16{1, 1, 1, 1} {
+		t.Fatalf("field ref boundary bS = %v, want all 1 for top/bottom refs from same frame", bS)
+	}
+}
+
 func TestH264LoopFilterThresholdsHighBitDepthQPBDOffset(t *testing.T) {
 	alpha8, beta8, index8, err := h264LoopFilterThresholdsForBitDepth(30, 0, 0, 8)
 	if err != nil {

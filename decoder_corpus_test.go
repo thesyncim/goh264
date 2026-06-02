@@ -97,6 +97,19 @@ func TestH264RealVectorKnownRedStrict(t *testing.T) {
 	testH264CorpusEntries(t, defaultH264RealVectorFailureManifest, failures)
 }
 
+func TestH264RealVectorRedQueue(t *testing.T) {
+	if os.Getenv("GOH264_REAL_VECTOR_RED_QUEUE") != "1" {
+		t.Skip("set GOH264_REAL_VECTOR_RED_QUEUE=1 to run known-red public vectors as an intentionally failing fix queue")
+	}
+	failures := h264RealVectorFailureEntriesForEnv(t, readH264CorpusManifest(t, defaultH264RealVectorFailureManifest))
+	t.Logf("public-vector red queue selected=%d ids=%s", len(failures), strings.Join(h264CorpusEntryIDs(failures), ","))
+	t.Logf("public-vector red queue lanes: %s", h264CorpusKnownRedLaneSummary(failures))
+	testH264CorpusEntries(t, defaultH264RealVectorFailureManifest, failures)
+	if !t.Failed() {
+		t.Fatalf("public-vector red queue unexpectedly passed; remove fixed row(s) from %s and rerun the matrix", defaultH264RealVectorFailureManifest)
+	}
+}
+
 func TestH264RealVectorKnownRedFilterSelected(t *testing.T) {
 	if !h264RealVectorRedOracleEnabled() {
 		t.Skip("set GOH264_REAL_VECTOR_RED=1 or GOH264_REAL_VECTOR_STRICT_FAILURES=1 to require that the current filter selects known-red rows")
@@ -212,10 +225,10 @@ func TestH264RealVectorLaneCoverage(t *testing.T) {
 	}{
 		{name: "implicit weighted B", tokens: []string{"implicit-weight-b"}},
 		{name: "partitioned P", tokens: []string{"partitioned-p"}},
-		{name: "partitioned B", tokens: []string{"partitioned-b"}, knownRed: true},
+		{name: "partitioned B", tokens: []string{"partitioned-b"}},
 		{name: "PIC-AFF", tokens: []string{"picaff"}, knownRed: true},
 		{name: "slice boundary", tokens: []string{"slice-boundary"}, knownRed: true},
-		{name: "high deblock boundary", tokens: []string{"high", "deblock", "slice-boundary"}, knownRed: true},
+		{name: "high deblock boundary", tokens: []string{"high", "deblock", "slice-boundary"}},
 		{name: "high no-deblock boundary", tokens: []string{"high", "no-deblock", "slice-boundary"}},
 		{name: "high10", tokens: []string{"high10"}},
 		{name: "cabac chroma", tokens: []string{"cabac", "chroma"}},
@@ -488,6 +501,18 @@ func TestH264RealVectorRedOracleEnv(t *testing.T) {
 	t.Setenv("GOH264_REAL_VECTOR_STRICT_FAILURES", "1")
 	if !h264RealVectorRedOracleEnabled() {
 		t.Fatal("GOH264_REAL_VECTOR_STRICT_FAILURES=1 did not enable red oracle")
+	}
+}
+
+func TestH264RealVectorRedQueueEnv(t *testing.T) {
+	t.Setenv("GOH264_REAL_VECTOR_RED_QUEUE", "")
+	if os.Getenv("GOH264_REAL_VECTOR_RED_QUEUE") == "1" {
+		t.Fatal("red queue env unexpectedly enabled")
+	}
+
+	t.Setenv("GOH264_REAL_VECTOR_RED_QUEUE", "1")
+	if os.Getenv("GOH264_REAL_VECTOR_RED_QUEUE") != "1" {
+		t.Fatal("GOH264_REAL_VECTOR_RED_QUEUE=1 did not enable red queue")
 	}
 }
 

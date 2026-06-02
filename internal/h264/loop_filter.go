@@ -195,7 +195,18 @@ func h264LoopFilterRef2Frame(entries [2][]simpleRefEntry, ids map[*DecodedFrame]
 			if err != nil {
 				return [2][]int8{}, err
 			}
-			out[list][i] = id
+			refStructure := entry.pictureStructure
+			if refStructure == 0 {
+				refStructure = PictureFrame
+			}
+			if refStructure != PictureTopField && refStructure != PictureBottomField && refStructure != PictureFrame {
+				return [2][]int8{}, ErrInvalidData
+			}
+			ref := int(id)*4 + int(refStructure&PictureFrame)
+			if ref > 127 {
+				return [2][]int8{}, ErrUnsupported
+			}
+			out[list][i] = int8(ref)
 		}
 	}
 	return out, nil
