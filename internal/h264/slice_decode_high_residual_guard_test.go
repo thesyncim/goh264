@@ -410,6 +410,62 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsNeutralPartitionedB
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsImplicitWeightedPartitionedAndDirectResidual(t *testing.T) {
+	bDirectSub := [4]uint32{
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+	}
+	bDirectSubCarrier := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	for _, tt := range []struct {
+		name   string
+		sh     *SliceHeader
+		mbType uint32
+		sub    *[4]uint32
+		cbp    int
+	}{
+		{
+			name:   "implicit b16x8 residual",
+			sh:     &SliceHeader{SliceTypeNoS: PictureTypeB, PPS: &PPS{WeightedBipredIDC: 2}},
+			mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1,
+			cbp:    0x1,
+		},
+		{
+			name:   "implicit b8x16 residual",
+			sh:     &SliceHeader{SliceTypeNoS: PictureTypeB, PPS: &PPS{WeightedBipredIDC: 2}},
+			mbType: MBType8x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1,
+			cbp:    0x3,
+		},
+		{
+			name:   "implicit direct sub residual",
+			sh:     &SliceHeader{SliceTypeNoS: PictureTypeB, PPS: &PPS{WeightedBipredIDC: 2}},
+			mbType: bDirectSubCarrier,
+			sub:    &bDirectSub,
+			cbp:    0x1,
+		},
+		{
+			name:   "deblock implicit b16x8 residual",
+			sh:     &SliceHeader{SliceTypeNoS: PictureTypeB, DeblockingFilter: 1, PPS: &PPS{WeightedBipredIDC: 2}},
+			mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0,
+			cbp:    0x1,
+		},
+		{
+			name:   "deblock implicit direct sub residual",
+			sh:     &SliceHeader{SliceTypeNoS: PictureTypeB, DeblockingFilter: 1, PPS: &PPS{WeightedBipredIDC: 2}},
+			mbType: bDirectSubCarrier,
+			sub:    &bDirectSub,
+			cbp:    0x1,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(tt.sh, tt.mbType, tt.sub, tt.cbp, tt.cbp); err != nil {
+				t.Fatalf("validate err = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoundaries(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
 	bSlice := &SliceHeader{SliceTypeNoS: PictureTypeB}
@@ -476,21 +532,21 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b explicit 16x8 direct flag remains guarded", sh: bSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeDirect2, want: ErrUnsupported},
 		{name: "b explicit 16x8 skip remains guarded", sh: bSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip, want: ErrUnsupported},
 		{name: "b explicit 16x8 missing partition direction", sh: bSlice, mbType: MBType16x8 | MBTypeP0L0, want: ErrUnsupported},
-		{name: "b implicit weighted b16x8 residual remains guarded", sh: bImplicitWeightedSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1, cbp: 1, cbpTable: 1, want: ErrUnsupported},
-		{name: "b implicit weighted b8x16 residual remains guarded", sh: bImplicitWeightedSlice, mbType: MBType8x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, cbp: 3, cbpTable: 3, want: ErrUnsupported},
-		{name: "b implicit weighted direct sub cbp remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1, want: ErrUnsupported},
+		{name: "b implicit weighted b16x8 residual", sh: bImplicitWeightedSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1, cbp: 1, cbpTable: 1},
+		{name: "b implicit weighted b8x16 residual", sh: bImplicitWeightedSlice, mbType: MBType8x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, cbp: 3, cbpTable: 3},
+		{name: "b implicit weighted direct sub cbp", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1},
 		{name: "b implicit weighted explicit direct sub mix remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bMixedExplicitDirectSub, want: ErrUnsupported},
 		{name: "b implicit weighted direct explicit sub mix remains guarded", sh: bImplicitWeightedSlice, mbType: bDirectSubCarrier, sub: &bMixedDirectSub, want: ErrUnsupported},
 		{name: "b implicit weighted top-level direct 8x8 remains guarded", sh: bImplicitWeightedSlice, mbType: MBType8x8 | MBTypeL0L1 | MBTypeDirect2, sub: &bExplicitSub, want: ErrUnsupported},
 		{name: "b deblock skip cbp remains guarded", sh: bDeblockSlice, mbType: bSkip, cbp: 1, want: ErrUnsupported},
 		{name: "b deblock skip cbp table remains guarded", sh: bDeblockSlice, mbType: bSkip, cbpTable: 1, want: ErrUnsupported},
-		{name: "b deblock direct sub cbp remains guarded", sh: bDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1, want: ErrUnsupported},
-		{name: "b deblock direct sub cbp table remains guarded", sh: bDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbpTable: 1, want: ErrUnsupported},
-		{name: "b deblock partitioned residual remains guarded", sh: bDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1, want: ErrUnsupported},
-		{name: "b deblock cabac partitioned residual remains guarded", sh: bCABACDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1, want: ErrUnsupported},
-		{name: "b deblock implicit weighted partitioned residual remains guarded", sh: bImplicitDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1, want: ErrUnsupported},
-		{name: "b deblock implicit weighted direct sub cbp remains guarded", sh: bImplicitDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1, want: ErrUnsupported},
-		{name: "b deblock implicit weighted direct sub cbp table remains guarded", sh: bImplicitDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbpTable: 1, want: ErrUnsupported},
+		{name: "b deblock direct sub cbp", sh: bDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1},
+		{name: "b deblock direct sub cbp table", sh: bDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbpTable: 1},
+		{name: "b deblock partitioned residual", sh: bDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1},
+		{name: "b deblock cabac partitioned residual", sh: bCABACDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1},
+		{name: "b deblock implicit weighted partitioned residual", sh: bImplicitDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1},
+		{name: "b deblock implicit weighted direct sub cbp", sh: bImplicitDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1},
+		{name: "b deblock implicit weighted direct sub cbp table", sh: bImplicitDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbpTable: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
