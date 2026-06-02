@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestHighP16x16ResidualHandoffReconstructsExactLuma(t *testing.T) {
 	const bitDepth = 10
@@ -177,7 +180,7 @@ func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.
 			gb := newBitReader(cavlcBitString(tt.bits))
 
 			_, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 51})
-			if err != ErrUnsupported {
+			if !errors.Is(err, ErrUnsupported) {
 				t.Fatalf("decode high CAVLC B err = %v, want ErrUnsupported", err)
 			}
 			assertHighBRejectUntouched(t, m)
@@ -201,7 +204,7 @@ func TestDecodeCABACFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.
 			src := &scriptedCABACSource{bits: tt.bits}
 
 			_, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 53})
-			if err != ErrUnsupported {
+			if !errors.Is(err, ErrUnsupported) {
 				t.Fatalf("decode high CABAC B err = %v, want ErrUnsupported", err)
 			}
 			assertHighBRejectUntouched(t, m)
@@ -492,7 +495,7 @@ func TestDecodeFrameSliceHighRejectsPartitionedBSkipBeforeWriteback(t *testing.T
 				gb := newBitReader(cavlcBitString("010"))
 				_, err = m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, in)
 			}
-			if err != ErrUnsupported {
+			if !errors.Is(err, ErrUnsupported) {
 				t.Fatalf("partitioned B-skip decode err = %v, want ErrUnsupported", err)
 			}
 			assertHighBRejectUntouched(t, m)

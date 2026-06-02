@@ -8,6 +8,8 @@
 
 package h264
 
+import "fmt"
+
 type h264FrameSliceDecodeInput struct {
 	SliceNum      uint16
 	Refs          [2][]*h264PicturePlanes
@@ -121,10 +123,10 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 		var work frameMacroblockDecodeWork
 		mb, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWork(gb, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
 		if err != nil {
-			return result, err
+			return result, fmt.Errorf("cavlc mb_xy=%d bit=%d: %w", cur.MBXY, gb.bitPos, err)
 		}
 		if err := h264HLDecodeFrameMacroblock(&dstView, h264FrameMBReconstructInputFromCAVLC(sh, cur, mb, &work, in)); err != nil {
-			return result, err
+			return result, fmt.Errorf("reconstruct cavlc mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
@@ -136,10 +138,10 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 			var bottomWork frameMacroblockDecodeWork
 			bottomMB, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWork(gb, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork)
 			if err != nil {
-				return result, err
+				return result, fmt.Errorf("cavlc mb_xy=%d bit=%d: %w", bottom.MBXY, gb.bitPos, err)
 			}
 			if err := h264HLDecodeFrameMacroblock(&dstView, h264FrameMBReconstructInputFromCAVLC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
-				return result, err
+				return result, fmt.Errorf("reconstruct cavlc mb_xy=%d: %w", bottom.MBXY, err)
 			}
 			result.Macroblocks++
 			result.LastMBXY = bottom.MBXY
@@ -182,13 +184,13 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 		var work frameMacroblockDecodeWork
 		mb, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, sh.SliceTypeNoS == PictureTypeB)
 		if err != nil {
-			return result, err
+			return result, fmt.Errorf("cavlc high mb_xy=%d bit=%d: %w", cur.MBXY, gb.bitPos, err)
 		}
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.Inter.SubMBType, mb.CBP, mb.CBPTable); err != nil {
-			return result, err
+			return result, fmt.Errorf("validate high cavlc mb_xy=%d: %w", cur.MBXY, err)
 		}
 		if err := h264HLDecodeFrameMacroblockHigh(&dstView, h264FrameMBReconstructInputHighFromCAVLC(sh, cur, mb, &work, in)); err != nil {
-			return result, err
+			return result, fmt.Errorf("reconstruct high cavlc mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
@@ -227,10 +229,10 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 		var work frameMacroblockDecodeWork
 		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
 		if err != nil {
-			return result, err
+			return result, fmt.Errorf("cabac mb_xy=%d: %w", cur.MBXY, err)
 		}
 		if err := h264HLDecodeFrameMacroblock(&dstView, h264FrameMBReconstructInputFromCABAC(sh, cur, mb, &work, in)); err != nil {
-			return result, err
+			return result, fmt.Errorf("reconstruct cabac mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
@@ -242,10 +244,10 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 			var bottomWork frameMacroblockDecodeWork
 			bottomMB, err := m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork)
 			if err != nil {
-				return result, err
+				return result, fmt.Errorf("cabac mb_xy=%d: %w", bottom.MBXY, err)
 			}
 			if err := h264HLDecodeFrameMacroblock(&dstView, h264FrameMBReconstructInputFromCABAC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
-				return result, err
+				return result, fmt.Errorf("reconstruct cabac mb_xy=%d: %w", bottom.MBXY, err)
 			}
 			result.Macroblocks++
 			result.LastMBXY = bottom.MBXY
@@ -289,13 +291,13 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 		var work frameMacroblockDecodeWork
 		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuard(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, sh.SliceTypeNoS == PictureTypeB)
 		if err != nil {
-			return result, err
+			return result, fmt.Errorf("cabac high mb_xy=%d: %w", cur.MBXY, err)
 		}
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.Inter.SubMBType, mb.CBP, mb.CBPTable); err != nil {
-			return result, err
+			return result, fmt.Errorf("validate high cabac mb_xy=%d: %w", cur.MBXY, err)
 		}
 		if err := h264HLDecodeFrameMacroblockHigh(&dstView, h264FrameMBReconstructInputHighFromCABAC(sh, cur, mb, &work, in)); err != nil {
-			return result, err
+			return result, fmt.Errorf("reconstruct high cabac mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
