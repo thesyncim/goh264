@@ -82,6 +82,13 @@ func TestH264RealVectorManifest(t *testing.T) {
 	testH264CorpusManifest(t, defaultH264RealVectorManifest)
 }
 
+func TestH264RealVectorStrictOracle(t *testing.T) {
+	if os.Getenv("GOH264_REAL_VECTOR_STRICT") != "1" {
+		t.Skip("set GOH264_REAL_VECTOR_STRICT=1 to run public H.264 vectors as strict decode-ok oracle rows")
+	}
+	testH264CorpusManifest(t, defaultH264RealVectorManifest)
+}
+
 func TestH264RealVectorKnownRedStrict(t *testing.T) {
 	if os.Getenv("GOH264_REAL_VECTOR_STRICT_FAILURES") != "1" {
 		t.Skip("set GOH264_REAL_VECTOR_STRICT_FAILURES=1 to run known-red public vectors as strict decode-ok oracle rows")
@@ -280,6 +287,7 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 	}
 
 	var green, knownRed int
+	var redRows []h264CorpusEntry
 	for _, entry := range manifest {
 		entry := entry
 		t.Run(entry.ID, func(t *testing.T) {
@@ -296,6 +304,7 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 			matches, detail := h264CorpusAnnexBMatchesOracle(t, entry, data)
 			if failure, ok := failureByID[entry.ID]; ok {
 				knownRed++
+				redRows = append(redRows, failure)
 				if matches {
 					t.Fatalf("%s: known-red row now matches oracle; remove it from %s", entry.ID, defaultH264RealVectorFailureManifest)
 				}
@@ -311,6 +320,9 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 		})
 	}
 	t.Logf("public-vector matrix selected=%d green=%d known-red=%d", len(manifest), green, knownRed)
+	if len(redRows) != 0 {
+		t.Logf("public-vector known-red lanes: %s", h264CorpusKnownRedLaneSummary(redRows))
+	}
 }
 
 func validateH264CorpusKnownFailure(t *testing.T, entry h264CorpusEntry) {
@@ -556,6 +568,38 @@ func h264CorpusFailureFilterSummary(entries []h264CorpusEntry) string {
 	}
 	sort.Strings(sorted)
 	return strings.Join(sorted, ",")
+}
+
+func h264CorpusKnownRedLaneSummary(entries []h264CorpusEntry) string {
+	classCounts := make(map[string]int)
+	featureCounts := make(map[string]int)
+	for _, entry := range entries {
+		if entry.KnownFailure != nil {
+			classCounts[entry.KnownFailure.Class]++
+		}
+		for _, tag := range entry.FeatureTags {
+			featureCounts[tag]++
+		}
+	}
+	return fmt.Sprintf("classes=%s features=%s",
+		h264CorpusCountSummary(classCounts),
+		h264CorpusCountSummary(featureCounts))
+}
+
+func h264CorpusCountSummary(counts map[string]int) string {
+	if len(counts) == 0 {
+		return "(none)"
+	}
+	keys := make([]string, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s:%d", key, counts[key]))
+	}
+	return strings.Join(parts, ",")
 }
 
 func TestH264CorpusOracleFailureClass(t *testing.T) {

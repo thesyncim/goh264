@@ -6,8 +6,8 @@ Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12
 fixtures, public FATE vector harness, frame-MD5 diagnostics, and CLI benchmark
 comparison.
 
-Public vectors: 13/26 green. Red rows are not hidden; each has a known-failure
-signature in `testdata/h264/realvectors/failures.jsonl`.
+Public vectors: 13/26 green. Strict mode fails red rows; matrix mode logs the
+current known-red lane counts from `testdata/h264/realvectors/failures.jsonl`.
 
 Still guarded: MBAFF/PIC-AFF, broad PAFF, FMO, broad slice-boundary high modes,
 12/14-bit public high streams, full error resilience, threading/SIMD, and full
