@@ -238,12 +238,122 @@ func TestPredTemporalDirectAllowsFrameCurrentOverInterlacedColocated(t *testing.
 	if err != nil {
 		t.Fatalf("frame-over-field temporal direct failed: %v", err)
 	}
-	if !is16x8(mbType) || !isDirect(mbType) {
-		t.Fatalf("mbType = %#x, want direct 16x8 from interlaced colocated", mbType)
+	if !is16x16(mbType) || !isDirect(mbType) {
+		t.Fatalf("mbType = %#x, want direct 16x16 from interlaced colocated single_col branch", mbType)
 	}
 	base := int(h264Scan8[0])
 	if cache.MV[0][base] != ([2]int16{2, 2}) || cache.MV[1][base] != ([2]int16{-2, -2}) {
 		t.Fatalf("frame-over-field mvs = %v/%v, want y-shifted temporal scale", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
+func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedKeepsPartitionShape(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idr := &DecodedFrame{poc: 0}
+	col := &DecodedFrame{
+		poc:      4,
+		fieldPOC: [2]int32{4, 20},
+		tables:   colTables,
+		refEntries: [2][]simpleRefEntry{
+			{{frame: idr, pictureStructure: PictureFrame, poc: 0}},
+		},
+	}
+	colTables.MacroblockTyp[0] = MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colTables.MacroblockTyp[colTables.MBStride] = MBType8x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colTables.RefIndex[0][0] = 0
+	colTables.RefIndex[0][1] = 0
+	colTables.MotionVal[0][colTables.MB2BXY[0]] = [2]int16{4, 2}
+	colTables.MotionVal[0][int(colTables.MB2BXY[0])+3*colTables.BStride] = [2]int16{4, 2}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err = m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr, pictureStructure: PictureFrame, poc: 0}},
+			{{frame: col, pictureStructure: PictureFrame, poc: 4}},
+		},
+		CurPOC:             2,
+		PictureStructure:   PictureFrame,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("frame-over-field partition temporal direct failed: %v", err)
+	}
+	if !is16x8(mbType) || is8x8(mbType) || !isDirect(mbType) {
+		t.Fatalf("mbType = %#x, want colocated 16x8 shape, not B_8x8", mbType)
+	}
+}
+
+func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedUsesFieldRefList(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	past0 := &DecodedFrame{poc: -4, fieldPOC: [2]int32{-4, -2}, frameNum: 0}
+	past1 := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 2}, frameNum: 1}
+	past2 := &DecodedFrame{poc: 8, fieldPOC: [2]int32{8, 10}, frameNum: 2}
+	col := &DecodedFrame{
+		poc:      4,
+		fieldPOC: [2]int32{4, 20},
+		tables:   colTables,
+		refEntries: [2][]simpleRefEntry{
+			{
+				{frame: past0, picID: past0.frameNum, pictureStructure: PictureFrame, poc: past0.poc},
+				{frame: past2, picID: past2.frameNum, pictureStructure: PictureFrame, poc: past2.poc},
+				{frame: past2, picID: past2.frameNum, pictureStructure: PictureFrame, poc: past2.poc},
+			},
+		},
+		fieldRefEntries: [2][2][]simpleRefEntry{
+			{
+				{
+					{frame: past0, picID: 2*past0.frameNum + 1, pictureStructure: PictureTopField, poc: past0.fieldPOC[0]},
+					{frame: past2, picID: 2*past2.frameNum + 1, pictureStructure: PictureTopField, poc: past2.fieldPOC[0]},
+					{frame: past1, picID: 2*past1.frameNum + 1, pictureStructure: PictureTopField, poc: past1.fieldPOC[0]},
+				},
+				nil,
+			},
+		},
+	}
+	colTables.MacroblockTyp[0] = MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colTables.RefIndex[0][0] = 2
+	colTables.RefIndex[0][1] = 2
+	colTables.MotionVal[0][colTables.MB2BXY[0]] = [2]int16{4, 2}
+	colTables.MotionVal[0][int(colTables.MB2BXY[0])+3*colTables.BStride] = [2]int16{4, 2}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err = m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: past0, picID: past0.frameNum, pictureStructure: PictureFrame, poc: past0.poc},
+				{frame: past1, picID: past1.frameNum, pictureStructure: PictureFrame, poc: past1.poc},
+				{frame: past2, picID: past2.frameNum, pictureStructure: PictureFrame, poc: past2.poc},
+			},
+			{{frame: col, pictureStructure: PictureFrame, poc: col.poc}},
+		},
+		CurPOC:             2,
+		PictureStructure:   PictureFrame,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("frame-over-field temporal direct field-ref map failed: %v", err)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 1 {
+		t.Fatalf("frame-over-field ref = %d, want field-ref-list mapped frame ref 1", cache.Ref[0][base])
 	}
 }
 
