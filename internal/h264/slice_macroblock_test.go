@@ -21,11 +21,11 @@ func TestSliceMacroblockCursorFrameMappingAndAdvance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cur.MBX != 1 || cur.MBY != 1 || cur.MBXY != 5 {
-		t.Fatalf("cursor = x%d y%d xy%d, want x1 y1 xy5", cur.MBX, cur.MBY, cur.MBXY)
+	if cur.MBX != 1 || cur.MBY != 1 || cur.PixelMBY != 1 || cur.MBXY != 5 {
+		t.Fatalf("cursor = x%d y%d pixelY%d xy%d, want x1 y1 pixelY1 xy5", cur.MBX, cur.MBY, cur.PixelMBY, cur.MBXY)
 	}
-	if !cur.advanceFrameMB() || cur.MBX != 2 || cur.MBY != 1 || cur.MBXY != 6 {
-		t.Fatalf("advance once = x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
+	if !cur.advanceFrameMB() || cur.MBX != 2 || cur.MBY != 1 || cur.PixelMBY != 1 || cur.MBXY != 6 {
+		t.Fatalf("advance once = x%d y%d pixelY%d xy%d", cur.MBX, cur.MBY, cur.PixelMBY, cur.MBXY)
 	}
 	if cur.advanceFrameMB() {
 		t.Fatalf("advance past final MB reported more work: x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
@@ -48,12 +48,14 @@ func TestSliceMacroblockCursorFieldPictureMappingAndAdvance(t *testing.T) {
 		name       string
 		picture    int32
 		wantMBY    int
+		wantPixelY int
 		wantMBXY   int
 		wantNextY  int
+		wantNextPY int
 		wantNextXY int
 	}{
-		{name: "top", picture: PictureTopField, wantMBY: 2, wantMBXY: 9, wantNextY: 2, wantNextXY: 10},
-		{name: "bottom", picture: PictureBottomField, wantMBY: 3, wantMBXY: 13, wantNextY: 3, wantNextXY: 14},
+		{name: "top", picture: PictureTopField, wantMBY: 2, wantPixelY: 1, wantMBXY: 9, wantNextY: 2, wantNextPY: 1, wantNextXY: 10},
+		{name: "bottom", picture: PictureBottomField, wantMBY: 3, wantPixelY: 1, wantMBXY: 13, wantNextY: 3, wantNextPY: 1, wantNextXY: 14},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			sh := &SliceHeader{
@@ -66,15 +68,15 @@ func TestSliceMacroblockCursorFieldPictureMappingAndAdvance(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !cur.FieldOrMBAFF || cur.FrameMBAFF || !cur.FieldPicture || cur.MBX != 1 || cur.MBY != tt.wantMBY || cur.MBXY != tt.wantMBXY {
-				t.Fatalf("field cursor = fieldOrMBAFF %v frameMBAFF %v fieldPicture %v x%d y%d xy%d",
-					cur.FieldOrMBAFF, cur.FrameMBAFF, cur.FieldPicture, cur.MBX, cur.MBY, cur.MBXY)
+			if !cur.FieldOrMBAFF || cur.FrameMBAFF || !cur.FieldPicture || cur.MBX != 1 || cur.MBY != tt.wantMBY || cur.PixelMBY != tt.wantPixelY || cur.MBXY != tt.wantMBXY {
+				t.Fatalf("field cursor = fieldOrMBAFF %v frameMBAFF %v fieldPicture %v x%d y%d pixelY%d xy%d",
+					cur.FieldOrMBAFF, cur.FrameMBAFF, cur.FieldPicture, cur.MBX, cur.MBY, cur.PixelMBY, cur.MBXY)
 			}
 			if _, err := cur.bottomMBAFFFrameMB(); err != ErrInvalidData {
 				t.Fatalf("field bottom MBAFF cursor err = %v, want ErrInvalidData", err)
 			}
-			if !cur.advanceFrameMB() || cur.MBX != 2 || cur.MBY != tt.wantNextY || cur.MBXY != tt.wantNextXY {
-				t.Fatalf("field advance once = x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
+			if !cur.advanceFrameMB() || cur.MBX != 2 || cur.MBY != tt.wantNextY || cur.PixelMBY != tt.wantNextPY || cur.MBXY != tt.wantNextXY {
+				t.Fatalf("field advance once = x%d y%d pixelY%d xy%d", cur.MBX, cur.MBY, cur.PixelMBY, cur.MBXY)
 			}
 			if cur.advanceFrameMB() {
 				t.Fatalf("field advance past final row reported more work: x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
@@ -100,20 +102,20 @@ func TestSliceMacroblockCursorFrameMBAFFMappingAndAdvance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cur.FieldOrMBAFF || !cur.FrameMBAFF || cur.FieldPicture || cur.MBX != 1 || cur.MBY != 2 || cur.MBXY != 9 {
-		t.Fatalf("MBAFF cursor = fieldOrMBAFF %v frameMBAFF %v fieldPicture %v x%d y%d xy%d, want true/true/false x1 y2 xy9",
-			cur.FieldOrMBAFF, cur.FrameMBAFF, cur.FieldPicture, cur.MBX, cur.MBY, cur.MBXY)
+	if !cur.FieldOrMBAFF || !cur.FrameMBAFF || cur.FieldPicture || cur.MBX != 1 || cur.MBY != 2 || cur.PixelMBY != 2 || cur.MBXY != 9 {
+		t.Fatalf("MBAFF cursor = fieldOrMBAFF %v frameMBAFF %v fieldPicture %v x%d y%d pixelY%d xy%d, want true/true/false x1 y2 pixelY2 xy9",
+			cur.FieldOrMBAFF, cur.FrameMBAFF, cur.FieldPicture, cur.MBX, cur.MBY, cur.PixelMBY, cur.MBXY)
 	}
 	bottom, err := cur.bottomMBAFFFrameMB()
 	if err != nil {
 		t.Fatalf("MBAFF bottom cursor failed: %v", err)
 	}
-	if bottom.MBX != cur.MBX || bottom.MBY != cur.MBY+1 || bottom.MBXY != cur.MBXY+cur.MBStride {
-		t.Fatalf("MBAFF bottom cursor = x%d y%d xy%d, want x%d y%d xy%d",
-			bottom.MBX, bottom.MBY, bottom.MBXY, cur.MBX, cur.MBY+1, cur.MBXY+cur.MBStride)
+	if bottom.MBX != cur.MBX || bottom.MBY != cur.MBY+1 || bottom.PixelMBY != cur.PixelMBY+1 || bottom.MBXY != cur.MBXY+cur.MBStride {
+		t.Fatalf("MBAFF bottom cursor = x%d y%d pixelY%d xy%d, want x%d y%d pixelY%d xy%d",
+			bottom.MBX, bottom.MBY, bottom.PixelMBY, bottom.MBXY, cur.MBX, cur.MBY+1, cur.PixelMBY+1, cur.MBXY+cur.MBStride)
 	}
-	if !cur.advanceFrameMB() || cur.MBX != 2 || cur.MBY != 2 || cur.MBXY != 10 {
-		t.Fatalf("MBAFF advance once = x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
+	if !cur.advanceFrameMB() || cur.MBX != 2 || cur.MBY != 2 || cur.PixelMBY != 2 || cur.MBXY != 10 {
+		t.Fatalf("MBAFF advance once = x%d y%d pixelY%d xy%d", cur.MBX, cur.MBY, cur.PixelMBY, cur.MBXY)
 	}
 	if cur.advanceFrameMB() {
 		t.Fatalf("MBAFF advance past final pair row reported more work: x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)

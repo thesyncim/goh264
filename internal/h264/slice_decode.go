@@ -107,6 +107,10 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 	if err := validateSimpleFrameSliceDecodeInputs(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	dstView := *dst
+	if sh.PictureStructure != PictureFrame {
+		applySimpleFieldRefPlane(&dstView, sh.PictureStructure)
+	}
 	cur, err := newSliceMacroblockCursor(m, sh)
 	if err != nil {
 		return result, err
@@ -119,7 +123,7 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 		if err != nil {
 			return result, err
 		}
-		if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCAVLC(sh, cur, mb, &work, in)); err != nil {
+		if err := h264HLDecodeFrameMacroblock(&dstView, h264FrameMBReconstructInputFromCAVLC(sh, cur, mb, &work, in)); err != nil {
 			return result, err
 		}
 		result.Macroblocks++
@@ -134,7 +138,7 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 			if err != nil {
 				return result, err
 			}
-			if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCAVLC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
+			if err := h264HLDecodeFrameMacroblock(&dstView, h264FrameMBReconstructInputFromCAVLC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
 				return result, err
 			}
 			result.Macroblocks++
@@ -161,6 +165,10 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	dstView := *dst
+	if sh.PictureStructure != PictureFrame {
+		applySimpleFieldRefPlaneHigh(&dstView, sh.PictureStructure)
+	}
 	if err := validateSimpleFrameSliceDecodeInputHighRefs(sh, in); err != nil {
 		return result, err
 	}
@@ -179,7 +187,7 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.Inter.SubMBType, mb.CBP, mb.CBPTable); err != nil {
 			return result, err
 		}
-		if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHighFromCAVLC(sh, cur, mb, &work, in)); err != nil {
+		if err := h264HLDecodeFrameMacroblockHigh(&dstView, h264FrameMBReconstructInputHighFromCAVLC(sh, cur, mb, &work, in)); err != nil {
 			return result, err
 		}
 		result.Macroblocks++
@@ -205,6 +213,10 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 	if err := validateSimpleFrameSliceDecodeInputs(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	dstView := *dst
+	if sh.PictureStructure != PictureFrame {
+		applySimpleFieldRefPlane(&dstView, sh.PictureStructure)
+	}
 	cur, err := newSliceMacroblockCursor(m, sh)
 	if err != nil {
 		return result, err
@@ -217,7 +229,7 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 		if err != nil {
 			return result, err
 		}
-		if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCABAC(sh, cur, mb, &work, in)); err != nil {
+		if err := h264HLDecodeFrameMacroblock(&dstView, h264FrameMBReconstructInputFromCABAC(sh, cur, mb, &work, in)); err != nil {
 			return result, err
 		}
 		result.Macroblocks++
@@ -232,7 +244,7 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 			if err != nil {
 				return result, err
 			}
-			if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCABAC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
+			if err := h264HLDecodeFrameMacroblock(&dstView, h264FrameMBReconstructInputFromCABAC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
 				return result, err
 			}
 			result.Macroblocks++
@@ -260,6 +272,10 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, in.SliceNum); err != nil {
 		return result, err
 	}
+	dstView := *dst
+	if sh.PictureStructure != PictureFrame {
+		applySimpleFieldRefPlaneHigh(&dstView, sh.PictureStructure)
+	}
 	if err := validateSimpleFrameSliceDecodeInputHighRefs(sh, in); err != nil {
 		return result, err
 	}
@@ -278,7 +294,7 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.Inter.SubMBType, mb.CBP, mb.CBPTable); err != nil {
 			return result, err
 		}
-		if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHighFromCABAC(sh, cur, mb, &work, in)); err != nil {
+		if err := h264HLDecodeFrameMacroblockHigh(&dstView, h264FrameMBReconstructInputHighFromCABAC(sh, cur, mb, &work, in)); err != nil {
 			return result, err
 		}
 		result.Macroblocks++
@@ -772,7 +788,7 @@ func h264FrameMBReconstructInputFromCAVLC(sh *SliceHeader, cur sliceMacroblockCu
 		MBType:             mb.MBType,
 		SubMBType:          mb.Inter.SubMBType,
 		MBX:                cur.MBX,
-		MBY:                cur.MBY,
+		MBY:                cur.PixelMBY,
 		CBP:                mb.CBP,
 		QScale:             mb.QScale,
 		ChromaQP:           mb.ChromaQP,
@@ -799,7 +815,7 @@ func h264FrameMBReconstructInputHighFromCAVLC(sh *SliceHeader, cur sliceMacroblo
 		MBType:             mb.MBType,
 		SubMBType:          mb.Inter.SubMBType,
 		MBX:                cur.MBX,
-		MBY:                cur.MBY,
+		MBY:                cur.PixelMBY,
 		CBP:                mb.CBP,
 		QScale:             mb.QScale,
 		ChromaQP:           mb.ChromaQP,
@@ -828,7 +844,7 @@ func h264FrameMBReconstructInputHighFromCABAC(sh *SliceHeader, cur sliceMacroblo
 		MBType:             mb.MBType,
 		SubMBType:          mb.Inter.SubMBType,
 		MBX:                cur.MBX,
-		MBY:                cur.MBY,
+		MBY:                cur.PixelMBY,
 		CBP:                mb.CBP,
 		QScale:             mb.QScale,
 		ChromaQP:           mb.ChromaQP,
@@ -857,7 +873,7 @@ func h264FrameMBReconstructInputFromCABAC(sh *SliceHeader, cur sliceMacroblockCu
 		MBType:             mb.MBType,
 		SubMBType:          mb.Inter.SubMBType,
 		MBX:                cur.MBX,
-		MBY:                cur.MBY,
+		MBY:                cur.PixelMBY,
 		CBP:                mb.CBP,
 		QScale:             mb.QScale,
 		ChromaQP:           mb.ChromaQP,

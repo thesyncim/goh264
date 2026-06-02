@@ -15,6 +15,7 @@ type sliceMacroblockCursor struct {
 	FieldPicture bool
 	MBX          int
 	MBY          int
+	PixelMBY     int
 	MBXY         int
 }
 
@@ -47,12 +48,17 @@ func newSliceMacroblockCursor(m *macroblockTables, sh *SliceHeader) (sliceMacrob
 	cur.FrameMBAFF = frameMBAFF
 	cur.FieldPicture = fieldPicture
 	cur.MBX = first % m.MBWidth
-	cur.MBY = first / m.MBWidth
+	fieldRow := first / m.MBWidth
+	cur.PixelMBY = fieldRow
+	cur.MBY = fieldRow
 	if cur.FieldOrMBAFF {
 		cur.MBY <<= 1
 	}
 	if sh.PictureStructure == PictureBottomField {
 		cur.MBY++
+	}
+	if !cur.FieldPicture {
+		cur.PixelMBY = cur.MBY
 	}
 	cur.MBXY = cur.MBX + cur.MBY*m.MBStride
 	return cur, nil
@@ -69,6 +75,11 @@ func (c *sliceMacroblockCursor) advanceFrameMB() bool {
 		if c.FieldOrMBAFF {
 			c.MBY++
 		}
+		if c.FieldPicture {
+			c.PixelMBY++
+		} else {
+			c.PixelMBY = c.MBY
+		}
 	}
 	if c.MBY >= c.MBHeight {
 		c.MBXY = c.MBStride * c.MBHeight
@@ -83,6 +94,7 @@ func (c sliceMacroblockCursor) bottomMBAFFFrameMB() (sliceMacroblockCursor, erro
 		return sliceMacroblockCursor{}, ErrInvalidData
 	}
 	c.MBY++
+	c.PixelMBY = c.MBY
 	c.MBXY += c.MBStride
 	return c, nil
 }

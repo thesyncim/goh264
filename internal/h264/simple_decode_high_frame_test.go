@@ -201,6 +201,54 @@ func TestNewH264MotionCompScratchHighForFrame(t *testing.T) {
 	}
 }
 
+func TestNewH264MotionCompScratchForFieldCapableFrameUsesFieldStrides(t *testing.T) {
+	sps := simpleDecodeFrameStorageTestSPS(8, 8, 1)
+	sps.FrameMBSOnlyFlag = 0
+	frame, _, err := newSimpleDecodedFrame(sps)
+	if err != nil {
+		t.Fatalf("new field-capable frame failed: %v", err)
+	}
+	field := frame.picturePlanes()
+	applySimpleFieldRefPlane(&field, PictureBottomField)
+
+	scratch := newH264MotionCompScratchForFrame(frame)
+	if scratch == nil {
+		t.Fatal("nil motion scratch")
+	}
+	wantEdge := h264EdgeScratchSize(frame.LumaStride*2, 16+5, 16+5)
+	if len(scratch.Y) != 16*frame.LumaStride*2 || len(scratch.Edge) != wantEdge {
+		t.Fatalf("field-capable scratch Y/edge lens = %d/%d, want %d/%d",
+			len(scratch.Y), len(scratch.Edge), 16*frame.LumaStride*2, wantEdge)
+	}
+	if !scratch.valid(&field, 16, 16, 8, 8) {
+		t.Fatalf("scratch does not validate against 8-bit bottom-field picture view")
+	}
+}
+
+func TestNewH264MotionCompScratchHighForFieldCapableFrameUsesFieldStrides(t *testing.T) {
+	sps := simpleDecodeFrameStorageTestSPS(10, 10, 1)
+	sps.FrameMBSOnlyFlag = 0
+	frame, _, err := newSimpleDecodedFrame(sps)
+	if err != nil {
+		t.Fatalf("new high field-capable frame failed: %v", err)
+	}
+	field := frame.picturePlanesHigh()
+	applySimpleFieldRefPlaneHigh(&field, PictureBottomField)
+
+	scratch := newH264MotionCompScratchHighForFrame(frame)
+	if scratch == nil {
+		t.Fatal("nil high motion scratch")
+	}
+	wantEdge := h264EdgeScratchSize(frame.LumaStride*2, 16+5, 16+5)
+	if len(scratch.Y) != 16*frame.LumaStride*2 || len(scratch.Edge) != wantEdge {
+		t.Fatalf("high field-capable scratch Y/edge lens = %d/%d, want %d/%d",
+			len(scratch.Y), len(scratch.Edge), 16*frame.LumaStride*2, wantEdge)
+	}
+	if !scratch.valid(&field, 16, 16, 8, 8) {
+		t.Fatalf("high scratch does not validate against bottom-field picture view")
+	}
+}
+
 func simpleDecodeFrameStorageTestSPS(lumaDepth int32, chromaDepth int32, chromaFormatIDC uint32) *SPS {
 	const (
 		mbWidth  = 3

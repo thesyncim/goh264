@@ -459,6 +459,7 @@ func applySimpleFieldRefPlane(pic *h264PicturePlanes, pictureStructure int32) {
 	}
 	pic.LumaStride *= 2
 	pic.ChromaStride *= 2
+	pic.MBHeight = (pic.MBHeight + 1) >> 1
 }
 
 func applySimpleFieldRefPlaneHigh(pic *h264PicturePlanesHigh, pictureStructure int32) {
@@ -478,6 +479,7 @@ func applySimpleFieldRefPlaneHigh(pic *h264PicturePlanesHigh, pictureStructure i
 	}
 	pic.LumaStride *= 2
 	pic.ChromaStride *= 2
+	pic.MBHeight = (pic.MBHeight + 1) >> 1
 }
 
 func (d *simpleFrameDPB) buildBRefLists(sh *SliceHeader, curPOC int32) ([2][]*DecodedFrame, error) {

@@ -152,16 +152,17 @@ func simpleDPBHighTestFrame(sps *SPS, frameNum uint32, seed int) simpleDPBHighTe
 	fillSimpleDPBHighPlane(y, seed)
 
 	frame := &DecodedFrame{
-		Y16:             y,
-		LumaStride:      lumaStride,
-		Width:           int(sps.Width),
-		Height:          int(sps.Height),
-		MBWidth:         int(sps.MBWidth),
-		MBHeight:        int(sps.MBHeight),
-		ChromaFormatIDC: int(sps.ChromaFormatIDC),
-		BitDepthLuma:    int(sps.BitDepthLuma),
-		BitDepthChroma:  int(sps.BitDepthChroma),
-		frameNum:        frameNum,
+		Y16:              y,
+		LumaStride:       lumaStride,
+		Width:            int(sps.Width),
+		Height:           int(sps.Height),
+		MBWidth:          int(sps.MBWidth),
+		MBHeight:         int(sps.MBHeight),
+		ChromaFormatIDC:  int(sps.ChromaFormatIDC),
+		BitDepthLuma:     int(sps.BitDepthLuma),
+		BitDepthChroma:   int(sps.BitDepthChroma),
+		frameMBSOnlyFlag: sps.FrameMBSOnlyFlag,
+		frameNum:         frameNum,
 	}
 
 	out := simpleDPBHighTestFrameData{frame: frame, y: y}

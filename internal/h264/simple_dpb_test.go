@@ -4,6 +4,70 @@ package h264
 
 import "testing"
 
+func TestApplySimpleFieldRefPlaneBuildsValidHalfHeightViews(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		picture int32
+	}{
+		{name: "top", picture: PictureTopField},
+		{name: "bottom", picture: PictureBottomField},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			frame := makeH264SliceDecodePicture(45, 30, 1)
+			view := *frame
+
+			applySimpleFieldRefPlane(&view, tt.picture)
+
+			if view.MBWidth != 45 || view.MBHeight != 15 {
+				t.Fatalf("field view mb geometry = %dx%d, want 45x15", view.MBWidth, view.MBHeight)
+			}
+			if view.LumaStride != frame.LumaStride*2 || view.ChromaStride != frame.ChromaStride*2 {
+				t.Fatalf("field view strides = %d/%d, want %d/%d", view.LumaStride, view.ChromaStride, frame.LumaStride*2, frame.ChromaStride*2)
+			}
+			if tt.picture == PictureBottomField {
+				if len(view.Y) != len(frame.Y)-frame.LumaStride || len(view.Cb) != len(frame.Cb)-frame.ChromaStride || len(view.Cr) != len(frame.Cr)-frame.ChromaStride {
+					t.Fatalf("bottom field view lengths = %d/%d/%d, want one source line offset", len(view.Y), len(view.Cb), len(view.Cr))
+				}
+			}
+			if err := view.validate(); err != nil {
+				t.Fatalf("field view validate failed: %v", err)
+			}
+		})
+	}
+}
+
+func TestApplySimpleFieldRefPlaneHighBuildsValidHalfHeightViews(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		picture int32
+	}{
+		{name: "top", picture: PictureTopField},
+		{name: "bottom", picture: PictureBottomField},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			frame := makeH264SliceDecodePictureHigh(45, 30, 1)
+			view := *frame
+
+			applySimpleFieldRefPlaneHigh(&view, tt.picture)
+
+			if view.MBWidth != 45 || view.MBHeight != 15 {
+				t.Fatalf("high field view mb geometry = %dx%d, want 45x15", view.MBWidth, view.MBHeight)
+			}
+			if view.LumaStride != frame.LumaStride*2 || view.ChromaStride != frame.ChromaStride*2 {
+				t.Fatalf("high field view strides = %d/%d, want %d/%d", view.LumaStride, view.ChromaStride, frame.LumaStride*2, frame.ChromaStride*2)
+			}
+			if tt.picture == PictureBottomField {
+				if len(view.Y) != len(frame.Y)-frame.LumaStride || len(view.Cb) != len(frame.Cb)-frame.ChromaStride || len(view.Cr) != len(frame.Cr)-frame.ChromaStride {
+					t.Fatalf("high bottom field view lengths = %d/%d/%d, want one source line offset", len(view.Y), len(view.Cb), len(view.Cr))
+				}
+			}
+			if err := view.validate(); err != nil {
+				t.Fatalf("high field view validate failed: %v", err)
+			}
+		})
+	}
+}
+
 func TestSimpleFrameDPBBuildsDefaultPListNewestFirst(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	newest := simpleDPBTestFrame(sps, 2)
@@ -852,19 +916,20 @@ func simpleDPBTestSPS(refs uint32) *SPS {
 
 func simpleDPBTestFrame(sps *SPS, frameNum uint32) *DecodedFrame {
 	return &DecodedFrame{
-		Y:               make([]uint8, 16*16),
-		Cb:              make([]uint8, 8*8),
-		Cr:              make([]uint8, 8*8),
-		LumaStride:      16,
-		ChromaStride:    8,
-		Width:           int(sps.Width),
-		Height:          int(sps.Height),
-		MBWidth:         int(sps.MBWidth),
-		MBHeight:        int(sps.MBHeight),
-		ChromaFormatIDC: int(sps.ChromaFormatIDC),
-		BitDepthLuma:    int(sps.BitDepthLuma),
-		BitDepthChroma:  int(sps.BitDepthChroma),
-		frameNum:        frameNum,
+		Y:                make([]uint8, 16*16),
+		Cb:               make([]uint8, 8*8),
+		Cr:               make([]uint8, 8*8),
+		LumaStride:       16,
+		ChromaStride:     8,
+		Width:            int(sps.Width),
+		Height:           int(sps.Height),
+		MBWidth:          int(sps.MBWidth),
+		MBHeight:         int(sps.MBHeight),
+		ChromaFormatIDC:  int(sps.ChromaFormatIDC),
+		BitDepthLuma:     int(sps.BitDepthLuma),
+		BitDepthChroma:   int(sps.BitDepthChroma),
+		frameMBSOnlyFlag: sps.FrameMBSOnlyFlag,
+		frameNum:         frameNum,
 	}
 }
 
