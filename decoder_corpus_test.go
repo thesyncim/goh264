@@ -102,6 +102,9 @@ func TestH264RealVectorRedQueue(t *testing.T) {
 		t.Skip("set GOH264_REAL_VECTOR_RED_QUEUE=1 to run known-red public vectors as an intentionally failing fix queue")
 	}
 	failures := h264RealVectorFailureEntriesForEnv(t, readH264CorpusManifest(t, defaultH264RealVectorFailureManifest))
+	if len(failures) == 0 {
+		t.Skipf("%s has no known-red rows", defaultH264RealVectorFailureManifest)
+	}
 	t.Logf("public-vector red queue selected=%d ids=%s", len(failures), strings.Join(h264CorpusEntryIDs(failures), ","))
 	t.Logf("public-vector red queue lanes: %s", h264CorpusKnownRedLaneSummary(failures))
 	testH264CorpusEntries(t, defaultH264RealVectorFailureManifest, failures)
@@ -124,9 +127,6 @@ func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
 	if len(manifest) == 0 {
 		t.Fatal("real-vector manifest is empty")
-	}
-	if len(failures) == 0 {
-		t.Fatal("real-vector failure ledger is empty; delete this test only when the public vector lane is fully green")
 	}
 
 	byID := make(map[string]h264CorpusEntry, len(manifest))
@@ -175,6 +175,9 @@ func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 func TestH264RealVectorFailureFocusedFilters(t *testing.T) {
 	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
 	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
+	if len(failures) == 0 {
+		t.Skipf("%s has no known-red rows", defaultH264RealVectorFailureManifest)
+	}
 	manifestByID := make(map[string]h264CorpusEntry, len(manifest))
 	for _, entry := range manifest {
 		manifestByID[entry.ID] = entry
@@ -226,7 +229,7 @@ func TestH264RealVectorLaneCoverage(t *testing.T) {
 		{name: "implicit weighted B", tokens: []string{"implicit-weight-b"}},
 		{name: "partitioned P", tokens: []string{"partitioned-p"}},
 		{name: "partitioned B", tokens: []string{"partitioned-b"}},
-		{name: "PIC-AFF", tokens: []string{"picaff"}, knownRed: true},
+		{name: "PIC-AFF", tokens: []string{"picaff"}},
 		{name: "slice boundary", tokens: []string{"slice-boundary"}},
 		{name: "high deblock boundary", tokens: []string{"high", "deblock", "slice-boundary"}},
 		{name: "high no-deblock boundary", tokens: []string{"high", "no-deblock", "slice-boundary"}},
@@ -402,7 +405,7 @@ func h264RealVectorRedOracleEnabled() bool {
 func h264RealVectorFailureEntriesForEnv(t *testing.T, failures []h264CorpusEntry) []h264CorpusEntry {
 	t.Helper()
 	if len(failures) == 0 {
-		t.Fatalf("%s: failure ledger is empty; red-vector gates have no known-red rows", defaultH264RealVectorFailureManifest)
+		return failures
 	}
 	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
 		filtered := filterH264CorpusEntries(append([]h264CorpusEntry(nil), failures...), filter)

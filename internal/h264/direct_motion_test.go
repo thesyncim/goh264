@@ -207,6 +207,7 @@ func TestPredTemporalDirectAllowsFrameCurrentOverInterlacedColocated(t *testing.
 	col := &DecodedFrame{
 		poc:      4,
 		fieldPOC: [2]int32{0, 4},
+		mbaff:    true,
 		tables:   colTables,
 		refEntries: [2][]simpleRefEntry{
 			{{frame: idr}},
@@ -260,6 +261,7 @@ func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedKeepsPartitionShap
 	col := &DecodedFrame{
 		poc:      4,
 		fieldPOC: [2]int32{4, 20},
+		mbaff:    true,
 		tables:   colTables,
 		refEntries: [2][]simpleRefEntry{
 			{{frame: idr, pictureStructure: PictureFrame, poc: 0}},
@@ -292,7 +294,7 @@ func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedKeepsPartitionShap
 	}
 }
 
-func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedUsesFieldRefList(t *testing.T) {
+func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedUsesOldRefColmap(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -307,11 +309,12 @@ func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedUsesFieldRefList(t
 	col := &DecodedFrame{
 		poc:      4,
 		fieldPOC: [2]int32{4, 20},
+		mbaff:    true,
 		tables:   colTables,
 		refEntries: [2][]simpleRefEntry{
 			{
 				{frame: past0, picID: past0.frameNum, pictureStructure: PictureFrame, poc: past0.poc},
-				{frame: past2, picID: past2.frameNum, pictureStructure: PictureFrame, poc: past2.poc},
+				{frame: past1, picID: past1.frameNum, pictureStructure: PictureFrame, poc: past1.poc},
 				{frame: past2, picID: past2.frameNum, pictureStructure: PictureFrame, poc: past2.poc},
 			},
 		},
@@ -320,7 +323,8 @@ func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedUsesFieldRefList(t
 				{
 					{frame: past0, picID: 2*past0.frameNum + 1, pictureStructure: PictureTopField, poc: past0.fieldPOC[0]},
 					{frame: past2, picID: 2*past2.frameNum + 1, pictureStructure: PictureTopField, poc: past2.fieldPOC[0]},
-					{frame: past1, picID: 2*past1.frameNum + 1, pictureStructure: PictureTopField, poc: past1.fieldPOC[0]},
+					{frame: past2, picID: 2*past2.frameNum + 1, pictureStructure: PictureTopField, poc: past2.fieldPOC[0]},
+					{frame: past0, picID: 2*past0.frameNum + 1, pictureStructure: PictureTopField, poc: past0.fieldPOC[0]},
 				},
 				nil,
 			},
@@ -328,7 +332,7 @@ func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedUsesFieldRefList(t
 	}
 	colTables.MacroblockTyp[0] = MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
 	colTables.RefIndex[0][0] = 2
-	colTables.RefIndex[0][1] = 2
+	colTables.RefIndex[0][1] = 3
 	colTables.MotionVal[0][colTables.MB2BXY[0]] = [2]int16{4, 2}
 	colTables.MotionVal[0][int(colTables.MB2BXY[0])+3*colTables.BStride] = [2]int16{4, 2}
 
@@ -353,7 +357,131 @@ func TestPredTemporalDirectFrameCurrentOverInterlacedColocatedUsesFieldRefList(t
 	}
 	base := int(h264Scan8[0])
 	if cache.Ref[0][base] != 1 {
-		t.Fatalf("frame-over-field ref = %d, want field-ref-list mapped frame ref 1", cache.Ref[0][base])
+		t.Fatalf("frame-over-field left ref = %d, want old-ref colmap frame ref 1", cache.Ref[0][base])
+	}
+	right := int(h264Scan8[4])
+	if cache.Ref[0][right] != 1 {
+		t.Fatalf("frame-over-field right ref = %d, want raw field ref 3 to map through old-ref 1", cache.Ref[0][right])
+	}
+}
+
+func TestTemporalDirectFrameCurrentColFieldColmapCollapsesVirtualFieldRefs(t *testing.T) {
+	past0 := &DecodedFrame{poc: -4, fieldPOC: [2]int32{-4, -2}, frameNum: 0}
+	past1 := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 2}, frameNum: 1}
+	col := &DecodedFrame{
+		mbaff: true,
+		refEntries: [2][]simpleRefEntry{
+			{
+				{frame: past0, picID: past0.frameNum, pictureStructure: PictureFrame, poc: past0.poc},
+				{frame: past1, picID: past1.frameNum, pictureStructure: PictureFrame, poc: past1.poc},
+			},
+		},
+		fieldRefEntries: [2][2][]simpleRefEntry{
+			{
+				{
+					{frame: past0, picID: 2*past0.frameNum + 1, pictureStructure: PictureTopField, poc: past0.fieldPOC[0]},
+					{frame: past0, picID: 2*past0.frameNum + 1, pictureStructure: PictureTopField, poc: past0.fieldPOC[0]},
+					{frame: past0, picID: 2*past0.frameNum + 1, pictureStructure: PictureTopField, poc: past0.fieldPOC[0]},
+					{frame: past0, picID: 2*past0.frameNum + 1, pictureStructure: PictureTopField, poc: past0.fieldPOC[0]},
+				},
+				nil,
+			},
+		},
+	}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: past0, picID: past0.frameNum, pictureStructure: PictureFrame, poc: past0.poc},
+				{frame: past1, picID: past1.frameNum, pictureStructure: PictureFrame, poc: past1.poc},
+			},
+			{{frame: col, pictureStructure: PictureFrame, poc: col.poc}},
+		},
+		PictureStructure: PictureFrame,
+	}
+
+	for _, rawRef := range []int{2, 3} {
+		got, err := temporalDirectMapColFieldRefToFrameList0(ctx, 0, rawRef, 0)
+		if err != nil {
+			t.Fatalf("raw field ref %d colmap failed: %v", rawRef, err)
+		}
+		if got != 1 {
+			t.Fatalf("raw field ref %d mapped to %d, want old_ref 1 frame ref", rawRef, got)
+		}
+	}
+}
+
+func TestTemporalDirectFrameCurrentColFieldPictureKeepsFieldRefIndex(t *testing.T) {
+	past0 := &DecodedFrame{poc: -4, fieldPOC: [2]int32{-4, -2}, frameNum: 0}
+	past1 := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 2}, frameNum: 1}
+	col := &DecodedFrame{
+		refEntries: [2][]simpleRefEntry{
+			{
+				{frame: past0, picID: past0.frameNum, pictureStructure: PictureFrame, poc: past0.poc},
+			},
+		},
+		fieldRefEntries: [2][2][]simpleRefEntry{
+			{
+				{
+					{frame: past0, picID: 2*past0.frameNum + 1, pictureStructure: PictureTopField, poc: past0.fieldPOC[0]},
+					{frame: past1, picID: 2*past1.frameNum + 1, pictureStructure: PictureTopField, poc: past1.fieldPOC[0]},
+				},
+				nil,
+			},
+		},
+	}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: past0, picID: past0.frameNum, pictureStructure: PictureFrame, poc: past0.poc},
+				{frame: past1, picID: past1.frameNum, pictureStructure: PictureFrame, poc: past1.poc},
+			},
+			{{frame: col, pictureStructure: PictureTopField, poc: col.fieldPOC[0]}},
+		},
+		PictureStructure: PictureFrame,
+	}
+
+	got, err := temporalDirectMapColFieldRefToFrameList0(ctx, 0, 1, 0)
+	if err != nil {
+		t.Fatalf("field-picture colmap failed: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("field-picture raw ref mapped to %d, want field-ref slot 1", got)
+	}
+}
+
+func TestTemporalDirectFrameCurrentColFieldPicturePrefersFrameMatchBeforePicID(t *testing.T) {
+	colliding := &DecodedFrame{poc: 8, fieldPOC: [2]int32{8, 10}, frameNum: 2}
+	matching := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 2}, frameNum: 1}
+	col := &DecodedFrame{
+		fieldRefEntries: [2][2][]simpleRefEntry{
+			{
+				{
+					{frame: colliding, picID: 5, pictureStructure: PictureTopField, poc: colliding.fieldPOC[0]},
+					{frame: colliding, picID: 4, pictureStructure: PictureBottomField, poc: colliding.fieldPOC[1]},
+					{frame: matching, picID: 3, pictureStructure: PictureTopField, poc: matching.fieldPOC[0]},
+					{frame: matching, picID: 2, pictureStructure: PictureBottomField, poc: matching.fieldPOC[1]},
+				},
+				nil,
+			},
+		},
+	}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: colliding, picID: 2, pictureStructure: PictureFrame, poc: colliding.poc},
+				{frame: matching, picID: matching.frameNum, pictureStructure: PictureFrame, poc: matching.poc},
+			},
+			{{frame: col, pictureStructure: PictureFrame, poc: col.poc}},
+		},
+		PictureStructure: PictureFrame,
+	}
+
+	got, err := temporalDirectMapColFieldRefToFrameList0(ctx, 0, 3, 0)
+	if err != nil {
+		t.Fatalf("field-picture picID collision colmap failed: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("field-picture picID collision mapped to %d, want same-frame ref 1", got)
 	}
 }
 
@@ -489,6 +617,7 @@ func TestPredTemporalDirectMapsMBAFFColocatedFieldRef(t *testing.T) {
 	col := &DecodedFrame{
 		poc:      4,
 		fieldPOC: [2]int32{4, 6},
+		mbaff:    true,
 		tables:   colTables,
 		refEntries: [2][]simpleRefEntry{
 			{

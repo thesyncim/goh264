@@ -9,4 +9,4 @@
 | public decoder/output | `decoder.go`, `simple_decode.go` | partial | corpus, FATE |
 | benchmark/oracle harness | `decoder_corpus_test.go`, `cmd/goh264bench` | replaced | FATE, smoke |
 
-Known deviations are in `testdata/h264/realvectors/failures.jsonl`.
+Known deviations are in `testdata/h264/realvectors/failures.jsonl` when present.

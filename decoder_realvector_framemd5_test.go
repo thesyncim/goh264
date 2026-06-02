@@ -71,6 +71,9 @@ func TestH264RealVectorFrameMD5Diagnostics(t *testing.T) {
 		})
 	}
 	if selected == 0 {
+		if len(failures) == 0 {
+			t.Skipf("%s has no raw-md5-mismatch known-red rows", defaultH264RealVectorFailureManifest)
+		}
 		t.Fatalf("%s: no raw-md5-mismatch known-red rows matched GOH264_CORPUS_FILTER=%q",
 			defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"))
 	}
@@ -144,6 +147,9 @@ func TestH264RealVectorRawDiffDiagnostics(t *testing.T) {
 		})
 	}
 	if selected == 0 {
+		if len(failures) == 0 {
+			t.Skipf("%s has no raw-md5-mismatch known-red rows", defaultH264RealVectorFailureManifest)
+		}
 		t.Fatalf("%s: no raw-md5-mismatch known-red rows matched GOH264_CORPUS_FILTER=%q",
 			defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"))
 	}

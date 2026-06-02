@@ -914,9 +914,20 @@ func temporalDirectColocatedFieldPictureRefEntry(ctx h264DirectMotionContext, li
 }
 
 func temporalDirectColocatedFrameFieldRefEntry(ctx h264DirectMotionContext, list int, ref int, field int) (simpleRefEntry, bool) {
-	if len(ctx.RefEntries[1]) != 0 && ctx.RefEntries[1][0].frame != nil && field >= 0 && field <= 1 {
+	if list < 0 || list > 1 || ref < 0 || field < 0 || field > 1 {
+		return simpleRefEntry{}, false
+	}
+	if len(ctx.RefEntries[1]) != 0 && ctx.RefEntries[1][0].frame != nil {
+		if ctx.RefEntries[1][0].frame.mbaff {
+			oldRef := ref >> 1
+			colEntries := ctx.RefEntries[1][0].frame.refEntries[list]
+			if oldRef < len(colEntries) {
+				return colEntries[oldRef], true
+			}
+			return temporalDirectColocatedRefEntry(ctx, list, oldRef, false)
+		}
 		colEntries := ctx.RefEntries[1][0].frame.fieldRefEntries[field][list]
-		if ref >= 0 && ref < len(colEntries) {
+		if ref < len(colEntries) {
 			return colEntries[ref], true
 		}
 	}
@@ -924,6 +935,14 @@ func temporalDirectColocatedFrameFieldRefEntry(ctx h264DirectMotionContext, list
 }
 
 func temporalDirectMapColFieldRefToFrameList0(ctx h264DirectMotionContext, list int, ref int, field int) (int8, error) {
+	if list < 0 || list > 1 || ref < 0 || field < 0 || field > 1 || len(ctx.RefEntries[0]) == 0 {
+		return 0, ErrInvalidData
+	}
+	// FFmpeg fill_colmap(..., mbafi=0) still fills +16 MBAFF slots for
+	// colocated frame/MBAFF parents as 2*old_ref+(rfield^field). The
+	// frame-current path then applies ref_offset=16, so both virtual field
+	// refs for one old_ref map by the colocated frame ref, not by a saved
+	// field-ref list slot. Field-picture parents do not use that ref_offset.
 	target, ok := temporalDirectColocatedFrameFieldRefEntry(ctx, list, ref, field)
 	if !ok {
 		return 0, fmt.Errorf("temporal direct missing colocated frame-field ref entry list=%d ref=%d field=%d: %w", list, ref, field, ErrUnsupported)
@@ -932,10 +951,13 @@ func temporalDirectMapColFieldRefToFrameList0(ctx h264DirectMotionContext, list 
 		if temporalDirectSameFrameRef(entry, target) {
 			return int8(i), nil
 		}
+	}
+	for i, entry := range ctx.RefEntries[0] {
 		if temporalDirectSamePictureID(entry, target) {
-			return int8(i), nil
-		}
-		if temporalDirectSameFieldPictureID(entry, target) {
+			if entry.frame != nil && target.frame != nil && entry.frame != target.frame &&
+				!entry.long && entry.frame.frameNum != target.frame.frameNum {
+				continue
+			}
 			return int8(i), nil
 		}
 	}

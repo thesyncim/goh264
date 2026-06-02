@@ -50,6 +50,7 @@ type DecodedFrame struct {
 	mmcoReset                      bool
 	recovered                      uint8
 	frameMBSOnlyFlag               int32
+	mbaff                          bool
 	tables                         *macroblockTables
 	refEntries                     [2][]simpleRefEntry
 	fieldRefEntries                [2][2][]simpleRefEntry
@@ -316,6 +317,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
+				frame.mbaff = sh.PictureStructure == PictureFrame && sh.SPS.MBAFF != 0
 				applySimpleFrameTimingProps(frame, sh.SPS, sei, dpb)
 				dpb.applySimpleRecoveryPoint(frame, sh, nal.RefIDC, sei)
 				consumeFrameSideDataFromSEI(sei)
