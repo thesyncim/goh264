@@ -290,7 +290,41 @@ func TestDecodeCAVLCFrameSliceRunZeroFallsThroughToMacroblock(t *testing.T) {
 	}
 }
 
-func TestDecodeCAVLCFrameMBAFFNonSkippedReadsFieldFlagBeforeType(t *testing.T) {
+func TestDecodeCAVLCFrameMBAFFFrameMacroblockDecodesAfterFieldFlag(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	sh := &SliceHeader{
+		SliceType:        PictureTypeI,
+		SliceTypeNoS:     PictureTypeI,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           20,
+	}
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	gb := newBitReader(cavlcBitString("0" + "11111111111111111100100"))
+
+	got, err := m.decodeCAVLCFrameSliceMacroblock(&gb, sh, &state, 0, 3)
+	if err != nil {
+		t.Fatalf("decode frame-coded mbaff failed: %v", err)
+	}
+	if got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 || got.MBType != MBTypeIntra4x4 || !got.IsIntra {
+		t.Fatalf("field result/state/type/intra = %d/%d/%#x/%v, want 0/0/intra4x4/true", got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.MBType, got.IsIntra)
+	}
+	if gb.bitPos != 24 {
+		t.Fatalf("consumed %d bits, want field flag plus intra4x4", gb.bitPos)
+	}
+	if m.SliceTable[0] != 3 || m.MacroblockTyp[0] != MBTypeIntra4x4 || m.QScaleTable[0] != 20 {
+		t.Fatalf("tables slice/type/q = %d/%#x/%d, want 3/intra4x4/20", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0])
+	}
+}
+
+func TestDecodeCAVLCFrameMBAFFFieldMacroblockUnsupportedBeforeWriteback(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {
 		t.Fatal(err)

@@ -78,6 +78,54 @@ func TestDecodeFrameSliceDataDispatchesCAVLC(t *testing.T) {
 	assertH264SliceDecodePCM(t, dst, 0, 0, pcm)
 }
 
+func TestDecodeCABACFrameSliceMBAFFReconstructsFrameCodedPCMPair(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	pps.CABAC = 1
+	sh := &SliceHeader{
+		FirstMBAddr:      0,
+		SliceType:        PictureTypeI,
+		SliceTypeNoS:     PictureTypeI,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           20,
+		DeblockingFilter: 0,
+	}
+	dst := makeH264SliceDecodePicture(1, 2, 1)
+	pcm0 := h264ReconstructIntraPCM(1, 53)
+	pcm1 := h264ReconstructIntraPCM(1, 67)
+	src := &scriptedCABACSource{
+		bits:  []int{0, 1, 1},
+		terms: []int{1, 1, 1},
+		pcm:   append(append([]byte(nil), pcm0...), pcm1...),
+	}
+
+	got, err := m.decodeCABACFrameSlice(src, dst, sh, h264FrameSliceDecodeInput{SliceNum: 12})
+	if err != nil {
+		t.Fatalf("decode cabac mbaff frame-coded pcm pair failed: %v", err)
+	}
+	bottomXY := m.MBStride
+	if got.Macroblocks != 2 || got.LastMBXY != bottomXY || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want 2 MBs ending at bottom xy %d and frame end", got, bottomXY)
+	}
+	assertH264SliceDecodePCM(t, dst, 0, 0, pcm0)
+	assertH264SliceDecodePCM(t, dst, 0, 1, pcm1)
+	for _, mbXY := range []int{0, bottomXY} {
+		if m.MacroblockTyp[mbXY] != MBTypeIntraPCM || m.CBPTable[mbXY] != 0xf7ef || m.QScaleTable[mbXY] != 0 || m.SliceTable[mbXY] != 12 {
+			t.Fatalf("tables[%d] type/cbp/q/slice = %#x/%#x/%d/%d", mbXY, m.MacroblockTyp[mbXY], m.CBPTable[mbXY], m.QScaleTable[mbXY], m.SliceTable[mbXY])
+		}
+	}
+	if len(src.bits) != 0 || len(src.terms) != 0 || len(src.pcm) != 0 {
+		t.Fatalf("script leftovers bits=%d terms=%d pcm=%d, want none", len(src.bits), len(src.terms), len(src.pcm))
+	}
+}
+
 func TestDecodeFrameSliceDataDispatchesCABACStartup(t *testing.T) {
 	m, err := newMacroblockTables(1, 1, 1)
 	if err != nil {

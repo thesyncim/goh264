@@ -57,6 +57,14 @@ func TestSliceMacroblockCursorFrameMBAFFMappingAndAdvance(t *testing.T) {
 	if !cur.FieldOrMBAFF || cur.MBX != 1 || cur.MBY != 2 || cur.MBXY != 9 {
 		t.Fatalf("MBAFF cursor = fieldOrMBAFF %v x%d y%d xy%d, want true x1 y2 xy9", cur.FieldOrMBAFF, cur.MBX, cur.MBY, cur.MBXY)
 	}
+	bottom, err := cur.bottomMBAFFFrameMB()
+	if err != nil {
+		t.Fatalf("MBAFF bottom cursor failed: %v", err)
+	}
+	if bottom.MBX != cur.MBX || bottom.MBY != cur.MBY+1 || bottom.MBXY != cur.MBXY+cur.MBStride {
+		t.Fatalf("MBAFF bottom cursor = x%d y%d xy%d, want x%d y%d xy%d",
+			bottom.MBX, bottom.MBY, bottom.MBXY, cur.MBX, cur.MBY+1, cur.MBXY+cur.MBStride)
+	}
 	if !cur.advanceFrameMB() || cur.MBX != 2 || cur.MBY != 2 || cur.MBXY != 10 {
 		t.Fatalf("MBAFF advance once = x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
 	}

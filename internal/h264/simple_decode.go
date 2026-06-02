@@ -491,7 +491,7 @@ func cloneByteSlices(src [][]uint8) [][]uint8 {
 }
 
 // applySimpleFrameTimingProps mirrors FFmpeg n8.0.1 h264_export_frame_props
-// for the simple frame-picture path. Field and MBAFF decoding remain
+// for the simple frame-picture path. Field-coded MBAFF/PAFF decoding remains
 // unsupported, but the public frame flags still follow picture-timing SEI.
 func applySimpleFrameTimingProps(frame *DecodedFrame, sps *SPS, sei *H264SEIContext, dpb *simpleFrameDPB) {
 	if frame == nil || sps == nil {

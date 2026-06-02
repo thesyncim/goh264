@@ -69,6 +69,15 @@ func (c *sliceMacroblockCursor) advanceFrameMB() bool {
 	return true
 }
 
+func (c sliceMacroblockCursor) bottomMBAFFFrameMB() (sliceMacroblockCursor, error) {
+	if !c.FieldOrMBAFF || (c.MBY&1) != 0 || c.MBY+1 >= c.MBHeight {
+		return sliceMacroblockCursor{}, ErrInvalidData
+	}
+	c.MBY++
+	c.MBXY += c.MBStride
+	return c, nil
+}
+
 type macroblockDecodeNeighbors struct {
 	MBXY             int
 	MBX              int

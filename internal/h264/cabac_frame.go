@@ -81,7 +81,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 	frameMBAFF := sh.SPS.MBAFF != 0
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
-	if frameMBAFF && (mbY&1) != 0 {
+	if frameMBAFF && (mbY&1) != 0 && state.MBFieldDecodingFlag != 0 {
 		return result, ErrUnsupported
 	}
 
@@ -119,7 +119,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		}
 	}
 	state.PrevMBSkipped = false
-	if frameMBAFF {
+	if frameMBAFF && (mbY&1) == 0 {
 		flag, err := m.decodeCABACFieldDecodingFlag(src, mbXY, mbX, sliceNum, state.MBFieldDecodingFlag != 0)
 		if err != nil {
 			return result, err
@@ -128,8 +128,8 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		result.MBFieldDecodingFlag = flag
 		if flag != 0 {
 			result.MBType = MBTypeInterlaced
+			return result, ErrUnsupported
 		}
-		return result, ErrUnsupported
 	}
 
 	result, err := m.decodeCABACFrameMacroblockWithWork(src, cabacFrameMacroblockInput{

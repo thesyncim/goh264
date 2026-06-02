@@ -3,8 +3,8 @@
 // Source-shaped simple frame-MB slice decode/reconstruct loop from FFmpeg
 // n8.0.1 libavcodec/h264_slice.c decode_slice. This layer keeps the raw
 // "entropy MB, then hl_decode_mb" order for frame pictures while row-threaded
-// deblocking, MBAFF/field pictures, error resilience, and threading remain
-// separate lanes.
+// deblocking, field-coded MBAFF/PAFF pictures, error resilience, and threading
+// remain separate lanes.
 
 package h264
 
@@ -124,6 +124,22 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
+		if cur.FieldOrMBAFF {
+			bottom, err := cur.bottomMBAFFFrameMB()
+			if err != nil {
+				return result, err
+			}
+			var bottomWork frameMacroblockDecodeWork
+			bottomMB, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWork(gb, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork)
+			if err != nil {
+				return result, err
+			}
+			if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCAVLC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
+				return result, err
+			}
+			result.Macroblocks++
+			result.LastMBXY = bottom.MBXY
+		}
 
 		if !cur.advanceFrameMB() {
 			result.EndOfFrame = true
@@ -206,6 +222,22 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
+		if cur.FieldOrMBAFF {
+			bottom, err := cur.bottomMBAFFFrameMB()
+			if err != nil {
+				return result, err
+			}
+			var bottomWork frameMacroblockDecodeWork
+			bottomMB, err := m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork)
+			if err != nil {
+				return result, err
+			}
+			if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCABAC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
+				return result, err
+			}
+			result.Macroblocks++
+			result.LastMBXY = bottom.MBXY
+		}
 
 		eos := src.terminate() != 0
 		if !cur.advanceFrameMB() {

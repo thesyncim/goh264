@@ -113,7 +113,7 @@ func TestDecodeCABACFrameIntraPCMMacroblockWritesState(t *testing.T) {
 	wantIndexes(t, src, []int{3})
 }
 
-func TestDecodeCABACFrameMBAFFFrameMacroblockUnsupportedAfterFieldFlag(t *testing.T) {
+func TestDecodeCABACFrameMBAFFFrameMacroblockDecodesAfterFieldFlag(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,11 @@ func TestDecodeCABACFrameMBAFFFrameMacroblockUnsupportedAfterFieldFlag(t *testin
 	pps := cavlcFlatQMulPPS()
 	pps.SPS = sps
 	src := &scriptedCABACSource{
-		bits: []int{0},
+		bits: append(append([]int{0, 0}, repeatCABACBits(16, 1)...), []int{
+			0,
+			0, 0, 0, 0,
+			0,
+		}...),
 	}
 	sh := &SliceHeader{
 		SliceType:        PictureTypeI,
@@ -135,16 +139,16 @@ func TestDecodeCABACFrameMBAFFFrameMacroblockUnsupportedAfterFieldFlag(t *testin
 	state := &cabacFrameSliceState{QScale: int(sh.QScale)}
 
 	got, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, 0, 3)
-	if err != ErrUnsupported {
-		t.Fatalf("err = %v, want ErrUnsupported", err)
+	if err != nil {
+		t.Fatalf("decode frame-coded mbaff failed: %v", err)
 	}
-	if got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 {
-		t.Fatalf("field flag result/state = %d/%d, want 0/0", got.MBFieldDecodingFlag, state.MBFieldDecodingFlag)
+	if got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 || got.MBType != MBTypeIntra4x4 || !got.IsIntra {
+		t.Fatalf("field result/state/type/intra = %d/%d/%#x/%v, want 0/0/intra4x4/true", got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.MBType, got.IsIntra)
 	}
-	if m.SliceTable[0] != ^uint16(0) || m.MacroblockTyp[0] != 0 || m.QScaleTable[0] != 0 {
-		t.Fatalf("tables changed on unsupported frame-coded mbaff: slice/type/q = %d/%#x/%d", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0])
+	if m.SliceTable[0] != 3 || m.MacroblockTyp[0] != MBTypeIntra4x4 || m.QScaleTable[0] != 20 {
+		t.Fatalf("tables slice/type/q = %d/%#x/%d, want 3/intra4x4/20", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0])
 	}
-	wantIndexes(t, src, []int{70})
+	wantIndexes(t, src, append(append([]int{70, 3}, repeatCABACBits(16, 68)...), []int{64, 73, 74, 75, 76, 77}...))
 }
 
 func TestDecodeCABACFrameMBAFFFieldMacroblockUnsupportedBeforeWriteback(t *testing.T) {
