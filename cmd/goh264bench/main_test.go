@@ -114,6 +114,62 @@ func TestAnnotateFFmpegPeerQuality(t *testing.T) {
 	}
 }
 
+func TestAnnotateBenchResultQuality(t *testing.T) {
+	tests := []struct {
+		name       string
+		result     benchResult
+		want       string
+		wantRef    string
+		wantMetric string
+	}{
+		{
+			name: "manifest oracle",
+			result: benchResult{
+				RawOutput:      true,
+				RawMD5:         "abc",
+				ExpectedRawMD5: "abc",
+				ParityStatus:   "rawvideo-md5-ok",
+			},
+			want:       "rawvideo-md5-ok",
+			wantRef:    "manifest-rawvideo-oracle",
+			wantMetric: "rawvideo-md5",
+		},
+		{
+			name: "ffmpeg peer quality",
+			result: benchResult{
+				RawOutput:      true,
+				RawMD5:         "abc",
+				ParityStatus:   "rawvideo-md5-match-goh264",
+				ComparisonLane: "native-cpu-vs-go-backend",
+			},
+			want:       "rawvideo-md5-match-goh264",
+			wantRef:    "goh264-rawvideo",
+			wantMetric: "rawvideo-md5",
+		},
+		{
+			name: "known red ledger",
+			result: benchResult{
+				RawOutput:      true,
+				ExpectedRawMD5: "abc",
+				ParityStatus:   "known-red",
+			},
+			want:       "known-red",
+			wantRef:    "failure-ledger",
+			wantMetric: "rawvideo-md5",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			annotateBenchResultQuality(&tt.result)
+			if tt.result.QualityStatus != tt.want || tt.result.QualityReference != tt.wantRef || tt.result.QualityMetric != tt.wantMetric {
+				t.Fatalf("quality = status %q metric %q ref %q, want %q/%q/%q",
+					tt.result.QualityStatus, tt.result.QualityMetric, tt.result.QualityReference,
+					tt.want, tt.wantMetric, tt.wantRef)
+			}
+		})
+	}
+}
+
 func TestReadBenchCorpusManifestAndValidate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "manifest.jsonl")

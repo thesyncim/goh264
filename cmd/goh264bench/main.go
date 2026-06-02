@@ -99,6 +99,9 @@ type benchResult struct {
 	ExpectedFrames    int                    `json:"expected_frames_per_iter,omitempty"`
 	ExpectedBytes     int64                  `json:"expected_bytes_per_iter,omitempty"`
 	ParityStatus      string                 `json:"parity_status,omitempty"`
+	QualityStatus     string                 `json:"quality_status,omitempty"`
+	QualityMetric     string                 `json:"quality_metric,omitempty"`
+	QualityReference  string                 `json:"quality_reference,omitempty"`
 	ErrorClass        string                 `json:"error_class,omitempty"`
 	Surfaces          []string               `json:"surfaces,omitempty"`
 	FeatureTags       []string               `json:"feature_tags,omitempty"`
@@ -267,7 +270,13 @@ func main() {
 			if r.EntryID != "" {
 				fmt.Printf(", entry %s", r.EntryID)
 			}
-			if r.ParityStatus != "" {
+			if r.QualityStatus != "" {
+				fmt.Printf(", quality %s", r.QualityStatus)
+				if r.QualityReference != "" {
+					fmt.Printf(" vs %s", r.QualityReference)
+				}
+			}
+			if r.ParityStatus != "" && r.ParityStatus != r.QualityStatus {
 				fmt.Printf(", parity %s", r.ParityStatus)
 			}
 			if r.Error != "" {
@@ -327,7 +336,13 @@ func main() {
 		if r.RawMD5 != "" {
 			fmt.Printf(", raw md5 %s", r.RawMD5)
 		}
-		if r.ParityStatus != "" {
+		if r.QualityStatus != "" {
+			fmt.Printf(", quality %s", r.QualityStatus)
+			if r.QualityReference != "" {
+				fmt.Printf(" vs %s", r.QualityReference)
+			}
+		}
+		if r.ParityStatus != "" && r.ParityStatus != r.QualityStatus {
 			fmt.Printf(", parity %s", r.ParityStatus)
 		}
 		if r.Command != "" {
@@ -369,8 +384,14 @@ func printBenchFrameDiagnostic(frame benchFrameDiagnostic) {
 }
 
 func buildBenchReport(input string, manifest string, maxEntries int, opts benchOptions) (benchReport, error) {
+	var report benchReport
 	if manifest != "" {
-		return benchManifest(manifest, maxEntries, opts)
+		report, err := benchManifest(manifest, maxEntries, opts)
+		if err != nil {
+			return benchReport{}, err
+		}
+		annotateBenchReportQuality(&report)
+		return report, nil
 	}
 	data, err := os.ReadFile(input)
 	if err != nil {
@@ -380,10 +401,12 @@ func buildBenchReport(input string, manifest string, maxEntries int, opts benchO
 	if err != nil {
 		return benchReport{}, err
 	}
-	return benchReport{
+	report = benchReport{
 		Metadata: benchmarkMetadata(input, data, opts),
 		Results:  results,
-	}, nil
+	}
+	annotateBenchReportQuality(&report)
+	return report, nil
 }
 
 func benchOneInput(input string, data []byte, opts benchOptions) ([]benchResult, error) {
@@ -1319,6 +1342,38 @@ func annotateFFmpegPeerQuality(result *benchResult, goResult benchResult) {
 		fmt.Sprintf("quality mismatch versus Go output: ffmpeg md5=%s bytes=%d, go md5=%s bytes=%d",
 			result.RawMD5, result.BytesPerIter, goResult.RawMD5, goResult.BytesPerIter),
 	)
+}
+
+func annotateBenchReportQuality(report *benchReport) {
+	if report == nil {
+		return
+	}
+	for i := range report.Results {
+		annotateBenchResultQuality(&report.Results[i])
+	}
+}
+
+func annotateBenchResultQuality(result *benchResult) {
+	if result == nil || result.QualityStatus != "" {
+		return
+	}
+	if result.ParityStatus == "" {
+		return
+	}
+	result.QualityStatus = result.ParityStatus
+	if result.RawOutput || result.RawMD5 != "" || result.ExpectedRawMD5 != "" {
+		result.QualityMetric = "rawvideo-md5"
+	}
+	switch {
+	case strings.Contains(result.ParityStatus, "known-red"):
+		result.QualityReference = "failure-ledger"
+	case result.ExpectedRawMD5 != "":
+		result.QualityReference = "manifest-rawvideo-oracle"
+	case strings.Contains(result.ParityStatus, "goh264"):
+		result.QualityReference = "goh264-rawvideo"
+	case result.RawMD5 != "":
+		result.QualityReference = "observed-rawvideo"
+	}
 }
 
 func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawOutput bool, annexBInput bool) (benchResult, error) {
