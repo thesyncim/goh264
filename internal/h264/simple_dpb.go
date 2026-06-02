@@ -3,8 +3,8 @@
 // Source-shaped simple reference DPB/ref-list subset from FFmpeg
 // n8.0.1 libavcodec/h264_refs.c h264_initialise_ref_list,
 // ff_h264_build_ref_list, and ff_h264_execute_ref_pic_marking. This file is
-// intentionally limited to progressive frame-picture refs for the
-// already-translated simple frame-MB path.
+// intentionally limited to the already-translated simple frame-MB path, with
+// field-picture POC/ref bookkeeping kept source-shaped for PAFF blockers.
 
 package h264
 
@@ -21,6 +21,7 @@ const (
 type simpleFrameDPB struct {
 	short              []*DecodedFrame
 	long               [simpleMaxLongRefs]*DecodedFrame
+	refMask            map[*DecodedFrame]int32
 	poc                simplePOCContext
 	delayed            []*DecodedFrame
 	hasBFrames         int
@@ -36,9 +37,11 @@ type simpleFrameDPB struct {
 }
 
 type simpleRefEntry struct {
-	frame *DecodedFrame
-	picID uint32
-	long  bool
+	frame            *DecodedFrame
+	picID            uint32
+	long             bool
+	pictureStructure int32
+	poc              int32
 }
 
 type simpleFrameRefContext struct {
@@ -153,6 +156,7 @@ func (d *simpleFrameDPB) resetRefs() {
 		for i := range d.long {
 			d.long[i] = nil
 		}
+		d.refMask = nil
 	}
 }
 
@@ -171,19 +175,19 @@ func (d *simpleFrameDPB) initFramePOC(frame *DecodedFrame, sh *SliceHeader, nalR
 	if d == nil || frame == nil || sh == nil || sh.SPS == nil {
 		return ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame {
-		return ErrUnsupported
-	}
 	if sh.NALType == NALIDRSlice {
 		d.resetRefs()
 		d.poc.reset()
 		d.resetLastPOCs()
 	}
+	if sh.PictureStructure != PictureFrame && frame.fieldPOC == [2]int32{} {
+		frame.fieldPOC = [2]int32{math.MaxInt32, math.MaxInt32}
+	}
 	d.poc.frameNum = int32(sh.FrameNum)
 	d.poc.pocLSB = int32(sh.POCLSB)
 	d.poc.deltaPOCBottom = sh.DeltaPOCBottom
 	d.poc.deltaPOC = sh.DeltaPOC
-	fieldPOC, poc, err := d.poc.initPOC(sh.SPS, sh.PictureStructure, nalRefIDC)
+	fieldPOC, poc, err := d.poc.initPOC(sh.SPS, sh.PictureStructure, nalRefIDC, frame.fieldPOC)
 	if err != nil {
 		return err
 	}
@@ -193,9 +197,8 @@ func (d *simpleFrameDPB) initFramePOC(frame *DecodedFrame, sh *SliceHeader, nalR
 }
 
 // initPOC is a source-shaped port of FFmpeg n8.0.1 libavcodec/h264_parse.c
-// ff_h264_init_poc for the progressive frame-picture subset.
-func (p *simplePOCContext) initPOC(sps *SPS, pictureStructure int32, nalRefIDC uint8) ([2]int32, int32, error) {
-	var out [2]int32
+// ff_h264_init_poc.
+func (p *simplePOCContext) initPOC(sps *SPS, pictureStructure int32, nalRefIDC uint8, out [2]int32) ([2]int32, int32, error) {
 	if p == nil || sps == nil {
 		return out, 0, ErrInvalidData
 	}
@@ -321,9 +324,6 @@ func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (
 	if sh.SliceTypeNoS == PictureTypeI {
 		return ctx, nil
 	}
-	if sh.PictureStructure != PictureFrame {
-		return ctx, ErrUnsupported
-	}
 	highDepth := frame != nil && frame.BitDepthLuma > 8
 
 	switch sh.SliceTypeNoS {
@@ -342,12 +342,16 @@ func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (
 		if frame == nil {
 			return ctx, ErrInvalidData
 		}
-		lists, err := d.buildBRefEntries(sh, frame.poc)
+		curPOC, err := simpleFrameCurrentPOC(frame, sh.PictureStructure)
+		if err != nil {
+			return ctx, err
+		}
+		lists, err := d.buildBRefEntries(sh, curPOC)
 		if err != nil {
 			return ctx, err
 		}
 		if sh.PPS != nil && sh.PPS.WeightedBipredIDC == 2 {
-			if err := initImplicitBWeightTable(&sh.PredWeightTable, lists, sh.RefCount, frame.poc); err != nil {
+			if err := initImplicitBWeightTable(&sh.PredWeightTable, lists, sh.RefCount, curPOC); err != nil {
 				return ctx, err
 			}
 		}
@@ -413,6 +417,7 @@ func simpleFrameEntryPlanesRefs(list []simpleRefEntry) []*h264PicturePlanes {
 	refs := make([]*h264PicturePlanes, len(list))
 	for i, entry := range list {
 		planes[i] = entry.frame.picturePlanes()
+		applySimpleFieldRefPlane(&planes[i], entry.pictureStructure)
 		refs[i] = &planes[i]
 	}
 	return refs
@@ -423,6 +428,7 @@ func simpleFrameEntryPlanesRefsHigh(list []simpleRefEntry) []*h264PicturePlanesH
 	refs := make([]*h264PicturePlanesHigh, len(list))
 	for i, entry := range list {
 		planes[i] = entry.frame.picturePlanesHigh()
+		applySimpleFieldRefPlaneHigh(&planes[i], entry.pictureStructure)
 		refs[i] = &planes[i]
 	}
 	return refs
@@ -434,6 +440,44 @@ func simpleFrameEntryFrames(list []simpleRefEntry) []*DecodedFrame {
 		frames[i] = entry.frame
 	}
 	return frames
+}
+
+func applySimpleFieldRefPlane(pic *h264PicturePlanes, pictureStructure int32) {
+	if pic == nil || pictureStructure == PictureFrame {
+		return
+	}
+	if pictureStructure == PictureBottomField {
+		if len(pic.Y) > pic.LumaStride {
+			pic.Y = pic.Y[pic.LumaStride:]
+		}
+		if len(pic.Cb) > pic.ChromaStride {
+			pic.Cb = pic.Cb[pic.ChromaStride:]
+		}
+		if len(pic.Cr) > pic.ChromaStride {
+			pic.Cr = pic.Cr[pic.ChromaStride:]
+		}
+	}
+	pic.LumaStride *= 2
+	pic.ChromaStride *= 2
+}
+
+func applySimpleFieldRefPlaneHigh(pic *h264PicturePlanesHigh, pictureStructure int32) {
+	if pic == nil || pictureStructure == PictureFrame {
+		return
+	}
+	if pictureStructure == PictureBottomField {
+		if len(pic.Y) > pic.LumaStride {
+			pic.Y = pic.Y[pic.LumaStride:]
+		}
+		if len(pic.Cb) > pic.ChromaStride {
+			pic.Cb = pic.Cb[pic.ChromaStride:]
+		}
+		if len(pic.Cr) > pic.ChromaStride {
+			pic.Cr = pic.Cr[pic.ChromaStride:]
+		}
+	}
+	pic.LumaStride *= 2
+	pic.ChromaStride *= 2
 }
 
 func (d *simpleFrameDPB) buildBRefLists(sh *SliceHeader, curPOC int32) ([2][]*DecodedFrame, error) {
@@ -483,32 +527,15 @@ func (d *simpleFrameDPB) buildDefaultBRefList(sh *SliceHeader, curPOC int32, lis
 	}
 	sorted := d.addSortedShortRefs(curPOC, 1^list)
 	sorted = append(sorted, d.addSortedShortRefs(curPOC, 0^list)...)
-	entries := make([]simpleRefEntry, 0, len(sorted)+d.longCount())
-	for _, frame := range sorted {
-		if frame == nil {
-			continue
-		}
-		if err := frame.matchesSPS(sh.SPS); err != nil {
-			return nil, err
-		}
-		entries = append(entries, simpleRefEntry{
-			frame: frame,
-			picID: frame.frameNum,
-		})
+	entries, err := d.buildDefaultEntriesFromFrames(sorted, sh, false)
+	if err != nil {
+		return nil, err
 	}
-	for i, frame := range d.long {
-		if frame == nil {
-			continue
-		}
-		if err := frame.matchesSPS(sh.SPS); err != nil {
-			return nil, err
-		}
-		entries = append(entries, simpleRefEntry{
-			frame: frame,
-			picID: uint32(i),
-			long:  true,
-		})
+	longEntries, err := d.buildDefaultEntriesFromFrames(d.long[:], sh, true)
+	if err != nil {
+		return nil, err
 	}
+	entries = append(entries, longEntries...)
 	return entries, nil
 }
 
@@ -560,6 +587,86 @@ func simpleRefListsSameFrames(a []simpleRefEntry, b []simpleRefEntry) bool {
 	return true
 }
 
+func (d *simpleFrameDPB) buildDefaultEntriesFromFrames(frames []*DecodedFrame, sh *SliceHeader, long bool) ([]simpleRefEntry, error) {
+	if sh.PictureStructure == PictureFrame {
+		entries := make([]simpleRefEntry, 0, len(frames))
+		for i, frame := range frames {
+			if frame == nil {
+				continue
+			}
+			if err := frame.matchesSPS(sh.SPS); err != nil {
+				return nil, err
+			}
+			picID := frame.frameNum
+			if long {
+				picID = uint32(i)
+			}
+			entries = append(entries, simpleRefEntry{
+				frame:            frame,
+				picID:            picID,
+				long:             long,
+				pictureStructure: PictureFrame,
+				poc:              frame.poc,
+			})
+		}
+		return entries, nil
+	}
+
+	entries := make([]simpleRefEntry, 0, len(frames)*2)
+	index := [2]int{}
+	sel := sh.PictureStructure
+	other := simpleOppositeField(sel)
+	for index[0] < len(frames) || index[1] < len(frames) {
+		for index[0] < len(frames) && !d.frameHasReferenceStructure(frames[index[0]], sel) {
+			index[0]++
+		}
+		for index[1] < len(frames) && !d.frameHasReferenceStructure(frames[index[1]], other) {
+			index[1]++
+		}
+		if index[0] < len(frames) {
+			entry, err := d.fieldRefEntry(frames[index[0]], sh.SPS, sel, long, uint32(index[0]), 1)
+			if err != nil {
+				return nil, err
+			}
+			entries = append(entries, entry)
+			index[0]++
+		}
+		if index[1] < len(frames) {
+			entry, err := d.fieldRefEntry(frames[index[1]], sh.SPS, other, long, uint32(index[1]), 0)
+			if err != nil {
+				return nil, err
+			}
+			entries = append(entries, entry)
+			index[1]++
+		}
+	}
+	return entries, nil
+}
+
+func (d *simpleFrameDPB) fieldRefEntry(frame *DecodedFrame, sps *SPS, pictureStructure int32, long bool, longIndex uint32, idAdd uint32) (simpleRefEntry, error) {
+	if frame == nil {
+		return simpleRefEntry{}, ErrInvalidData
+	}
+	if err := frame.matchesSPS(sps); err != nil {
+		return simpleRefEntry{}, err
+	}
+	poc, err := simpleFrameCurrentPOC(frame, pictureStructure)
+	if err != nil {
+		return simpleRefEntry{}, err
+	}
+	picID := frame.frameNum
+	if long {
+		picID = longIndex
+	}
+	return simpleRefEntry{
+		frame:            frame,
+		picID:            2*picID + idAdd,
+		long:             long,
+		pictureStructure: pictureStructure,
+		poc:              poc,
+	}, nil
+}
+
 func (d *simpleFrameDPB) applyRefModifications(list []simpleRefEntry, sh *SliceHeader, listIndex int) ([]*DecodedFrame, error) {
 	entries, err := d.applyRefModificationsEntries(list, sh, listIndex)
 	if err != nil {
@@ -603,11 +710,13 @@ func (d *simpleFrameDPB) applyRefModificationsEntries(list []simpleRefEntry, sh 
 		if mod.Op == 2 {
 			picID = mod.Val
 			isLong = true
-			if picID > 31 {
+			longIdx, picStructure := simplePicNumExtract(sh.PictureStructure, picID)
+			if longIdx > 31 {
 				return nil, ErrInvalidData
 			}
-			if picID < simpleMaxLongRefs {
-				ref = d.findLongByIndex(picID)
+			if longIdx < simpleMaxLongRefs {
+				ref = d.findLongByIndexAndStructure(longIdx, picStructure)
+				picID = mod.Val
 			}
 		} else {
 			absDiffPicNum := mod.Val + 1
@@ -621,10 +730,25 @@ func (d *simpleFrameDPB) applyRefModificationsEntries(list []simpleRefEntry, sh 
 			}
 			pred &= sh.MaxPicNum - 1
 			picID = pred
-			ref = d.findShortByFrameNum(pred)
+			frameNum, picStructure := simplePicNumExtract(sh.PictureStructure, pred)
+			ref = d.findShortByFrameNumAndStructure(frameNum, picStructure)
 		}
 		if ref != nil {
-			entry = simpleRefEntry{frame: ref, picID: picID, long: isLong}
+			picStructure := PictureFrame
+			if sh.PictureStructure != PictureFrame {
+				_, picStructure = simplePicNumExtract(sh.PictureStructure, picID)
+			}
+			poc, err := simpleFrameCurrentPOC(ref, picStructure)
+			if err != nil {
+				return nil, err
+			}
+			entry = simpleRefEntry{
+				frame:            ref,
+				picID:            picID,
+				long:             isLong,
+				pictureStructure: picStructure,
+				poc:              poc,
+			}
 		}
 		i := int(index)
 		if ref != nil {
@@ -690,7 +814,7 @@ func initImplicitBWeightTable(pwt *PredWeightTable, lists [2][]simpleRefEntry, r
 		return ErrInvalidData
 	}
 	if refCount0 == 1 && refCount1 == 1 &&
-		int64(lists[0][0].frame.poc)+int64(lists[1][0].frame.poc) == 2*int64(curPOC) {
+		int64(simpleRefEntryPOC(lists[0][0]))+int64(simpleRefEntryPOC(lists[1][0])) == 2*int64(curPOC) {
 		pwt.UseWeight = 0
 		pwt.UseWeightChroma = 0
 		return nil
@@ -702,11 +826,11 @@ func initImplicitBWeightTable(pwt *PredWeightTable, lists [2][]simpleRefEntry, r
 	pwt.ChromaLog2WeightDenom = 5
 
 	for ref0 := 0; ref0 < refCount0; ref0++ {
-		poc0 := int(lists[0][ref0].frame.poc)
+		poc0 := int(simpleRefEntryPOC(lists[0][ref0]))
 		for ref1 := 0; ref1 < refCount1; ref1++ {
 			w := int32(32)
 			if !lists[0][ref0].long && !lists[1][ref1].long {
-				poc1 := int(lists[1][ref1].frame.poc)
+				poc1 := int(simpleRefEntryPOC(lists[1][ref1]))
 				td := clipInt(poc1-poc0, -128, 127)
 				if td != 0 {
 					tb := clipInt(int(curPOC)-poc0, -128, 127)
@@ -725,32 +849,15 @@ func initImplicitBWeightTable(pwt *PredWeightTable, lists [2][]simpleRefEntry, r
 }
 
 func (d *simpleFrameDPB) buildDefaultPRefList(sh *SliceHeader) ([]simpleRefEntry, error) {
-	list := make([]simpleRefEntry, 0, len(d.short))
-	for _, frame := range d.short {
-		if frame == nil {
-			continue
-		}
-		if err := frame.matchesSPS(sh.SPS); err != nil {
-			return nil, err
-		}
-		list = append(list, simpleRefEntry{
-			frame: frame,
-			picID: frame.frameNum,
-		})
+	list, err := d.buildDefaultEntriesFromFrames(d.short, sh, false)
+	if err != nil {
+		return nil, err
 	}
-	for i, frame := range d.long {
-		if frame == nil {
-			continue
-		}
-		if err := frame.matchesSPS(sh.SPS); err != nil {
-			return nil, err
-		}
-		list = append(list, simpleRefEntry{
-			frame: frame,
-			picID: uint32(i),
-			long:  true,
-		})
+	longEntries, err := d.buildDefaultEntriesFromFrames(d.long[:], sh, true)
+	if err != nil {
+		return nil, err
 	}
+	list = append(list, longEntries...)
 	return list, nil
 }
 
@@ -758,14 +865,13 @@ func (d *simpleFrameDPB) markDecodedFrame(frame *DecodedFrame, sh *SliceHeader, 
 	if d == nil || frame == nil || sh == nil || sh.SPS == nil {
 		return ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame {
-		return ErrUnsupported
-	}
 	defer d.finishFramePOC(nalRefIDC)
 	frame.frameNum = sh.FrameNum
 	currentRefAssigned := false
+	secondFieldRef := sh.PictureStructure != PictureFrame && (d.frameIsShort(frame) || d.frameIsLong(frame)) && d.frameRefMask(frame) != 0
 	if sh.NALType == NALIDRSlice {
 		d.resetRefs()
+		secondFieldRef = false
 		if sh.NBMMCO != 0 {
 			resetFrameNum, assigned, err := d.applyMMCO(frame, sh)
 			if err != nil {
@@ -799,14 +905,25 @@ func (d *simpleFrameDPB) markDecodedFrame(frame *DecodedFrame, sh *SliceHeader, 
 	if maxRefs > simpleMaxShortRefs {
 		return ErrUnsupported
 	}
-	if sh.ExplicitRefMarking == 0 && len(d.short) != 0 && d.refCount() >= maxRefs {
+	if sh.ExplicitRefMarking == 0 && !secondFieldRef && len(d.short) != 0 && d.refCount() >= maxRefs {
 		d.removeShortAtIndex(len(d.short) - 1)
 	}
 	if !currentRefAssigned {
-		d.removeShortByFrameNum(frame.frameNum)
-		d.short = append(d.short, nil)
-		copy(d.short[1:], d.short[:len(d.short)-1])
-		d.short[0] = frame
+		if secondFieldRef {
+			if len(d.short) != 0 && d.short[0] == frame {
+				d.setFrameRefMask(frame, d.frameRefMask(frame)|sh.PictureStructure)
+			} else if d.frameIsLong(frame) {
+				return ErrInvalidData
+			} else {
+				d.setFrameRefMask(frame, d.frameRefMask(frame)|sh.PictureStructure)
+			}
+		} else {
+			d.removeShortByFrameNum(frame.frameNum)
+			d.short = append(d.short, nil)
+			copy(d.short[1:], d.short[:len(d.short)-1])
+			d.short[0] = frame
+			d.setFrameRefMask(frame, simpleReferenceMask(sh.PictureStructure))
+		}
 	}
 	if d.refCount() > maxRefs {
 		if d.longCount() != 0 && len(d.short) == 0 {
@@ -1016,15 +1133,17 @@ func (d *simpleFrameDPB) applyMMCO(frame *DecodedFrame, sh *SliceHeader) (bool, 
 		case mmcoEnd:
 			return resetFrameNum, currentRefAssigned, nil
 		case mmcoShort2Unused:
-			d.removeShortByFrameNum(sh.MMCO[i].ShortPicNum)
+			frameNum, structure := simplePicNumExtract(sh.PictureStructure, sh.MMCO[i].ShortPicNum)
+			d.removeShortByFrameNumAndStructure(frameNum, structure)
 		case mmcoShort2Long:
 			if sh.MMCO[i].LongArg >= simpleMaxLongRefs {
 				return resetFrameNum, currentRefAssigned, ErrInvalidData
 			}
-			pic := d.findShortByFrameNum(sh.MMCO[i].ShortPicNum)
+			frameNum, structure := simplePicNumExtract(sh.PictureStructure, sh.MMCO[i].ShortPicNum)
+			pic := d.findShortByFrameNumAndStructure(frameNum, structure)
 			if pic == nil {
 				long := d.findLongByIndex(sh.MMCO[i].LongArg)
-				if long == nil || long.frameNum != sh.MMCO[i].ShortPicNum {
+				if long == nil || long.frameNum != frameNum {
 					return resetFrameNum, currentRefAssigned, ErrInvalidData
 				}
 				continue
@@ -1033,23 +1152,30 @@ func (d *simpleFrameDPB) applyMMCO(frame *DecodedFrame, sh *SliceHeader) (bool, 
 			if d.long[longIndex] != pic {
 				d.removeLongByIndex(longIndex)
 			}
-			d.removeShortByFrameNum(sh.MMCO[i].ShortPicNum)
+			mask := d.frameRefMask(pic)
+			d.removeShortByFrameNum(frameNum)
 			d.long[longIndex] = pic
+			d.setFrameRefMask(pic, mask|structure)
 		case mmcoLong2Unused:
-			if sh.MMCO[i].LongArg >= simpleMaxLongRefs {
+			longIndex, structure := simplePicNumExtract(sh.PictureStructure, sh.MMCO[i].LongArg)
+			if longIndex >= simpleMaxLongRefs {
 				return resetFrameNum, currentRefAssigned, ErrInvalidData
 			}
-			d.removeLongByIndex(int(sh.MMCO[i].LongArg))
+			d.removeLongByIndexAndStructure(int(longIndex), structure)
 		case mmcoLong:
 			if sh.MMCO[i].LongArg >= simpleMaxLongRefs {
 				return resetFrameNum, currentRefAssigned, ErrInvalidData
 			}
 			longIndex := int(sh.MMCO[i].LongArg)
+			if len(d.short) != 0 && d.short[0] == frame {
+				d.removeShortAtIndex(0)
+			}
 			d.removeLongRefsForFrame(frame)
 			if d.long[longIndex] != frame {
 				d.removeLongByIndex(longIndex)
 				d.long[longIndex] = frame
 			}
+			d.setFrameRefMask(frame, d.frameRefMask(frame)|simpleReferenceMask(sh.PictureStructure))
 			currentRefAssigned = true
 		case mmcoSetMaxLong:
 			if sh.MMCO[i].LongArg > simpleMaxLongRefs {
@@ -1081,11 +1207,31 @@ func (d *simpleFrameDPB) findShortByFrameNum(frameNum uint32) *DecodedFrame {
 	return nil
 }
 
+func (d *simpleFrameDPB) findShortByFrameNumAndStructure(frameNum uint32, pictureStructure int32) *DecodedFrame {
+	if d == nil {
+		return nil
+	}
+	for _, frame := range d.short {
+		if frame != nil && frame.frameNum == frameNum && d.frameHasReferenceStructure(frame, pictureStructure) {
+			return frame
+		}
+	}
+	return nil
+}
+
 func (d *simpleFrameDPB) findLongByIndex(index uint32) *DecodedFrame {
 	if d == nil || index >= simpleMaxLongRefs {
 		return nil
 	}
 	return d.long[index]
+}
+
+func (d *simpleFrameDPB) findLongByIndexAndStructure(index uint32, pictureStructure int32) *DecodedFrame {
+	ref := d.findLongByIndex(index)
+	if ref == nil || !d.frameHasReferenceStructure(ref, pictureStructure) {
+		return nil
+	}
+	return ref
 }
 
 func (d *simpleFrameDPB) removeShortByFrameNum(frameNum uint32) {
@@ -1097,6 +1243,30 @@ func (d *simpleFrameDPB) removeShortByFrameNum(frameNum uint32) {
 			continue
 		}
 		d.removeShortAtIndex(i)
+		d.clearFrameRefMaskIfUnreferenced(frame)
+		return
+	}
+}
+
+func (d *simpleFrameDPB) removeShortByFrameNumAndStructure(frameNum uint32, pictureStructure int32) {
+	if d == nil {
+		return
+	}
+	if pictureStructure == PictureFrame {
+		d.removeShortByFrameNum(frameNum)
+		return
+	}
+	for i, frame := range d.short {
+		if frame == nil || frame.frameNum != frameNum || !d.frameHasReferenceStructure(frame, pictureStructure) {
+			continue
+		}
+		mask := d.frameRefMask(frame) &^ pictureStructure
+		if mask == 0 {
+			d.removeShortAtIndex(i)
+			d.clearFrameRefMaskIfUnreferenced(frame)
+		} else {
+			d.setFrameRefMask(frame, mask)
+		}
 		return
 	}
 }
@@ -1105,16 +1275,41 @@ func (d *simpleFrameDPB) removeShortAtIndex(index int) {
 	if d == nil || index < 0 || index >= len(d.short) {
 		return
 	}
+	frame := d.short[index]
 	copy(d.short[index:], d.short[index+1:])
 	d.short[len(d.short)-1] = nil
 	d.short = d.short[:len(d.short)-1]
+	d.clearFrameRefMaskIfUnreferenced(frame)
 }
 
 func (d *simpleFrameDPB) removeLongByIndex(index int) {
 	if d == nil || index < 0 || index >= simpleMaxLongRefs {
 		return
 	}
+	frame := d.long[index]
 	d.long[index] = nil
+	d.clearFrameRefMaskIfUnreferenced(frame)
+}
+
+func (d *simpleFrameDPB) removeLongByIndexAndStructure(index int, pictureStructure int32) {
+	if d == nil || index < 0 || index >= simpleMaxLongRefs {
+		return
+	}
+	frame := d.long[index]
+	if frame == nil || !d.frameHasReferenceStructure(frame, pictureStructure) {
+		return
+	}
+	if pictureStructure == PictureFrame {
+		d.removeLongByIndex(index)
+		return
+	}
+	mask := d.frameRefMask(frame) &^ pictureStructure
+	if mask == 0 {
+		d.long[index] = nil
+		d.clearFrameRefMaskIfUnreferenced(frame)
+	} else {
+		d.setFrameRefMask(frame, mask)
+	}
 }
 
 func (d *simpleFrameDPB) removeLongRefsForFrame(frame *DecodedFrame) {
@@ -1126,6 +1321,7 @@ func (d *simpleFrameDPB) removeLongRefsForFrame(frame *DecodedFrame) {
 			d.long[i] = nil
 		}
 	}
+	d.clearFrameRefMaskIfUnreferenced(frame)
 }
 
 func (d *simpleFrameDPB) removeFirstLong() {
@@ -1134,7 +1330,9 @@ func (d *simpleFrameDPB) removeFirstLong() {
 	}
 	for i, ref := range d.long {
 		if ref != nil {
+			frame := ref
 			d.long[i] = nil
+			d.clearFrameRefMaskIfUnreferenced(frame)
 			return
 		}
 	}
@@ -1158,4 +1356,151 @@ func (d *simpleFrameDPB) refCount() int {
 		return 0
 	}
 	return len(d.short) + d.longCount()
+}
+
+func simpleReferenceMask(pictureStructure int32) int32 {
+	if pictureStructure == PictureTopField || pictureStructure == PictureBottomField {
+		return pictureStructure
+	}
+	return PictureFrame
+}
+
+func simpleOppositeField(pictureStructure int32) int32 {
+	if pictureStructure == PictureTopField || pictureStructure == PictureBottomField {
+		return pictureStructure ^ PictureFrame
+	}
+	return PictureFrame
+}
+
+func simplePicNumExtract(pictureStructure int32, picNum uint32) (uint32, int32) {
+	structure := pictureStructure
+	if pictureStructure != PictureFrame {
+		if picNum&1 == 0 {
+			structure ^= PictureFrame
+		}
+		picNum >>= 1
+	}
+	return picNum, structure
+}
+
+func simpleFrameCurrentPOC(frame *DecodedFrame, pictureStructure int32) (int32, error) {
+	if frame == nil {
+		return 0, ErrInvalidData
+	}
+	switch pictureStructure {
+	case PictureFrame:
+		return frame.poc, nil
+	case PictureTopField:
+		if frame.fieldPOC[0] == math.MaxInt32 {
+			return 0, ErrInvalidData
+		}
+		return frame.fieldPOC[0], nil
+	case PictureBottomField:
+		if frame.fieldPOC[1] == math.MaxInt32 {
+			return 0, ErrInvalidData
+		}
+		return frame.fieldPOC[1], nil
+	default:
+		return 0, ErrInvalidData
+	}
+}
+
+func simpleRefEntryPOC(entry simpleRefEntry) int32 {
+	if entry.poc != 0 || entry.frame == nil {
+		return entry.poc
+	}
+	switch entry.pictureStructure {
+	case PictureTopField:
+		if entry.frame.fieldPOC[0] != math.MaxInt32 {
+			return entry.frame.fieldPOC[0]
+		}
+	case PictureBottomField:
+		if entry.frame.fieldPOC[1] != math.MaxInt32 {
+			return entry.frame.fieldPOC[1]
+		}
+	}
+	return entry.frame.poc
+}
+
+func (d *simpleFrameDPB) frameHasReferenceStructure(frame *DecodedFrame, pictureStructure int32) bool {
+	if frame == nil {
+		return false
+	}
+	mask := d.frameRefMask(frame)
+	if pictureStructure == PictureFrame {
+		return mask&PictureFrame == PictureFrame
+	}
+	return mask&pictureStructure != 0
+}
+
+func (d *simpleFrameDPB) frameRefMask(frame *DecodedFrame) int32 {
+	if frame == nil {
+		return 0
+	}
+	if d != nil && d.refMask != nil {
+		if mask, ok := d.refMask[frame]; ok {
+			return mask
+		}
+	}
+	mask := int32(0)
+	if frame.fieldPOC[0] != math.MaxInt32 {
+		mask |= PictureTopField
+	}
+	if frame.fieldPOC[1] != math.MaxInt32 {
+		mask |= PictureBottomField
+	}
+	if mask == 0 {
+		return PictureFrame
+	}
+	return mask
+}
+
+func (d *simpleFrameDPB) setFrameRefMask(frame *DecodedFrame, mask int32) {
+	if d == nil || frame == nil {
+		return
+	}
+	if mask == 0 {
+		if d.refMask != nil {
+			delete(d.refMask, frame)
+			if len(d.refMask) == 0 {
+				d.refMask = nil
+			}
+		}
+		return
+	}
+	if d.refMask == nil {
+		d.refMask = make(map[*DecodedFrame]int32)
+	}
+	d.refMask[frame] = mask & PictureFrame
+}
+
+func (d *simpleFrameDPB) clearFrameRefMaskIfUnreferenced(frame *DecodedFrame) {
+	if d == nil || frame == nil || d.frameIsShort(frame) || d.frameIsLong(frame) {
+		return
+	}
+	d.setFrameRefMask(frame, 0)
+}
+
+func (d *simpleFrameDPB) frameIsShort(frame *DecodedFrame) bool {
+	if d == nil || frame == nil {
+		return false
+	}
+	for _, ref := range d.short {
+		if ref == frame {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *simpleFrameDPB) frameIsLong(frame *DecodedFrame) bool {
+	if d == nil || frame == nil {
+		return false
+	}
+	for _, ref := range d.long {
+		if ref == frame {
+			return true
+		}
+	}
+	return false
 }

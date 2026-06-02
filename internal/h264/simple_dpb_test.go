@@ -131,6 +131,152 @@ func TestSimplePOCType0FrameOrder(t *testing.T) {
 	}
 }
 
+func TestSimplePOCType0FieldsPreserveComplementaryPOC(t *testing.T) {
+	sps := simpleDPBTestSPS(1)
+	sps.FrameMBSOnlyFlag = 0
+	sps.Log2MaxFrameNum = 4
+	sps.PocType = 0
+	sps.Log2MaxPocLSB = 4
+	var dpb simpleFrameDPB
+	dpb.reset()
+
+	frame := simpleDPBTestFrame(sps, 0)
+	topHeader := simpleDPBTestPOCHeader(sps, NALIDRSlice, PictureTypeI, 0, 0)
+	topHeader.PictureStructure = PictureTopField
+	topHeader.CurrPicNum = 1
+	topHeader.MaxPicNum = 32
+	if err := dpb.initFramePOC(frame, topHeader, 3); err != nil {
+		t.Fatal(err)
+	}
+	if frame.fieldPOC != [2]int32{65536, int32(2147483647)} || frame.poc != 65536 {
+		t.Fatalf("top field poc = %v/%d, want top set and bottom left inactive", frame.fieldPOC, frame.poc)
+	}
+	dpb.finishFramePOC(3)
+
+	bottomHeader := simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeP, 0, 2)
+	bottomHeader.PictureStructure = PictureBottomField
+	bottomHeader.CurrPicNum = 1
+	bottomHeader.MaxPicNum = 32
+	if err := dpb.initFramePOC(frame, bottomHeader, 3); err != nil {
+		t.Fatal(err)
+	}
+	if frame.fieldPOC != [2]int32{65536, 65538} || frame.poc != 65536 {
+		t.Fatalf("paired field poc = %v/%d, want preserved top and bottom min frame poc", frame.fieldPOC, frame.poc)
+	}
+}
+
+func TestSimpleFrameDPBBuildsDefaultFieldPListCurrentThenOpposite(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sps.FrameMBSOnlyFlag = 0
+	ref := simpleDPBTestFrame(sps, 2)
+	ref.fieldPOC = [2]int32{10, 12}
+	ref.poc = 10
+	dpb := simpleFrameDPB{short: []*DecodedFrame{ref}}
+	dpb.setFrameRefMask(ref, PictureFrame)
+	sh := simpleDPBTestPHeader(sps, 3, 2)
+	sh.PictureStructure = PictureBottomField
+	sh.CurrPicNum = 7
+	sh.MaxPicNum = 32
+
+	entries, err := dpb.buildPRefEntries(sh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entry count = %d, want 2", len(entries))
+	}
+	if entries[0].frame != ref || entries[0].pictureStructure != PictureBottomField || entries[0].picID != 5 || entries[0].poc != 12 {
+		t.Fatalf("entry0 = %+v, want bottom field pic_id 5 poc 12", entries[0])
+	}
+	if entries[1].frame != ref || entries[1].pictureStructure != PictureTopField || entries[1].picID != 4 || entries[1].poc != 10 {
+		t.Fatalf("entry1 = %+v, want top field pic_id 4 poc 10", entries[1])
+	}
+}
+
+func TestSimpleFrameDPBReordersFieldShortRefsWithPicNumExtract(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sps.FrameMBSOnlyFlag = 0
+	ref := simpleDPBTestFrame(sps, 2)
+	ref.fieldPOC = [2]int32{10, 12}
+	ref.poc = 10
+	dpb := simpleFrameDPB{short: []*DecodedFrame{ref}}
+	dpb.setFrameRefMask(ref, PictureFrame)
+	sh := simpleDPBTestPHeader(sps, 3, 2)
+	sh.PictureStructure = PictureBottomField
+	sh.CurrPicNum = 7
+	sh.MaxPicNum = 32
+	sh.NBRefModifications[0] = 1
+	sh.RefModifications[0][0] = RefModification{Op: 0, Val: 2}
+
+	entries, err := dpb.buildPRefEntries(sh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || entries[0].pictureStructure != PictureTopField || entries[0].picID != 4 ||
+		entries[1].pictureStructure != PictureBottomField || entries[1].picID != 5 {
+		t.Fatalf("reordered field entries = %+v, want top then bottom", entries)
+	}
+}
+
+func TestSimpleFrameDPBMMCOShortFieldRemovalKeepsOpposite(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sps.FrameMBSOnlyFlag = 0
+	ref := simpleDPBTestFrame(sps, 2)
+	ref.fieldPOC = [2]int32{10, 12}
+	ref.poc = 10
+	current := simpleDPBTestFrame(sps, 3)
+	dpb := simpleFrameDPB{short: []*DecodedFrame{ref}}
+	dpb.setFrameRefMask(ref, PictureFrame)
+	sh := &SliceHeader{
+		NALType:          NALSlice,
+		SPS:              sps,
+		FrameNum:         3,
+		PictureStructure: PictureTopField,
+		NBMMCO:           1,
+		MMCO: [maxMMCOCount]MMCO{
+			{Opcode: mmcoShort2Unused, ShortPicNum: 5},
+		},
+	}
+
+	if _, _, err := dpb.applyMMCO(current, sh); err != nil {
+		t.Fatal(err)
+	}
+	if len(dpb.short) != 1 || dpb.short[0] != ref || dpb.frameRefMask(ref) != PictureBottomField {
+		t.Fatalf("refs after top removal = short %v mask %d, want bottom-only ref", simpleDPBFrameNums(dpb.short), dpb.frameRefMask(ref))
+	}
+
+	sh.MMCO[0].ShortPicNum = 4
+	if _, _, err := dpb.applyMMCO(current, sh); err != nil {
+		t.Fatal(err)
+	}
+	if len(dpb.short) != 0 {
+		t.Fatalf("refs after bottom removal = short %v, want no DPB ref", simpleDPBFrameNums(dpb.short))
+	}
+}
+
+func TestSimpleFrameDPBMarksSecondFieldWithoutDuplicateShortRef(t *testing.T) {
+	sps := simpleDPBTestSPS(1)
+	sps.FrameMBSOnlyFlag = 0
+	frame := simpleDPBTestFrame(sps, 2)
+	frame.fieldPOC = [2]int32{10, 12}
+	frame.poc = 10
+	dpb := simpleFrameDPB{short: []*DecodedFrame{frame}}
+	dpb.setFrameRefMask(frame, PictureTopField)
+	sh := &SliceHeader{
+		NALType:          NALSlice,
+		SPS:              sps,
+		FrameNum:         2,
+		PictureStructure: PictureBottomField,
+	}
+
+	if err := dpb.markDecodedFrame(frame, sh, 2); err != nil {
+		t.Fatal(err)
+	}
+	if len(dpb.short) != 1 || dpb.short[0] != frame || dpb.frameRefMask(frame) != PictureFrame {
+		t.Fatalf("second-field refs = short %v mask %d, want one complementary ref", simpleDPBFrameNums(dpb.short), dpb.frameRefMask(frame))
+	}
+}
+
 func TestSimpleRecoveryPointMarksImmediateRecoveryKeyFrame(t *testing.T) {
 	sps := simpleDPBTestSPS(1)
 	sps.Log2MaxFrameNum = 4
