@@ -139,7 +139,7 @@ func TestFillLoopFilterCachesFieldPictureKeepsSameFrameFieldRefsDistinct(t *test
 		t.Fatal(err)
 	}
 	maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> 1))
-	bS, err := m.loopFilterBoundaryStrength(&ctx, mbType, mbType, 1, maskPar0, p.ListCount, h264LoopFilterMVYLimit(mbType))
+	bS, err := m.loopFilterBoundaryStrength(&ctx, mbType, mbType, 1, maskPar0, p.ListCount, h264LoopFilterMVYLimit(mbType), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -834,26 +834,76 @@ func TestLoopFilterBoundaryStrengthFieldIntraHorizontalUsesBS3(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := &h264LoopFilterContext{}
-	bS, err := m.loopFilterBoundaryStrength(ctx, MBTypeIntra4x4|MBTypeInterlaced, MBTypeIntra4x4|MBTypeInterlaced, 1, 0, 1, 2)
+	bS, err := m.loopFilterBoundaryStrength(ctx, MBTypeIntra4x4|MBTypeInterlaced, MBTypeIntra4x4|MBTypeInterlaced, 1, 0, 1, 2, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bS != [4]int16{3, 3, 3, 3} {
 		t.Fatalf("field intra horizontal bS = %v, want all 3", bS)
 	}
-	bS, err = m.loopFilterBoundaryStrength(ctx, MBTypeIntra4x4|MBTypeInterlaced, MBTypeIntra4x4|MBTypeInterlaced, 0, 0, 1, 2)
+	bS, err = m.loopFilterBoundaryStrength(ctx, MBTypeIntra4x4|MBTypeInterlaced, MBTypeIntra4x4|MBTypeInterlaced, 0, 0, 1, 2, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bS != [4]int16{4, 4, 4, 4} {
 		t.Fatalf("field intra vertical bS = %v, want all 4", bS)
 	}
-	bS, err = m.loopFilterBoundaryStrength(ctx, MBTypeIntra4x4, MBTypeIntra4x4, 1, 0, 1, 4)
+	bS, err = m.loopFilterBoundaryStrength(ctx, MBTypeIntra4x4, MBTypeIntra4x4, 1, 0, 1, 4, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bS != [4]int16{4, 4, 4, 4} {
 		t.Fatalf("frame intra horizontal bS = %v, want all 4", bS)
+	}
+}
+
+func TestLoopFilterBoundaryStrengthFrameMBAFFHorizontalMixedInterlaceUsesBS1(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := &h264LoopFilterContext{}
+	mbType := MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	topType := MBType16x16 | MBTypeP0L0
+	maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> 1))
+
+	bS, err := m.loopFilterBoundaryStrength(ctx, mbType, topType, 1, maskPar0, 1, h264LoopFilterMVYLimit(mbType), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bS != [4]int16{1, 1, 1, 1} {
+		t.Fatalf("frame-MBAFF mixed horizontal bS = %v, want all 1", bS)
+	}
+
+	ctx.NonZeroCountCache[int(h264Scan8[0])+2] = 1
+	bS, err = m.loopFilterBoundaryStrength(ctx, mbType, topType, 1, maskPar0, 1, h264LoopFilterMVYLimit(mbType), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bS != [4]int16{1, 1, 2, 1} {
+		t.Fatalf("frame-MBAFF mixed horizontal nonzero bS = %v, want nonzero slot upgraded", bS)
+	}
+}
+
+func TestLoopFilterMBAFFTopHorizontalStrengthUsesFieldNeighborRows(t *testing.T) {
+	m, err := newMacroblockTables(1, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := 2 * m.MBStride
+	topField := 0
+	m.MacroblockTyp[current] = MBType16x16 | MBTypeP0L0
+	m.MacroblockTyp[topField] = MBType8x8 | MBTypeP0L0 | MBType8x8DCT | MBTypeInterlaced
+	m.CBPTable[topField] = 0x4000
+	ctx := &h264LoopFilterContext{MBXY: current}
+	ctx.NonZeroCountCache[int(h264Scan8[0])+2] = 1
+
+	bS, err := m.loopFilterMBAFFTopHorizontalStrength(ctx, m.MacroblockTyp[current], topField, h264LoopFilterSliceParams{CABAC: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bS != [4]int16{2, 2, 2, 1} {
+		t.Fatalf("MBAFF top-horizontal CAVLC bS = %v, want cbp/current-nnz driven [2 2 2 1]", bS)
 	}
 }
 
