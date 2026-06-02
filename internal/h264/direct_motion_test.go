@@ -36,6 +36,71 @@ func TestPredTemporalDirect16x16MapsColocatedMotion(t *testing.T) {
 	}
 }
 
+func TestPredTemporalDirectMapsColocatedRefByPictureID(t *testing.T) {
+	m, col, _ := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0)
+	col.tables.RefIndex[0][0] = 0
+	col.tables.MotionVal[0][col.tables.MB2BXY[0]] = [2]int16{4, 2}
+
+	firstCurrentRef := &DecodedFrame{poc: -4, frameNum: 1}
+	matchingCurrentRef := &DecodedFrame{poc: 0, frameNum: 7}
+	colocatedRef := &DecodedFrame{poc: 0, frameNum: 7}
+	col.refEntries[0] = []simpleRefEntry{{frame: colocatedRef, picID: 7}}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: firstCurrentRef, picID: 1},
+				{frame: matchingCurrentRef, picID: 7},
+			},
+			{{frame: col}},
+		},
+		CurPOC:             2,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("temporal direct picture-id map failed: %v", err)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 1 || cache.Ref[1][base] != 0 {
+		t.Fatalf("refs = %d/%d, want 1/0", cache.Ref[0][base], cache.Ref[1][base])
+	}
+	if cache.MV[0][base] != ([2]int16{2, 1}) || cache.MV[1][base] != ([2]int16{-2, -1}) {
+		t.Fatalf("mvs = %v/%v, want picture-id mapped scale", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
+func TestPredTemporalDirectColocatedRefMapMissingFallsBackToZero(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0)
+	col.tables.RefIndex[0][0] = 1
+	col.tables.MotionVal[0][col.tables.MB2BXY[0]] = [2]int16{4, 2}
+	col.refEntries[0] = []simpleRefEntry{
+		{frame: idr, picID: idr.frameNum},
+		{frame: &DecodedFrame{poc: 8, frameNum: 99}, picID: 99},
+	}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr, picID: idr.frameNum}},
+			{{frame: col}},
+		},
+		CurPOC:             2,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("temporal direct missing colmap fallback failed: %v", err)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 0 || cache.Ref[1][base] != 0 {
+		t.Fatalf("refs = %d/%d, want zero fallback 0/0", cache.Ref[0][base], cache.Ref[1][base])
+	}
+}
+
 func TestPredTemporalDirect8x8FromColocatedShape(t *testing.T) {
 	m, col, idr := newTemporalDirectTestTables(t, MBType8x8|MBTypeP0L0|MBTypeP1L0)
 	bxy := int(col.tables.MB2BXY[0])

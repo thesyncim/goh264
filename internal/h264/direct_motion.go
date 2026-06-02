@@ -449,16 +449,42 @@ func temporalDirectMapColToList0(ctx h264DirectMotionContext, list int, ref int8
 	if list < 0 || list > 1 || ref < 0 {
 		return 0, ErrInvalidData
 	}
-	if int(ref) >= len(ctx.RefEntries[list]) || ctx.RefEntries[list][ref].frame == nil {
+	if len(ctx.RefEntries[0]) == 0 {
+		return 0, ErrInvalidData
+	}
+	target, ok := temporalDirectColocatedRefEntry(ctx, list, int(ref))
+	if !ok {
 		return 0, ErrUnsupported
 	}
-	target := ctx.RefEntries[list][ref]
 	for i, entry := range ctx.RefEntries[0] {
-		if entry.frame == target.frame {
+		if entry.frame != nil && target.frame != nil && entry.frame == target.frame {
+			return int8(i), nil
+		}
+		if temporalDirectSamePictureID(entry, target) {
 			return int8(i), nil
 		}
 	}
-	return 0, ErrUnsupported
+	return 0, nil
+}
+
+func temporalDirectColocatedRefEntry(ctx h264DirectMotionContext, list int, ref int) (simpleRefEntry, bool) {
+	if len(ctx.RefEntries[1]) != 0 && ctx.RefEntries[1][0].frame != nil {
+		colEntries := ctx.RefEntries[1][0].frame.refEntries[list]
+		if ref < len(colEntries) {
+			return colEntries[ref], true
+		}
+	}
+	if ref < len(ctx.RefEntries[list]) {
+		return ctx.RefEntries[list][ref], true
+	}
+	return simpleRefEntry{}, false
+}
+
+func temporalDirectSamePictureID(a simpleRefEntry, b simpleRefEntry) bool {
+	if a.long != b.long || a.picID != b.picID {
+		return false
+	}
+	return a.frame != nil || b.frame != nil || a.long || a.picID != 0
 }
 
 func temporalDirectDistScaleFactor(ctx h264DirectMotionContext, ref0 int8) (int, error) {
