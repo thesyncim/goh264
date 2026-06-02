@@ -9,6 +9,7 @@ Known failures are explicit in `testdata/h264/realvectors/failures.jsonl`.
 
 ```sh
 go test ./...
+scripts/h264-real-vector-strict.sh
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorFailureMatrix

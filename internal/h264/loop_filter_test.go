@@ -128,6 +128,273 @@ func TestH264LoopFilterValidateRejectsHighBitDepthMBAFFDeblock(t *testing.T) {
 	}
 }
 
+func TestH264FrameMBAFFLoopFilterViewMapsFieldCodedRows(t *testing.T) {
+	const (
+		mbWidth      = 1
+		mbHeight     = 2
+		lumaStride   = 16
+		chromaStride = 8
+	)
+	dst := &h264PicturePlanes{
+		Y:                make([]uint8, lumaStride*32),
+		Cb:               make([]uint8, chromaStride*16),
+		Cr:               make([]uint8, chromaStride*16),
+		LumaStride:       lumaStride,
+		ChromaStride:     chromaStride,
+		MBWidth:          mbWidth,
+		MBHeight:         mbHeight,
+		ChromaFormatIDC:  1,
+		PictureStructure: PictureFrame,
+	}
+
+	top, mbY, err := h264FrameMBAFFLoopFilterView(dst, 0, MBTypeInterlaced|MBTypeIntra4x4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if top.PictureStructure != PictureTopField || top.LumaStride != lumaStride*2 || top.ChromaStride != chromaStride*2 || top.MBHeight != 1 || mbY != 0 {
+		t.Fatalf("top MBAFF filter view = picture %d strides %d/%d height %d mbY %d, want top %d/%d/1/0",
+			top.PictureStructure, top.LumaStride, top.ChromaStride, top.MBHeight, mbY, lumaStride*2, chromaStride*2)
+	}
+	if len(top.Y) != len(dst.Y) || len(top.Cb) != len(dst.Cb) || len(top.Cr) != len(dst.Cr) {
+		t.Fatalf("top MBAFF filter view shifted planes")
+	}
+
+	bottom, mbY, err := h264FrameMBAFFLoopFilterView(dst, 1, MBTypeInterlaced|MBTypeIntra4x4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bottom.PictureStructure != PictureBottomField || bottom.LumaStride != lumaStride*2 || bottom.ChromaStride != chromaStride*2 || bottom.MBHeight != 1 || mbY != 0 {
+		t.Fatalf("bottom MBAFF filter view = picture %d strides %d/%d height %d mbY %d, want bottom %d/%d/1/0",
+			bottom.PictureStructure, bottom.LumaStride, bottom.ChromaStride, bottom.MBHeight, mbY, lumaStride*2, chromaStride*2)
+	}
+	if &bottom.Y[0] != &dst.Y[lumaStride] || &bottom.Cb[0] != &dst.Cb[chromaStride] || &bottom.Cr[0] != &dst.Cr[chromaStride] {
+		t.Fatalf("bottom MBAFF filter view did not shift to bottom-field rows")
+	}
+
+	frame, mbY, err := h264FrameMBAFFLoopFilterView(dst, 1, MBTypeIntra4x4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame.PictureStructure != PictureFrame || frame.LumaStride != lumaStride || frame.ChromaStride != chromaStride || frame.MBHeight != mbHeight || mbY != 1 {
+		t.Fatalf("frame-coded MBAFF filter view = picture %d strides %d/%d height %d mbY %d, want frame %d/%d/%d/1",
+			frame.PictureStructure, frame.LumaStride, frame.ChromaStride, frame.MBHeight, mbY, lumaStride, chromaStride, mbHeight)
+	}
+}
+
+func TestFillLoopFilterCachesFrameMBAFFUsesFieldTopNeighbor(t *testing.T) {
+	const (
+		mbWidth  = 1
+		mbHeight = 4
+	)
+	m, err := newMacroblockTables(mbWidth, mbHeight, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		mbXY := mbY * m.MBStride
+		m.MacroblockTyp[mbXY] = MBTypeIntra4x4 | MBTypeInterlaced
+		m.QScaleTable[mbXY] = 30
+		m.SliceTable[mbXY] = 0
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+		MBAFF:            1,
+	}
+	params := []h264LoopFilterSliceParams{{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureFrame,
+		DeblockingFilter: 1,
+	}}
+
+	ctx, err := m.fillLoopFilterCachesFrame(2*m.MBStride, 0, params[0], params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.TopMBXY != 0 {
+		t.Fatalf("field-coded MBAFF top neighbor = %d, want 0 two rows above", ctx.TopMBXY)
+	}
+}
+
+func TestFillLoopFilterCachesFrameMBAFFSplitsMixedLeftNeighbors(t *testing.T) {
+	const (
+		mbWidth  = 2
+		mbHeight = 4
+	)
+	m, err := newMacroblockTables(mbWidth, mbHeight, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		for mbX := 0; mbX < mbWidth; mbX++ {
+			mbXY := mbX + mbY*m.MBStride
+			m.MacroblockTyp[mbXY] = MBTypeIntra4x4
+			m.QScaleTable[mbXY] = 30
+			m.SliceTable[mbXY] = 0
+		}
+	}
+	leftTop := 0
+	leftBottom := m.MBStride
+	current := 1
+	m.MacroblockTyp[leftTop] = MBTypeIntra4x4 | MBTypeInterlaced
+	m.MacroblockTyp[leftBottom] = MBTypeIntra16x16 | MBTypeInterlaced
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+		MBAFF:            1,
+	}
+	params := []h264LoopFilterSliceParams{{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureFrame,
+		DeblockingFilter: 1,
+	}}
+
+	ctx, err := m.fillLoopFilterCachesFrame(current, 0, params[0], params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.LeftMBXYs != ([2]int{leftTop, leftBottom}) {
+		t.Fatalf("frame-coded MBAFF mixed left xy = %v, want top/bottom %d/%d", ctx.LeftMBXYs, leftTop, leftBottom)
+	}
+	if ctx.LeftTypes != ([2]uint32{m.MacroblockTyp[leftTop], m.MacroblockTyp[leftBottom]}) {
+		t.Fatalf("frame-coded MBAFF mixed left types = %#x/%#x", ctx.LeftTypes[0], ctx.LeftTypes[1])
+	}
+
+	fieldCurrent := current + m.MBStride
+	m.MacroblockTyp[fieldCurrent] = MBTypeIntra4x4 | MBTypeInterlaced
+	m.MacroblockTyp[leftTop] = MBTypeIntra4x4
+	m.MacroblockTyp[leftBottom] = MBTypeIntra16x16
+	ctx, err = m.fillLoopFilterCachesFrame(fieldCurrent, 0, params[0], params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.LeftMBXYs != ([2]int{leftTop, leftBottom}) {
+		t.Fatalf("field-coded MBAFF mixed left xy = %v, want top/bottom %d/%d", ctx.LeftMBXYs, leftTop, leftBottom)
+	}
+	if ctx.LeftTypes != ([2]uint32{m.MacroblockTyp[leftTop], m.MacroblockTyp[leftBottom]}) {
+		t.Fatalf("field-coded MBAFF mixed left types = %#x/%#x", ctx.LeftTypes[0], ctx.LeftTypes[1])
+	}
+}
+
+func TestLoopFilterMBAFFMixedVerticalStrengthUsesBothLeftRows(t *testing.T) {
+	m, err := newMacroblockTables(2, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leftTop := 0
+	leftBottom := m.MBStride
+	current := 1
+	m.MacroblockTyp[leftTop] = MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	m.MacroblockTyp[leftBottom] = MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	m.MacroblockTyp[current] = MBType16x16 | MBTypeP0L0
+	m.NonZeroCount[leftTop][3] = 1
+	m.NonZeroCount[leftBottom][7] = 1
+	ctx := &h264LoopFilterContext{
+		MBXY:      current,
+		LeftMBXYs: [2]int{leftTop, leftBottom},
+		LeftTypes: [2]uint32{
+			m.MacroblockTyp[leftTop],
+			m.MacroblockTyp[leftBottom],
+		},
+	}
+	pps := cavlcFlatQMulPPS()
+
+	bS, err := m.loopFilterMBAFFMixedVerticalStrength(ctx, m.MacroblockTyp[current], h264LoopFilterSliceParams{PPS: pps, CABAC: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [8]int16{2, 1, 2, 1, 1, 2, 1, 2}
+	if bS != want {
+		t.Fatalf("frame-coded mixed MBAFF bS = %v, want %v", bS, want)
+	}
+
+	m.MacroblockTyp[current] |= MBTypeInterlaced
+	ctx.NonZeroCountCache = [h264NonZeroCountCacheSize]uint8{}
+	ctx.NonZeroCountCache[12+8*1] = 1
+	bS, err = m.loopFilterMBAFFMixedVerticalStrength(ctx, m.MacroblockTyp[current], h264LoopFilterSliceParams{PPS: pps, CABAC: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = [8]int16{2, 1, 2, 2, 1, 2, 1, 1}
+	if bS != want {
+		t.Fatalf("field-coded mixed MBAFF bS = %v, want %v", bS, want)
+	}
+}
+
+func TestMacroblockTablesFilterFrameMBAFFFieldViewFiltersFieldRows(t *testing.T) {
+	const (
+		mbWidth      = 1
+		mbHeight     = 2
+		lumaStride   = 16
+		chromaStride = 8
+		qp           = 30
+	)
+	m, err := newMacroblockTables(mbWidth, mbHeight, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := &h264PicturePlanes{
+		Y:               make([]uint8, lumaStride*32),
+		Cb:              make([]uint8, chromaStride*16),
+		Cr:              make([]uint8, chromaStride*16),
+		LumaStride:      lumaStride,
+		ChromaStride:    chromaStride,
+		MBWidth:         mbWidth,
+		MBHeight:        mbHeight,
+		ChromaFormatIDC: 1,
+	}
+	fillLoopFilterHorizontalStep(dst.Y, lumaStride, 16, 32, 8, 104, 112)
+	fillLoopFilterHorizontalStep(dst.Cb, chromaStride, 8, 16, 4, 84, 92)
+	fillLoopFilterHorizontalStep(dst.Cr, chromaStride, 8, 16, 4, 64, 72)
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		mbXY := mbY * m.MBStride
+		m.MacroblockTyp[mbXY] = MBTypeIntra16x16 | MBTypeInterlaced
+		m.QScaleTable[mbXY] = qp
+		m.SliceTable[mbXY] = 0
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+		MBAFF:            1,
+	}
+	params := []h264LoopFilterSliceParams{{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureFrame,
+		DeblockingFilter: 1,
+	}}
+	adjacentFrameRowsBefore := [2]uint8{dst.Y[7*lumaStride], dst.Y[8*lumaStride]}
+	topFieldRowsBefore := [2]uint8{dst.Y[6*lumaStride], dst.Y[8*lumaStride]}
+	bottomFieldRowsBefore := [2]uint8{dst.Y[7*lumaStride], dst.Y[9*lumaStride]}
+
+	if err := m.filterFrame(dst, params); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[6*lumaStride] == topFieldRowsBefore[0] || dst.Y[8*lumaStride] == topFieldRowsBefore[1] {
+		t.Fatalf("top-field MBAFF horizontal edge did not filter: %v -> [%d %d]",
+			topFieldRowsBefore, dst.Y[6*lumaStride], dst.Y[8*lumaStride])
+	}
+	if dst.Y[7*lumaStride] == bottomFieldRowsBefore[0] || dst.Y[9*lumaStride] == bottomFieldRowsBefore[1] {
+		t.Fatalf("bottom-field MBAFF horizontal edge did not filter: %v -> [%d %d]",
+			bottomFieldRowsBefore, dst.Y[7*lumaStride], dst.Y[9*lumaStride])
+	}
+	if dst.Y[7*lumaStride] == adjacentFrameRowsBefore[0] || dst.Y[8*lumaStride] == adjacentFrameRowsBefore[1] {
+		t.Fatalf("MBAFF filter unexpectedly left adjacent frame rows untouched: %v -> [%d %d]",
+			adjacentFrameRowsBefore, dst.Y[7*lumaStride], dst.Y[8*lumaStride])
+	}
+}
+
 func TestH264ApplyLoopFilterEdgeHigh420MutatesLumaChroma(t *testing.T) {
 	const (
 		lumaStride   = 32
@@ -615,6 +882,21 @@ func fillLoopFilterStepRows(pix []uint8, stride int, height int, edge int, left 
 		}
 		for x := edge; x < stride; x++ {
 			pix[row+x] = right
+		}
+	}
+}
+
+func fillLoopFilterHorizontalStep(pix []uint8, stride int, width int, height int, edge int, top uint8, bottom uint8) {
+	for y := 0; y < edge; y++ {
+		row := y * stride
+		for x := 0; x < width; x++ {
+			pix[row+x] = top
+		}
+	}
+	for y := edge; y < height; y++ {
+		row := y * stride
+		for x := 0; x < width; x++ {
+			pix[row+x] = bottom
 		}
 	}
 }
