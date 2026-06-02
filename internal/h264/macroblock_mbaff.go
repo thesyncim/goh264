@@ -31,6 +31,7 @@ func (m *macroblockTables) fillFrameMacroblockDecodeCachesEntropy(intraCache *[h
 
 	if isInter(in.MBType) || (isDirect(in.MBType) && in.DirectSpatialMVPred) {
 		motionNeighbors := neighbors.motionNeighbors(in.MBType, in.ListCount, in.SliceTypeNoS, in.CABAC, in.DirectSpatialMVPred)
+		motionNeighbors.FrameMBAFF = frameMBAFF
 		if err := m.fillMotionDecodeCaches(motion, motionNeighbors); err != nil {
 			return result, err
 		}

@@ -131,6 +131,7 @@ type motionDecodeNeighbors struct {
 	SliceTypeNoS        int32
 	CABAC               bool
 	DirectSpatialMVPred bool
+	FrameMBAFF          bool
 	LeftBlock           *[32]uint8
 }
 

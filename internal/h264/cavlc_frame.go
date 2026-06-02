@@ -297,12 +297,15 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithDirectWorkFieldG
 	if fieldPicture {
 		mbType |= MBTypeInterlaced
 	}
-	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, fieldPicture)
+	frameMBAFF := sh.PictureStructure == PictureFrame && sh.SPS != nil && sh.SPS.MBAFF != 0
+	neighbors, err := m.fillDecodeNeighborsFrameEntropy(mbXY, sliceNum, mbType, fieldPicture, frameMBAFF)
 	if err != nil {
 		return result, err
 	}
 	*work = frameMacroblockDecodeWork{}
-	if err := m.writeBackPskipMacroblockWithMotion(mbXY, qscale, neighbors.motionNeighbors(mbType, 1, PictureTypeP, false, false), sliceNum, &work.Motion); err != nil {
+	motionNeighbors := neighbors.motionNeighbors(mbType, 1, PictureTypeP, false, false)
+	motionNeighbors.FrameMBAFF = frameMBAFF
+	if err := m.writeBackPskipMacroblockWithMotion(mbXY, qscale, motionNeighbors, sliceNum, &work.Motion); err != nil {
 		return result, err
 	}
 	if fieldPicture {

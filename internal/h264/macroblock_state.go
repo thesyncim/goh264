@@ -170,7 +170,7 @@ func (m *macroblockTables) writeBackPskipMacroblockWithCABAC(mbXY int, qscale in
 	if qscale < 0 || qscale > qpMaxNum {
 		return ErrInvalidData
 	}
-	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip | (n.MBType & MBTypeInterlaced)
 	var cache macroblockMotionCache
 	if motion != nil {
 		*motion = macroblockMotionCache{}

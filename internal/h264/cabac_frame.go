@@ -417,7 +417,9 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkFieldG
 		return result, err
 	}
 	*work = frameMacroblockDecodeWork{}
-	if err := m.writeBackCABACPskipMacroblockWithMotion(mbXY, qscale, neighbors.motionNeighbors(mbType, 1, PictureTypeP, true, false), sliceNum, &work.Motion); err != nil {
+	motionNeighbors := neighbors.motionNeighbors(mbType, 1, PictureTypeP, true, false)
+	motionNeighbors.FrameMBAFF = frameMBAFF
+	if err := m.writeBackCABACPskipMacroblockWithMotion(mbXY, qscale, motionNeighbors, sliceNum, &work.Motion); err != nil {
 		return result, err
 	}
 	if fieldPicture {

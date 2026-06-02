@@ -155,6 +155,7 @@ func (m *macroblockTables) predPSkipMotion(cache *macroblockMotionCache, n motio
 		}
 		leftRef = m.RefIndex[0][refIdx]
 		a = m.MotionVal[0][mvIdx]
+		leftRef, a = h264FixPskipMVForMBAFF(n, n.LeftType[h264LeftTop], leftRef, a)
 		if refAndMVZero(leftRef, a) {
 			fillMotionRectangle(&cache.MV[0], base, 4, 4, 8, [2]int16{})
 			return nil
@@ -180,6 +181,7 @@ func (m *macroblockTables) predPSkipMotion(cache *macroblockMotionCache, n motio
 		}
 		topRef = m.RefIndex[0][refIdx]
 		b = m.MotionVal[0][mvIdx]
+		topRef, b = h264FixPskipMVForMBAFF(n, n.TopType, topRef, b)
 		if refAndMVZero(topRef, b) {
 			fillMotionRectangle(&cache.MV[0], base, 4, 4, 8, [2]int16{})
 			return nil
@@ -205,6 +207,7 @@ func (m *macroblockTables) predPSkipMotion(cache *macroblockMotionCache, n motio
 		}
 		diagonalRef = m.RefIndex[0][refIdx]
 		c = m.MotionVal[0][mvIdx]
+		diagonalRef, c = h264FixPskipMVForMBAFF(n, n.TopRightType, diagonalRef, c)
 	} else if n.TopRightType != 0 {
 		diagonalRef = h264ListNotUsed
 	} else if usesList(n.TopLeftType, 0) {
@@ -221,6 +224,7 @@ func (m *macroblockTables) predPSkipMotion(cache *macroblockMotionCache, n motio
 		}
 		diagonalRef = m.RefIndex[0][refIdx]
 		c = m.MotionVal[0][mvIdx]
+		diagonalRef, c = h264FixPskipMVForMBAFF(n, n.TopLeftType, diagonalRef, c)
 	} else if n.TopLeftType != 0 {
 		diagonalRef = h264ListNotUsed
 	} else {
@@ -246,6 +250,22 @@ func (m *macroblockTables) predPSkipMotion(cache *macroblockMotionCache, n motio
 	}
 	fillMotionRectangle(&cache.MV[0], base, 4, 4, 8, mv)
 	return nil
+}
+
+func h264FixPskipMVForMBAFF(n motionDecodeNeighbors, neighborType uint32, ref int8, mv [2]int16) (int8, [2]int16) {
+	if !n.FrameMBAFF {
+		return ref, mv
+	}
+	mbField := n.MBType&MBTypeInterlaced != 0
+	neighborField := neighborType&MBTypeInterlaced != 0
+	if mbField && !neighborField {
+		ref <<= 1
+		mv[1] /= 2
+	} else if !mbField && neighborField {
+		ref >>= 1
+		mv[1] = int16(int(mv[1]) * 2)
+	}
+	return ref, mv
 }
 
 func fillCAVLCInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacroblockSyntax, listCount int) error {

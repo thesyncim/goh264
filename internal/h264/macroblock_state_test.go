@@ -228,6 +228,86 @@ func TestWriteBackPskipMacroblockState(t *testing.T) {
 	}
 }
 
+func TestWriteBackPskipFrameMBAFFFieldCurrentScalesFrameNeighbors(t *testing.T) {
+	m, err := newMacroblockTables(3, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mbXY := 5
+	leftXY := 4
+	topXY := 1
+	topRightXY := 2
+	for _, xy := range []int{leftXY, topXY, topRightXY} {
+		m.MacroblockTyp[xy] = MBType16x16 | MBTypeP0L0
+	}
+	m.RefIndex[0][4*leftXY+1] = 0
+	m.MotionVal[0][int(m.MB2BXY[leftXY])+3] = [2]int16{-35, -10}
+	m.RefIndex[0][4*topXY+2] = 0
+	m.MotionVal[0][int(m.MB2BXY[topXY])+3*m.BStride] = [2]int16{-35, -10}
+	m.RefIndex[0][4*topRightXY+2] = 0
+	m.MotionVal[0][int(m.MB2BXY[topRightXY])+3*m.BStride] = [2]int16{-35, -10}
+
+	err = m.writeBackPskipMacroblock(mbXY, 24, motionDecodeNeighbors{
+		MBType:       MBTypeInterlaced,
+		FrameMBAFF:   true,
+		LeftType:     [2]uint32{MBType16x16 | MBTypeP0L0, 0},
+		TopType:      MBType16x16 | MBTypeP0L0,
+		TopRightType: MBType16x16 | MBTypeP0L0,
+		LeftXY:       [2]int{leftXY, 0},
+		TopXY:        topXY,
+		TopRightXY:   topRightXY,
+	}, 11)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip | MBTypeInterlaced
+	if m.MacroblockTyp[mbXY] != wantType {
+		t.Fatalf("pskip type = %#x, want %#x", m.MacroblockTyp[mbXY], wantType)
+	}
+	bXY := int(m.MB2BXY[mbXY])
+	if m.RefIndex[0][4*mbXY] != 0 || m.MotionVal[0][bXY] != ([2]int16{-35, -5}) {
+		t.Fatalf("field pskip ref/mv = %d/%v, want 0/[-35 -5]", m.RefIndex[0][4*mbXY], m.MotionVal[0][bXY])
+	}
+}
+
+func TestWriteBackPskipFrameMBAFFFrameCurrentScalesFieldNeighbors(t *testing.T) {
+	m, err := newMacroblockTables(3, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mbXY := 5
+	leftXY := 4
+	topXY := 1
+	topRightXY := 2
+	fieldType := MBTypeInterlaced | MBType16x16 | MBTypeP0L0
+	for _, xy := range []int{leftXY, topXY, topRightXY} {
+		m.MacroblockTyp[xy] = fieldType
+	}
+	m.RefIndex[0][4*leftXY+1] = 1
+	m.MotionVal[0][int(m.MB2BXY[leftXY])+3] = [2]int16{7, 5}
+	m.RefIndex[0][4*topXY+2] = 1
+	m.MotionVal[0][int(m.MB2BXY[topXY])+3*m.BStride] = [2]int16{7, 5}
+	m.RefIndex[0][4*topRightXY+2] = 1
+	m.MotionVal[0][int(m.MB2BXY[topRightXY])+3*m.BStride] = [2]int16{7, 5}
+
+	err = m.writeBackPskipMacroblock(mbXY, 24, motionDecodeNeighbors{
+		FrameMBAFF:   true,
+		LeftType:     [2]uint32{fieldType, 0},
+		TopType:      fieldType,
+		TopRightType: fieldType,
+		LeftXY:       [2]int{leftXY, 0},
+		TopXY:        topXY,
+		TopRightXY:   topRightXY,
+	}, 11)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bXY := int(m.MB2BXY[mbXY])
+	if m.RefIndex[0][4*mbXY] != 0 || m.MotionVal[0][bXY] != ([2]int16{7, 10}) {
+		t.Fatalf("frame pskip ref/mv = %d/%v, want 0/[7 10]", m.RefIndex[0][4*mbXY], m.MotionVal[0][bXY])
+	}
+}
+
 func TestWriteBackCABACPskipMacroblockZerosMVDTable(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {
