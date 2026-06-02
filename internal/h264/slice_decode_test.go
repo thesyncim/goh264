@@ -46,6 +46,50 @@ func TestDecodeCAVLCFrameSliceReconstructsIntraPCMRun(t *testing.T) {
 	}
 }
 
+func TestDecodeCAVLCFrameSliceReconstructsFieldPictureIntraPCM(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		picture    int32
+		wantMBY    int
+		wantLastXY func(*macroblockTables) int
+	}{
+		{name: "top", picture: PictureTopField, wantMBY: 0, wantLastXY: func(*macroblockTables) int { return 0 }},
+		{name: "bottom", picture: PictureBottomField, wantMBY: 1, wantLastXY: func(m *macroblockTables) int { return m.MBStride }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := newMacroblockTables(1, 2, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0}
+			pps := cavlcFlatQMulPPS()
+			pps.SPS = sps
+			sh := &SliceHeader{
+				FirstMBAddr:      0,
+				SliceType:        PictureTypeI,
+				SliceTypeNoS:     PictureTypeI,
+				PictureStructure: tt.picture,
+				PPS:              pps,
+				SPS:              sps,
+				QScale:           20,
+				DeblockingFilter: 0,
+			}
+			dst := makeH264SliceDecodePicture(1, 2, 1)
+			pcm := h264ReconstructIntraPCM(1, 31+tt.wantMBY)
+			gb := newBitReader(cavlcIntraPCMBytes(pcm))
+
+			got, err := m.decodeCAVLCFrameSlice(&gb, dst, sh, h264FrameSliceDecodeInput{SliceNum: 19})
+			if err != nil {
+				t.Fatalf("decode cavlc field slice failed: %v", err)
+			}
+			if got.Macroblocks != 1 || got.LastMBXY != tt.wantLastXY(m) || !got.EndOfSlice || !got.EndOfFrame {
+				t.Fatalf("slice result = %+v, want one field MB ending at xy %d", got, tt.wantLastXY(m))
+			}
+			assertH264SliceDecodePCM(t, dst, 0, tt.wantMBY, pcm)
+		})
+	}
+}
+
 func TestDecodeFrameSliceDataDispatchesCAVLC(t *testing.T) {
 	m, err := newMacroblockTables(1, 1, 1)
 	if err != nil {
@@ -123,6 +167,58 @@ func TestDecodeCABACFrameSliceMBAFFReconstructsFrameCodedPCMPair(t *testing.T) {
 	}
 	if len(src.bits) != 0 || len(src.terms) != 0 || len(src.pcm) != 0 {
 		t.Fatalf("script leftovers bits=%d terms=%d pcm=%d, want none", len(src.bits), len(src.terms), len(src.pcm))
+	}
+}
+
+func TestDecodeCABACFrameSliceReconstructsFieldPictureIntraPCM(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		picture    int32
+		wantMBY    int
+		wantLastXY func(*macroblockTables) int
+	}{
+		{name: "top", picture: PictureTopField, wantMBY: 0, wantLastXY: func(*macroblockTables) int { return 0 }},
+		{name: "bottom", picture: PictureBottomField, wantMBY: 1, wantLastXY: func(m *macroblockTables) int { return m.MBStride }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := newMacroblockTables(1, 2, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0}
+			pps := cavlcFlatQMulPPS()
+			pps.SPS = sps
+			pps.CABAC = 1
+			sh := &SliceHeader{
+				FirstMBAddr:      0,
+				SliceType:        PictureTypeI,
+				SliceTypeNoS:     PictureTypeI,
+				PictureStructure: tt.picture,
+				PPS:              pps,
+				SPS:              sps,
+				QScale:           20,
+				DeblockingFilter: 0,
+			}
+			dst := makeH264SliceDecodePicture(1, 2, 1)
+			pcm := h264ReconstructIntraPCM(1, 47+tt.wantMBY)
+			src := &scriptedCABACSource{
+				bits:  []int{1},
+				terms: []int{1, 1},
+				pcm:   append([]byte(nil), pcm...),
+			}
+
+			got, err := m.decodeCABACFrameSlice(src, dst, sh, h264FrameSliceDecodeInput{SliceNum: 20})
+			if err != nil {
+				t.Fatalf("decode cabac field slice failed: %v", err)
+			}
+			if got.Macroblocks != 1 || got.LastMBXY != tt.wantLastXY(m) || !got.EndOfSlice || !got.EndOfFrame {
+				t.Fatalf("slice result = %+v, want one field MB ending at xy %d", got, tt.wantLastXY(m))
+			}
+			assertH264SliceDecodePCM(t, dst, 0, tt.wantMBY, pcm)
+			if len(src.bits) != 0 || len(src.pcm) != 0 {
+				t.Fatalf("script leftovers bits=%d pcm=%d, want none", len(src.bits), len(src.pcm))
+			}
+		})
 	}
 }
 

@@ -71,14 +71,14 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 	if m == nil || src == nil || sh == nil || sh.PPS == nil || sh.SPS == nil || state == nil || work == nil {
 		return result, ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame {
+	if sh.PictureStructure != PictureFrame && sh.PictureStructure != PictureTopField && sh.PictureStructure != PictureBottomField {
 		return result, ErrUnsupported
 	}
 	if sh.QScale > qpMaxNum || state.QScale < 0 || state.QScale > qpMaxNum {
 		return result, ErrInvalidData
 	}
 
-	frameMBAFF := sh.SPS.MBAFF != 0
+	frameMBAFF := sh.PictureStructure == PictureFrame && sh.SPS.MBAFF != 0
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
 	if frameMBAFF && (mbY&1) != 0 && state.MBFieldDecodingFlag != 0 {
@@ -88,7 +88,9 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 	if sh.SliceTypeNoS != PictureTypeI {
 		var skip bool
 		var err error
-		if frameMBAFF {
+		if frameMBAFF && (mbY&1) != 0 && state.PrevMBSkipped {
+			skip = state.NextMBSkipped
+		} else if frameMBAFF {
 			skip, err = m.decodeCABACMBSkipMBAFF(src, mbXY, mbX, mbY, sh.SliceTypeNoS, sliceNum, state.MBFieldDecodingFlag)
 		} else {
 			skip, err = m.decodeCABACMBSkip(src, mbXY, sh.SliceTypeNoS, sliceNum)
@@ -99,7 +101,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		if skip {
 			state.PrevMBSkipped = true
 			state.LastQScaleDiff = 0
-			if frameMBAFF {
+			if frameMBAFF && (mbY&1) == 0 {
 				next, err := m.decodeCABACMBSkipMBAFF(src, mbXY+m.MBStride, mbX, mbY+1, sh.SliceTypeNoS, sliceNum, state.MBFieldDecodingFlag)
 				if err != nil {
 					return result, err
@@ -113,7 +115,10 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 					state.MBFieldDecodingFlag = flag
 					result.MBFieldDecodingFlag = flag
 				}
-				return result, ErrUnsupported
+				if state.MBFieldDecodingFlag != 0 {
+					result.MBType = MBTypeInterlaced
+					return result, ErrUnsupported
+				}
 			}
 			return m.writeBackCABACFrameSkipMacroblockWithDirectWorkGuard(sh, state.QScale, mbXY, sliceNum, direct, work, rejectUnsupportedHighB)
 		}

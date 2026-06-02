@@ -113,6 +113,55 @@ func TestDecodeCABACFrameIntraPCMMacroblockWritesState(t *testing.T) {
 	wantIndexes(t, src, []int{3})
 }
 
+func TestDecodeCABACFieldPictureIntraPCMMacroblockPassesMBAFFGuard(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		picture int32
+		mbXY    func(*macroblockTables) int
+	}{
+		{name: "top", picture: PictureTopField, mbXY: func(*macroblockTables) int { return 0 }},
+		{name: "bottom", picture: PictureBottomField, mbXY: func(m *macroblockTables) int { return m.MBStride }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := newMacroblockTables(1, 2, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+			pps := cavlcFlatQMulPPS()
+			pps.SPS = sps
+			pcm := h264ReconstructIntraPCM(1, 43)
+			src := &scriptedCABACSource{
+				bits:  []int{1},
+				terms: []int{1},
+				pcm:   append([]byte(nil), pcm...),
+			}
+			sh := &SliceHeader{
+				SliceType:        PictureTypeI,
+				SliceTypeNoS:     PictureTypeI,
+				PictureStructure: tt.picture,
+				PPS:              pps,
+				SPS:              sps,
+				QScale:           20,
+			}
+			state := &cabacFrameSliceState{QScale: int(sh.QScale)}
+			mbXY := tt.mbXY(m)
+
+			got, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, mbXY, 6)
+			if err != nil {
+				t.Fatalf("decode field-picture intra pcm failed: %v", err)
+			}
+			if got.MBType != MBTypeIntraPCM || !got.IsIntra || got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 {
+				t.Fatalf("result type/intra/field = %#x/%v/%d/%d, want intra pcm field-picture without MBAFF flag", got.MBType, got.IsIntra, got.MBFieldDecodingFlag, state.MBFieldDecodingFlag)
+			}
+			if m.SliceTable[mbXY] != 6 || m.MacroblockTyp[mbXY] != MBTypeIntraPCM || m.QScaleTable[mbXY] != 0 {
+				t.Fatalf("tables slice/type/q = %d/%#x/%d, want 6/intra pcm/0", m.SliceTable[mbXY], m.MacroblockTyp[mbXY], m.QScaleTable[mbXY])
+			}
+			wantIndexes(t, src, []int{3})
+		})
+	}
+}
+
 func TestDecodeCABACFrameMBAFFFrameMacroblockDecodesAfterFieldFlag(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {
@@ -577,6 +626,84 @@ func TestDecodeCABACFrameMBAFFSkipReadsBottomSkipAndFieldFlag(t *testing.T) {
 		t.Fatalf("tables changed on unsupported mbaff skip: top slice/type %d/%#x bottom slice/type %d/%#x", m.SliceTable[0], m.MacroblockTyp[0], m.SliceTable[m.MBStride], m.MacroblockTyp[m.MBStride])
 	}
 	wantIndexes(t, src, []int{11, 11, 70})
+}
+
+func TestDecodeCABACFrameMBAFFSkipWritesFrameCodedTopSkip(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	sh := &SliceHeader{
+		SliceType:        PictureTypeP,
+		SliceTypeNoS:     PictureTypeP,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           24,
+		RefCount:         [2]uint32{1, 0},
+	}
+	state := &cabacFrameSliceState{QScale: int(sh.QScale), LastQScaleDiff: 3}
+	src := &scriptedCABACSource{bits: []int{1, 0, 0}}
+
+	got, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, 0, 5)
+	if err != nil {
+		t.Fatalf("decode frame-coded mbaff skip failed: %v", err)
+	}
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	if !got.Skipped || !got.IsInter || got.MBType != wantType || got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 || got.LastQScaleDiff != 0 {
+		t.Fatalf("skip result = skipped:%v inter:%v type:%#x field:%d/%d diff:%d, want frame-coded pskip", got.Skipped, got.IsInter, got.MBType, got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.LastQScaleDiff)
+	}
+	if !state.PrevMBSkipped || state.NextMBSkipped || state.LastQScaleDiff != 0 {
+		t.Fatalf("skip state prev/next/diff = %v/%v/%d, want true/false/0", state.PrevMBSkipped, state.NextMBSkipped, state.LastQScaleDiff)
+	}
+	if m.SliceTable[0] != 5 || m.MacroblockTyp[0] != wantType || m.QScaleTable[0] != 24 {
+		t.Fatalf("tables slice/type/q = %d/%#x/%d, want 5/pskip/24", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0])
+	}
+	if m.SliceTable[m.MBStride] != ^uint16(0) || m.MacroblockTyp[m.MBStride] != 0 {
+		t.Fatalf("bottom tables changed before bottom decode: slice/type = %d/%#x", m.SliceTable[m.MBStride], m.MacroblockTyp[m.MBStride])
+	}
+	wantIndexes(t, src, []int{11, 11, 70})
+}
+
+func TestDecodeCABACFrameMBAFFBottomSkipReusesDecodedNextSkip(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	sh := &SliceHeader{
+		SliceType:        PictureTypeP,
+		SliceTypeNoS:     PictureTypeP,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           24,
+		RefCount:         [2]uint32{1, 0},
+	}
+	state := &cabacFrameSliceState{QScale: int(sh.QScale)}
+	src := &scriptedCABACSource{bits: []int{1, 1}}
+
+	top, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, 0, 5)
+	if err != nil {
+		t.Fatalf("decode top frame-coded mbaff skip failed: %v", err)
+	}
+	bottom, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, m.MBStride, 5)
+	if err != nil {
+		t.Fatalf("decode bottom frame-coded mbaff skip failed: %v", err)
+	}
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	if top.MBType != wantType || bottom.MBType != wantType || !top.Skipped || !bottom.Skipped {
+		t.Fatalf("top/bottom skip type = %#x/%#x skipped %v/%v, want pskip pair", top.MBType, bottom.MBType, top.Skipped, bottom.Skipped)
+	}
+	if m.SliceTable[0] != 5 || m.SliceTable[m.MBStride] != 5 || m.MacroblockTyp[0] != wantType || m.MacroblockTyp[m.MBStride] != wantType {
+		t.Fatalf("tables top slice/type %d/%#x bottom slice/type %d/%#x, want pskip pair", m.SliceTable[0], m.MacroblockTyp[0], m.SliceTable[m.MBStride], m.MacroblockTyp[m.MBStride])
+	}
+	wantIndexes(t, src, []int{11, 11})
 }
 
 func TestDecodeCABACFrameBDirectUnsupportedBeforeWriteback(t *testing.T) {

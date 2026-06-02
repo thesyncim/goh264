@@ -218,13 +218,7 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 			if matches {
 				t.Fatalf("%s: failure-ledger row now matches oracle; remove it from %s", entry.ID, defaultH264RealVectorFailureManifest)
 			}
-			t.Logf("%s: still red: class=%s features=%s surfaces=%s source=%q detail=%s",
-				entry.ID,
-				h264CorpusOracleFailureClass(detail),
-				strings.Join(entry.FeatureTags, ","),
-				strings.Join(entry.Surfaces, ","),
-				entry.Source,
-				detail)
+			t.Logf("%s: still red: %s", entry.ID, h264CorpusFailureDetail(entry, detail))
 		})
 	}
 }
@@ -267,7 +261,7 @@ func testH264CorpusEntries(t *testing.T, manifest string, entries []h264CorpusEn
 						return
 					}
 					if err != nil {
-						t.Fatalf("%s decode: %v", surface, err)
+						failH264CorpusOracle(t, entry, fmt.Sprintf("%s decode: %v", surface, err))
 					}
 					assertH264CorpusFrames(t, entry, frames)
 				})
@@ -415,6 +409,24 @@ func h264CorpusFailureFilterSummary(entries []h264CorpusEntry) string {
 	}
 	sort.Strings(sorted)
 	return strings.Join(sorted, ",")
+}
+
+func TestH264CorpusOracleFailureClass(t *testing.T) {
+	tests := map[string]string{
+		"missing /tmp/in.264; set GOH264_CORPUS_FETCH=1": "input-missing",
+		"decode error: unsupported MBAFF":                "decode-error",
+		"frames = 2, want 3":                             "frame-count-mismatch",
+		"frame[0] pix_fmt = yuv420p, want yuv422p":       "pixel-format-mismatch",
+		"frame[0] raw size = 10, want 20":                "raw-size-mismatch",
+		"bitstream_md5 = abc, want def":                  "bitstream-md5-mismatch",
+		"rawvideo md5 = abc, want def":                   "raw-md5-mismatch",
+		"unexpected oracle detail":                       "oracle-mismatch",
+	}
+	for detail, want := range tests {
+		if got := h264CorpusOracleFailureClass(detail); got != want {
+			t.Fatalf("h264CorpusOracleFailureClass(%q) = %q, want %q", detail, got, want)
+		}
+	}
 }
 
 func TestValidateH264CorpusEntryAllowsURLBackedDecodeOK(t *testing.T) {
@@ -704,48 +716,48 @@ func assertCorpusBitstreamMD5(t *testing.T, entry h264CorpusEntry, data []byte) 
 	}
 	sum := md5.Sum(data)
 	if got := hex.EncodeToString(sum[:]); got != entry.BitstreamMD5 {
-		t.Fatalf("%s: bitstream_md5 = %s, want %s", entry.ID, got, entry.BitstreamMD5)
+		failH264CorpusOracle(t, entry, fmt.Sprintf("bitstream_md5 = %s, want %s", got, entry.BitstreamMD5))
 	}
 }
 
 func assertH264CorpusFrames(t *testing.T, entry h264CorpusEntry, frames []*Frame) {
 	t.Helper()
 	if len(frames) != entry.FrameCount {
-		t.Fatalf("%s: frames = %d, want %d", entry.ID, len(frames), entry.FrameCount)
+		failH264CorpusOracle(t, entry, fmt.Sprintf("frames = %d, want %d", len(frames), entry.FrameCount))
 	}
 	rawHash := md5.New()
 	var total int
 	for i, frame := range frames {
 		pixFmt, err := frame.RawPixelFormat()
 		if err != nil {
-			t.Fatalf("%s frame[%d] pix_fmt: %v", entry.ID, i, err)
+			failH264CorpusOracle(t, entry, fmt.Sprintf("frame[%d] pix_fmt: %v", i, err))
 		}
 		if pixFmt != entry.PixFmt {
-			t.Fatalf("%s frame[%d] pix_fmt = %s, want %s", entry.ID, i, pixFmt, entry.PixFmt)
+			failH264CorpusOracle(t, entry, fmt.Sprintf("frame[%d] pix_fmt = %s, want %s", i, pixFmt, entry.PixFmt))
 		}
 		raw, err := frame.AppendRawYUVBytesLE(nil)
 		if err != nil {
-			t.Fatalf("%s frame[%d] raw yuv: %v", entry.ID, i, err)
+			failH264CorpusOracle(t, entry, fmt.Sprintf("frame[%d] raw yuv: %v", i, err))
 		}
 		if len(raw) != entry.FrameSize {
-			t.Fatalf("%s frame[%d] raw size = %d, want %d", entry.ID, i, len(raw), entry.FrameSize)
+			failH264CorpusOracle(t, entry, fmt.Sprintf("frame[%d] raw size = %d, want %d", i, len(raw), entry.FrameSize))
 		}
 		sum := md5.Sum(raw)
 		if len(entry.FrameMD5) != 0 {
 			if got := hex.EncodeToString(sum[:]); got != entry.FrameMD5[i] {
-				t.Fatalf("%s frame[%d] md5 = %s, want %s", entry.ID, i, got, entry.FrameMD5[i])
+				failH264CorpusOracle(t, entry, fmt.Sprintf("frame[%d] md5 = %s, want %s", i, got, entry.FrameMD5[i]))
 			}
 		}
 		if _, err := rawHash.Write(raw); err != nil {
-			t.Fatalf("%s frame[%d] raw hash: %v", entry.ID, i, err)
+			failH264CorpusOracle(t, entry, fmt.Sprintf("frame[%d] raw hash: %v", i, err))
 		}
 		total += len(raw)
 	}
 	if total != entry.FrameCount*entry.FrameSize {
-		t.Fatalf("%s: raw total = %d, want %d", entry.ID, total, entry.FrameCount*entry.FrameSize)
+		failH264CorpusOracle(t, entry, fmt.Sprintf("raw total = %d, want %d", total, entry.FrameCount*entry.FrameSize))
 	}
 	if got := hex.EncodeToString(rawHash.Sum(nil)); got != entry.RawVideoMD5 {
-		t.Fatalf("%s: rawvideo md5 = %s, want %s", entry.ID, got, entry.RawVideoMD5)
+		failH264CorpusOracle(t, entry, fmt.Sprintf("rawvideo md5 = %s, want %s", got, entry.RawVideoMD5))
 	}
 }
 
@@ -796,10 +808,13 @@ func h264CorpusAnnexBMatchesOracle(t *testing.T, entry h264CorpusEntry, data []b
 }
 
 func h264CorpusOracleFailureClass(detail string) string {
+	detail = strings.ToLower(detail)
 	switch {
 	case detail == "":
 		return ""
-	case strings.Contains(detail, "decode error") || strings.Contains(detail, "unsupported"):
+	case strings.Contains(detail, "missing ") || strings.Contains(detail, "no such file"):
+		return "input-missing"
+	case strings.Contains(detail, "decode") || strings.Contains(detail, "unsupported"):
 		return "decode-error"
 	case strings.Contains(detail, "frames ="):
 		return "frame-count-mismatch"
@@ -807,11 +822,34 @@ func h264CorpusOracleFailureClass(detail string) string {
 		return "pixel-format-mismatch"
 	case strings.Contains(detail, "raw size") || strings.Contains(detail, "raw total"):
 		return "raw-size-mismatch"
+	case strings.Contains(detail, "bitstream_md5"):
+		return "bitstream-md5-mismatch"
 	case strings.Contains(detail, "rawvideo md5") || strings.Contains(detail, "md5 ="):
 		return "raw-md5-mismatch"
 	default:
 		return "oracle-mismatch"
 	}
+}
+
+func failH264CorpusOracle(t *testing.T, entry h264CorpusEntry, detail string) {
+	t.Helper()
+	t.Fatalf("%s: strict corpus failure: %s", entry.ID, h264CorpusFailureDetail(entry, detail))
+}
+
+func h264CorpusFailureDetail(entry h264CorpusEntry, detail string) string {
+	return fmt.Sprintf("class=%s features=%s surfaces=%s source=%q detail=%s",
+		h264CorpusOracleFailureClass(detail),
+		h264CorpusMetadataList(entry.FeatureTags),
+		h264CorpusMetadataList(entry.Surfaces),
+		entry.Source,
+		detail)
+}
+
+func h264CorpusMetadataList(values []string) string {
+	if len(values) == 0 {
+		return "(none)"
+	}
+	return strings.Join(values, ",")
 }
 
 func assertH264CorpusUnsupported(t *testing.T, entry h264CorpusEntry, err error) {

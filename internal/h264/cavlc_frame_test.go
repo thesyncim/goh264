@@ -91,6 +91,54 @@ func TestDecodeCAVLCFrameIntraPCMMacroblockAlignsAndWritesState(t *testing.T) {
 	}
 }
 
+func TestDecodeCAVLCFieldPictureIntraPCMMacroblockPassesMBAFFGuard(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		picture int32
+		mbXY    func(*macroblockTables) int
+	}{
+		{name: "top", picture: PictureTopField, mbXY: func(*macroblockTables) int { return 0 }},
+		{name: "bottom", picture: PictureBottomField, mbXY: func(m *macroblockTables) int { return m.MBStride }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := newMacroblockTables(1, 2, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+			pps := cavlcFlatQMulPPS()
+			pps.SPS = sps
+			sh := &SliceHeader{
+				SliceType:        PictureTypeI,
+				SliceTypeNoS:     PictureTypeI,
+				PictureStructure: tt.picture,
+				PPS:              pps,
+				SPS:              sps,
+				QScale:           20,
+			}
+			state := newCAVLCFrameSliceState(int(sh.QScale))
+			pcm := h264ReconstructIntraPCM(1, 29)
+			buf := append([]byte{0x0d, 0x00}, pcm...)
+			gb := newBitReader(buf)
+			mbXY := tt.mbXY(m)
+
+			got, err := m.decodeCAVLCFrameSliceMacroblock(&gb, sh, &state, mbXY, 6)
+			if err != nil {
+				t.Fatalf("decode field-picture intra pcm failed: %v", err)
+			}
+			if got.MBType != MBTypeIntraPCM || !got.IsIntra || got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 {
+				t.Fatalf("result type/intra/field = %#x/%v/%d/%d, want intra pcm field-picture without MBAFF flag", got.MBType, got.IsIntra, got.MBFieldDecodingFlag, state.MBFieldDecodingFlag)
+			}
+			if m.SliceTable[mbXY] != 6 || m.MacroblockTyp[mbXY] != MBTypeIntraPCM || m.QScaleTable[mbXY] != 0 {
+				t.Fatalf("tables slice/type/q = %d/%#x/%d, want 6/intra pcm/0", m.SliceTable[mbXY], m.MacroblockTyp[mbXY], m.QScaleTable[mbXY])
+			}
+			if gb.bitPos != uint32(16+len(pcm)*8) {
+				t.Fatalf("consumed %d bits, want intra pcm without field flag", gb.bitPos)
+			}
+		})
+	}
+}
+
 func TestDecodeCAVLCFrameHighIntraPCMMacroblockReadsBitDepthPayload(t *testing.T) {
 	m, err := newMacroblockTables(1, 1, 1)
 	if err != nil {
@@ -396,7 +444,46 @@ func TestDecodeCAVLCFrameMBAFFSkipRunReadsTerminalFieldFlag(t *testing.T) {
 	}
 }
 
-func TestDecodeCAVLCFrameMBAFFSkipRunDefersFieldFlagUntilTerminalSkip(t *testing.T) {
+func TestDecodeCAVLCFrameMBAFFSkipRunWritesFrameCodedTerminalSkip(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	sh := &SliceHeader{
+		SliceType:        PictureTypeP,
+		SliceTypeNoS:     PictureTypeP,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           24,
+		RefCount:         [2]uint32{1, 0},
+	}
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	gb := newBitReader(cavlcBitString("0100"))
+
+	got, err := m.decodeCAVLCFrameSliceMacroblock(&gb, sh, &state, 0, 5)
+	if err != nil {
+		t.Fatalf("decode frame-coded mbaff skip failed: %v", err)
+	}
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	if !got.Skipped || !got.IsInter || got.MBType != wantType || got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 {
+		t.Fatalf("skip result = skipped:%v inter:%v type:%#x field:%d/%d, want frame-coded pskip", got.Skipped, got.IsInter, got.MBType, got.MBFieldDecodingFlag, state.MBFieldDecodingFlag)
+	}
+	if state.MBSkipRun != 0 {
+		t.Fatalf("skip run = %d, want post-decrement 0", state.MBSkipRun)
+	}
+	if gb.bitPos != 4 {
+		t.Fatalf("consumed %d bits, want skip_run plus terminal field flag", gb.bitPos)
+	}
+	if m.SliceTable[0] != 5 || m.MacroblockTyp[0] != wantType || m.QScaleTable[0] != 24 {
+		t.Fatalf("tables slice/type/q = %d/%#x/%d, want 5/pskip/24", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0])
+	}
+}
+
+func TestDecodeCAVLCFrameMBAFFSkipRunDefersFieldFlagAndWritesFrameSkip(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -417,17 +504,21 @@ func TestDecodeCAVLCFrameMBAFFSkipRunDefersFieldFlagUntilTerminalSkip(t *testing
 	gb := newBitReader(cavlcBitString("0111"))
 
 	got, err := m.decodeCAVLCFrameSliceMacroblock(&gb, sh, &state, 0, 5)
-	if err != ErrUnsupported {
-		t.Fatalf("err = %v, want ErrUnsupported", err)
+	if err != nil {
+		t.Fatalf("decode nonterminal frame-coded mbaff skip failed: %v", err)
 	}
 	if state.MBSkipRun != 1 {
 		t.Fatalf("skip run = %d, want post-decrement 1", state.MBSkipRun)
 	}
-	if got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 || got.MBType != 0 {
-		t.Fatalf("field result/state/type = %d/%d/%#x, want no field flag yet", got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.MBType)
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
+	if !got.Skipped || !got.IsInter || got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 || got.MBType != wantType {
+		t.Fatalf("skip result/state/type = %v/%v/%d/%d/%#x, want frame-coded pskip with no field flag yet", got.Skipped, got.IsInter, got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.MBType)
 	}
 	if gb.bitPos != 3 {
 		t.Fatalf("consumed %d bits, want skip_run only", gb.bitPos)
+	}
+	if m.SliceTable[0] != 5 || m.MacroblockTyp[0] != wantType || m.QScaleTable[0] != 24 {
+		t.Fatalf("tables slice/type/q = %d/%#x/%d, want 5/pskip/24", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0])
 	}
 }
 

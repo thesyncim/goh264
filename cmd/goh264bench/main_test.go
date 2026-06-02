@@ -128,11 +128,27 @@ func TestReadBenchFailureLedgerAutoValidatesManifestSubset(t *testing.T) {
 	if _, ok := failures["fate/h264-conformance/frext-hcamff1-hhi"]; !ok || len(failures) != 1 {
 		t.Fatalf("failures = %+v, want hcamff1 only", failures)
 	}
+
+	missingRow := strings.Replace(row, `"id":"fate/h264-conformance/frext-hcamff1-hhi"`, `"id":"fate/h264-conformance/missing-from-manifest"`, 1)
+	if err := os.WriteFile(failurePath, []byte(missingRow+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readBenchFailureLedger(manifestPath, "auto", entries); err == nil || !strings.Contains(err.Error(), "missing from") {
+		t.Fatalf("missing ledger row err = %v, want manifest subset rejection", err)
+	}
+
+	driftedRow := strings.Replace(row, `"source":"FFmpeg FATE h264-conformance/FRext"`, `"source":"drifted source"`, 1)
+	if err := os.WriteFile(failurePath, []byte(driftedRow+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readBenchFailureLedger(manifestPath, "auto", entries); err == nil || !strings.Contains(err.Error(), "drifted") {
+		t.Fatalf("drifted ledger row err = %v, want manifest drift rejection", err)
+	}
 }
 
 func TestBenchManifestReportsKnownRedRowsWithoutBenchmarking(t *testing.T) {
 	dir := t.TempDir()
-	row := `{"id":"known-red","path":"missing.264","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":1,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","surfaces":["annexb"],"feature_tags":["unsupported"]}`
+	row := `{"id":"known-red","path":"missing.264","source":"test public vectors","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":1,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","surfaces":["annexb"],"feature_tags":["unsupported"]}`
 	manifestPath := filepath.Join(dir, "manifest.jsonl")
 	failurePath := filepath.Join(dir, "failures.jsonl")
 	if err := os.WriteFile(manifestPath, []byte(row+"\n"), 0o644); err != nil {
@@ -161,6 +177,15 @@ func TestBenchManifestReportsKnownRedRowsWithoutBenchmarking(t *testing.T) {
 	}
 	if got := strings.Join(report.Results[0].FeatureTags, ","); got != "unsupported" {
 		t.Fatalf("known-red feature tags = %q, want unsupported", got)
+	}
+	if got := strings.Join(report.Results[0].Surfaces, ","); got != "annexb" {
+		t.Fatalf("known-red surfaces = %q, want annexb", got)
+	}
+	if report.Results[0].Source != "test public vectors" {
+		t.Fatalf("known-red source = %q, want test public vectors", report.Results[0].Source)
+	}
+	if !strings.HasSuffix(report.Results[0].Input, "missing.264") {
+		t.Fatalf("known-red input = %q, want missing.264 path", report.Results[0].Input)
 	}
 	if report.Results[0].Error == "" || !strings.Contains(report.Results[0].Error, "missing.264") {
 		t.Fatalf("known-red error = %q, want missing input detail", report.Results[0].Error)
@@ -295,6 +320,7 @@ func TestBenchOracleFailureClass(t *testing.T) {
 		"frames_per_iter = 2, want 3":                    "frame-count-mismatch",
 		"Go raw_pixel_format = yuv420p, want yuv422p":    "pixel-format-mismatch",
 		"bytes_per_iter = 10, want 20":                   "raw-size-mismatch",
+		"BITSTREAM_MD5 = abc, want def":                  "bitstream-md5-mismatch",
 		"raw_md5 = abc, want def":                        "raw-md5-mismatch",
 		"unexpected oracle detail":                       "oracle-mismatch",
 	}

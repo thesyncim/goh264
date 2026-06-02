@@ -124,7 +124,7 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
-		if cur.FieldOrMBAFF {
+		if cur.FrameMBAFF {
 			bottom, err := cur.bottomMBAFFFrameMB()
 			if err != nil {
 				return result, err
@@ -222,7 +222,7 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
-		if cur.FieldOrMBAFF {
+		if cur.FrameMBAFF {
 			bottom, err := cur.bottomMBAFFFrameMB()
 			if err != nil {
 				return result, err
@@ -301,7 +301,7 @@ func validateSimpleFrameSliceDecodeInputs(m *macroblockTables, dst *h264PictureP
 	if sliceNum == ^uint16(0) {
 		return ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame {
+	if sh.PictureStructure != PictureFrame && sh.PictureStructure != PictureTopField && sh.PictureStructure != PictureBottomField {
 		return ErrUnsupported
 	}
 	if !h264SimpleFrameSliceDecodeSupportsBitDepth(sh.SPS.BitDepthLuma) {

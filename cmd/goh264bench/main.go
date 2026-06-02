@@ -219,6 +219,12 @@ func main() {
 			if len(r.FeatureTags) != 0 {
 				fmt.Printf(", features %s", strings.Join(r.FeatureTags, ","))
 			}
+			if len(r.Surfaces) != 0 {
+				fmt.Printf(", surfaces %s", strings.Join(r.Surfaces, ","))
+			}
+			if r.Source != "" {
+				fmt.Printf(", source %q", r.Source)
+			}
 			for _, note := range r.Notes {
 				fmt.Printf("\n  note: %s", note)
 			}
@@ -723,7 +729,9 @@ func skippedBenchResult(entry benchCorpusEntry, reason string) benchResult {
 
 func knownRedBenchResult(entry benchCorpusEntry, input string, data []byte, err error, ledgerPath string) benchResult {
 	result := skippedBenchResult(entry, "listed in the known-red failure ledger and not included in timing aggregates")
-	result.Input = input
+	if input != "" {
+		result.Input = input
+	}
 	result.InputBytesPerIter = int64(len(data))
 	result.ParityStatus = "known-red"
 	result.BaselineKind = "oracle-known-red"
@@ -738,6 +746,7 @@ func knownRedBenchResult(entry benchCorpusEntry, input string, data []byte, err 
 }
 
 func benchOracleFailureClass(detail string) string {
+	detail = strings.ToLower(detail)
 	switch {
 	case detail == "":
 		return ""
@@ -751,6 +760,8 @@ func benchOracleFailureClass(detail string) string {
 		return "pixel-format-mismatch"
 	case strings.Contains(detail, "bytes_per_iter") || strings.Contains(detail, "raw size") || strings.Contains(detail, "raw total"):
 		return "raw-size-mismatch"
+	case strings.Contains(detail, "bitstream_md5"):
+		return "bitstream-md5-mismatch"
 	case strings.Contains(detail, "raw_md5") || strings.Contains(detail, "rawvideo md5") || strings.Contains(detail, "md5 ="):
 		return "raw-md5-mismatch"
 	default:
