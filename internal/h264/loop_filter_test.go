@@ -245,6 +245,66 @@ func TestMacroblockTablesFilterFrameHighDeblocksBoundary(t *testing.T) {
 	}
 }
 
+func TestMacroblockTablesFilterFrameDeblocksPAFFFramePicture(t *testing.T) {
+	const (
+		mbWidth      = 2
+		mbHeight     = 1
+		lumaStride   = 32
+		chromaStride = 16
+		qp           = 30
+	)
+	m, err := newMacroblockTables(mbWidth, mbHeight, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := &h264PicturePlanes{
+		Y:               make([]uint8, lumaStride*16),
+		Cb:              make([]uint8, chromaStride*8),
+		Cr:              make([]uint8, chromaStride*8),
+		LumaStride:      lumaStride,
+		ChromaStride:    chromaStride,
+		MBWidth:         mbWidth,
+		MBHeight:        mbHeight,
+		ChromaFormatIDC: 1,
+	}
+	fillLoopFilterStepRows(dst.Y, lumaStride, 16, 16, 104, 112)
+	fillLoopFilterStepRows(dst.Cb, chromaStride, 8, 8, 84, 92)
+	fillLoopFilterStepRows(dst.Cr, chromaStride, 8, 8, 64, 72)
+	for mbXY := 0; mbXY < mbWidth*mbHeight; mbXY++ {
+		m.MacroblockTyp[mbXY] = MBTypeIntra16x16
+		m.QScaleTable[mbXY] = qp
+		m.SliceTable[mbXY] = 0
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+		MBAFF:            0,
+	}
+	params := []h264LoopFilterSliceParams{{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureFrame,
+		DeblockingFilter: 1,
+	}}
+	yBefore := [2]uint8{dst.Y[15], dst.Y[16]}
+	cbBefore := [2]uint8{dst.Cb[7], dst.Cb[8]}
+	crBefore := [2]uint8{dst.Cr[7], dst.Cr[8]}
+
+	if err := m.filterFrame(dst, params); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[15] == yBefore[0] || dst.Y[16] == yBefore[1] {
+		t.Fatalf("PAFF frame-picture luma boundary did not filter: %v -> [%d %d]", yBefore, dst.Y[15], dst.Y[16])
+	}
+	if dst.Cb[7] == cbBefore[0] || dst.Cb[8] == cbBefore[1] || dst.Cr[7] == crBefore[0] || dst.Cr[8] == crBefore[1] {
+		t.Fatalf("PAFF frame-picture chroma boundary did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
+			cbBefore, dst.Cb[7], dst.Cb[8], crBefore, dst.Cr[7], dst.Cr[8])
+	}
+}
+
 func TestMacroblockTablesFilterFrameDeblocksPAFFFieldViews(t *testing.T) {
 	const (
 		mbWidth      = 2

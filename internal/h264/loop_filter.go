@@ -130,7 +130,7 @@ func (p h264LoopFilterSliceParams) validate() error {
 		return ErrUnsupported
 	}
 	if p.PPS.SPS.FrameMBSOnlyFlag == 0 {
-		if p.PictureStructure != PictureTopField && p.PictureStructure != PictureBottomField {
+		if p.PictureStructure != PictureFrame && p.PictureStructure != PictureTopField && p.PictureStructure != PictureBottomField {
 			return ErrUnsupported
 		}
 	}
