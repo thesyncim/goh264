@@ -158,6 +158,49 @@ func TestFillDecodeNeighborsFrameSliceBoundaries(t *testing.T) {
 	}
 }
 
+func TestPredictFrameMBAFFFieldDecodingFlagUsesLeftThenTop(t *testing.T) {
+	m, err := newMacroblockTables(3, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sliceNum = uint16(12)
+	mbXY := 2 * m.MBStride
+	leftXY := mbXY - 1
+	topXY := mbXY - m.MBStride
+
+	if got := m.predictFrameMBAFFFieldDecodingFlag(mbXY, sliceNum); got != 0 {
+		t.Fatalf("empty prediction = %d, want 0", got)
+	}
+
+	m.SliceTable[topXY] = sliceNum
+	m.MacroblockTyp[topXY] = MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	if got := m.predictFrameMBAFFFieldDecodingFlag(mbXY, sliceNum); got != 1 {
+		t.Fatalf("top field prediction = %d, want 1", got)
+	}
+
+	m.SliceTable[leftXY] = sliceNum
+	m.MacroblockTyp[leftXY] = MBType16x16 | MBTypeP0L0
+	if got := m.predictFrameMBAFFFieldDecodingFlag(mbXY, sliceNum); got != 1 {
+		t.Fatalf("row guard prediction = %d, want top field", got)
+	}
+
+	mbXY = 1 + 2*m.MBStride
+	leftXY = mbXY - 1
+	topXY = mbXY - m.MBStride
+	m.SliceTable[topXY] = sliceNum
+	m.MacroblockTyp[topXY] = MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	m.SliceTable[leftXY] = sliceNum
+	m.MacroblockTyp[leftXY] = MBType16x16 | MBTypeP0L0
+	if got := m.predictFrameMBAFFFieldDecodingFlag(mbXY, sliceNum); got != 0 {
+		t.Fatalf("left frame prediction = %d, want 0", got)
+	}
+
+	m.MacroblockTyp[leftXY] |= MBTypeInterlaced
+	if got := m.predictFrameMBAFFFieldDecodingFlag(mbXY, sliceNum); got != 1 {
+		t.Fatalf("left field prediction = %d, want 1", got)
+	}
+}
+
 func TestFillDecodeNeighborsFieldPictureSkipsOppositeFieldRow(t *testing.T) {
 	m, err := newMacroblockTables(3, 4, 1)
 	if err != nil {

@@ -771,6 +771,37 @@ func TestDecodeCABACFrameMBAFFBottomSkipReusesDecodedNextSkip(t *testing.T) {
 	wantIndexes(t, src, []int{11, 11})
 }
 
+func TestDecodeCABACFrameMBAFFRowStartPredictionSelectsSkipContext(t *testing.T) {
+	m, err := newMacroblockTables(2, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sliceNum = uint16(14)
+	mbXY := 2 * m.MBStride
+	topPairXY := mbXY - 2*m.MBStride
+	bottomPairXY := mbXY - m.MBStride
+
+	m.SliceTable[topPairXY] = sliceNum
+	m.MacroblockTyp[topPairXY] = MBTypeInterlaced | MBType16x16 | MBTypeP0L0
+	m.SliceTable[bottomPairXY] = sliceNum
+	m.MacroblockTyp[bottomPairXY] = MBTypeInterlaced | MBType16x16 | MBTypeP0L0 | MBTypeSkip
+
+	field := m.predictFrameMBAFFFieldDecodingFlag(mbXY, sliceNum)
+	if field != 1 {
+		t.Fatalf("row-start field prediction = %d, want 1", field)
+	}
+
+	src := &scriptedCABACSource{bits: []int{0}}
+	skip, err := m.decodeCABACMBSkipMBAFF(src, mbXY, 0, 2, PictureTypeP, sliceNum, field)
+	if err != nil {
+		t.Fatalf("decode predicted-row skip failed: %v", err)
+	}
+	if skip {
+		t.Fatal("skip = true, want false from scripted bit")
+	}
+	wantIndexes(t, src, []int{12})
+}
+
 func TestWriteBackCABACFrameMBAFFBSpatialSkipMapsFieldNeighborMotion(t *testing.T) {
 	m, err := newMacroblockTables(2, 2, 1)
 	if err != nil {

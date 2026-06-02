@@ -99,6 +99,25 @@ func (c sliceMacroblockCursor) bottomMBAFFFrameMB() (sliceMacroblockCursor, erro
 	return c, nil
 }
 
+func (m *macroblockTables) predictFrameMBAFFFieldDecodingFlag(mbXY int, sliceNum uint16) int32 {
+	if m == nil || mbXY < 0 || mbXY >= len(m.MacroblockTyp) {
+		return 0
+	}
+	mbType := uint32(0)
+	mbX := mbXY % m.MBStride
+	leftXY := mbXY - 1
+	topXY := mbXY - m.MBStride
+	if mbX != 0 && m.sameSlice(leftXY, sliceNum) {
+		mbType = m.MacroblockTyp[leftXY]
+	} else if m.sameSlice(topXY, sliceNum) {
+		mbType = m.MacroblockTyp[topXY]
+	}
+	if mbType&MBTypeInterlaced != 0 {
+		return 1
+	}
+	return 0
+}
+
 type macroblockDecodeNeighbors struct {
 	MBXY             int
 	MBX              int

@@ -170,6 +170,9 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 			result.EndOfSlice = true
 			return result, nil
 		}
+		if cur.FrameMBAFF && cur.MBX == 0 {
+			state.MBFieldDecodingFlag = m.predictFrameMBAFFFieldDecodingFlag(cur.MBXY, in.SliceNum)
+		}
 		if gb.bitsLeft() <= 0 && state.MBSkipRun <= 0 {
 			result.EndOfSlice = true
 			return result, nil
@@ -217,6 +220,9 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 			result.EndOfFrame = true
 			result.EndOfSlice = true
 			return result, nil
+		}
+		if cur.FrameMBAFF && cur.MBX == 0 {
+			state.MBFieldDecodingFlag = m.predictFrameMBAFFFieldDecodingFlag(cur.MBXY, in.SliceNum)
 		}
 		if gb.bitsLeft() <= 0 && state.MBSkipRun <= 0 {
 			result.EndOfSlice = true
@@ -295,6 +301,9 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 			result.EndOfSlice = true
 			return result, nil
 		}
+		if cur.FrameMBAFF && cur.MBX == 0 {
+			state.MBFieldDecodingFlag = m.predictFrameMBAFFFieldDecodingFlag(cur.MBXY, in.SliceNum)
+		}
 		if eos {
 			result.EndOfSlice = true
 			return result, nil
@@ -343,6 +352,9 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 			result.EndOfFrame = true
 			result.EndOfSlice = true
 			return result, nil
+		}
+		if cur.FrameMBAFF && cur.MBX == 0 {
+			state.MBFieldDecodingFlag = m.predictFrameMBAFFFieldDecodingFlag(cur.MBXY, in.SliceNum)
 		}
 		if eos {
 			result.EndOfSlice = true

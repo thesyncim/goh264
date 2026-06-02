@@ -729,7 +729,7 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 					var err error
 					ref, err = decodeCABACRefForPartition(src, motion, sliceTypeNoS, list, 4*i, refCount[list])
 					if err != nil {
-						return err
+						return fmt.Errorf("ref list=%d sub=%d n=%d total=%d: %w", list, i, 4*i, refCount[list], err)
 					}
 				}
 				mb.Ref[list][i] = ref
@@ -761,11 +761,11 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 					ref := motion.Ref[list][h264Scan8[index]]
 					pred, err := predMotion(motion, index, blockWidth, list, ref)
 					if err != nil {
-						return err
+						return fmt.Errorf("pred list=%d sub=%d n=%d width=%d ref=%d: %w", list, i, index, blockWidth, ref, err)
 					}
 					mvd, mvda, err := decodeCABACMVDForPartition(src, motion, list, index)
 					if err != nil {
-						return err
+						return fmt.Errorf("mvd list=%d sub=%d n=%d: %w", list, i, index, err)
 					}
 					mb.MVD[list][index] = mvd
 					writeSubPartitionMVD(motion, list, index, mb.SubMBType[i], mvda)
@@ -783,7 +783,7 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 			}
 			ref, err := decodeCABACRefForPartition(src, motion, sliceTypeNoS, list, 0, refCount[list])
 			if err != nil {
-				return err
+				return fmt.Errorf("ref list=%d n=0 total=%d: %w", list, refCount[list], err)
 			}
 			mb.Ref[list][0] = ref
 			fillRefRectangle(&motion.Ref[list], int(h264Scan8[0]), 4, 4, 8, int8(ref))
@@ -795,11 +795,11 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 			ref := motion.Ref[list][h264Scan8[0]]
 			pred, err := predMotion(motion, 0, 4, list, ref)
 			if err != nil {
-				return err
+				return fmt.Errorf("pred list=%d n=0 width=4 ref=%d: %w", list, ref, err)
 			}
 			mvd, mvda, err := decodeCABACMVDForPartition(src, motion, list, 0)
 			if err != nil {
-				return err
+				return fmt.Errorf("mvd list=%d n=0: %w", list, err)
 			}
 			mb.MVD[list][0] = mvd
 			fillMVDRectangle(&motion.MVD[list], int(h264Scan8[0]), 4, 4, 8, mvda)
@@ -816,7 +816,7 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 					var err error
 					ref, err = decodeCABACRefForPartition(src, motion, sliceTypeNoS, list, 8*i, refCount[list])
 					if err != nil {
-						return err
+						return fmt.Errorf("ref list=%d part=%d n=%d total=%d: %w", list, i, 8*i, refCount[list], err)
 					}
 				}
 				mb.Ref[list][i] = ref
@@ -835,11 +835,11 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 				ref := motion.Ref[list][start]
 				pred, err := pred16x8Motion(motion, index, list, ref)
 				if err != nil {
-					return err
+					return fmt.Errorf("pred16x8 list=%d part=%d n=%d ref=%d: %w", list, i, index, ref, err)
 				}
 				mvd, mvda, err := decodeCABACMVDForPartition(src, motion, list, index)
 				if err != nil {
-					return err
+					return fmt.Errorf("mvd list=%d part=%d n=%d: %w", list, i, index, err)
 				}
 				mb.MVD[list][index] = mvd
 				fillMVDRectangle(&motion.MVD[list], start, 4, 2, 8, mvda)
@@ -857,7 +857,7 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 					var err error
 					ref, err = decodeCABACRefForPartition(src, motion, sliceTypeNoS, list, 4*i, refCount[list])
 					if err != nil {
-						return err
+						return fmt.Errorf("ref list=%d part=%d n=%d total=%d: %w", list, i, 4*i, refCount[list], err)
 					}
 				}
 				mb.Ref[list][i] = ref
@@ -876,11 +876,11 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 				ref := motion.Ref[list][start]
 				pred, err := pred8x16Motion(motion, index, list, ref)
 				if err != nil {
-					return err
+					return fmt.Errorf("pred8x16 list=%d part=%d n=%d ref=%d: %w", list, i, index, ref, err)
 				}
 				mvd, mvda, err := decodeCABACMVDForPartition(src, motion, list, index)
 				if err != nil {
-					return err
+					return fmt.Errorf("mvd list=%d part=%d n=%d: %w", list, i, index, err)
 				}
 				mb.MVD[list][index] = mvd
 				fillMVDRectangle(&motion.MVD[list], start, 2, 4, 8, mvda)
@@ -929,15 +929,23 @@ func fillDirectCacheFromSubMBTypes(cache *[h264MotionCacheSize]uint8, sub *[4]ui
 
 func decodeCABACRefForPartition(src cabacSyntaxSource, motion *macroblockMotionCache, sliceTypeNoS int32, list int, n int, refTotal uint32) (int32, error) {
 	if refTotal == 0 {
-		return 0, ErrInvalidData
+		return 0, fmt.Errorf("zero refs: %w", ErrInvalidData)
 	}
 	if refTotal == 1 {
 		return 0, nil
 	}
 	index := int(h264Scan8[n])
-	ref := decodeCABACMBRef(src, sliceTypeNoS, int32(motion.Ref[list][index-1]), int32(motion.Ref[list][index-8]), uint32(motion.Direct[index-1]), uint32(motion.Direct[index-8]))
+	refA := motion.Ref[list][index-1]
+	refB := motion.Ref[list][index-8]
+	directA := motion.Direct[index-1]
+	directB := motion.Direct[index-8]
+	ref := decodeCABACMBRef(src, sliceTypeNoS, int32(refA), int32(refB), uint32(directA), uint32(directB))
 	if ref < 0 || uint32(ref) >= refTotal {
-		return 0, ErrInvalidData
+		cabacState := ""
+		if dec, ok := src.(cabacSyntaxDecoder); ok && dec.cabac != nil {
+			cabacState = fmt.Sprintf(" low=%d range=%d bytestream=%d", dec.cabac.low, dec.cabac.rng, dec.cabac.bytestream)
+		}
+		return 0, fmt.Errorf("decoded ref=%d refa=%d refb=%d dira=%d dirb=%d%s: %w", ref, refA, refB, directA, directB, cabacState, ErrInvalidData)
 	}
 	return ref, nil
 }
