@@ -12,6 +12,8 @@ scripts intentionally exit non-zero while rows in
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or
 `scripts/h264-red-vector.sh <filter>` to hand agents a failing public lane; the
 single-lane script exits at the first divergent raw byte for raw-MD5 rows.
+Use `scripts/h264-real-vector-red-each.sh` for per-known-red logs plus a TSV
+summary of first-divergence evidence.
 
 Still guarded: MBAFF/PIC-AFF, broad PAFF, FMO, broad slice-boundary high modes,
 12/14-bit public high streams, full error resilience, threading/SIMD, and full

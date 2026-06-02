@@ -11,6 +11,7 @@ Known failures are explicit in `testdata/h264/realvectors/failures.jsonl`.
 go test ./...
 scripts/h264-real-vector-strict.sh
 scripts/h264-real-vector-red-queue.sh   # exits non-zero while known-red rows remain
+scripts/h264-real-vector-red-each.sh    # per-known-red logs + first divergence TSV
 scripts/h264-real-vector-bench.sh canl4 # JSON: selected/green/known-red/skipped + timings
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorKnownRedStrict
