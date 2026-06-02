@@ -20,6 +20,7 @@ type cavlcFrameMacroblockInput struct {
 	DCT8x8Allowed          bool
 	DirectSpatialMVPred    bool
 	DeblockingFilter       int32
+	FrameMBAFF             bool
 	FieldPicture           bool
 	Direct                 h264DirectMotionContext
 	PPS                    *PPS
@@ -144,6 +145,7 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb
 		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
 		DeblockingFilter:       sh.DeblockingFilter,
+		FrameMBAFF:             frameMBAFF,
 		FieldPicture:           sh.PictureStructure != PictureFrame || state.MBFieldDecodingFlag != 0,
 		Direct:                 direct,
 		PPS:                    sh.PPS,
@@ -198,7 +200,7 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 		return result, err
 	}
 
-	cacheResult, err := m.fillFrameMacroblockDecodeCaches(&work.IntraCache, &work.Residual, &work.Motion, frameMacroblockDecodeCacheInput{
+	cacheResult, err := m.fillFrameMacroblockDecodeCachesEntropy(&work.IntraCache, &work.Residual, &work.Motion, frameMacroblockDecodeCacheInput{
 		MBXY:                 in.MBXY,
 		SliceNum:             in.SliceNum,
 		MBType:               base.MBType,
@@ -208,7 +210,7 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 		FieldPicture:         fieldPicture,
 		ConstrainedIntraPred: in.PPS.ConstrainedIntraPred != 0,
 		DirectSpatialMVPred:  in.DirectSpatialMVPred,
-	})
+	}, in.FrameMBAFF)
 	if err != nil {
 		return result, err
 	}

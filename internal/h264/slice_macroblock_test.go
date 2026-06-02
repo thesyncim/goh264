@@ -206,6 +206,81 @@ func TestFillDecodeNeighborsFieldPictureSkipsOppositeFieldRow(t *testing.T) {
 	}
 }
 
+func TestFillDecodeNeighborsFrameMBAFFFieldTopRemap(t *testing.T) {
+	m, err := newMacroblockTables(3, 6, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sliceNum := uint16(12)
+	mbXY := 1 + 4*m.MBStride
+	topFramePairXY := mbXY - 2*m.MBStride
+	topFramePairBottomXY := topFramePairXY + m.MBStride
+	topLeftPairXY := topFramePairXY - 1
+	topLeftPairBottomXY := topLeftPairXY + m.MBStride
+	topRightPairXY := topFramePairXY + 1
+	topRightPairBottomXY := topRightPairXY + m.MBStride
+	leftXY := mbXY - 1
+	for _, xy := range []int{topFramePairXY, topFramePairBottomXY, topLeftPairXY, topLeftPairBottomXY, topRightPairXY, topRightPairBottomXY, leftXY} {
+		m.SliceTable[xy] = sliceNum
+	}
+	m.MacroblockTyp[topFramePairXY] = MBType16x16 | MBTypeP0L0
+	m.MacroblockTyp[topFramePairBottomXY] = MBTypeIntra4x4
+	m.MacroblockTyp[topLeftPairXY] = MBType16x16 | MBTypeP0L0
+	m.MacroblockTyp[topLeftPairBottomXY] = MBTypeIntra16x16
+	m.MacroblockTyp[topRightPairXY] = MBType16x16 | MBTypeP0L0
+	m.MacroblockTyp[topRightPairBottomXY] = MBTypeIntraPCM
+	m.MacroblockTyp[leftXY] = MBType16x16 | MBTypeP0L0
+
+	n, err := m.fillDecodeNeighborsFrameMBAFF(mbXY, sliceNum, MBTypeInterlaced|MBTypeIntra4x4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.TopXY != topFramePairBottomXY || n.TopLeftXY != topLeftPairBottomXY || n.TopRightXY != topRightPairBottomXY {
+		t.Fatalf("MBAFF field top remap = tl/top/tr %d/%d/%d, want %d/%d/%d",
+			n.TopLeftXY, n.TopXY, n.TopRightXY, topLeftPairBottomXY, topFramePairBottomXY, topRightPairBottomXY)
+	}
+	if n.TopType != m.MacroblockTyp[topFramePairBottomXY] || n.TopLeftType != m.MacroblockTyp[topLeftPairBottomXY] || n.TopRightType != m.MacroblockTyp[topRightPairBottomXY] {
+		t.Fatalf("MBAFF field top types = %#x/%#x/%#x", n.TopLeftType, n.TopType, n.TopRightType)
+	}
+	if n.LeftXY != ([2]int{leftXY, leftXY + m.MBStride}) || n.LeftBlock != &h264LeftBlockOptions[3] {
+		t.Fatalf("MBAFF field left = xy %v block %p, want split left with option 3", n.LeftXY, n.LeftBlock)
+	}
+}
+
+func TestFillDecodeNeighborsFrameMBAFFOddFrameLeftRemap(t *testing.T) {
+	m, err := newMacroblockTables(4, 5, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sliceNum := uint16(13)
+	mbXY := 2 + 3*m.MBStride
+	leftFieldProbeXY := mbXY - 1
+	leftRemapXY := mbXY - m.MBStride - 1
+	topLeftRemapXY := leftRemapXY + m.MBStride
+	for _, xy := range []int{leftFieldProbeXY, leftRemapXY, topLeftRemapXY, mbXY - m.MBStride, mbXY - m.MBStride + 1} {
+		m.SliceTable[xy] = sliceNum
+	}
+	m.MacroblockTyp[leftFieldProbeXY] = MBTypeInterlaced | MBType16x16 | MBTypeP0L0
+	m.MacroblockTyp[leftRemapXY] = MBTypeInterlaced | MBTypeIntra4x4
+	m.MacroblockTyp[topLeftRemapXY] = MBTypeInterlaced | MBTypeIntra16x16
+	m.MacroblockTyp[mbXY-m.MBStride] = MBType16x16 | MBTypeP0L0
+	m.MacroblockTyp[mbXY-m.MBStride+1] = MBType16x16 | MBTypeP0L0
+
+	n, err := m.fillDecodeNeighborsFrameMBAFF(mbXY, sliceNum, MBTypeIntra4x4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.LeftXY != ([2]int{leftRemapXY, leftRemapXY}) || n.LeftBlock != &h264LeftBlockOptions[1] {
+		t.Fatalf("MBAFF odd frame left remap = xy %v block %p, want %d/%d with option 1", n.LeftXY, n.LeftBlock, leftRemapXY, leftRemapXY)
+	}
+	if n.TopLeftXY != topLeftRemapXY || n.TopLeftPartition != 0 {
+		t.Fatalf("MBAFF odd frame top-left = xy %d partition %d, want %d/0", n.TopLeftXY, n.TopLeftPartition, topLeftRemapXY)
+	}
+	if n.LeftType[h264LeftTop] != m.MacroblockTyp[leftRemapXY] || n.TopLeftType != m.MacroblockTyp[topLeftRemapXY] {
+		t.Fatalf("MBAFF odd frame types = left %#x topLeft %#x", n.LeftType[h264LeftTop], n.TopLeftType)
+	}
+}
+
 func TestFillFrameMacroblockDecodeCachesComposesResidualAndMotion(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {

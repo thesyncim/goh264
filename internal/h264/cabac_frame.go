@@ -21,6 +21,7 @@ type cabacFrameMacroblockInput struct {
 	DCT8x8Allowed          bool
 	DirectSpatialMVPred    bool
 	DeblockingFilter       int32
+	FrameMBAFF             bool
 	FieldPicture           bool
 	Direct                 h264DirectMotionContext
 	PPS                    *PPS
@@ -151,6 +152,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
 		DeblockingFilter:       sh.DeblockingFilter,
+		FrameMBAFF:             frameMBAFF,
 		FieldPicture:           sh.PictureStructure != PictureFrame || state.MBFieldDecodingFlag != 0,
 		Direct:                 direct,
 		PPS:                    sh.PPS,
@@ -184,7 +186,11 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 	*work = frameMacroblockDecodeWork{}
 
 	fieldPicture := in.FieldPicture || in.MBFieldDecodingFlag != 0
-	neighbors, err := m.fillDecodeNeighborsFrameFields(in.MBXY, in.SliceNum, 0, fieldPicture)
+	neighborMBType := uint32(0)
+	if in.FrameMBAFF && fieldPicture {
+		neighborMBType = MBTypeInterlaced
+	}
+	neighbors, err := m.fillDecodeNeighborsFrameEntropy(in.MBXY, in.SliceNum, neighborMBType, fieldPicture, in.FrameMBAFF)
 	if err != nil {
 		return result, fmt.Errorf("neighbors field=%t: %w", fieldPicture, err)
 	}
@@ -210,7 +216,7 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 		return result, fmt.Errorf("list_count type=%d: %w", in.SliceTypeNoS, err)
 	}
 
-	cacheResult, err := m.fillFrameMacroblockDecodeCaches(&work.IntraCache, &work.Residual, &work.Motion, frameMacroblockDecodeCacheInput{
+	cacheResult, err := m.fillFrameMacroblockDecodeCachesEntropy(&work.IntraCache, &work.Residual, &work.Motion, frameMacroblockDecodeCacheInput{
 		MBXY:                 in.MBXY,
 		SliceNum:             in.SliceNum,
 		MBType:               base.MBType,
@@ -220,7 +226,7 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 		FieldPicture:         fieldPicture,
 		ConstrainedIntraPred: in.PPS.ConstrainedIntraPred != 0,
 		DirectSpatialMVPred:  in.DirectSpatialMVPred,
-	})
+	}, in.FrameMBAFF)
 	if err != nil {
 		return result, fmt.Errorf("caches field=%t type=%#x left=%#x top=%#x: %w", fieldPicture, base.MBType, neighbors.LeftType[h264LeftTop], neighbors.TopType, err)
 	}
