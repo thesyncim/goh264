@@ -119,8 +119,7 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 		if err != nil {
 			return result, err
 		}
-		reconDst := h264FrameMBReconstructPlanes(dst, sh)
-		if err := h264HLDecodeFrameMacroblock(&reconDst, h264FrameMBReconstructInputFromCAVLC(sh, cur, mb, &work, in)); err != nil {
+		if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCAVLC(sh, cur, mb, &work, in)); err != nil {
 			return result, err
 		}
 		result.Macroblocks++
@@ -135,8 +134,7 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 			if err != nil {
 				return result, err
 			}
-			reconDst := h264FrameMBReconstructPlanes(dst, sh)
-			if err := h264HLDecodeFrameMacroblock(&reconDst, h264FrameMBReconstructInputFromCAVLC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
+			if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCAVLC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
 				return result, err
 			}
 			result.Macroblocks++
@@ -219,8 +217,7 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 		if err != nil {
 			return result, err
 		}
-		reconDst := h264FrameMBReconstructPlanes(dst, sh)
-		if err := h264HLDecodeFrameMacroblock(&reconDst, h264FrameMBReconstructInputFromCABAC(sh, cur, mb, &work, in)); err != nil {
+		if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCABAC(sh, cur, mb, &work, in)); err != nil {
 			return result, err
 		}
 		result.Macroblocks++
@@ -235,8 +232,7 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 			if err != nil {
 				return result, err
 			}
-			reconDst := h264FrameMBReconstructPlanes(dst, sh)
-			if err := h264HLDecodeFrameMacroblock(&reconDst, h264FrameMBReconstructInputFromCABAC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
+			if err := h264HLDecodeFrameMacroblock(dst, h264FrameMBReconstructInputFromCABAC(sh, bottom, bottomMB, &bottomWork, in)); err != nil {
 				return result, err
 			}
 			result.Macroblocks++
@@ -771,34 +767,13 @@ func h264SimpleFrameSliceDecodeSupportsBitDepth(bitDepth int32) bool {
 	return bitDepth == 8
 }
 
-func h264FrameMBReconstructPlanes(dst *h264PicturePlanes, sh *SliceHeader) h264PicturePlanes {
-	if dst == nil {
-		return h264PicturePlanes{}
-	}
-	pic := *dst
-	if sh != nil {
-		applySimpleFieldRefPlane(&pic, sh.PictureStructure)
-		if sh.PictureStructure != PictureFrame {
-			pic.MBHeight = (pic.MBHeight + 1) >> 1
-		}
-	}
-	return pic
-}
-
-func h264FrameMBReconstructY(cur sliceMacroblockCursor) int {
-	if cur.FieldPicture {
-		return cur.MBY >> 1
-	}
-	return cur.MBY
-}
-
 func h264FrameMBReconstructInputFromCAVLC(sh *SliceHeader, cur sliceMacroblockCursor, mb cavlcFrameMacroblockResult, work *frameMacroblockDecodeWork, in h264FrameSliceDecodeInput) h264FrameMBReconstructInput {
 	listCount, _ := cavlcFrameListCount(sh.SliceTypeNoS)
 	return h264FrameMBReconstructInput{
 		MBType:             mb.MBType,
 		SubMBType:          mb.Inter.SubMBType,
 		MBX:                cur.MBX,
-		MBY:                h264FrameMBReconstructY(cur),
+		MBY:                cur.MBY,
 		CBP:                mb.CBP,
 		QScale:             mb.QScale,
 		ChromaQP:           mb.ChromaQP,
@@ -825,7 +800,7 @@ func h264FrameMBReconstructInputHighFromCAVLC(sh *SliceHeader, cur sliceMacroblo
 		MBType:             mb.MBType,
 		SubMBType:          mb.Inter.SubMBType,
 		MBX:                cur.MBX,
-		MBY:                h264FrameMBReconstructY(cur),
+		MBY:                cur.MBY,
 		CBP:                mb.CBP,
 		QScale:             mb.QScale,
 		ChromaQP:           mb.ChromaQP,
@@ -854,7 +829,7 @@ func h264FrameMBReconstructInputHighFromCABAC(sh *SliceHeader, cur sliceMacroblo
 		MBType:             mb.MBType,
 		SubMBType:          mb.Inter.SubMBType,
 		MBX:                cur.MBX,
-		MBY:                h264FrameMBReconstructY(cur),
+		MBY:                cur.MBY,
 		CBP:                mb.CBP,
 		QScale:             mb.QScale,
 		ChromaQP:           mb.ChromaQP,
@@ -883,7 +858,7 @@ func h264FrameMBReconstructInputFromCABAC(sh *SliceHeader, cur sliceMacroblockCu
 		MBType:             mb.MBType,
 		SubMBType:          mb.Inter.SubMBType,
 		MBX:                cur.MBX,
-		MBY:                h264FrameMBReconstructY(cur),
+		MBY:                cur.MBY,
 		CBP:                mb.CBP,
 		QScale:             mb.QScale,
 		ChromaQP:           mb.ChromaQP,
