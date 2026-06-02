@@ -51,3 +51,35 @@ func TestBitReaderRemainingAlignedBytes(t *testing.T) {
 		t.Fatalf("remaining bytes = % x, want 2a 40 80 11", got)
 	}
 }
+
+func TestBitReaderRemainingAlignedRawBytesKeepsRBSPTrailingByte(t *testing.T) {
+	gb, err := newRBSPBitReader([]byte{0xe0, 0x2a, 0x40, 0x80})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := gb.readBits(3); err != nil || got != 0b111 {
+		t.Fatalf("prefix bits = %b, %v; want 111, nil", got, err)
+	}
+	trimmed, err := gb.remainingAlignedBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trimmed) != 2 || trimmed[0] != 0x2a || trimmed[1] != 0x40 {
+		t.Fatalf("trimmed remaining bytes = % x, want 2a 40", trimmed)
+	}
+
+	gb, err = newRBSPBitReader([]byte{0xe0, 0x2a, 0x40, 0x80})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gb.readBits(3); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := gb.remainingAlignedRawBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) != 3 || raw[0] != 0x2a || raw[1] != 0x40 || raw[2] != 0x80 {
+		t.Fatalf("raw remaining bytes = % x, want 2a 40 80", raw)
+	}
+}

@@ -6,7 +6,7 @@ Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12
 fixtures, public FATE vector harness, frame-MD5 diagnostics, and CLI benchmark
 comparison.
 
-Public vectors: 18/26 green. Matrix mode is the safe-point gate; red-queue mode
+Public vectors: 19/26 green. Matrix mode is the safe-point gate; red-queue mode
 is the intentionally failing fix queue from `testdata/h264/realvectors/failures.jsonl`.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` to make a lane go red.
 

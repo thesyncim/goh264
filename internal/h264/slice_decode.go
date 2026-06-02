@@ -86,7 +86,7 @@ func initCABACFrameSliceDecoder(gb *bitReader, sh *SliceHeader) (cabacFrameSlice
 	if gb == nil || sh == nil || sh.SPS == nil {
 		return dec, ErrInvalidData
 	}
-	buf, err := gb.remainingAlignedBytes()
+	buf, err := gb.remainingAlignedRawBytes()
 	if err != nil {
 		return dec, err
 	}

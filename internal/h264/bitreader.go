@@ -166,3 +166,21 @@ func (gb *bitReader) remainingAlignedBytes() ([]byte, error) {
 	}
 	return gb.buf[start : start+n], nil
 }
+
+// CABAC is initialized from FFmpeg's raw aligned byte tail, including
+// rbsp_trailing_bits; non-CABAC syntax readers stay bounded by numBits.
+func (gb *bitReader) remainingAlignedRawBytes() ([]byte, error) {
+	if gb == nil {
+		return nil, ErrInvalidData
+	}
+	aligned := (gb.bitPos + 7) &^ 7
+	if uint64(aligned) > uint64(len(gb.buf))*8 {
+		return nil, ErrInvalidData
+	}
+	gb.bitPos = aligned
+	start := int(gb.bitPos >> 3)
+	if start < 0 || start > len(gb.buf) {
+		return nil, ErrInvalidData
+	}
+	return gb.buf[start:], nil
+}
