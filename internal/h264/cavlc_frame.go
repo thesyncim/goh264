@@ -7,6 +7,8 @@
 
 package h264
 
+import "fmt"
+
 type cavlcFrameMacroblockInput struct {
 	MBXY                   int
 	SliceNum               uint16
@@ -127,6 +129,10 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb
 		}
 	}
 
+	refCount := sh.RefCount
+	if frameMBAFF && state.MBFieldDecodingFlag != 0 {
+		refCount = h264MBAFFFieldRefCount(refCount)
+	}
 	result, err := m.decodeCAVLCFrameMacroblockWithWork(gb, cavlcFrameMacroblockInput{
 		MBXY:                   mbXY,
 		SliceNum:               sliceNum,
@@ -134,7 +140,7 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb
 		SliceTypeNoS:           sh.SliceTypeNoS,
 		QScale:                 state.QScale,
 		MBFieldDecodingFlag:    state.MBFieldDecodingFlag,
-		RefCount:               sh.RefCount,
+		RefCount:               refCount,
 		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
 		DeblockingFilter:       sh.DeblockingFilter,
@@ -145,7 +151,7 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb
 		RejectUnsupportedHighB: rejectUnsupportedHighB,
 	}, work)
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("field=%d refs=%d/%d: %w", state.MBFieldDecodingFlag, refCount[0], refCount[1], err)
 	}
 	if result.MBType&MBTypeIntraPCM == 0 {
 		state.QScale = result.QScale
@@ -171,7 +177,7 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 
 	base, err := decodeCAVLCMBType(gb, in.SliceType, in.SliceTypeNoS)
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("mb_type field=%t: %w", in.FieldPicture, err)
 	}
 	fieldPicture := in.FieldPicture || in.MBFieldDecodingFlag != 0
 	if fieldPicture {
@@ -209,9 +215,17 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 	result.Neighbors = cacheResult.Neighbors
 
 	if isIntra(base.MBType) {
-		return m.decodeCAVLCFrameIntraMacroblock(gb, in, base, &work.Residual, &work.IntraCache, cacheResult, result)
+		result, err := m.decodeCAVLCFrameIntraMacroblock(gb, in, base, &work.Residual, &work.IntraCache, cacheResult, result)
+		if err != nil {
+			return result, fmt.Errorf("intra field=%t type=%#x cbp=%#x: %w", fieldPicture, base.MBType, base.CBP, err)
+		}
+		return result, nil
 	}
-	return m.decodeCAVLCFrameInterMacroblock(gb, in, base, &work.Residual, &work.Motion, listCount, result)
+	result, err = m.decodeCAVLCFrameInterMacroblock(gb, in, base, &work.Residual, &work.Motion, listCount, result)
+	if err != nil {
+		return result, fmt.Errorf("inter field=%t type=%#x refs=%d/%d: %w", fieldPicture, base.MBType, in.RefCount[0], in.RefCount[1], err)
+	}
+	return result, nil
 }
 
 func (m *macroblockTables) decodeCAVLCFrameIntraPCMMacroblock(gb *bitReader, in cavlcFrameMacroblockInput, base cavlcMacroblockSyntax, result cavlcFrameMacroblockResult) (cavlcFrameMacroblockResult, error) {

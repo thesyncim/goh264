@@ -262,6 +262,7 @@ func TestDecodeCABACFrameMBAFFFieldMacroblockMarksInterlaced(t *testing.T) {
 		0,
 		1,
 		0, 0, 0,
+		0,
 		0, 0,
 		0, 0, 0, 0,
 		0,
@@ -282,13 +283,13 @@ func TestDecodeCABACFrameMBAFFFieldMacroblockMarksInterlaced(t *testing.T) {
 		t.Fatalf("decode field-coded mbaff failed: %v", err)
 	}
 	wantType := MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
-	if got.MBFieldDecodingFlag != 1 || state.MBFieldDecodingFlag != 1 || got.MBType != wantType || !got.IsInter {
-		t.Fatalf("field result/state/type/inter = %d/%d/%#x/%v, want 1/1/%#x/true", got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.MBType, got.IsInter, wantType)
+	if got.MBFieldDecodingFlag != 1 || state.MBFieldDecodingFlag != 1 || got.MBType != wantType || !got.IsInter || got.Inter.Ref[0][0] != 0 {
+		t.Fatalf("field result/state/type/inter/ref = %d/%d/%#x/%v/%d, want 1/1/%#x/true/0", got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.MBType, got.IsInter, got.Inter.Ref[0][0], wantType)
 	}
 	if m.SliceTable[0] != 3 || m.MacroblockTyp[0] != wantType || m.QScaleTable[0] != 24 {
 		t.Fatalf("tables slice/type/q = %d/%#x/%d, want 3/%#x/24", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0], wantType)
 	}
-	wantIndexes(t, src, []int{11, 70, 14, 15, 16, 40, 47, 73, 74, 75, 76, 77})
+	wantIndexes(t, src, []int{11, 70, 14, 15, 16, 54, 40, 47, 73, 74, 75, 76, 77})
 }
 
 func TestDecodeCABACFrameHighIntraPCMMacroblockReadsBitDepthPayload(t *testing.T) {

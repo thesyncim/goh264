@@ -411,6 +411,39 @@ func TestDecodeCAVLCFrameMBAFFFieldMacroblockMarksInterlaced(t *testing.T) {
 	}
 }
 
+func TestDecodeCAVLCFrameMBAFFFieldInterMacroblockDoublesRefCount(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	sh := &SliceHeader{
+		SliceType:        PictureTypeP,
+		SliceTypeNoS:     PictureTypeP,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           24,
+		RefCount:         [2]uint32{1, 0},
+	}
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	gb := newBitReader(cavlcBitString("1111111"))
+
+	got, err := m.decodeCAVLCFrameSliceMacroblock(&gb, sh, &state, 0, 3)
+	if err != nil {
+		t.Fatalf("decode field-coded mbaff inter failed: %v", err)
+	}
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	if got.MBFieldDecodingFlag != 1 || state.MBFieldDecodingFlag != 1 || got.MBType != wantType || got.Inter.Ref[0][0] != 0 {
+		t.Fatalf("field/ref/type = %d/%d/%#x, want field-coded ref0 type %#x", got.MBFieldDecodingFlag, got.Inter.Ref[0][0], got.MBType, wantType)
+	}
+	if gb.bitPos != 7 {
+		t.Fatalf("consumed %d bits, want skip_run+field+mb_type+ref+mvd+cbp", gb.bitPos)
+	}
+}
+
 func TestDecodeCAVLCFrameMBAFFSkipRunWritesFieldCodedTerminalSkip(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {

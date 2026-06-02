@@ -74,6 +74,13 @@ type macroblockMotionCache struct {
 	Direct [h264MotionCacheSize]uint8
 }
 
+func h264MBAFFFieldRefCount(refCount [2]uint32) [2]uint32 {
+	for list := 0; list < 2; list++ {
+		refCount[list] <<= 1
+	}
+	return refCount
+}
+
 type intraPredDecodeNeighbors struct {
 	MBType               uint32
 	TopType              uint32
