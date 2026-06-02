@@ -11,6 +11,7 @@ Known failures are explicit in `testdata/h264/realvectors/failures.jsonl`.
 go test ./...
 scripts/h264-real-vector-strict.sh
 scripts/h264-real-vector-red-queue.sh   # exits non-zero while known-red rows remain
+scripts/h264-real-vector-bench.sh canl4 # JSON: selected/green/known-red/skipped + timings
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_RED_QUEUE=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorRedQueue
@@ -19,6 +20,7 @@ GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealV
 GOH264_REAL_VECTOR_RAWDIFF=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorRawDiffDiagnostics
 GOH264_REAL_VECTOR_FRAMEMD5=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorFrameMD5Diagnostics
 scripts/h264-red-vector.sh mbaff        # exits non-zero at first divergent raw byte
+GOH264_BENCH_FFMPEG=1 scripts/h264-real-vector-bench.sh canl4
 go run ./cmd/goh264bench -manifest testdata/h264/realvectors/manifest.jsonl -filter canl4 -iters 1 -repeats 1 -warmup 0 -ffmpeg -json
 ```
 

@@ -41,10 +41,14 @@ type benchMetadata struct {
 	FailureLedger  string `json:"failure_ledger,omitempty"`
 	CorpusFilter   string `json:"corpus_filter,omitempty"`
 	CorpusEntries  int    `json:"corpus_entries,omitempty"`
+	CorpusSelected int    `json:"corpus_selected_entries,omitempty"`
 	CorpusDecodeOK int    `json:"corpus_decode_ok_entries,omitempty"`
+	CorpusGreen    int    `json:"corpus_green_entries,omitempty"`
 	CorpusBench    int    `json:"corpus_benchmarked_entries,omitempty"`
 	CorpusKnownRed int    `json:"corpus_known_red_entries,omitempty"`
+	CorpusStaleRed int    `json:"corpus_stale_known_red_entries,omitempty"`
 	CorpusSkipped  int    `json:"corpus_skipped_entries,omitempty"`
+	CorpusNotTimed int    `json:"corpus_not_timed_entries,omitempty"`
 	FairnessPolicy string `json:"fairness_policy,omitempty"`
 	GoVersion      string `json:"go_version"`
 	GOOS           string `json:"goos"`
@@ -223,6 +227,15 @@ func main() {
 		return
 	}
 	fmt.Printf("input: %s, %d bytes, md5 %s\n", report.Metadata.Input, report.Metadata.InputBytes, report.Metadata.InputMD5)
+	if report.Metadata.CorpusManifest != "" {
+		fmt.Printf("corpus: selected %d, decode-ok %d, green %d, benchmarked %d, known-red %d, stale-known-red %d, skipped %d, not-timed %d\n",
+			report.Metadata.CorpusSelected, report.Metadata.CorpusDecodeOK, report.Metadata.CorpusGreen,
+			report.Metadata.CorpusBench, report.Metadata.CorpusKnownRed, report.Metadata.CorpusStaleRed,
+			report.Metadata.CorpusSkipped, report.Metadata.CorpusNotTimed)
+		if report.Metadata.FailureLedger != "" {
+			fmt.Printf("failure ledger: %s\n", report.Metadata.FailureLedger)
+		}
+	}
 	for _, r := range report.Results {
 		if r.Skipped {
 			fmt.Printf("%s: skipped", r.Name)
@@ -387,8 +400,11 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 
 	baseDir := filepath.Dir(path)
 	var results []benchResult
+	var decodeOKSelected int
+	var green int
 	var benchmarked int
 	var knownRed int
+	var staleKnownRed int
 	var skipped int
 	for _, entry := range entries {
 		if entry.Expect != "decode-ok" {
@@ -396,9 +412,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 			skipped++
 			continue
 		}
-		if maxEntries > 0 && benchmarked >= maxEntries {
-			break
-		}
+		decodeOKSelected++
 		if err := validateBenchCorpusEntry(entry); err != nil {
 			return benchReport{}, err
 		}
@@ -407,6 +421,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 			if failure, ok := failureLedger[entry.ID]; ok {
 				results = append(results, knownRedBenchResult(failure, "", nil, err, failureLedgerPath))
 				knownRed++
+				skipped++
 				continue
 			}
 			return benchReport{}, err
@@ -416,6 +431,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 			if failure, ok := failureLedger[entry.ID]; ok {
 				results = append(results, knownRedBenchResult(failure, inputPath, nil, err, failureLedgerPath))
 				knownRed++
+				skipped++
 				continue
 			}
 			return benchReport{}, fmt.Errorf("%s: read input: %w", entry.ID, err)
@@ -423,21 +439,30 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		if err := validateBenchBitstreamMD5(entry, data); err != nil {
 			return benchReport{}, err
 		}
-		staleLedger := false
 		if err := preflightBenchGoOracle(inputPath, data, entry); err != nil {
 			if failure, ok := failureLedger[entry.ID]; ok {
 				results = append(results, knownRedBenchResult(failure, inputPath, data, err, failureLedgerPath))
 				knownRed++
+				skipped++
 				continue
 			}
 			return benchReport{}, fmt.Errorf("%s: goh264 oracle preflight: %w", entry.ID, err)
 		} else if _, ok := failureLedger[entry.ID]; ok {
-			staleLedger = true
+			results = append(results, staleKnownRedBenchResult(failureLedger[entry.ID], inputPath, data, failureLedgerPath))
+			staleKnownRed++
+			skipped++
+			continue
 		}
+		green++
 		if opts.runFFmpeg {
 			if err := preflightBenchFFmpegOracle(inputPath, entry, opts); err != nil {
 				return benchReport{}, fmt.Errorf("%s: ffmpeg oracle preflight: %w", entry.ID, err)
 			}
+		}
+		if maxEntries > 0 && benchmarked >= maxEntries {
+			results = append(results, greenNotTimedBenchResult(entry, inputPath, data, maxEntries))
+			skipped++
+			continue
 		}
 		entryOpts := opts
 		entryOpts.annexBInput = entry.Format == "annexb"
@@ -448,12 +473,6 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		for i := range entryResults {
 			if err := annotateBenchResultWithOracle(&entryResults[i], entry); err != nil {
 				return benchReport{}, err
-			}
-			if staleLedger {
-				entryResults[i].ParityStatus = "rawvideo-md5-ok-failure-ledger-stale"
-				entryResults[i].Notes = append(entryResults[i].Notes,
-					fmt.Sprintf("entry is still listed in %s but passed Go oracle preflight; update the failure ledger before using this as a green benchmark lane", failureLedgerPath),
-				)
 			}
 		}
 		results = append(results, entryResults...)
@@ -468,15 +487,19 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 	meta.FailureLedger = failureLedgerPath
 	meta.CorpusFilter = opts.corpusFilter
 	meta.CorpusEntries = len(entries)
-	meta.CorpusDecodeOK = benchmarked
+	meta.CorpusSelected = len(entries)
+	meta.CorpusDecodeOK = decodeOKSelected
+	meta.CorpusGreen = green
 	meta.CorpusBench = benchmarked
 	meta.CorpusKnownRed = knownRed
+	meta.CorpusStaleRed = staleKnownRed
 	meta.CorpusSkipped = skipped
+	meta.CorpusNotTimed = len(entries) - benchmarked
 	meta.ComparisonKind = "manifest-goh264-in-process"
 	if opts.runFFmpeg {
 		meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli"
 	}
-	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows that do not pass Go oracle preflight are emitted as skipped results with the exact error and are not timing samples. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run. FFmpeg timing remains a process-per-iteration CLI baseline."
+	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run. FFmpeg timing remains a process-per-iteration CLI baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
 }
 
@@ -505,29 +528,44 @@ func diagnoseBenchManifest(path string, maxEntries int, opts benchOptions) (benc
 
 	baseDir := filepath.Dir(path)
 	var results []benchResult
+	var decodeOKSelected int
+	var green int
 	var diagnosed int
 	var knownRed int
+	var staleKnownRed int
 	var skipped int
 	for _, entry := range entries {
-		if maxEntries > 0 && diagnosed >= maxEntries {
-			break
-		}
 		if entry.Expect != "decode-ok" {
 			results = append(results, skippedBenchResult(entry, "manifest row is not a decode-ok oracle row and is not a diagnostic oracle row"))
 			skipped++
 			continue
 		}
+		decodeOKSelected++
 		if err := validateBenchCorpusEntry(entry); err != nil {
 			return benchReport{}, err
+		}
+		if maxEntries > 0 && diagnosed >= maxEntries {
+			results = append(results, skippedBenchResult(entry, fmt.Sprintf("not diagnosed because -max-entries=%d was reached", maxEntries)))
+			results[len(results)-1].ParityStatus = "max-entries-not-diagnosed"
+			results[len(results)-1].BaselineKind = "oracle-diagnostic-not-run"
+			skipped++
+			continue
 		}
 		diagnosed++
 		failure, isKnownRed := failureLedger[entry.ID]
 		result := diagnoseBenchEntry(baseDir, entry)
 		if isKnownRed {
 			applyKnownRedDiagnostic(&result, failure, failureLedgerPath)
-			knownRed++
+			if result.ParityStatus == "rawvideo-md5-ok-failure-ledger-stale" {
+				staleKnownRed++
+			} else {
+				knownRed++
+			}
+			skipped++
 		} else if result.ParityStatus != "rawvideo-md5-ok" {
 			result.Notes = append(result.Notes, "unexpected manifest oracle failure")
+		} else {
+			green++
 		}
 		results = append(results, result)
 	}
@@ -540,10 +578,14 @@ func diagnoseBenchManifest(path string, maxEntries int, opts benchOptions) (benc
 	meta.FailureLedger = failureLedgerPath
 	meta.CorpusFilter = opts.corpusFilter
 	meta.CorpusEntries = len(entries)
-	meta.CorpusDecodeOK = diagnosed
+	meta.CorpusSelected = len(entries)
+	meta.CorpusDecodeOK = decodeOKSelected
+	meta.CorpusGreen = green
 	meta.CorpusBench = 0
 	meta.CorpusKnownRed = knownRed
+	meta.CorpusStaleRed = staleKnownRed
 	meta.CorpusSkipped = skipped
+	meta.CorpusNotTimed = len(entries)
 	meta.ComparisonKind = "manifest-goh264-oracle-diagnostic"
 	meta.FairnessPolicy = "Manifest diagnostics run selected decode-ok rows once from the existing manifest/cache and compare Go raw pixel format, frame count, raw byte count, rawvideo MD5, and per-frame raw MD5s when frames decode. Known-red ledger rows remain marked known-red unless the decoder output actually matches the oracle, in which case they are reported as failure-ledger stale rather than green timing samples."
 	return benchReport{Metadata: meta, Results: results}, nil
@@ -1053,6 +1095,36 @@ func knownRedBenchResult(entry benchCorpusEntry, input string, data []byte, err 
 			result.Notes = append(result.Notes, fmt.Sprintf("current failure signature drifted: class=%s detail=%q", result.ErrorClass, err.Error()))
 		}
 	}
+	return result
+}
+
+func staleKnownRedBenchResult(entry benchCorpusEntry, input string, data []byte, ledgerPath string) benchResult {
+	result := skippedBenchResult(entry, "listed in the known-red failure ledger and not included in timing aggregates")
+	if input != "" {
+		result.Input = input
+	}
+	result.InputBytesPerIter = int64(len(data))
+	result.RawMD5 = entry.RawVideoMD5
+	result.ParityStatus = "rawvideo-md5-ok-failure-ledger-stale"
+	result.BaselineKind = "oracle-known-red-stale"
+	if ledgerPath != "" {
+		result.Notes = append(result.Notes, "failure ledger: "+ledgerPath)
+	}
+	result.Notes = append(result.Notes,
+		fmt.Sprintf("entry is still listed in %s but passed Go oracle preflight; update the failure ledger before using this as a green benchmark lane", ledgerPath),
+	)
+	return result
+}
+
+func greenNotTimedBenchResult(entry benchCorpusEntry, input string, data []byte, maxEntries int) benchResult {
+	result := skippedBenchResult(entry, fmt.Sprintf("oracle-green row not timed because -max-entries=%d was reached", maxEntries))
+	if input != "" {
+		result.Input = input
+	}
+	result.InputBytesPerIter = int64(len(data))
+	result.RawMD5 = entry.RawVideoMD5
+	result.ParityStatus = "rawvideo-md5-ok-not-timed"
+	result.BaselineKind = "oracle-green-not-timed"
 	return result
 }
 

@@ -5,6 +5,7 @@ package main
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -172,6 +173,10 @@ func TestBenchManifestReportsKnownRedRowsWithoutBenchmarking(t *testing.T) {
 	if report.Metadata.CorpusKnownRed != 1 || report.Metadata.CorpusBench != 0 || report.Metadata.FailureLedger != failurePath {
 		t.Fatalf("metadata = %+v, want known-red only with %s", report.Metadata, failurePath)
 	}
+	if report.Metadata.CorpusSelected != 1 || report.Metadata.CorpusDecodeOK != 1 || report.Metadata.CorpusGreen != 0 ||
+		report.Metadata.CorpusSkipped != 1 || report.Metadata.CorpusNotTimed != 1 {
+		t.Fatalf("metadata counts = %+v, want selected/decode-ok/skipped known-red row", report.Metadata)
+	}
 	if len(report.Results) != 1 || !report.Results[0].Skipped || report.Results[0].ParityStatus != "known-red" {
 		t.Fatalf("result = %+v, want visible known-red skipped row", report.Results)
 	}
@@ -222,6 +227,10 @@ func TestBenchManifestDiagnoseReportsKnownRedRows(t *testing.T) {
 	}
 	if report.Metadata.ComparisonKind != "manifest-goh264-oracle-diagnostic" || report.Metadata.CorpusKnownRed != 1 || report.Metadata.CorpusBench != 0 {
 		t.Fatalf("metadata = %+v, want diagnostic known-red without benchmarks", report.Metadata)
+	}
+	if report.Metadata.CorpusSelected != 1 || report.Metadata.CorpusDecodeOK != 1 || report.Metadata.CorpusGreen != 0 ||
+		report.Metadata.CorpusSkipped != 1 || report.Metadata.CorpusNotTimed != 1 {
+		t.Fatalf("diagnostic metadata counts = %+v, want visible known-red skip", report.Metadata)
 	}
 	if len(report.Results) != 1 || !report.Results[0].Skipped || report.Results[0].BaselineKind != "oracle-known-red-diagnostic" || report.Results[0].ParityStatus != "known-red" {
 		t.Fatalf("result = %+v, want known-red diagnostic row", report.Results)
@@ -280,6 +289,75 @@ func TestApplyKnownRedDiagnosticMarksStaleLedgerWithoutGreenwashing(t *testing.T
 	}
 }
 
+func TestBenchManifestSkipsStaleKnownRedRowsUntilLedgerUpdates(t *testing.T) {
+	dir := t.TempDir()
+	entry := writeBenchFixtureEntry(t, dir, "stale-red", "stale.264")
+	failure := entry
+	failure.KnownFailure = &benchKnownFailure{
+		Class:          "raw-md5-mismatch",
+		DetailContains: "old-signature",
+	}
+	manifestPath := filepath.Join(dir, "manifest.jsonl")
+	failurePath := filepath.Join(dir, "failures.jsonl")
+	writeBenchManifestRows(t, manifestPath, entry)
+	writeBenchManifestRows(t, failurePath, failure)
+
+	report, err := benchManifest(manifestPath, 0, benchOptions{
+		iters:         1,
+		repeats:       1,
+		rawOutput:     true,
+		failureLedger: "auto",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Metadata.CorpusBench != 0 || report.Metadata.CorpusGreen != 0 || report.Metadata.CorpusKnownRed != 0 ||
+		report.Metadata.CorpusStaleRed != 1 || report.Metadata.CorpusSkipped != 1 || report.Metadata.CorpusNotTimed != 1 {
+		t.Fatalf("metadata = %+v, want stale known-red skipped without timing", report.Metadata)
+	}
+	if len(report.Results) != 1 || !report.Results[0].Skipped ||
+		report.Results[0].BaselineKind != "oracle-known-red-stale" ||
+		report.Results[0].ParityStatus != "rawvideo-md5-ok-failure-ledger-stale" {
+		t.Fatalf("result = %+v, want stale known-red skip", report.Results)
+	}
+	if report.Results[0].RawMD5 != entry.RawVideoMD5 {
+		t.Fatalf("stale result raw md5 = %q, want oracle %q", report.Results[0].RawMD5, entry.RawVideoMD5)
+	}
+}
+
+func TestBenchManifestMaxEntriesReportsGreenRowsNotTimed(t *testing.T) {
+	dir := t.TempDir()
+	entryA := writeBenchFixtureEntry(t, dir, "green-a", "a.264")
+	entryB := writeBenchFixtureEntry(t, dir, "green-b", "b.264")
+	manifestPath := filepath.Join(dir, "manifest.jsonl")
+	writeBenchManifestRows(t, manifestPath, entryA, entryB)
+
+	report, err := benchManifest(manifestPath, 1, benchOptions{
+		iters:         1,
+		repeats:       1,
+		rawOutput:     true,
+		failureLedger: "off",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Metadata.CorpusSelected != 2 || report.Metadata.CorpusDecodeOK != 2 ||
+		report.Metadata.CorpusGreen != 2 || report.Metadata.CorpusBench != 1 ||
+		report.Metadata.CorpusSkipped != 1 || report.Metadata.CorpusNotTimed != 1 {
+		t.Fatalf("metadata = %+v, want one timed green row and one visible not-timed row", report.Metadata)
+	}
+	if len(report.Results) != 2 {
+		t.Fatalf("results = %d, want timed plus not-timed row", len(report.Results))
+	}
+	if report.Results[0].Skipped || report.Results[0].ParityStatus != "rawvideo-md5-ok" {
+		t.Fatalf("result[0] = %+v, want timed green", report.Results[0])
+	}
+	if !report.Results[1].Skipped || report.Results[1].BaselineKind != "oracle-green-not-timed" ||
+		report.Results[1].ParityStatus != "rawvideo-md5-ok-not-timed" {
+		t.Fatalf("result[1] = %+v, want visible green not-timed row", report.Results[1])
+	}
+}
+
 func TestAnnotateBenchFrameDiagnostics(t *testing.T) {
 	result := benchResult{
 		FrameDiagnostics: []benchFrameDiagnostic{
@@ -311,6 +389,56 @@ func TestAnnotateBenchFrameDiagnostics(t *testing.T) {
 	}
 	if result.FrameDiagnostics[3].ParityStatus != "missing" || result.FrameDiagnostics[3].ExpectedRawMD5 == "" {
 		t.Fatalf("frame[3] = %+v, want missing expected frame", result.FrameDiagnostics[3])
+	}
+}
+
+func writeBenchFixtureEntry(t *testing.T, dir string, id string, name string) benchCorpusEntry {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "h264", "high10_inter_cavlc_idrp.h264"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := decodeGoOnceForFormat(data, true, true)
+	if err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	if run.frames <= 0 || run.bytes <= 0 || run.bytes%int64(run.frames) != 0 {
+		t.Fatalf("fixture summary frames/bytes = %d/%d, want stable frame size", run.frames, run.bytes)
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := md5.Sum(data)
+	return benchCorpusEntry{
+		ID:           id,
+		Path:         name,
+		Source:       "local benchmark fixture",
+		Format:       "annexb",
+		Expect:       "decode-ok",
+		PixFmt:       run.pixFmt,
+		FrameCount:   run.frames,
+		FrameSize:    int(run.bytes / int64(run.frames)),
+		BitstreamMD5: hex.EncodeToString(sum[:]),
+		RawVideoMD5:  run.md5,
+		Surfaces:     []string{"annexb"},
+		FeatureTags:  []string{"fixture"},
+	}
+}
+
+func writeBenchManifestRows(t *testing.T, path string, entries ...benchCorpusEntry) {
+	t.Helper()
+	var text strings.Builder
+	for _, entry := range entries {
+		row, err := json.Marshal(entry)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text.Write(row)
+		text.WriteByte('\n')
+	}
+	if err := os.WriteFile(path, []byte(text.String()), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
