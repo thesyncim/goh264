@@ -88,6 +88,46 @@ func TestH264LoopFilterThresholdsHighBitDepthQPBDOffset(t *testing.T) {
 	}
 }
 
+func TestH264LoopFilterValidateAllows8BitFrameMBAFFDeblock(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+		MBAFF:            1,
+	}
+	p := h264LoopFilterSliceParams{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureFrame,
+		DeblockingFilter: 1,
+	}
+	if err := p.validate(); err != nil {
+		t.Fatalf("8-bit frame-MBAFF deblock validation err = %v, want nil", err)
+	}
+}
+
+func TestH264LoopFilterValidateRejectsHighBitDepthMBAFFDeblock(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     10,
+		BitDepthChroma:   10,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+		MBAFF:            1,
+	}
+	p := h264LoopFilterSliceParams{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureFrame,
+		DeblockingFilter: 1,
+	}
+	if err := p.validate(); err != ErrUnsupported {
+		t.Fatalf("High10 frame-MBAFF deblock validation err = %v, want ErrUnsupported", err)
+	}
+}
+
 func TestH264ApplyLoopFilterEdgeHigh420MutatesLumaChroma(t *testing.T) {
 	const (
 		lumaStride   = 32

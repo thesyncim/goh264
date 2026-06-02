@@ -126,7 +126,7 @@ func (p h264LoopFilterSliceParams) validate() error {
 	if p.PPS == nil || p.PPS.SPS == nil {
 		return ErrInvalidData
 	}
-	if p.PPS.SPS.MBAFF != 0 {
+	if p.PPS.SPS.MBAFF != 0 && p.PPS.SPS.BitDepthLuma != 8 {
 		return ErrUnsupported
 	}
 	if p.PPS.SPS.FrameMBSOnlyFlag == 0 {
