@@ -214,7 +214,7 @@ func TestH264RealVectorLaneCoverage(t *testing.T) {
 		{name: "PIC-AFF", tokens: []string{"picaff"}, knownRed: true},
 		{name: "slice boundary", tokens: []string{"slice-boundary"}, knownRed: true},
 		{name: "high deblock boundary", tokens: []string{"high", "deblock", "slice-boundary"}, knownRed: true},
-		{name: "high no-deblock boundary", tokens: []string{"high", "no-deblock", "slice-boundary"}, knownRed: true},
+		{name: "high no-deblock boundary", tokens: []string{"high", "no-deblock", "slice-boundary"}},
 		{name: "high10", tokens: []string{"high10"}},
 		{name: "cabac chroma", tokens: []string{"cabac", "chroma"}},
 	} {

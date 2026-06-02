@@ -2,11 +2,7 @@
 
 package h264
 
-import (
-	"errors"
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestPredTemporalDirect16x16MapsColocatedMotion(t *testing.T) {
 	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
@@ -75,27 +71,134 @@ func TestPredTemporalDirectAllowsFieldInterlacedColocatedMotion(t *testing.T) {
 	}
 }
 
-func TestPredDirectMotionReportsUnsupportedInterlacedColocatedFrame(t *testing.T) {
-	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0|MBTypeInterlaced)
+func TestPredTemporalDirectAllowsFrameCurrentOverInterlacedColocated(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idr := &DecodedFrame{poc: 0}
+	col := &DecodedFrame{
+		poc:      4,
+		fieldPOC: [2]int32{0, 4},
+		tables:   colTables,
+		refEntries: [2][]simpleRefEntry{
+			{{frame: idr}},
+		},
+	}
+	colTables.MacroblockTyp[0] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colTables.MacroblockTyp[colTables.MBStride] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colTables.RefIndex[0][0] = 0
+	colTables.RefIndex[0][1] = 0
+	colTables.RefIndex[0][4*colTables.MBStride] = 0
+	colTables.RefIndex[0][4*colTables.MBStride+1] = 0
+	colTables.MotionVal[0][colTables.MB2BXY[0]] = [2]int16{4, 2}
+	colTables.MotionVal[0][int(colTables.MB2BXY[0])+colTables.BStride] = [2]int16{4, 2}
+	colTables.MotionVal[0][colTables.MB2BXY[colTables.MBStride]] = [2]int16{4, 2}
+	colTables.MotionVal[0][int(colTables.MB2BXY[colTables.MBStride])+colTables.BStride] = [2]int16{4, 2}
 
 	var cache macroblockMotionCache
 	var sub [4]uint32
 	mbType := MBTypeDirect2 | MBTypeL0L1
-	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+	err = m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
 		RefEntries: [2][]simpleRefEntry{
 			{{frame: idr}},
-			{{frame: col, pictureStructure: PictureFrame}},
+			{{frame: col, pictureStructure: PictureFrame, poc: 4}},
 		},
+		CurPOC:             2,
 		PictureStructure:   PictureFrame,
 		Direct8x8Inference: true,
 	})
-	if !errors.Is(err, ErrUnsupported) {
-		t.Fatalf("err = %v, want ErrUnsupported", err)
+	if err != nil {
+		t.Fatalf("frame-over-field temporal direct failed: %v", err)
 	}
-	for _, want := range []string{"direct motion interlaced colocated", "mb_xy=0", "picture=3", "ref1_picture=3"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("err = %q, want detail %q", err, want)
-		}
+	if !is16x8(mbType) || !isDirect(mbType) {
+		t.Fatalf("mbType = %#x, want direct 16x8 from interlaced colocated", mbType)
+	}
+	base := int(h264Scan8[0])
+	if cache.MV[0][base] != ([2]int16{2, 2}) || cache.MV[1][base] != ([2]int16{-2, -2}) {
+		t.Fatalf("frame-over-field mvs = %v/%v, want y-shifted temporal scale", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
+func TestDirectColocatedLayoutFrameCurrentUsesColParityAndBottomHalf(t *testing.T) {
+	m, err := newMacroblockTables(1, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	col, err := newMacroblockTables(1, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for mbXY := range col.MacroblockTyp {
+		col.MacroblockTyp[mbXY] = MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	}
+	colFrame := &DecodedFrame{fieldPOC: [2]int32{20, 4}, tables: col}
+
+	mbXY := 3 * m.MBStride
+	layout, err := m.directColocatedLayout(col, mbXY, MBTypeDirect2|MBTypeL0L1, h264DirectMotionContext{
+		RefEntries:       [2][]simpleRefEntry{nil, {{frame: colFrame, pictureStructure: PictureFrame}}},
+		CurPOC:           0,
+		PictureStructure: PictureFrame,
+	})
+	if err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	if layout.MBXY != mbXY || layout.B8Stride != 0 || !layout.InterlacedMismatch {
+		t.Fatalf("layout mbxy/b8/mismatch = %d/%d/%v, want bottom colocated field mismatch", layout.MBXY, layout.B8Stride, layout.InterlacedMismatch)
+	}
+	if layout.RefBase != 4*mbXY+2 || layout.MVBase != int(col.MB2BXY[mbXY])+2*col.BStride {
+		t.Fatalf("layout bases = ref %d mv %d, want bottom-half offsets", layout.RefBase, layout.MVBase)
+	}
+}
+
+func TestPredTemporalDirectAllowsFieldCurrentOverFrameColocated(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idr := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 0}}
+	col := &DecodedFrame{
+		poc:      4,
+		fieldPOC: [2]int32{4, 6},
+		tables:   colTables,
+		refEntries: [2][]simpleRefEntry{
+			{{frame: idr, pictureStructure: PictureFrame, poc: 0}},
+		},
+	}
+	colTables.MacroblockTyp[0] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0
+	colTables.MacroblockTyp[colTables.MBStride] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0
+	colTables.RefIndex[0][0] = 0
+	colTables.MotionVal[0][colTables.MB2BXY[0]] = [2]int16{4, 4}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1 | MBTypeInterlaced
+	err = m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr, pictureStructure: PictureTopField, poc: 0}},
+			{{frame: col, pictureStructure: PictureFrame, poc: 4}},
+		},
+		CurPOC:             2,
+		PictureStructure:   PictureTopField,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("field-over-frame temporal direct failed: %v", err)
+	}
+	if !is16x8(mbType) || !isDirect(mbType) {
+		t.Fatalf("mbType = %#x, want field direct 16x8", mbType)
+	}
+	base := int(h264Scan8[0])
+	if cache.MV[0][base] != ([2]int16{2, 1}) || cache.MV[1][base] != ([2]int16{-2, -1}) {
+		t.Fatalf("field-over-frame mvs = %v/%v, want field-scaled temporal direct", cache.MV[0][base], cache.MV[1][base])
 	}
 }
 
@@ -331,7 +434,15 @@ func TestSpatialDirectColZeroUsesFFmpegUnsignedX264BuildCompare(t *testing.T) {
 	col.tables.RefIndex[0][0] = -1
 	col.tables.RefIndex[1][0] = 0
 
-	list, ok := spatialDirectColZeroList(col.tables, 0, 0, h264DirectMotionContext{
+	layout := directColocatedLayout{
+		MBXY:      0,
+		MBTypeCol: [2]uint32{col.tables.MacroblockTyp[0], col.tables.MacroblockTyp[0]},
+		B8Stride:  2,
+		B4Stride:  col.tables.BStride,
+		RefBase:   0,
+		MVBase:    int(col.tables.MB2BXY[0]),
+	}
+	list, ok := spatialDirectColZeroList(col.tables, layout, 0, h264DirectMotionContext{
 		RefEntries: [2][]simpleRefEntry{
 			nil,
 			{{frame: col}},
