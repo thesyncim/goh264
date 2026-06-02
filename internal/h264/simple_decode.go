@@ -226,6 +226,9 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 	var sliceNum uint16
 	haveSlice := false
 	frameComplete := false
+	fieldPairPending := false
+	pendingFieldStructure := int32(0)
+	pendingFieldFrameNum := uint32(0)
 	decodedFrames := 0
 
 	for _, nal := range nals {
@@ -262,7 +265,17 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 			if err := validateSimpleFrameReferenceSyntax(sh); err != nil {
 				return nil, err
 			}
-			if frameComplete || haveSlice && sh.FirstMBAddr == 0 {
+			fieldPicture := sh.PictureStructure != PictureFrame
+			samePendingFieldFrame := fieldPairPending &&
+				fieldPicture &&
+				sh.FrameNum == pendingFieldFrameNum &&
+				sh.PictureStructure != pendingFieldStructure
+			startingComplementaryField := haveSlice &&
+				!frameComplete &&
+				sh.FirstMBAddr == 0 &&
+				samePendingFieldFrame
+			decodingComplementaryField := haveSlice && !frameComplete && samePendingFieldFrame
+			if frameComplete || haveSlice && sh.FirstMBAddr == 0 && !startingComplementaryField {
 				if sh.FirstMBAddr != 0 {
 					return nil, ErrInvalidData
 				}
@@ -275,6 +288,9 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				sliceNum = 0
 				haveSlice = false
 				frameComplete = false
+				fieldPairPending = false
+				pendingFieldStructure = 0
+				pendingFieldFrameNum = 0
 			}
 			if !haveSlice && sh.FirstMBAddr != 0 {
 				return nil, ErrInvalidData
@@ -307,6 +323,11 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				loopFilterRefFrameIDs = make(map[*DecodedFrame]int8)
 			} else if err := frame.matchesSPS(sh.SPS); err != nil {
 				return nil, err
+			} else if startingComplementaryField {
+				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
+					return nil, err
+				}
+				applySimpleFrameTimingProps(frame, sh.SPS, sei, dpb)
 			}
 
 			sliceNum++
@@ -327,6 +348,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 			}
 			frame.refEntries = cloneSimpleRefEntries2(refctx.Entries)
 			var result h264FrameSliceDecodeResult
+			completeFrameNow := false
 			if frame.BitDepthLuma == 8 {
 				pic := frame.picturePlanes()
 				result, err = tables.decodeFrameSliceData(&payload, &pic, sh, h264FrameSliceDecodeInput{
@@ -336,7 +358,8 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 					PredWeight:    &sh.PredWeightTable,
 					MotionScratch: motionScratch,
 				})
-				if err == nil && result.EndOfFrame {
+				completeFrameNow = result.EndOfFrame && (!fieldPicture || decodingComplementaryField)
+				if err == nil && completeFrameNow {
 					err = tables.filterFrame(&pic, loopFilterSlices)
 				}
 			} else {
@@ -348,15 +371,27 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 					PredWeight:    &sh.PredWeightTable,
 					MotionScratch: motionScratchHigh,
 				})
-				if err == nil && result.EndOfFrame {
+				completeFrameNow = result.EndOfFrame && (!fieldPicture || decodingComplementaryField)
+				if err == nil && completeFrameNow {
 					err = tables.filterFrameHigh(&pic, loopFilterSlices)
 				}
 			}
 			if err != nil {
 				return nil, err
 			}
-			if result.EndOfFrame {
+			if result.EndOfFrame && fieldPicture && !decodingComplementaryField {
+				fieldPairPending = true
+				pendingFieldStructure = sh.PictureStructure
+				pendingFieldFrameNum = sh.FrameNum
+				if err := dpb.markDecodedFrame(frame, sh, nal.RefIDC); err != nil {
+					return nil, err
+				}
+			}
+			if completeFrameNow {
 				frameComplete = true
+				fieldPairPending = false
+				pendingFieldStructure = 0
+				pendingFieldFrameNum = 0
 				decodedFrames++
 				if err := dpb.markDecodedFrame(frame, sh, nal.RefIDC); err != nil {
 					return nil, err

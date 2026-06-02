@@ -110,6 +110,7 @@ type frameMacroblockDecodeCacheInput struct {
 	ListCount            int
 	SliceTypeNoS         int32
 	CABAC                bool
+	FieldPicture         bool
 	ConstrainedIntraPred bool
 	DirectSpatialMVPred  bool
 }
@@ -121,6 +122,10 @@ type frameMacroblockDecodeCacheResult struct {
 }
 
 func (m *macroblockTables) fillDecodeNeighborsFrame(mbXY int, sliceNum uint16, mbType uint32) (macroblockDecodeNeighbors, error) {
+	return m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, false)
+}
+
+func (m *macroblockTables) fillDecodeNeighborsFrameFields(mbXY int, sliceNum uint16, mbType uint32, fieldPicture bool) (macroblockDecodeNeighbors, error) {
 	var n macroblockDecodeNeighbors
 	if err := m.checkCodedMBXY(mbXY); err != nil {
 		return n, err
@@ -143,8 +148,14 @@ func (m *macroblockTables) fillDecodeNeighborsFrame(mbXY int, sliceNum uint16, m
 		LeftBlock:        &h264LeftBlockFrame,
 	}
 
-	if mbY > 0 {
-		n.TopXY = mbXY - m.MBStride
+	topStride := m.MBStride
+	topRows := 1
+	if fieldPicture {
+		topStride <<= 1
+		topRows = 2
+	}
+	if mbY >= topRows {
+		n.TopXY = mbXY - topStride
 		if mbX > 0 {
 			n.TopLeftXY = n.TopXY - 1
 		}
@@ -181,7 +192,7 @@ func (m *macroblockTables) fillDecodeNeighborsFrame(mbXY int, sliceNum uint16, m
 
 func (m *macroblockTables) fillFrameMacroblockDecodeCaches(intraCache *[h264IntraPredModeCacheSize]int8, residual *cavlcResidualContext, motion *macroblockMotionCache, in frameMacroblockDecodeCacheInput) (frameMacroblockDecodeCacheResult, error) {
 	var result frameMacroblockDecodeCacheResult
-	neighbors, err := m.fillDecodeNeighborsFrame(in.MBXY, in.SliceNum, in.MBType)
+	neighbors, err := m.fillDecodeNeighborsFrameFields(in.MBXY, in.SliceNum, in.MBType, in.FieldPicture)
 	if err != nil {
 		return result, err
 	}

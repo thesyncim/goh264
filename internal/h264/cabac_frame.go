@@ -19,6 +19,7 @@ type cabacFrameMacroblockInput struct {
 	DCT8x8Allowed          bool
 	DirectSpatialMVPred    bool
 	DeblockingFilter       int32
+	FieldPicture           bool
 	Direct                 h264DirectMotionContext
 	PPS                    *PPS
 	SPS                    *SPS
@@ -93,7 +94,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		} else if frameMBAFF {
 			skip, err = m.decodeCABACMBSkipMBAFF(src, mbXY, mbX, mbY, sh.SliceTypeNoS, sliceNum, state.MBFieldDecodingFlag)
 		} else {
-			skip, err = m.decodeCABACMBSkip(src, mbXY, sh.SliceTypeNoS, sliceNum)
+			skip, err = m.decodeCABACMBSkip(src, mbXY, sh.SliceTypeNoS, sliceNum, sh.PictureStructure != PictureFrame)
 		}
 		if err != nil {
 			return result, err
@@ -149,6 +150,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
 		DeblockingFilter:       sh.DeblockingFilter,
+		FieldPicture:           sh.PictureStructure != PictureFrame,
 		Direct:                 direct,
 		PPS:                    sh.PPS,
 		SPS:                    sh.SPS,
@@ -184,7 +186,7 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 	}
 	*work = frameMacroblockDecodeWork{}
 
-	neighbors, err := m.fillDecodeNeighborsFrame(in.MBXY, in.SliceNum, 0)
+	neighbors, err := m.fillDecodeNeighborsFrameFields(in.MBXY, in.SliceNum, 0, in.FieldPicture)
 	if err != nil {
 		return result, err
 	}
@@ -214,6 +216,7 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 		ListCount:            listCount,
 		SliceTypeNoS:         in.SliceTypeNoS,
 		CABAC:                true,
+		FieldPicture:         in.FieldPicture,
 		ConstrainedIntraPred: in.PPS.ConstrainedIntraPred != 0,
 		DirectSpatialMVPred:  in.DirectSpatialMVPred,
 	})
@@ -250,7 +253,7 @@ func (m *macroblockTables) decodeCABACFrameIntraPCMMacroblock(src cabacSyntaxSou
 	return result, nil
 }
 
-func (m *macroblockTables) decodeCABACMBSkip(src cabacSyntaxSource, mbXY int, sliceTypeNoS int32, sliceNum uint16) (bool, error) {
+func (m *macroblockTables) decodeCABACMBSkip(src cabacSyntaxSource, mbXY int, sliceTypeNoS int32, sliceNum uint16, fieldPicture bool) (bool, error) {
 	if m == nil || src == nil {
 		return false, ErrInvalidData
 	}
@@ -263,7 +266,11 @@ func (m *macroblockTables) decodeCABACMBSkip(src cabacSyntaxSource, mbXY int, sl
 	if mbX > 0 {
 		leftXY = mbXY - 1
 	}
-	topXY := mbXY - m.MBStride
+	topStride := m.MBStride
+	if fieldPicture {
+		topStride <<= 1
+	}
+	topXY := mbXY - topStride
 	if m.sameSlice(leftXY, sliceNum) && !isSkip(m.MacroblockTyp[leftXY]) {
 		ctx++
 	}
@@ -377,7 +384,7 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkGuard(
 	}
 
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
-	neighbors, err := m.fillDecodeNeighborsFrame(mbXY, sliceNum, mbType)
+	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, sh.PictureStructure != PictureFrame)
 	if err != nil {
 		return result, err
 	}
@@ -404,7 +411,7 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWork(sh *
 func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	mbType := MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
-	neighbors, err := m.fillDecodeNeighborsFrame(mbXY, sliceNum, mbType)
+	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, sh.PictureStructure != PictureFrame)
 	if err != nil {
 		return result, err
 	}

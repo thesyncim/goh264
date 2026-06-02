@@ -156,6 +156,54 @@ func TestFillDecodeNeighborsFrameSliceBoundaries(t *testing.T) {
 	}
 }
 
+func TestFillDecodeNeighborsFieldPictureSkipsOppositeFieldRow(t *testing.T) {
+	m, err := newMacroblockTables(3, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sliceNum := uint16(11)
+	mbXY := 1 + 2*m.MBStride
+	topLeftXY := mbXY - 2*m.MBStride - 1
+	topXY := mbXY - 2*m.MBStride
+	topRightXY := mbXY - 2*m.MBStride + 1
+	oppositeFieldTopXY := mbXY - m.MBStride
+	leftXY := mbXY - 1
+	for _, xy := range []int{topLeftXY, topXY, topRightXY, oppositeFieldTopXY, leftXY} {
+		m.SliceTable[xy] = sliceNum
+	}
+	m.MacroblockTyp[topLeftXY] = MBTypeIntra4x4
+	m.MacroblockTyp[topXY] = MBType16x16 | MBTypeP0L0
+	m.MacroblockTyp[topRightXY] = MBType16x16 | MBTypeP0L0
+	m.MacroblockTyp[oppositeFieldTopXY] = MBTypeIntraPCM
+	m.MacroblockTyp[leftXY] = MBTypeIntra16x16
+
+	n, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, MBTypeIntra4x4, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.TopXY != topXY || n.TopLeftXY != topLeftXY || n.TopRightXY != topRightXY {
+		t.Fatalf("field top neighbors = top %d tl %d tr %d, want %d/%d/%d",
+			n.TopXY, n.TopLeftXY, n.TopRightXY, topXY, topLeftXY, topRightXY)
+	}
+	if n.TopType != m.MacroblockTyp[topXY] || n.TopType == m.MacroblockTyp[oppositeFieldTopXY] {
+		t.Fatalf("field top type = %#x, want same-field %#x and not opposite-row %#x",
+			n.TopType, m.MacroblockTyp[topXY], m.MacroblockTyp[oppositeFieldTopXY])
+	}
+	if n.LeftXY != ([2]int{leftXY, leftXY}) || n.LeftType[0] != m.MacroblockTyp[leftXY] || n.LeftType[1] != m.MacroblockTyp[leftXY] {
+		t.Fatalf("field left neighbors = xy %v type %#x/%#x, want %d/%#x",
+			n.LeftXY, n.LeftType[0], n.LeftType[1], leftXY, m.MacroblockTyp[leftXY])
+	}
+
+	firstBottomRowXY := 1 + m.MBStride
+	n, err = m.fillDecodeNeighborsFrameFields(firstBottomRowXY, sliceNum, MBTypeIntra4x4, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.TopXY != -1 || n.TopType != 0 {
+		t.Fatalf("first bottom-field row top = %d/%#x, want unavailable", n.TopXY, n.TopType)
+	}
+}
+
 func TestFillFrameMacroblockDecodeCachesComposesResidualAndMotion(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {

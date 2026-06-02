@@ -17,6 +17,7 @@ type cavlcFrameMacroblockInput struct {
 	DCT8x8Allowed          bool
 	DirectSpatialMVPred    bool
 	DeblockingFilter       int32
+	FieldPicture           bool
 	Direct                 h264DirectMotionContext
 	PPS                    *PPS
 	SPS                    *SPS
@@ -145,6 +146,7 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb
 		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
 		DeblockingFilter:       sh.DeblockingFilter,
+		FieldPicture:           sh.PictureStructure != PictureFrame,
 		Direct:                 direct,
 		PPS:                    sh.PPS,
 		SPS:                    sh.SPS,
@@ -200,6 +202,7 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 		ListCount:            listCount,
 		SliceTypeNoS:         in.SliceTypeNoS,
 		CABAC:                false,
+		FieldPicture:         in.FieldPicture,
 		ConstrainedIntraPred: in.PPS.ConstrainedIntraPred != 0,
 		DirectSpatialMVPred:  in.DirectSpatialMVPred,
 	})
@@ -266,7 +269,7 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithDirectWorkGuard(
 	}
 
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
-	neighbors, err := m.fillDecodeNeighborsFrame(mbXY, sliceNum, mbType)
+	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, sh.PictureStructure != PictureFrame)
 	if err != nil {
 		return result, err
 	}
@@ -292,7 +295,7 @@ func (m *macroblockTables) writeBackCAVLCFrameBSkipMacroblockWithDirectWork(sh *
 func (m *macroblockTables) writeBackCAVLCFrameBSkipMacroblockWithDirectWorkGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cavlcFrameMacroblockResult, error) {
 	var result cavlcFrameMacroblockResult
 	mbType := MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
-	neighbors, err := m.fillDecodeNeighborsFrame(mbXY, sliceNum, mbType)
+	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, sh.PictureStructure != PictureFrame)
 	if err != nil {
 		return result, err
 	}
