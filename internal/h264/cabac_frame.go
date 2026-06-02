@@ -915,24 +915,25 @@ func (c *cavlcResidualContext) decodeCABACResidualPayload(src cabacSyntaxSource,
 		}
 
 		scan, scan8x8 := h264CABACScansForQScale(sps, qscale)
-		ret, err := c.decodeCABACLumaResidual(src, pps, scan, scan8x8, mbType, cbp, 0, qscale, cacheResult.LeftCBP, cacheResult.TopCBP, false, false)
+		narrowDCT := sps.BitDepthLuma == 8
+		ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 0, qscale, cacheResult.LeftCBP, cacheResult.TopCBP, false, false, narrowDCT)
 		if err != nil {
 			return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 		}
 		cbpTable |= ret
 		if sps.ChromaFormatIDC == 3 {
-			ret, err := c.decodeCABACLumaResidual(src, pps, scan, scan8x8, mbType, cbp, 1, int(chromaQP[0]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true)
+			ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 1, int(chromaQP[0]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true, narrowDCT)
 			if err != nil {
 				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 			}
 			cbpTable |= ret
-			ret, err = c.decodeCABACLumaResidual(src, pps, scan, scan8x8, mbType, cbp, 2, int(chromaQP[1]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true)
+			ret, err = c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 2, int(chromaQP[1]), cacheResult.LeftCBP, cacheResult.TopCBP, false, true, narrowDCT)
 			if err != nil {
 				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 			}
 			cbpTable |= ret
 		} else {
-			ret, err := c.decodeCABACChromaResidual(src, pps, scan, mbType, cbp, int32(sps.ChromaFormatIDC), chromaQP, cacheResult.LeftCBP, cacheResult.TopCBP, false)
+			ret, err := c.decodeCABACChromaResidualTyped(src, pps, scan, mbType, cbp, int32(sps.ChromaFormatIDC), chromaQP, cacheResult.LeftCBP, cacheResult.TopCBP, false, narrowDCT)
 			if err != nil {
 				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
 			}

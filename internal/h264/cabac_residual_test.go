@@ -69,6 +69,45 @@ func TestDecodeCABACResidualNonDCQuantizedCoeff(t *testing.T) {
 	wantIndexes(t, src, []int{93, 134, 135, 196, 248})
 }
 
+func TestDecodeCABACResidualNonDCTypedDCTElemWidth(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		narrowDCT bool
+		want      int32
+	}{
+		{name: "8-bit-dctelem", narrowDCT: true, want: 0},
+		{name: "high-bit-depth-dctelem", narrowDCT: false, want: 65536},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var ctx cavlcResidualContext
+			var block [16]int32
+			var qmul [16]uint32
+			for i := range qmul {
+				qmul[i] = 1 << 22
+			}
+			src := &scriptedCABACSource{
+				bits:  []int{1, 0, 1, 1, 0},
+				signs: []int32{1 << 22},
+			}
+
+			result, err := ctx.decodeCABACResidualNonDCTyped(src, block[:], 2, 0, cabacIdentityScan(16), qmul[:], 4, 0, 0, false, false, tt.narrowDCT)
+			if err != nil {
+				t.Fatalf("decode non-dc typed residual failed: %v", err)
+			}
+			if !result.Coded || result.CoeffCount != 1 {
+				t.Fatalf("result = %+v, want coded count=1", result)
+			}
+			if block[1] != tt.want {
+				t.Fatalf("block[1] = %d, want %d", block[1], tt.want)
+			}
+			if ctx.NonZeroCountCache[h264Scan8[0]] != 1 {
+				t.Fatalf("nnz = %d, want 1", ctx.NonZeroCountCache[h264Scan8[0]])
+			}
+			wantIndexes(t, src, []int{93, 134, 135, 196, 248})
+		})
+	}
+}
+
 func TestDecodeCABACResidualZeroCBF(t *testing.T) {
 	var ctx cavlcResidualContext
 	ctx.NonZeroCountCache[h264Scan8[4]] = 9

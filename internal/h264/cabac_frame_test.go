@@ -219,6 +219,42 @@ func TestDecodeCABACFrameHighIntraPCMMacroblockReadsBitDepthPayload(t *testing.T
 	}
 }
 
+func TestDecodeCABACResidualPayloadSelectsDCTElemWidth(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		bitDepth int32
+		want     int32
+	}{
+		{name: "8-bit-dctelem", bitDepth: 8, want: 0},
+		{name: "high-bit-depth-dctelem", bitDepth: 10, want: 65536},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pps := cavlcFlatQMulPPS()
+			for i := range pps.Dequant4Buffer[3][20] {
+				pps.Dequant4Buffer[3][20][i] = 1 << 22
+			}
+			sps := &SPS{BitDepthLuma: tt.bitDepth, ChromaFormatIDC: 0}
+			var ctx cavlcResidualContext
+			src := &scriptedCABACSource{
+				bits:  []int{0, 1, 0, 1, 1, 0, 0, 0, 0},
+				signs: []int32{1 << 22},
+			}
+
+			qscale, _, cbpTable, _, err := ctx.decodeCABACResidualPayload(src, pps, sps, MBType16x16|MBTypeP0L0, 1, 20, 0, residualDecodeCacheResult{})
+			if err != nil {
+				t.Fatalf("decode cabac residual payload failed: %v", err)
+			}
+			if qscale != 20 || cbpTable != 1 {
+				t.Fatalf("qscale/cbpTable = %d/%#x, want 20/1", qscale, cbpTable)
+			}
+			pos := int(h264ZigzagScanCAVLC[1])
+			if ctx.MB[pos] != tt.want {
+				t.Fatalf("luma coeff[%d] = %d, want %d", pos, ctx.MB[pos], tt.want)
+			}
+		})
+	}
+}
+
 func TestDecodeCABACFrameP16x16MacroblockAppliesNeighborMotion(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {

@@ -31,6 +31,41 @@ func TestDecodeCABACChromaResidual420DC(t *testing.T) {
 	wantIndexes(t, src, []int{97, 149, 210, 258, 97})
 }
 
+func TestDecodeCABACChromaResidualTypedDCTElemWidth(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		narrowDCT bool
+		want      int32
+	}{
+		{name: "8-bit-dctelem", narrowDCT: true, want: dctcoef8(40000)},
+		{name: "high-bit-depth-dctelem", narrowDCT: false, want: 40000},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pps := cavlcFlatQMulPPS()
+			var ctx cavlcResidualContext
+			src := &scriptedCABACSource{
+				bits:  []int{1, 1, 1, 0, 0},
+				signs: []int32{40000},
+			}
+
+			ret, err := ctx.decodeCABACChromaResidualTyped(src, pps, h264ZigzagScanCAVLC[:], MBTypeIntra4x4, 0x10, 1, [2]uint8{0, 0}, 0, 0, false, tt.narrowDCT)
+			if err != nil {
+				t.Fatalf("decode chroma typed residual failed: %v", err)
+			}
+			if ret != 0x40 {
+				t.Fatalf("ret cbp table bits = %#x, want 0x40", ret)
+			}
+			if ctx.MB[256] != tt.want {
+				t.Fatalf("chroma dc coeff = %d, want %d", ctx.MB[256], tt.want)
+			}
+			if ctx.NonZeroCountCache[h264Scan8[chromaDCBlockIndex]] != 1 {
+				t.Fatalf("chroma dc0 nnz = %d, want 1", ctx.NonZeroCountCache[h264Scan8[chromaDCBlockIndex]])
+			}
+			wantIndexes(t, src, []int{97, 149, 210, 258, 97})
+		})
+	}
+}
+
 func TestDecodeCABACChromaResidualClearsSkippedChroma(t *testing.T) {
 	pps := cavlcFlatQMulPPS()
 	var ctx cavlcResidualContext

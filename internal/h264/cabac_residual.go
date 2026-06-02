@@ -96,6 +96,10 @@ func (c *cavlcResidualContext) cabacCBFContext(cat int, idx int, maxCoeff int, i
 }
 
 func (c *cavlcResidualContext) decodeCABACResidualDC(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma422 bool) (cabacResidualResult, error) {
+	return c.decodeCABACResidualDCTyped(src, block, cat, n, scantable, maxCoeff, leftCBP, topCBP, mbField, chroma422, false)
+}
+
+func (c *cavlcResidualContext) decodeCABACResidualDCTyped(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma422 bool, narrowDCT bool) (cabacResidualResult, error) {
 	var result cabacResidualResult
 	ctx, err := c.cabacCBFContext(cat, n, maxCoeff, true, leftCBP, topCBP)
 	if err != nil {
@@ -105,10 +109,14 @@ func (c *cavlcResidualContext) decodeCABACResidualDC(src cabacSyntaxSource, bloc
 		c.NonZeroCountCache[h264Scan8[n]] = 0
 		return result, nil
 	}
-	return c.decodeCABACResidualInternal(src, block, cat, n, scantable, nil, maxCoeff, true, mbField, chroma422)
+	return c.decodeCABACResidualInternal(src, block, cat, n, scantable, nil, maxCoeff, true, mbField, chroma422, narrowDCT)
 }
 
 func (c *cavlcResidualContext) decodeCABACResidualNonDC(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma444 bool) (cabacResidualResult, error) {
+	return c.decodeCABACResidualNonDCTyped(src, block, cat, n, scantable, qmul, maxCoeff, leftCBP, topCBP, mbField, chroma444, false)
+}
+
+func (c *cavlcResidualContext) decodeCABACResidualNonDCTyped(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma444 bool, narrowDCT bool) (cabacResidualResult, error) {
 	var result cabacResidualResult
 	if cat < 0 || cat >= len(cabacCBFBaseContext) {
 		return result, ErrInvalidData
@@ -127,10 +135,10 @@ func (c *cavlcResidualContext) decodeCABACResidualNonDC(src cabacSyntaxSource, b
 			return result, nil
 		}
 	}
-	return c.decodeCABACResidualInternal(src, block, cat, n, scantable, qmul, maxCoeff, false, mbField, false)
+	return c.decodeCABACResidualInternal(src, block, cat, n, scantable, qmul, maxCoeff, false, mbField, false, narrowDCT)
 }
 
-func (c *cavlcResidualContext) decodeCABACResidualInternal(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, isDC bool, mbField bool, chroma422 bool) (cabacResidualResult, error) {
+func (c *cavlcResidualContext) decodeCABACResidualInternal(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, isDC bool, mbField bool, chroma422 bool, narrowDCT bool) (cabacResidualResult, error) {
 	var result cabacResidualResult
 	if cat < 0 || cat >= len(cabacCBFBaseContext) || n < 0 || n >= len(h264Scan8) || maxCoeff <= 0 || maxCoeff > 64 {
 		return result, ErrInvalidData
@@ -228,9 +236,9 @@ func (c *cavlcResidualContext) decodeCABACResidualInternal(src cabacSyntaxSource
 		if src.get(ctx) == 0 {
 			nodeCtx = int(cabacCoeffAbsLevelTransition[0][nodeCtx])
 			if isDC {
-				block[scanPos] = src.bypassSign(-1)
+				storeCABACResidualCoeff(block, scanPos, src.bypassSign(-1), narrowDCT)
 			} else {
-				block[scanPos] = (src.bypassSign(-int32(qmul[scanPos])) + 32) >> 6
+				storeCABACResidualCoeff(block, scanPos, (src.bypassSign(-int32(qmul[scanPos]))+32)>>6, narrowDCT)
 			}
 			continue
 		}
@@ -260,10 +268,17 @@ func (c *cavlcResidualContext) decodeCABACResidualInternal(src cabacSyntaxSource
 		}
 
 		if isDC {
-			block[scanPos] = src.bypassSign(-int32(coeffAbs))
+			storeCABACResidualCoeff(block, scanPos, src.bypassSign(-int32(coeffAbs)), narrowDCT)
 		} else {
-			block[scanPos] = (src.bypassSign(-int32(coeffAbs))*int32(qmul[scanPos]) + 32) >> 6
+			storeCABACResidualCoeff(block, scanPos, (src.bypassSign(-int32(coeffAbs))*int32(qmul[scanPos])+32)>>6, narrowDCT)
 		}
 	}
 	return result, nil
+}
+
+func storeCABACResidualCoeff(block []int32, pos int, value int32, narrowDCT bool) {
+	if narrowDCT {
+		value = dctcoef8(int(value))
+	}
+	block[pos] = value
 }
