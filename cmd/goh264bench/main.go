@@ -135,21 +135,27 @@ type benchOptions struct {
 }
 
 type benchCorpusEntry struct {
-	ID           string   `json:"id"`
-	Path         string   `json:"path"`
-	URL          string   `json:"url,omitempty"`
-	Format       string   `json:"format"`
-	Expect       string   `json:"expect"`
-	PixFmt       string   `json:"pix_fmt,omitempty"`
-	FrameCount   int      `json:"frame_count,omitempty"`
-	FrameSize    int      `json:"frame_size,omitempty"`
-	BitstreamMD5 string   `json:"bitstream_md5,omitempty"`
-	RawVideoMD5  string   `json:"rawvideo_md5,omitempty"`
-	FrameMD5     []string `json:"frame_md5,omitempty"`
-	Surfaces     []string `json:"surfaces,omitempty"`
-	GuardTags    []string `json:"guard_tags,omitempty"`
-	FeatureTags  []string `json:"feature_tags,omitempty"`
-	Source       string   `json:"source,omitempty"`
+	ID           string             `json:"id"`
+	Path         string             `json:"path"`
+	URL          string             `json:"url,omitempty"`
+	Format       string             `json:"format"`
+	Expect       string             `json:"expect"`
+	PixFmt       string             `json:"pix_fmt,omitempty"`
+	FrameCount   int                `json:"frame_count,omitempty"`
+	FrameSize    int                `json:"frame_size,omitempty"`
+	BitstreamMD5 string             `json:"bitstream_md5,omitempty"`
+	RawVideoMD5  string             `json:"rawvideo_md5,omitempty"`
+	FrameMD5     []string           `json:"frame_md5,omitempty"`
+	Surfaces     []string           `json:"surfaces,omitempty"`
+	GuardTags    []string           `json:"guard_tags,omitempty"`
+	FeatureTags  []string           `json:"feature_tags,omitempty"`
+	Source       string             `json:"source,omitempty"`
+	KnownFailure *benchKnownFailure `json:"known_failure,omitempty"`
+}
+
+type benchKnownFailure struct {
+	Class          string `json:"class"`
+	DetailContains string `json:"detail_contains"`
 }
 
 func main() {
@@ -351,8 +357,8 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		}
 		inputPath, err := resolveBenchCorpusPath(baseDir, entry)
 		if err != nil {
-			if _, ok := failureLedger[entry.ID]; ok {
-				results = append(results, knownRedBenchResult(entry, "", nil, err, failureLedgerPath))
+			if failure, ok := failureLedger[entry.ID]; ok {
+				results = append(results, knownRedBenchResult(failure, "", nil, err, failureLedgerPath))
 				knownRed++
 				continue
 			}
@@ -360,8 +366,8 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		}
 		data, err := os.ReadFile(inputPath)
 		if err != nil {
-			if _, ok := failureLedger[entry.ID]; ok {
-				results = append(results, knownRedBenchResult(entry, inputPath, nil, err, failureLedgerPath))
+			if failure, ok := failureLedger[entry.ID]; ok {
+				results = append(results, knownRedBenchResult(failure, inputPath, nil, err, failureLedgerPath))
 				knownRed++
 				continue
 			}
@@ -372,8 +378,8 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		}
 		staleLedger := false
 		if err := preflightBenchGoOracle(inputPath, data, entry); err != nil {
-			if _, ok := failureLedger[entry.ID]; ok {
-				results = append(results, knownRedBenchResult(entry, inputPath, data, err, failureLedgerPath))
+			if failure, ok := failureLedger[entry.ID]; ok {
+				results = append(results, knownRedBenchResult(failure, inputPath, data, err, failureLedgerPath))
 				knownRed++
 				continue
 			}
@@ -448,6 +454,9 @@ func readBenchFailureLedger(manifestPath string, mode string, manifestEntries []
 		if err := validateBenchCorpusEntry(failure); err != nil {
 			return nil, "", fmt.Errorf("%s: failure-ledger row: %w", failure.ID, err)
 		}
+		if err := validateBenchKnownFailure(failure); err != nil {
+			return nil, "", fmt.Errorf("%s: failure-ledger row: %w", failure.ID, err)
+		}
 		if _, ok := failures[failure.ID]; ok {
 			return nil, "", fmt.Errorf("%s: duplicate failure-ledger id in %s", failure.ID, path)
 		}
@@ -455,12 +464,17 @@ func readBenchFailureLedger(manifestPath string, mode string, manifestEntries []
 		if !ok {
 			return nil, "", fmt.Errorf("%s: failure-ledger row missing from %s", failure.ID, manifestPath)
 		}
-		if !reflect.DeepEqual(failure, manifestEntry) {
+		if !reflect.DeepEqual(benchCorpusEntryWithoutKnownFailure(failure), benchCorpusEntryWithoutKnownFailure(manifestEntry)) {
 			return nil, "", fmt.Errorf("%s: failure-ledger row drifted from %s", failure.ID, manifestPath)
 		}
 		failures[failure.ID] = failure
 	}
 	return failures, path, nil
+}
+
+func benchCorpusEntryWithoutKnownFailure(entry benchCorpusEntry) benchCorpusEntry {
+	entry.KnownFailure = nil
+	return entry
 }
 
 func benchFailureLedgerPath(manifestPath string, mode string) (string, error) {
@@ -575,6 +589,21 @@ func validateBenchCorpusEntry(entry benchCorpusEntry) error {
 	}
 	if len(entry.FrameMD5) != 0 && len(entry.FrameMD5) != entry.FrameCount {
 		return fmt.Errorf("%s: frame_md5 count = %d, want 0 or %d", entry.ID, len(entry.FrameMD5), entry.FrameCount)
+	}
+	return nil
+}
+
+func validateBenchKnownFailure(entry benchCorpusEntry) error {
+	if entry.KnownFailure == nil {
+		return fmt.Errorf("known-red rows must record known_failure")
+	}
+	if entry.KnownFailure.Class == "" || entry.KnownFailure.DetailContains == "" {
+		return fmt.Errorf("known_failure needs class and detail_contains")
+	}
+	switch entry.KnownFailure.Class {
+	case "decode-error", "frame-count-mismatch", "pixel-format-mismatch", "raw-size-mismatch", "bitstream-md5-mismatch", "raw-md5-mismatch", "oracle-mismatch", "input-missing":
+	default:
+		return fmt.Errorf("unknown known_failure class %q", entry.KnownFailure.Class)
 	}
 	return nil
 }
@@ -738,6 +767,9 @@ func knownRedBenchResult(entry benchCorpusEntry, input string, data []byte, err 
 	if ledgerPath != "" {
 		result.Notes = append(result.Notes, "failure ledger: "+ledgerPath)
 	}
+	if entry.KnownFailure != nil {
+		result.Notes = append(result.Notes, fmt.Sprintf("expected current failure: class=%s contains=%q", entry.KnownFailure.Class, entry.KnownFailure.DetailContains))
+	}
 	if err != nil {
 		result.Error = err.Error()
 		result.ErrorClass = benchOracleFailureClass(err.Error())
@@ -752,7 +784,7 @@ func benchOracleFailureClass(detail string) string {
 		return ""
 	case strings.Contains(detail, "missing ") || strings.Contains(detail, "no such file"):
 		return "input-missing"
-	case strings.Contains(detail, "decode") || strings.Contains(detail, "unsupported"):
+	case strings.Contains(detail, "decode") || strings.Contains(detail, "unsupported") || strings.Contains(detail, "invalid data"):
 		return "decode-error"
 	case strings.Contains(detail, "frames_per_iter") || strings.Contains(detail, "frames ="):
 		return "frame-count-mismatch"

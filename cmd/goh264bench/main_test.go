@@ -106,12 +106,13 @@ func TestReadBenchCorpusManifestAndValidate(t *testing.T) {
 func TestReadBenchFailureLedgerAutoValidatesManifestSubset(t *testing.T) {
 	dir := t.TempDir()
 	row := `{"id":"fate/h264-conformance/frext-hcamff1-hhi","path":"HCAMFF1_HHI.264","url":"https://example.invalid/HCAMFF1_HHI.264","source":"FFmpeg FATE h264-conformance/FRext","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":10,"frame_size":152064,"bitstream_md5":"0dd0819dd9a276101a25259c0774c02c","rawvideo_md5":"2973f5376378cde879649160d4a46a98","surfaces":["annexb"],"feature_tags":["high","mbaff","field"]}`
+	failureRow := `{"id":"fate/h264-conformance/frext-hcamff1-hhi","path":"HCAMFF1_HHI.264","url":"https://example.invalid/HCAMFF1_HHI.264","source":"FFmpeg FATE h264-conformance/FRext","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":10,"frame_size":152064,"bitstream_md5":"0dd0819dd9a276101a25259c0774c02c","rawvideo_md5":"2973f5376378cde879649160d4a46a98","surfaces":["annexb"],"feature_tags":["high","mbaff","field"],"known_failure":{"class":"decode-error","detail_contains":"unsupported bitstream feature"}}`
 	manifestPath := filepath.Join(dir, "manifest.jsonl")
 	failurePath := filepath.Join(dir, "failures.jsonl")
 	if err := os.WriteFile(manifestPath, []byte(row+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(failurePath, []byte(row+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(failurePath, []byte(failureRow+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := readBenchCorpusManifest(manifestPath)
@@ -129,7 +130,7 @@ func TestReadBenchFailureLedgerAutoValidatesManifestSubset(t *testing.T) {
 		t.Fatalf("failures = %+v, want hcamff1 only", failures)
 	}
 
-	missingRow := strings.Replace(row, `"id":"fate/h264-conformance/frext-hcamff1-hhi"`, `"id":"fate/h264-conformance/missing-from-manifest"`, 1)
+	missingRow := strings.Replace(failureRow, `"id":"fate/h264-conformance/frext-hcamff1-hhi"`, `"id":"fate/h264-conformance/missing-from-manifest"`, 1)
 	if err := os.WriteFile(failurePath, []byte(missingRow+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +138,7 @@ func TestReadBenchFailureLedgerAutoValidatesManifestSubset(t *testing.T) {
 		t.Fatalf("missing ledger row err = %v, want manifest subset rejection", err)
 	}
 
-	driftedRow := strings.Replace(row, `"source":"FFmpeg FATE h264-conformance/FRext"`, `"source":"drifted source"`, 1)
+	driftedRow := strings.Replace(failureRow, `"source":"FFmpeg FATE h264-conformance/FRext"`, `"source":"drifted source"`, 1)
 	if err := os.WriteFile(failurePath, []byte(driftedRow+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -149,12 +150,13 @@ func TestReadBenchFailureLedgerAutoValidatesManifestSubset(t *testing.T) {
 func TestBenchManifestReportsKnownRedRowsWithoutBenchmarking(t *testing.T) {
 	dir := t.TempDir()
 	row := `{"id":"known-red","path":"missing.264","source":"test public vectors","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":1,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","surfaces":["annexb"],"feature_tags":["unsupported"]}`
+	failureRow := `{"id":"known-red","path":"missing.264","source":"test public vectors","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":1,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","surfaces":["annexb"],"feature_tags":["unsupported"],"known_failure":{"class":"input-missing","detail_contains":"missing.264"}}`
 	manifestPath := filepath.Join(dir, "manifest.jsonl")
 	failurePath := filepath.Join(dir, "failures.jsonl")
 	if err := os.WriteFile(manifestPath, []byte(row+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(failurePath, []byte(row+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(failurePath, []byte(failureRow+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	report, err := benchManifest(manifestPath, 0, benchOptions{
@@ -189,6 +191,9 @@ func TestBenchManifestReportsKnownRedRowsWithoutBenchmarking(t *testing.T) {
 	}
 	if report.Results[0].Error == "" || !strings.Contains(report.Results[0].Error, "missing.264") {
 		t.Fatalf("known-red error = %q, want missing input detail", report.Results[0].Error)
+	}
+	if notes := strings.Join(report.Results[0].Notes, "\n"); !strings.Contains(notes, `expected current failure: class=input-missing contains="missing.264"`) {
+		t.Fatalf("known-red notes = %q, want expected failure signature", notes)
 	}
 }
 

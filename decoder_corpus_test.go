@@ -42,22 +42,28 @@ func h264CorpusManifestPaths() []string {
 }
 
 type h264CorpusEntry struct {
-	ID            string   `json:"id"`
-	Path          string   `json:"path"`
-	URL           string   `json:"url,omitempty"`
-	Format        string   `json:"format"`
-	Expect        string   `json:"expect"`
-	ExpectedError string   `json:"expected_error,omitempty"`
-	PixFmt        string   `json:"pix_fmt,omitempty"`
-	FrameCount    int      `json:"frame_count,omitempty"`
-	FrameSize     int      `json:"frame_size,omitempty"`
-	BitstreamMD5  string   `json:"bitstream_md5,omitempty"`
-	RawVideoMD5   string   `json:"rawvideo_md5,omitempty"`
-	FrameMD5      []string `json:"frame_md5,omitempty"`
-	Surfaces      []string `json:"surfaces,omitempty"`
-	GuardTags     []string `json:"guard_tags,omitempty"`
-	FeatureTags   []string `json:"feature_tags,omitempty"`
-	Source        string   `json:"source,omitempty"`
+	ID            string                  `json:"id"`
+	Path          string                  `json:"path"`
+	URL           string                  `json:"url,omitempty"`
+	Format        string                  `json:"format"`
+	Expect        string                  `json:"expect"`
+	ExpectedError string                  `json:"expected_error,omitempty"`
+	PixFmt        string                  `json:"pix_fmt,omitempty"`
+	FrameCount    int                     `json:"frame_count,omitempty"`
+	FrameSize     int                     `json:"frame_size,omitempty"`
+	BitstreamMD5  string                  `json:"bitstream_md5,omitempty"`
+	RawVideoMD5   string                  `json:"rawvideo_md5,omitempty"`
+	FrameMD5      []string                `json:"frame_md5,omitempty"`
+	Surfaces      []string                `json:"surfaces,omitempty"`
+	GuardTags     []string                `json:"guard_tags,omitempty"`
+	FeatureTags   []string                `json:"feature_tags,omitempty"`
+	Source        string                  `json:"source,omitempty"`
+	KnownFailure  *h264CorpusKnownFailure `json:"known_failure,omitempty"`
+}
+
+type h264CorpusKnownFailure struct {
+	Class          string `json:"class"`
+	DetailContains string `json:"detail_contains"`
 }
 
 func TestH264CorpusManifest(t *testing.T) {
@@ -119,6 +125,7 @@ func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 		if failure.Expect != "decode-ok" {
 			t.Fatalf("%s: failure ledger rows must stay decode-ok oracle rows, got %q", failure.ID, failure.Expect)
 		}
+		validateH264CorpusKnownFailure(t, failure)
 		if _, ok := failedIDs[failure.ID]; ok {
 			t.Fatalf("%s: duplicate failure-ledger id", failure.ID)
 		}
@@ -127,7 +134,7 @@ func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s: failure-ledger row is missing from %s", failure.ID, defaultH264RealVectorManifest)
 		}
-		if !reflect.DeepEqual(failure, manifestEntry) {
+		if !reflect.DeepEqual(h264CorpusEntryWithoutKnownFailure(failure), h264CorpusEntryWithoutKnownFailure(manifestEntry)) {
 			t.Fatalf("%s: failure-ledger row drifted from real-vector manifest\nfailure=%+v\nmanifest=%+v", failure.ID, failure, manifestEntry)
 		}
 	}
@@ -151,7 +158,7 @@ func TestH264RealVectorFailureFocusedFilters(t *testing.T) {
 		manifestByID[entry.ID] = entry
 	}
 
-	focusTokens := []string{"mbaff", "paff", "field", "high", "chroma", "b-slice", "direct", "weighted"}
+	focusTokens := []string{"mbaff", "paff", "picaff", "field", "high", "chroma", "b-slice", "direct", "weighted", "partitioned-b", "partitioned-p", "slice-boundary"}
 	var applicable int
 	for _, token := range focusTokens {
 		token := token
@@ -171,7 +178,7 @@ func TestH264RealVectorFailureFocusedFilters(t *testing.T) {
 				if !ok {
 					t.Fatalf("%s: known-red row matched filter %q but disappeared from filtered manifest", failure.ID, token)
 				}
-				if !reflect.DeepEqual(failure, manifestEntry) {
+				if !reflect.DeepEqual(h264CorpusEntryWithoutKnownFailure(failure), h264CorpusEntryWithoutKnownFailure(manifestEntry)) {
 					t.Fatalf("%s: filtered known-red row drifted from real-vector manifest\nfailure=%+v\nmanifest=%+v", failure.ID, failure, manifestEntry)
 				}
 				if _, ok := manifestByID[failure.ID]; !ok {
@@ -183,6 +190,38 @@ func TestH264RealVectorFailureFocusedFilters(t *testing.T) {
 	}
 	if applicable == 0 {
 		t.Fatalf("no known-red rows matched focused filters %v; failure ledger tags are %s", focusTokens, h264CorpusFailureFilterSummary(failures))
+	}
+}
+
+func TestH264RealVectorLaneCoverage(t *testing.T) {
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
+	for _, lane := range []struct {
+		name     string
+		tokens   []string
+		knownRed bool
+	}{
+		{name: "implicit weighted B", tokens: []string{"implicit-weight-b"}},
+		{name: "partitioned P", tokens: []string{"partitioned-p"}},
+		{name: "partitioned B", tokens: []string{"partitioned-b"}, knownRed: true},
+		{name: "PIC-AFF", tokens: []string{"picaff"}, knownRed: true},
+		{name: "slice boundary", tokens: []string{"slice-boundary"}, knownRed: true},
+		{name: "high deblock boundary", tokens: []string{"high", "deblock", "slice-boundary"}, knownRed: true},
+		{name: "high no-deblock boundary", tokens: []string{"high", "no-deblock", "slice-boundary"}, knownRed: true},
+		{name: "high10", tokens: []string{"high10"}},
+		{name: "cabac chroma", tokens: []string{"cabac", "chroma"}},
+	} {
+		lane := lane
+		t.Run(lane.name, func(t *testing.T) {
+			if got := filterH264CorpusEntries(append([]h264CorpusEntry(nil), manifest...), lane.tokens); len(got) == 0 {
+				t.Fatalf("real-vector manifest has no rows for tokens %v", lane.tokens)
+			}
+			if lane.knownRed {
+				if got := filterH264CorpusEntries(append([]h264CorpusEntry(nil), failures...), lane.tokens); len(got) == 0 {
+					t.Fatalf("failure ledger has no known-red rows for tokens %v", lane.tokens)
+				}
+			}
+		})
 	}
 }
 
@@ -205,6 +244,7 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 			if entry.Expect != "decode-ok" {
 				t.Fatalf("%s: failure ledger rows must stay decode-ok oracle rows, got %q", entry.ID, entry.Expect)
 			}
+			validateH264CorpusKnownFailure(t, entry)
 			if !h264CorpusEntryHasSurface(entry, "annexb") {
 				t.Fatalf("%s: failure-ledger freshness currently requires an annexb surface", entry.ID)
 			}
@@ -218,8 +258,41 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 			if matches {
 				t.Fatalf("%s: failure-ledger row now matches oracle; remove it from %s", entry.ID, defaultH264RealVectorFailureManifest)
 			}
+			assertH264CorpusKnownFailureStillCurrent(t, entry, detail)
 			t.Logf("%s: still red: %s", entry.ID, h264CorpusFailureDetail(entry, detail))
 		})
+	}
+}
+
+func validateH264CorpusKnownFailure(t *testing.T, entry h264CorpusEntry) {
+	t.Helper()
+	if entry.KnownFailure == nil {
+		t.Fatalf("%s: failure-ledger row must record known_failure", entry.ID)
+	}
+	if entry.KnownFailure.Class == "" || entry.KnownFailure.DetailContains == "" {
+		t.Fatalf("%s: known_failure needs class and detail_contains: %+v", entry.ID, entry.KnownFailure)
+	}
+	switch entry.KnownFailure.Class {
+	case "decode-error", "frame-count-mismatch", "pixel-format-mismatch", "raw-size-mismatch", "bitstream-md5-mismatch", "raw-md5-mismatch", "oracle-mismatch", "input-missing":
+	default:
+		t.Fatalf("%s: unknown known_failure class %q", entry.ID, entry.KnownFailure.Class)
+	}
+}
+
+func h264CorpusEntryWithoutKnownFailure(entry h264CorpusEntry) h264CorpusEntry {
+	entry.KnownFailure = nil
+	return entry
+}
+
+func assertH264CorpusKnownFailureStillCurrent(t *testing.T, entry h264CorpusEntry, detail string) {
+	t.Helper()
+	validateH264CorpusKnownFailure(t, entry)
+	gotClass := h264CorpusOracleFailureClass(detail)
+	if gotClass != entry.KnownFailure.Class {
+		t.Fatalf("%s: current failure class = %q, want known_failure class %q; detail=%s", entry.ID, gotClass, entry.KnownFailure.Class, detail)
+	}
+	if !strings.Contains(strings.ToLower(detail), strings.ToLower(entry.KnownFailure.DetailContains)) {
+		t.Fatalf("%s: current failure detail %q does not contain known_failure detail %q", entry.ID, detail, entry.KnownFailure.DetailContains)
 	}
 }
 
