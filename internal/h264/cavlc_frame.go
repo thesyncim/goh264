@@ -173,7 +173,8 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 	if err != nil {
 		return result, err
 	}
-	if in.MBFieldDecodingFlag != 0 {
+	fieldPicture := in.FieldPicture || in.MBFieldDecodingFlag != 0
+	if fieldPicture {
 		base.MBType |= MBTypeInterlaced
 	}
 	result.MBType = base.MBType
@@ -198,7 +199,7 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 		ListCount:            listCount,
 		SliceTypeNoS:         in.SliceTypeNoS,
 		CABAC:                false,
-		FieldPicture:         in.FieldPicture,
+		FieldPicture:         fieldPicture,
 		ConstrainedIntraPred: in.PPS.ConstrainedIntraPred != 0,
 		DirectSpatialMVPred:  in.DirectSpatialMVPred,
 	})
@@ -273,7 +274,7 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithDirectWorkFieldG
 
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
 	fieldPicture := sh.PictureStructure != PictureFrame || mbFieldDecodingFlag != 0
-	if mbFieldDecodingFlag != 0 {
+	if fieldPicture {
 		mbType |= MBTypeInterlaced
 	}
 	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, fieldPicture)
@@ -284,7 +285,7 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithDirectWorkFieldG
 	if err := m.writeBackPskipMacroblockWithMotion(mbXY, qscale, neighbors.motionNeighbors(mbType, 1, PictureTypeP, false, false), sliceNum, &work.Motion); err != nil {
 		return result, err
 	}
-	if mbFieldDecodingFlag != 0 {
+	if fieldPicture {
 		m.MacroblockTyp[mbXY] |= MBTypeInterlaced
 	}
 
@@ -311,7 +312,7 @@ func (m *macroblockTables) writeBackCAVLCFrameBSkipMacroblockWithDirectWorkField
 	var result cavlcFrameMacroblockResult
 	mbType := MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
 	fieldPicture := sh.PictureStructure == PictureTopField || sh.PictureStructure == PictureBottomField || mbFieldDecodingFlag != 0
-	if mbFieldDecodingFlag != 0 {
+	if fieldPicture {
 		mbType |= MBTypeInterlaced
 	}
 	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, fieldPicture)

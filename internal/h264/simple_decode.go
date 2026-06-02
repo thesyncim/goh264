@@ -8,6 +8,8 @@
 
 package h264
 
+import "fmt"
+
 type DecodedFrame struct {
 	Y, Cb, Cr                      []uint8
 	Y16, Cb16, Cr16                []uint16
@@ -264,7 +266,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				return nil, ErrUnsupported
 			}
 			if err := validateSimpleFrameReferenceSyntax(sh); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("validate simple frame reference syntax: %w", err)
 			}
 			fieldPicture := sh.PictureStructure != PictureFrame
 			samePendingFieldFrame := fieldPairPending &&
@@ -341,7 +343,9 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 			loopFilterSlices[sliceNum] = h264LoopFilterSliceParamsFromHeader(sh)
 			refctx, err := dpb.buildRefContext(sh, frame)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("build simple ref context slice=%d type=%d frame_num=%d refs=%d/%d mods=%d/%d picture=%d: %w",
+					sliceNum, sh.SliceTypeNoS, sh.FrameNum, sh.RefCount[0], sh.RefCount[1],
+					sh.NBRefModifications[0], sh.NBRefModifications[1], sh.PictureStructure, err)
 			}
 			loopFilterSlices[sliceNum].Ref2Frame, err = h264LoopFilterRef2Frame(refctx.Entries, loopFilterRefFrameIDs)
 			if err != nil {
@@ -362,6 +366,9 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				completeFrameNow = result.EndOfFrame && (!fieldPicture || decodingComplementaryField)
 				if err == nil && completeFrameNow {
 					err = tables.filterFrame(&pic, loopFilterSlices)
+					if err != nil {
+						err = fmt.Errorf("filter 8-bit frame slice=%d type=%d: %w", sliceNum, sh.SliceTypeNoS, err)
+					}
 				}
 			} else {
 				pic := frame.picturePlanesHigh()
@@ -375,10 +382,15 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				completeFrameNow = result.EndOfFrame && (!fieldPicture || decodingComplementaryField)
 				if err == nil && completeFrameNow {
 					err = tables.filterFrameHigh(&pic, loopFilterSlices)
+					if err != nil {
+						err = fmt.Errorf("filter high-bit frame slice=%d type=%d: %w", sliceNum, sh.SliceTypeNoS, err)
+					}
 				}
 			}
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("decode slice=%d type=%d first_mb=%d frame_num=%d picture=%d refs=%d/%d: %w",
+					sliceNum, sh.SliceTypeNoS, sh.FirstMBAddr, sh.FrameNum, sh.PictureStructure,
+					sh.RefCount[0], sh.RefCount[1], err)
 			}
 			if result.EndOfFrame && fieldPicture && !decodingComplementaryField {
 				fieldPairPending = true
@@ -672,14 +684,15 @@ func (f *DecodedFrame) picturePlanes() h264PicturePlanes {
 		return h264PicturePlanes{}
 	}
 	return h264PicturePlanes{
-		Y:               f.Y,
-		Cb:              f.Cb,
-		Cr:              f.Cr,
-		LumaStride:      f.LumaStride,
-		ChromaStride:    f.ChromaStride,
-		MBWidth:         f.MBWidth,
-		MBHeight:        f.MBHeight,
-		ChromaFormatIDC: f.ChromaFormatIDC,
+		Y:                f.Y,
+		Cb:               f.Cb,
+		Cr:               f.Cr,
+		LumaStride:       f.LumaStride,
+		ChromaStride:     f.ChromaStride,
+		MBWidth:          f.MBWidth,
+		MBHeight:         f.MBHeight,
+		ChromaFormatIDC:  f.ChromaFormatIDC,
+		PictureStructure: PictureFrame,
 	}
 }
 

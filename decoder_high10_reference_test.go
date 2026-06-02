@@ -2,7 +2,10 @@
 
 package goh264
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 const testsrc16High10CAVLCReferenceBoundaryAnnexBHex = `
 00000001676e000aa6cb4f42000003000200000300051e244d400000000168ce0f2c8b00000165888432a218ab030217e0214c880004026b50618003c5e33a31a3a05f77ff81a40d900d01ca08b0cad5e6a86cce6e5bd76d22637cc4ca82fabbfc4fb291c84f22c08
@@ -21,7 +24,7 @@ func TestDecodeConfiguredAVCHigh10RetainsReferenceForResidualP(t *testing.T) {
 	if _, err := fresh.ParseAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fresh.DecodeConfiguredAVC(samples[1]); err != ErrInvalidData {
+	if _, err := fresh.DecodeConfiguredAVC(samples[1]); !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("P sample without retained reference err = %v, want ErrInvalidData", err)
 	}
 

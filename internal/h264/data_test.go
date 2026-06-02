@@ -115,9 +115,13 @@ func TestScanTables(t *testing.T) {
 		t.Fatalf("field8x8 cabac spots = %d %d %d", h264FieldScan8x8CABAC[1], h264FieldScan8x8CABAC[3], h264FieldScan8x8CABAC[63])
 	}
 	sps := &SPS{TransformBypass: 1}
-	scan, scan8x8 := h264CAVLCScansForQScale(sps, 0)
+	scan, scan8x8 := h264CAVLCScansForQScale(sps, 0, false)
 	if scan[1] != 1 || scan8x8[7] != 7 {
 		t.Fatalf("q0 cavlc scans = %d %d, want untransposed spots", scan[1], scan8x8[7])
+	}
+	scan, scan8x8 = h264CAVLCScansForQScale(sps, 26, true)
+	if scan[1] != 1 || scan8x8[1] != 9 || scan8x8[2] != 16 {
+		t.Fatalf("field cavlc scans = %d %d %d, want transposed field-cavlc spots", scan[1], scan8x8[1], scan8x8[2])
 	}
 	scan, scan8x8 = h264CABACScansForQScale(sps, 0, false)
 	if scan[1] != 1 || scan8x8[2] != 8 {

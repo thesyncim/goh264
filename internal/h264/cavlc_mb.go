@@ -318,11 +318,8 @@ func (c *cavlcResidualContext) decodeCAVLCResidualPayload(gb *bitReader, pps *PP
 		chromaQP[0] = pps.ChromaQPTable[0][qscale]
 		chromaQP[1] = pps.ChromaQPTable[1][qscale]
 
-		if mbType&MBTypeInterlaced != 0 {
-			return qscale, chromaQP, cbpTable, ErrUnsupported
-		}
-
-		scan, scan8x8 := h264CAVLCScansForQScale(sps, qscale)
+		mbField := mbType&MBTypeInterlaced != 0
+		scan, scan8x8 := h264CAVLCScansForQScale(sps, qscale, mbField)
 		ret, err := c.decodeLumaResidual(gb, pps, scan, scan8x8, mbType, cbp, 0, qscale)
 		if err != nil {
 			return qscale, chromaQP, cbpTable, err

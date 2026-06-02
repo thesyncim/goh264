@@ -126,7 +126,7 @@ func TestDecodeCAVLCFieldPictureIntraPCMMacroblockPassesMBAFFGuard(t *testing.T)
 			if err != nil {
 				t.Fatalf("decode field-picture intra pcm failed: %v", err)
 			}
-			wantType := MBTypeIntraPCM
+			wantType := MBTypeIntraPCM | MBTypeInterlaced
 			if got.MBType != wantType || !got.IsIntra || got.MBFieldDecodingFlag != 0 || state.MBFieldDecodingFlag != 0 {
 				t.Fatalf("result type/intra/field = %#x/%v/%d/%d, want field-picture intra pcm without MBAFF flag", got.MBType, got.IsIntra, got.MBFieldDecodingFlag, state.MBFieldDecodingFlag)
 			}
