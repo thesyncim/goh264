@@ -151,6 +151,76 @@ func TestFillLoopFilterCachesFrameMBAFFFieldRefsUseExpandedRef2Frame(t *testing.
 	}
 }
 
+func TestFillLoopFilterCachesInterFrameMBAFFMixedLeftLeavesMotionCache(t *testing.T) {
+	m, err := newMacroblockTables(2, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leftXY := 0
+	mbXY := 1
+	leftType := MBType16x16 | MBTypeP0L0
+	mbType := MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	m.MacroblockTyp[leftXY] = leftType
+	m.MacroblockTyp[mbXY] = mbType
+	for _, xy := range []int{leftXY, mbXY} {
+		m.QScaleTable[xy] = 24
+		m.SliceTable[xy] = 0
+	}
+	leftBXY := int(m.MB2BXY[leftXY]) + 3
+	for row := 0; row < 4; row++ {
+		m.MotionVal[0][leftBXY+row*m.BStride] = [2]int16{int16(50 + row), int16(70 + row)}
+	}
+	m.RefIndex[0][4*leftXY+1] = 1
+	m.RefIndex[0][4*leftXY+3] = 1
+
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+		MBAFF:            1,
+	}
+	p := h264LoopFilterSliceParams{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureFrame,
+		DeblockingFilter: 1,
+		Ref2Frame: [2][]int8{
+			{3, 7},
+		},
+	}
+	base := int(h264Scan8[0])
+	ctx := &h264LoopFilterContext{}
+	for row := 0; row < 4; row++ {
+		idx := base - 1 + row*8
+		ctx.Motion.MV[0][idx] = [2]int16{123, 456}
+		ctx.Motion.Ref[0][idx] = 77
+	}
+
+	if err := m.fillLoopFilterCachesInterFrame(ctx, mbXY, -1, leftXY, mbType, 0, leftType, 0, p, []h264LoopFilterSliceParams{p}); err != nil {
+		t.Fatal(err)
+	}
+	for row := 0; row < 4; row++ {
+		idx := base - 1 + row*8
+		if ctx.Motion.MV[0][idx] != ([2]int16{123, 456}) || ctx.Motion.Ref[0][idx] != 77 {
+			t.Fatalf("mixed left cache row %d = mv %v ref %d, want sentinel untouched", row, ctx.Motion.MV[0][idx], ctx.Motion.Ref[0][idx])
+		}
+	}
+
+	mbType &^= MBTypeInterlaced
+	if err := m.fillLoopFilterCachesInterFrame(ctx, mbXY, -1, leftXY, mbType, 0, leftType, 0, p, []h264LoopFilterSliceParams{p}); err != nil {
+		t.Fatal(err)
+	}
+	for row := 0; row < 4; row++ {
+		idx := base - 1 + row*8
+		wantMV := [2]int16{int16(50 + row), int16(70 + row)}
+		if ctx.Motion.MV[0][idx] != wantMV || ctx.Motion.Ref[0][idx] != 7 {
+			t.Fatalf("same left cache row %d = mv %v ref %d, want %v/7", row, ctx.Motion.MV[0][idx], ctx.Motion.Ref[0][idx], wantMV)
+		}
+	}
+}
+
 func TestFillLoopFilterCachesFieldPictureKeepsSameFrameFieldRefsDistinct(t *testing.T) {
 	m, err := newMacroblockTables(1, 3, 1)
 	if err != nil {

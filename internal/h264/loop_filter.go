@@ -601,7 +601,10 @@ func (m *macroblockTables) fillLoopFilterCachesInterFrame(ctx *h264LoopFilterCon
 			fillRefRow(&ctx.Motion.Ref[list], base-8, 4, h264ListNotUsed)
 		}
 
-		if usesList(leftType, list) {
+		if mbType&MBTypeInterlaced != leftType&MBTypeInterlaced {
+			// FFmpeg leaves the left cache untouched for mixed frame/field MBAFF
+			// neighbors; the mixed vertical edge computes strength separately.
+		} else if usesList(leftType, list) {
 			if err := m.copyLeftMotionForLoopFilter(ctx, leftXY, list, base, m.loopFilterParamsForMB(params, leftXY, p), mbType); err != nil {
 				return err
 			}
