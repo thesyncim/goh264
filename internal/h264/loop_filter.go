@@ -270,6 +270,58 @@ func (m *macroblockTables) filterFrame(dst *h264PicturePlanes, params []h264Loop
 	return nil
 }
 
+func (m *macroblockTables) filterField(dst *h264PicturePlanes, params []h264LoopFilterSliceParams, pictureStructure int32) error {
+	if m == nil || dst == nil {
+		return ErrInvalidData
+	}
+	if pictureStructure != PictureTopField && pictureStructure != PictureBottomField {
+		return ErrInvalidData
+	}
+	if err := dst.validate(); err != nil {
+		return err
+	}
+	if m.MBWidth != dst.MBWidth || m.MBHeight != dst.MBHeight || m.ChromaFormatIDC != dst.ChromaFormatIDC {
+		return ErrInvalidData
+	}
+	wantOddRow := pictureStructure == PictureBottomField
+	for mbY := 0; mbY < m.MBHeight; mbY++ {
+		if (mbY&1 != 0) != wantOddRow {
+			continue
+		}
+		for mbX := 0; mbX < m.MBWidth; mbX++ {
+			mbXY := mbX + mbY*m.MBStride
+			sliceNum := m.SliceTable[mbXY]
+			if sliceNum == ^uint16(0) || int(sliceNum) >= len(params) {
+				return ErrInvalidData
+			}
+			p := params[sliceNum]
+			if p.PictureStructure != pictureStructure {
+				return ErrInvalidData
+			}
+			if err := p.validate(); err != nil {
+				return err
+			}
+			if p.DeblockingFilter == 0 {
+				continue
+			}
+			ctx, err := m.fillLoopFilterCachesFrame(mbXY, sliceNum, p, params)
+			if err != nil {
+				return err
+			}
+			dstView := *dst
+			filterMBY, err := h264LoopFilterFieldMBY(mbY, p)
+			if err != nil {
+				return err
+			}
+			applySimpleFieldRefPlane(&dstView, p.PictureStructure)
+			if err := m.filterFrameMacroblock(&dstView, mbX, filterMBY, p, &ctx); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (m *macroblockTables) filterFrameHigh(dst *h264PicturePlanesHigh, params []h264LoopFilterSliceParams) error {
 	if m == nil || dst == nil {
 		return ErrInvalidData
@@ -589,7 +641,7 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 		edges = 1
 	}
 	maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> uint(dir)))
-	mvyLimit := 4
+	mvyLimit := h264LoopFilterMVYLimit(mbType)
 
 	if mbmType != 0 {
 		bS, err := m.loopFilterBoundaryStrength(ctx, mbType, mbmType, dir, maskPar0, p.ListCount, mvyLimit)
@@ -668,7 +720,7 @@ func (m *macroblockTables) filterFrameMacroblockDirHigh(dst *h264PicturePlanesHi
 		edges = 1
 	}
 	maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> uint(dir)))
-	mvyLimit := 4
+	mvyLimit := h264LoopFilterMVYLimit(mbType)
 
 	if mbmType != 0 {
 		bS, err := m.loopFilterBoundaryStrength(ctx, mbType, mbmType, dir, maskPar0, p.ListCount, mvyLimit)
@@ -721,11 +773,22 @@ func (m *macroblockTables) filterFrameMacroblockDirHigh(dst *h264PicturePlanesHi
 	return nil
 }
 
+func h264LoopFilterMVYLimit(mbType uint32) int {
+	if mbType&MBTypeInterlaced != 0 {
+		return 2
+	}
+	return 4
+}
+
 func (m *macroblockTables) loopFilterBoundaryStrength(ctx *h264LoopFilterContext, mbType uint32, mbmType uint32, dir int, maskPar0 uint32, listCount int, mvyLimit int) ([4]int16, error) {
 	var bS [4]int16
 	if isIntra(mbType | mbmType) {
+		v := int16(3)
+		if (mbType&MBTypeInterlaced == 0 && mbmType&MBTypeInterlaced == 0) || dir == 0 {
+			v = 4
+		}
 		for i := range bS {
-			bS[i] = 4
+			bS[i] = v
 		}
 		return bS, nil
 	}

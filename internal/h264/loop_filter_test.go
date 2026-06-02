@@ -372,6 +372,104 @@ func TestMacroblockTablesFilterFrameDeblocksPAFFFieldViews(t *testing.T) {
 	}
 }
 
+func TestMacroblockTablesFilterFieldAllowsComplementaryFieldPending(t *testing.T) {
+	const (
+		mbWidth      = 2
+		mbHeight     = 2
+		lumaStride   = 32
+		chromaStride = 16
+		qp           = 30
+	)
+	m, err := newMacroblockTables(mbWidth, mbHeight, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := &h264PicturePlanes{
+		Y:               make([]uint8, lumaStride*32),
+		Cb:              make([]uint8, chromaStride*16),
+		Cr:              make([]uint8, chromaStride*16),
+		LumaStride:      lumaStride,
+		ChromaStride:    chromaStride,
+		MBWidth:         mbWidth,
+		MBHeight:        mbHeight,
+		ChromaFormatIDC: 1,
+	}
+	fillLoopFilterStepRows(dst.Y, lumaStride, 32, 16, 104, 112)
+	fillLoopFilterStepRows(dst.Cb, chromaStride, 16, 8, 84, 92)
+	fillLoopFilterStepRows(dst.Cr, chromaStride, 16, 8, 64, 72)
+	for mbX := 0; mbX < mbWidth; mbX++ {
+		mbXY := mbX
+		m.MacroblockTyp[mbXY] = MBTypeIntra16x16
+		m.QScaleTable[mbXY] = qp
+		m.SliceTable[mbXY] = 0
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+	}
+	params := []h264LoopFilterSliceParams{{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureTopField,
+		DeblockingFilter: 1,
+	}}
+	topYBefore := [2]uint8{dst.Y[15], dst.Y[16]}
+	bottomYBefore := [2]uint8{dst.Y[lumaStride+15], dst.Y[lumaStride+16]}
+
+	if err := m.filterField(dst, params, PictureTopField); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[15] == topYBefore[0] || dst.Y[16] == topYBefore[1] {
+		t.Fatalf("top field luma boundary did not filter before complementary field: %v -> [%d %d]",
+			topYBefore, dst.Y[15], dst.Y[16])
+	}
+	if dst.Y[lumaStride+15] != bottomYBefore[0] || dst.Y[lumaStride+16] != bottomYBefore[1] {
+		t.Fatalf("pending bottom field was modified: %v -> [%d %d]",
+			bottomYBefore, dst.Y[lumaStride+15], dst.Y[lumaStride+16])
+	}
+}
+
+func TestH264LoopFilterMVYLimitMatchesFieldMacroblockShape(t *testing.T) {
+	if got := h264LoopFilterMVYLimit(MBType16x16 | MBTypeP0L0); got != 4 {
+		t.Fatalf("progressive mvy limit = %d, want 4", got)
+	}
+	if got := h264LoopFilterMVYLimit(MBType16x16 | MBTypeP0L0 | MBTypeInterlaced); got != 2 {
+		t.Fatalf("interlaced mvy limit = %d, want 2", got)
+	}
+}
+
+func TestLoopFilterBoundaryStrengthFieldIntraHorizontalUsesBS3(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := &h264LoopFilterContext{}
+	bS, err := m.loopFilterBoundaryStrength(ctx, MBTypeIntra4x4|MBTypeInterlaced, MBTypeIntra4x4|MBTypeInterlaced, 1, 0, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bS != [4]int16{3, 3, 3, 3} {
+		t.Fatalf("field intra horizontal bS = %v, want all 3", bS)
+	}
+	bS, err = m.loopFilterBoundaryStrength(ctx, MBTypeIntra4x4|MBTypeInterlaced, MBTypeIntra4x4|MBTypeInterlaced, 0, 0, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bS != [4]int16{4, 4, 4, 4} {
+		t.Fatalf("field intra vertical bS = %v, want all 4", bS)
+	}
+	bS, err = m.loopFilterBoundaryStrength(ctx, MBTypeIntra4x4, MBTypeIntra4x4, 1, 0, 1, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bS != [4]int16{4, 4, 4, 4} {
+		t.Fatalf("frame intra horizontal bS = %v, want all 4", bS)
+	}
+}
+
 func TestMacroblockTablesFilterFrameHighSliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
 	const bitDepth = 10
 	dst := high422SliceBoundaryFrame()

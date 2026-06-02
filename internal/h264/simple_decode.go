@@ -364,8 +364,12 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 					MotionScratch: motionScratch,
 				})
 				completeFrameNow = result.EndOfFrame && (!fieldPicture || decodingComplementaryField)
-				if err == nil && completeFrameNow {
-					err = tables.filterFrame(&pic, loopFilterSlices)
+				if err == nil && result.EndOfFrame {
+					if fieldPicture {
+						err = tables.filterField(&pic, loopFilterSlices, sh.PictureStructure)
+					} else if completeFrameNow {
+						err = tables.filterFrame(&pic, loopFilterSlices)
+					}
 					if err != nil {
 						err = fmt.Errorf("filter 8-bit frame slice=%d type=%d: %w", sliceNum, sh.SliceTypeNoS, err)
 					}
