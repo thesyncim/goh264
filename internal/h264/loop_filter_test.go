@@ -245,6 +245,73 @@ func TestMacroblockTablesFilterFrameHighDeblocksBoundary(t *testing.T) {
 	}
 }
 
+func TestMacroblockTablesFilterFrameDeblocksPAFFFieldViews(t *testing.T) {
+	const (
+		mbWidth      = 2
+		mbHeight     = 2
+		lumaStride   = 32
+		chromaStride = 16
+		qp           = 30
+	)
+	m, err := newMacroblockTables(mbWidth, mbHeight, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := &h264PicturePlanes{
+		Y:               make([]uint8, lumaStride*32),
+		Cb:              make([]uint8, chromaStride*16),
+		Cr:              make([]uint8, chromaStride*16),
+		LumaStride:      lumaStride,
+		ChromaStride:    chromaStride,
+		MBWidth:         mbWidth,
+		MBHeight:        mbHeight,
+		ChromaFormatIDC: 1,
+	}
+	fillLoopFilterStepRows(dst.Y, lumaStride, 32, 16, 104, 112)
+	fillLoopFilterStepRows(dst.Cb, chromaStride, 16, 8, 84, 92)
+	fillLoopFilterStepRows(dst.Cr, chromaStride, 16, 8, 64, 72)
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		for mbX := 0; mbX < mbWidth; mbX++ {
+			mbXY := mbX + mbY*m.MBStride
+			m.MacroblockTyp[mbXY] = MBTypeIntra16x16
+			m.QScaleTable[mbXY] = qp
+			m.SliceTable[mbXY] = uint16(mbY & 1)
+		}
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+	}
+	params := []h264LoopFilterSliceParams{
+		{PPS: pps, ListCount: 1, PictureStructure: PictureTopField, DeblockingFilter: 1},
+		{PPS: pps, ListCount: 1, PictureStructure: PictureBottomField, DeblockingFilter: 1},
+	}
+	topYBefore := [2]uint8{dst.Y[15], dst.Y[16]}
+	bottomYBefore := [2]uint8{dst.Y[lumaStride+15], dst.Y[lumaStride+16]}
+	topCbBefore := [2]uint8{dst.Cb[7], dst.Cb[8]}
+	bottomCbBefore := [2]uint8{dst.Cb[chromaStride+7], dst.Cb[chromaStride+8]}
+
+	if err := m.filterFrame(dst, params); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[15] == topYBefore[0] || dst.Y[16] == topYBefore[1] {
+		t.Fatalf("top-field luma boundary did not filter: %v -> [%d %d]", topYBefore, dst.Y[15], dst.Y[16])
+	}
+	if dst.Y[lumaStride+15] == bottomYBefore[0] || dst.Y[lumaStride+16] == bottomYBefore[1] {
+		t.Fatalf("bottom-field luma boundary did not filter: %v -> [%d %d]", bottomYBefore, dst.Y[lumaStride+15], dst.Y[lumaStride+16])
+	}
+	if dst.Cb[7] == topCbBefore[0] || dst.Cb[8] == topCbBefore[1] {
+		t.Fatalf("top-field chroma boundary did not filter: %v -> [%d %d]", topCbBefore, dst.Cb[7], dst.Cb[8])
+	}
+	if dst.Cb[chromaStride+7] == bottomCbBefore[0] || dst.Cb[chromaStride+8] == bottomCbBefore[1] {
+		t.Fatalf("bottom-field chroma boundary did not filter: %v -> [%d %d]",
+			bottomCbBefore, dst.Cb[chromaStride+7], dst.Cb[chromaStride+8])
+	}
+}
+
 func TestMacroblockTablesFilterFrameHighSliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
 	const bitDepth = 10
 	dst := high422SliceBoundaryFrame()
@@ -337,6 +404,18 @@ func fill444LoopFilterStep(pix []uint8, stride int, edge int, left uint8, right 
 			pix[row+x] = left
 		}
 		for x := edge; x < 16; x++ {
+			pix[row+x] = right
+		}
+	}
+}
+
+func fillLoopFilterStepRows(pix []uint8, stride int, height int, edge int, left uint8, right uint8) {
+	for y := 0; y < height; y++ {
+		row := y * stride
+		for x := 0; x < edge; x++ {
+			pix[row+x] = left
+		}
+		for x := edge; x < stride; x++ {
 			pix[row+x] = right
 		}
 	}

@@ -79,6 +79,7 @@ type h264LoopFilterSliceParams struct {
 	PPS                  *PPS
 	CABAC                bool
 	ListCount            int
+	PictureStructure     int32
 	DeblockingFilter     int32
 	SliceAlphaC0Offset   int32
 	SliceBetaOffset      int32
@@ -106,6 +107,7 @@ func h264LoopFilterSliceParamsFromHeader(sh *SliceHeader) h264LoopFilterSlicePar
 		PPS:                  sh.PPS,
 		CABAC:                sh.PPS.CABAC != 0,
 		ListCount:            int(sh.ListCount),
+		PictureStructure:     sh.PictureStructure,
 		DeblockingFilter:     sh.DeblockingFilter,
 		SliceAlphaC0Offset:   sh.SliceAlphaC0Offset,
 		SliceBetaOffset:      sh.SliceBetaOffset,
@@ -124,8 +126,13 @@ func (p h264LoopFilterSliceParams) validate() error {
 	if p.PPS == nil || p.PPS.SPS == nil {
 		return ErrInvalidData
 	}
-	if p.PPS.SPS.MBAFF != 0 || p.PPS.SPS.FrameMBSOnlyFlag == 0 {
+	if p.PPS.SPS.MBAFF != 0 {
 		return ErrUnsupported
+	}
+	if p.PPS.SPS.FrameMBSOnlyFlag == 0 {
+		if p.PictureStructure != PictureTopField && p.PictureStructure != PictureBottomField {
+			return ErrUnsupported
+		}
 	}
 	if err := checkH264LoopFilterBitDepth(int(p.PPS.SPS.BitDepthLuma)); err != nil {
 		return err
@@ -134,6 +141,33 @@ func (p h264LoopFilterSliceParams) validate() error {
 		return ErrUnsupported
 	}
 	return nil
+}
+
+func (p h264LoopFilterSliceParams) fieldPicture() bool {
+	return p.PPS != nil && p.PPS.SPS != nil && p.PPS.SPS.FrameMBSOnlyFlag == 0 &&
+		p.PictureStructure != PictureFrame
+}
+
+func h264LoopFilterFieldMBY(mbY int, p h264LoopFilterSliceParams) (int, error) {
+	if !p.fieldPicture() {
+		return mbY, nil
+	}
+	if mbY < 0 {
+		return 0, ErrInvalidData
+	}
+	if p.PictureStructure == PictureTopField {
+		if mbY&1 != 0 {
+			return 0, ErrInvalidData
+		}
+		return mbY >> 1, nil
+	}
+	if p.PictureStructure == PictureBottomField {
+		if mbY&1 == 0 {
+			return 0, ErrInvalidData
+		}
+		return mbY >> 1, nil
+	}
+	return 0, ErrInvalidData
 }
 
 func (p h264LoopFilterSliceParams) ref2Frame(list int, ref int8) int8 {
@@ -219,7 +253,16 @@ func (m *macroblockTables) filterFrame(dst *h264PicturePlanes, params []h264Loop
 			if err != nil {
 				return err
 			}
-			if err := m.filterFrameMacroblock(dst, mbX, mbY, p, &ctx); err != nil {
+			dstView := *dst
+			filterMBY := mbY
+			if p.fieldPicture() {
+				filterMBY, err = h264LoopFilterFieldMBY(mbY, p)
+				if err != nil {
+					return err
+				}
+				applySimpleFieldRefPlane(&dstView, p.PictureStructure)
+			}
+			if err := m.filterFrameMacroblock(&dstView, mbX, filterMBY, p, &ctx); err != nil {
 				return err
 			}
 		}
@@ -255,7 +298,16 @@ func (m *macroblockTables) filterFrameHigh(dst *h264PicturePlanesHigh, params []
 			if err != nil {
 				return err
 			}
-			if err := m.filterFrameMacroblockHigh(dst, mbX, mbY, p, &ctx); err != nil {
+			dstView := *dst
+			filterMBY := mbY
+			if p.fieldPicture() {
+				filterMBY, err = h264LoopFilterFieldMBY(mbY, p)
+				if err != nil {
+					return err
+				}
+				applySimpleFieldRefPlaneHigh(&dstView, p.PictureStructure)
+			}
+			if err := m.filterFrameMacroblockHigh(&dstView, mbX, filterMBY, p, &ctx); err != nil {
 				return err
 			}
 		}
@@ -276,8 +328,14 @@ func (m *macroblockTables) fillLoopFilterCachesFrame(mbXY int, sliceNum uint16, 
 	mbY := mbXY / m.MBStride
 	topXY := -1
 	leftXY := -1
-	if mbY > 0 {
-		topXY = mbXY - m.MBStride
+	topStride := m.MBStride
+	topRows := 1
+	if p.fieldPicture() {
+		topStride <<= 1
+		topRows = 2
+	}
+	if mbY >= topRows {
+		topXY = mbXY - topStride
 	}
 	if mbX > 0 {
 		leftXY = mbXY - 1
