@@ -5,7 +5,7 @@
 | NAL/extradata/SPS/PPS/SEI | `nal.go`, `sps.go`, `pps.go`, `sei.go` | translated subset | unit, corpus |
 | slice headers/ref lists/DPB | `slice.go`, `simple_dpb.go` | partial | unit, MD5 |
 | CAVLC/CABAC macroblocks | `cavlc*.go`, `cabac*.go` | partial | unit, MD5 |
-| prediction/MC/IDCT/deblock | `pred*.go`, `motion_comp*.go`, `idct.go`, `loop_filter.go` | partial; MBAFF diagonal MV ported | unit, C oracle, MD5 |
+| prediction/MC/IDCT/deblock | `pred*.go`, `motion_comp*.go`, `idct.go`, `loop_filter.go` | partial; MBAFF MV + field-ref deblock | unit, C oracle, MD5 |
 | public decoder/output | `decoder.go`, `simple_decode.go` | partial | corpus, FATE |
 | benchmark/oracle harness | `decoder_corpus_test.go`, `cmd/goh264bench` | replaced | FATE, smoke |
 

@@ -92,6 +92,65 @@ func TestH264LoopFilterRef2FramePreservesReferenceStructure(t *testing.T) {
 	}
 }
 
+func TestFillLoopFilterCachesFrameMBAFFFieldRefsUseExpandedRef2Frame(t *testing.T) {
+	m, err := newMacroblockTables(2, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leftXY := 0
+	mbXY := 1
+	mbType := MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	for _, xy := range []int{leftXY, mbXY} {
+		m.MacroblockTyp[xy] = mbType
+		m.QScaleTable[xy] = 24
+		m.SliceTable[xy] = 0
+	}
+	m.RefIndex[0][4*mbXY+0] = 0
+	m.RefIndex[0][4*mbXY+1] = 0
+	m.RefIndex[0][4*mbXY+2] = 0
+	m.RefIndex[0][4*mbXY+3] = 0
+	m.RefIndex[0][4*leftXY+1] = 3
+	m.RefIndex[0][4*leftXY+3] = 3
+
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 0,
+		MBAFF:            1,
+	}
+	params := []h264LoopFilterSliceParams{{
+		PPS:              pps,
+		ListCount:        1,
+		PictureStructure: PictureFrame,
+		DeblockingFilter: 1,
+		Ref2Frame: [2][]int8{
+			{3, 7},
+		},
+	}}
+
+	ctx, err := m.fillLoopFilterCachesFrame(mbXY, 0, params[0], params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := int(h264Scan8[0])
+	if got := ctx.Motion.Ref[0][base]; got != 1 {
+		t.Fatalf("current expanded ref = %d, want top field id 1", got)
+	}
+	if got := ctx.Motion.Ref[0][base-1+2*8]; got != 6 {
+		t.Fatalf("left expanded ref = %d, want second frame bottom field id 6", got)
+	}
+	maskPar0 := mbType & (MBType16x16 | MBType8x16)
+	bS, err := m.loopFilterBoundaryStrength(&ctx, mbType, mbType, 0, maskPar0, params[0].ListCount, h264LoopFilterMVYLimit(mbType), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bS != [4]int16{1, 1, 1, 1} {
+		t.Fatalf("MBAFF field-ref boundary bS = %v, want all 1", bS)
+	}
+}
+
 func TestFillLoopFilterCachesFieldPictureKeepsSameFrameFieldRefsDistinct(t *testing.T) {
 	m, err := newMacroblockTables(1, 3, 1)
 	if err != nil {

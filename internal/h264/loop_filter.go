@@ -183,6 +183,22 @@ func (p h264LoopFilterSliceParams) ref2Frame(list int, ref int8) int8 {
 	return refs[ref]
 }
 
+func (p h264LoopFilterSliceParams) ref2FrameForLoopFilter(list int, ref int8, currentMBType uint32) int8 {
+	if !h264LoopFilterFrameMBAFF(p) || currentMBType&MBTypeInterlaced == 0 || ref < 0 || list < 0 || list > 1 {
+		return p.ref2Frame(list, ref)
+	}
+	refs := p.Ref2Frame[list]
+	frameRef := int(ref) >> 1
+	if frameRef < 0 || frameRef >= len(refs) || refs[frameRef] < 0 {
+		return p.ref2Frame(list, ref)
+	}
+	structure := int8(PictureTopField)
+	if ref&1 != 0 {
+		structure = int8(PictureBottomField)
+	}
+	return (refs[frameRef] &^ 3) | structure
+}
+
 func h264LoopFilterRef2Frame(entries [2][]simpleRefEntry, ids map[*DecodedFrame]int8) ([2][]int8, error) {
 	var out [2][]int8
 	for list := 0; list < 2; list++ {
@@ -577,7 +593,7 @@ func (m *macroblockTables) fillLoopFilterCachesInterFrame(ctx *h264LoopFilterCon
 	base := int(h264Scan8[0])
 	if isInter(mbType) || isDirect(mbType) {
 		if usesList(topType, list) {
-			if err := m.copyTopMotionForLoopFilter(ctx, topXY, list, base, m.loopFilterParamsForMB(params, topXY, p)); err != nil {
+			if err := m.copyTopMotionForLoopFilter(ctx, topXY, list, base, m.loopFilterParamsForMB(params, topXY, p), mbType); err != nil {
 				return err
 			}
 		} else {
@@ -586,7 +602,7 @@ func (m *macroblockTables) fillLoopFilterCachesInterFrame(ctx *h264LoopFilterCon
 		}
 
 		if usesList(leftType, list) {
-			if err := m.copyLeftMotionForLoopFilter(ctx, leftXY, list, base, m.loopFilterParamsForMB(params, leftXY, p)); err != nil {
+			if err := m.copyLeftMotionForLoopFilter(ctx, leftXY, list, base, m.loopFilterParamsForMB(params, leftXY, p), mbType); err != nil {
 				return err
 			}
 		} else {
@@ -604,13 +620,13 @@ func (m *macroblockTables) fillLoopFilterCachesInterFrame(ctx *h264LoopFilterCon
 		return nil
 	}
 
-	if err := m.copyCurrentMotionForLoopFilter(ctx, mbXY, list, base, p); err != nil {
+	if err := m.copyCurrentMotionForLoopFilter(ctx, mbXY, list, base, p, mbType); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *macroblockTables) copyTopMotionForLoopFilter(ctx *h264LoopFilterContext, topXY int, list int, base int, p h264LoopFilterSliceParams) error {
+func (m *macroblockTables) copyTopMotionForLoopFilter(ctx *h264LoopFilterContext, topXY int, list int, base int, p h264LoopFilterSliceParams, currentMBType uint32) error {
 	if err := m.checkCodedMBXY(topXY); err != nil {
 		return err
 	}
@@ -624,14 +640,14 @@ func (m *macroblockTables) copyTopMotionForLoopFilter(ctx *h264LoopFilterContext
 	if err := checkRange(len(m.RefIndex[list]), refBase, 2); err != nil {
 		return err
 	}
-	ctx.Motion.Ref[list][base+0-8] = p.ref2Frame(list, m.RefIndex[list][refBase+0])
-	ctx.Motion.Ref[list][base+1-8] = p.ref2Frame(list, m.RefIndex[list][refBase+0])
-	ctx.Motion.Ref[list][base+2-8] = p.ref2Frame(list, m.RefIndex[list][refBase+1])
-	ctx.Motion.Ref[list][base+3-8] = p.ref2Frame(list, m.RefIndex[list][refBase+1])
+	ctx.Motion.Ref[list][base+0-8] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+0], currentMBType)
+	ctx.Motion.Ref[list][base+1-8] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+0], currentMBType)
+	ctx.Motion.Ref[list][base+2-8] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+1], currentMBType)
+	ctx.Motion.Ref[list][base+3-8] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+1], currentMBType)
 	return nil
 }
 
-func (m *macroblockTables) copyLeftMotionForLoopFilter(ctx *h264LoopFilterContext, leftXY int, list int, base int, p h264LoopFilterSliceParams) error {
+func (m *macroblockTables) copyLeftMotionForLoopFilter(ctx *h264LoopFilterContext, leftXY int, list int, base int, p h264LoopFilterSliceParams, currentMBType uint32) error {
 	if err := m.checkCodedMBXY(leftXY); err != nil {
 		return err
 	}
@@ -647,12 +663,12 @@ func (m *macroblockTables) copyLeftMotionForLoopFilter(ctx *h264LoopFilterContex
 		}
 		cacheIdx := base - 1 + row*8
 		ctx.Motion.MV[list][cacheIdx] = m.MotionVal[list][mvIdx]
-		ctx.Motion.Ref[list][cacheIdx] = p.ref2Frame(list, m.RefIndex[list][refBase+2*(row>>1)])
+		ctx.Motion.Ref[list][cacheIdx] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+2*(row>>1)], currentMBType)
 	}
 	return nil
 }
 
-func (m *macroblockTables) copyCurrentMotionForLoopFilter(ctx *h264LoopFilterContext, mbXY int, list int, base int, p h264LoopFilterSliceParams) error {
+func (m *macroblockTables) copyCurrentMotionForLoopFilter(ctx *h264LoopFilterContext, mbXY int, list int, base int, p h264LoopFilterSliceParams, currentMBType uint32) error {
 	if err := m.checkCodedMBXY(mbXY); err != nil {
 		return err
 	}
@@ -671,16 +687,16 @@ func (m *macroblockTables) copyCurrentMotionForLoopFilter(ctx *h264LoopFilterCon
 		return err
 	}
 	for row := 0; row < 2; row++ {
-		ctx.Motion.Ref[list][base+row*8+0] = p.ref2Frame(list, m.RefIndex[list][refBase+0])
-		ctx.Motion.Ref[list][base+row*8+1] = p.ref2Frame(list, m.RefIndex[list][refBase+0])
-		ctx.Motion.Ref[list][base+row*8+2] = p.ref2Frame(list, m.RefIndex[list][refBase+1])
-		ctx.Motion.Ref[list][base+row*8+3] = p.ref2Frame(list, m.RefIndex[list][refBase+1])
+		ctx.Motion.Ref[list][base+row*8+0] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+0], currentMBType)
+		ctx.Motion.Ref[list][base+row*8+1] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+0], currentMBType)
+		ctx.Motion.Ref[list][base+row*8+2] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+1], currentMBType)
+		ctx.Motion.Ref[list][base+row*8+3] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+1], currentMBType)
 	}
 	for row := 2; row < 4; row++ {
-		ctx.Motion.Ref[list][base+row*8+0] = p.ref2Frame(list, m.RefIndex[list][refBase+2])
-		ctx.Motion.Ref[list][base+row*8+1] = p.ref2Frame(list, m.RefIndex[list][refBase+2])
-		ctx.Motion.Ref[list][base+row*8+2] = p.ref2Frame(list, m.RefIndex[list][refBase+3])
-		ctx.Motion.Ref[list][base+row*8+3] = p.ref2Frame(list, m.RefIndex[list][refBase+3])
+		ctx.Motion.Ref[list][base+row*8+0] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+2], currentMBType)
+		ctx.Motion.Ref[list][base+row*8+1] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+2], currentMBType)
+		ctx.Motion.Ref[list][base+row*8+2] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+3], currentMBType)
+		ctx.Motion.Ref[list][base+row*8+3] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+3], currentMBType)
 	}
 	return nil
 }
