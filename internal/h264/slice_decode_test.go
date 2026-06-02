@@ -687,6 +687,67 @@ func TestDecodeCAVLCFrameSliceAllowsDeblockingFlag(t *testing.T) {
 	assertH264SliceDecodePCM(t, dst, 0, 0, h264ReconstructIntraPCM(1, 5))
 }
 
+func TestH264FrameMBAFFReconstructViewKeepsFrameCodedMacroblocksInFrameView(t *testing.T) {
+	dst := makeH264SliceDecodePicture(1, 4, 1)
+	ref := makeH264SliceDecodePicture(1, 4, 1)
+	ref.PictureStructure = PictureFrame
+	refs := [2][]*h264PicturePlanes{{ref}}
+	cur := sliceMacroblockCursor{FrameMBAFF: true, MBY: 2, PixelMBY: 2}
+	var refPlanes [2][32]h264PicturePlanes
+	var refPtrs [2][32]*h264PicturePlanes
+
+	view, mbY, gotRefs, err := h264FrameMBAFFReconstructView(dst, cur, MBTypeIntra4x4, refs, &refPlanes, &refPtrs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.LumaStride != dst.LumaStride || view.ChromaStride != dst.ChromaStride || view.MBHeight != dst.MBHeight || mbY != cur.PixelMBY {
+		t.Fatalf("frame-coded view stride/chroma/height/mbY = %d/%d/%d/%d, want %d/%d/%d/%d",
+			view.LumaStride, view.ChromaStride, view.MBHeight, mbY, dst.LumaStride, dst.ChromaStride, dst.MBHeight, cur.PixelMBY)
+	}
+	if len(gotRefs[0]) != 1 || gotRefs[0][0] != ref {
+		t.Fatalf("frame-coded refs = %#v, want original ref", gotRefs[0])
+	}
+}
+
+func TestH264FrameMBAFFReconstructViewMapsBottomFieldDestinationAndRefs(t *testing.T) {
+	dst := makeH264SliceDecodePicture(1, 4, 1)
+	ref0 := makeH264SliceDecodePicture(1, 4, 1)
+	ref1 := makeH264SliceDecodePicture(1, 4, 1)
+	ref0.PictureStructure = PictureFrame
+	ref1.PictureStructure = PictureFrame
+	refs := [2][]*h264PicturePlanes{{ref0, ref1}}
+	cur := sliceMacroblockCursor{FrameMBAFF: true, MBY: 1, PixelMBY: 1}
+	var refPlanes [2][32]h264PicturePlanes
+	var refPtrs [2][32]*h264PicturePlanes
+
+	view, mbY, gotRefs, err := h264FrameMBAFFReconstructView(dst, cur, MBTypeInterlaced|MBType16x16|MBTypeP0L0, refs, &refPlanes, &refPtrs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.PictureStructure != PictureBottomField || view.LumaStride != dst.LumaStride*2 || view.ChromaStride != dst.ChromaStride*2 || view.MBHeight != 2 || mbY != 0 {
+		t.Fatalf("bottom field view picture/stride/chroma/height/mbY = %d/%d/%d/%d/%d",
+			view.PictureStructure, view.LumaStride, view.ChromaStride, view.MBHeight, mbY)
+	}
+	if &view.Y[0] != &dst.Y[dst.LumaStride] || &view.Cb[0] != &dst.Cb[dst.ChromaStride] || &view.Cr[0] != &dst.Cr[dst.ChromaStride] {
+		t.Fatalf("bottom field view does not start on the second frame line")
+	}
+	if len(gotRefs[0]) != 4 {
+		t.Fatalf("field refs len = %d, want 4", len(gotRefs[0]))
+	}
+	if gotRefs[0][0].PictureStructure != PictureBottomField || &gotRefs[0][0].Y[0] != &ref0.Y[ref0.LumaStride] {
+		t.Fatalf("ref0 maps to bottom field of frame 0")
+	}
+	if gotRefs[0][1].PictureStructure != PictureTopField || &gotRefs[0][1].Y[0] != &ref0.Y[0] {
+		t.Fatalf("ref1 maps to top field of frame 0")
+	}
+	if gotRefs[0][2].PictureStructure != PictureBottomField || &gotRefs[0][2].Y[0] != &ref1.Y[ref1.LumaStride] {
+		t.Fatalf("ref2 maps to bottom field of frame 1")
+	}
+	if gotRefs[0][3].PictureStructure != PictureTopField || &gotRefs[0][3].Y[0] != &ref1.Y[0] {
+		t.Fatalf("ref3 maps to top field of frame 1")
+	}
+}
+
 func makeH264SliceDecodePicture(mbWidth int, mbHeight int, chromaFormatIDC int) *h264PicturePlanes {
 	chromaWidth, chromaHeight := h264ChromaFrameSize(mbWidth, mbHeight, chromaFormatIDC)
 	p := &h264PicturePlanes{

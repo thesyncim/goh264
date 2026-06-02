@@ -8,6 +8,14 @@ if [[ -n "$filter" ]]; then
     export GOH264_CORPUS_FILTER="$filter"
 fi
 
+printf 'known-red filter preflight'
+if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
+    printf ' filter=%s' "$GOH264_CORPUS_FILTER"
+fi
+printf '\n'
+GOH264_REAL_VECTOR_RED=1 go test . -run '^TestH264RealVectorKnownRedFilterSelected$' -count=1 -v
+
+printf '\n'
 printf 'real-vector matrix (safe-point gate)'
 if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
     printf ' filter=%s' "$GOH264_CORPUS_FILTER"

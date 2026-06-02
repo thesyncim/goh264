@@ -104,6 +104,22 @@ func TestH264RealVectorKnownRedStrict(t *testing.T) {
 	testH264CorpusEntries(t, defaultH264RealVectorFailureManifest, failures)
 }
 
+func TestH264RealVectorKnownRedFilterSelected(t *testing.T) {
+	if !h264RealVectorRedOracleEnabled() {
+		t.Skip("set GOH264_REAL_VECTOR_RED=1 or GOH264_REAL_VECTOR_STRICT_FAILURES=1 to require that the current filter selects known-red rows")
+	}
+	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
+	filter := h264CorpusFilterTokens()
+	if len(filter) != 0 {
+		failures = filterH264CorpusEntries(failures, filter)
+	}
+	if len(failures) == 0 {
+		t.Fatalf("%s: no failure entries matched GOH264_CORPUS_FILTER=%q; available known-red filters: %s",
+			defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)))
+	}
+	t.Logf("known-red filter selected=%d ids=%s", len(failures), strings.Join(h264CorpusEntryIDs(failures), ","))
+}
+
 func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
 	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
