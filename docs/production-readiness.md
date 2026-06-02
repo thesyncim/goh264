@@ -6,7 +6,7 @@ Harness-first status:
 scripts/h264-real-vector-strict.sh
 scripts/h264-real-vector-red-queue.sh   # exits non-zero while known-red rows remain
 scripts/h264-real-vector-red-each.sh    # per-row red queue report
-scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C/Go and native C+asm/Go+asm lanes
+scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C vs pure Go and native C+asm vs Go+asm lanes
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_RED_QUEUE=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorRedQueue

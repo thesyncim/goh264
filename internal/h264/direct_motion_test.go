@@ -71,6 +71,129 @@ func TestPredTemporalDirectAllowsFieldInterlacedColocatedMotion(t *testing.T) {
 	}
 }
 
+func TestPredTemporalDirectFieldPictureMapsExactColocatedFieldRef(t *testing.T) {
+	m, col, past := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0|MBTypeInterlaced)
+	past.fieldPOC = [2]int32{0, 2}
+	past.poc = 0
+	col.fieldPOC = [2]int32{4, 6}
+	col.poc = 4
+	col.refEntries[0] = []simpleRefEntry{
+		{frame: past, picID: 4, pictureStructure: PictureTopField, poc: 0},
+		{frame: past, picID: 5, pictureStructure: PictureBottomField, poc: 2},
+	}
+	col.tables.RefIndex[0][0] = 1
+	col.tables.MotionVal[0][col.tables.MB2BXY[0]] = [2]int16{4, 0}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1 | MBTypeInterlaced
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: past, picID: 4, pictureStructure: PictureTopField, poc: 0},
+				{frame: past, picID: 5, pictureStructure: PictureBottomField, poc: 2},
+			},
+			{{frame: col, pictureStructure: PictureTopField, poc: 4}},
+		},
+		CurPOC:             1,
+		CurFieldPOC:        [2]int32{1, 3},
+		PictureStructure:   PictureTopField,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("field temporal direct exact-ref mapping failed: %v", err)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 1 {
+		t.Fatalf("field temporal ref = %d, want exact bottom-field list0 ref 1", cache.Ref[0][base])
+	}
+}
+
+func TestPredTemporalDirectBottomFieldPictureMapsByColmapPictureID(t *testing.T) {
+	m, col, past := newTemporalDirectTestTables(t, MBType8x8|MBTypeP0L0|MBTypeP1L0|MBTypeInterlaced)
+	next := &DecodedFrame{poc: 4, fieldPOC: [2]int32{4, 6}, frameNum: 1}
+	past.fieldPOC = [2]int32{0, 2}
+	past.poc = 0
+	past.frameNum = 0
+	col.fieldPOC = [2]int32{8, 10}
+	col.poc = 8
+	col.refEntries[0] = []simpleRefEntry{
+		{frame: past, picID: 1, pictureStructure: PictureBottomField, poc: 2},
+		{frame: next, picID: 2, pictureStructure: PictureTopField, poc: 4},
+		{frame: past, picID: 0, pictureStructure: PictureTopField, poc: 0},
+	}
+	for i8 := 0; i8 < 4; i8++ {
+		col.tables.RefIndex[0][i8] = 0
+	}
+	col.tables.RefIndex[0][0] = 1
+	col.tables.MotionVal[0][col.tables.MB2BXY[0]] = [2]int16{4, 0}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1 | MBTypeInterlaced
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: past, picID: 1, pictureStructure: PictureBottomField, poc: 2},
+				{frame: past, picID: 0, pictureStructure: PictureTopField, poc: 0},
+				{frame: next, picID: 3, pictureStructure: PictureBottomField, poc: 6},
+				{frame: next, picID: 2, pictureStructure: PictureTopField, poc: 4},
+			},
+			{{frame: col, pictureStructure: PictureBottomField, poc: 10}},
+		},
+		CurPOC:             3,
+		CurFieldPOC:        [2]int32{1, 3},
+		PictureStructure:   PictureBottomField,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("bottom-field temporal direct colmap mapping failed: %v", err)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 3 {
+		t.Fatalf("bottom-field temporal ref = %d, want colmap picture-id list0 ref 3", cache.Ref[0][base])
+	}
+}
+
+func TestPredTemporalDirectFieldPictureFrameRefExpandsToCurrentField(t *testing.T) {
+	m, col, _ := newTemporalDirectTestTables(t, MBType8x8|MBTypeP0L0|MBTypeP1L0)
+	matching := &DecodedFrame{poc: 8, fieldPOC: [2]int32{8, 10}, frameNum: 1}
+	older := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 2}, frameNum: 0}
+	col.fieldPOC = [2]int32{12, 14}
+	col.poc = 12
+	col.refEntries[0] = []simpleRefEntry{
+		{frame: matching, picID: matching.frameNum, pictureStructure: PictureFrame, poc: matching.poc},
+	}
+	for i8 := 0; i8 < 4; i8++ {
+		col.tables.RefIndex[0][i8] = 0
+	}
+	col.tables.MotionVal[0][col.tables.MB2BXY[0]] = [2]int16{4, 0}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: matching, picID: 2*matching.frameNum + 1, pictureStructure: PictureTopField, poc: matching.fieldPOC[0]},
+				{frame: older, picID: 2*older.frameNum + 1, pictureStructure: PictureTopField, poc: older.fieldPOC[0]},
+			},
+			{{frame: col, pictureStructure: PictureTopField, poc: col.fieldPOC[0]}},
+		},
+		CurPOC:             9,
+		CurFieldPOC:        [2]int32{9, 11},
+		PictureStructure:   PictureTopField,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("field temporal direct frame-ref expansion failed: %v", err)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 0 {
+		t.Fatalf("field temporal frame ref = %d, want current-field list0 ref 0", cache.Ref[0][base])
+	}
+}
+
 func TestPredTemporalDirectAllowsFrameCurrentOverInterlacedColocated(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {

@@ -52,6 +52,7 @@ type DecodedFrame struct {
 	frameMBSOnlyFlag               int32
 	tables                         *macroblockTables
 	refEntries                     [2][]simpleRefEntry
+	fieldRefEntries                [2][2][]simpleRefEntry
 }
 
 type DecodedFrameSideData struct {
@@ -351,7 +352,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 			if err != nil {
 				return nil, err
 			}
-			frame.refEntries = cloneSimpleRefEntries2(refctx.Entries)
+			frame.saveRefEntries(refctx.Entries, sh.PictureStructure)
 			var result h264FrameSliceDecodeResult
 			completeFrameNow := false
 			if frame.BitDepthLuma == 8 {

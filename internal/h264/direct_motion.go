@@ -746,6 +746,9 @@ func temporalDirectMapColToList0Field(ctx h264DirectMotionContext, list int, ref
 		}
 		return 0, nil
 	}
+	if ctx.PictureStructure == PictureTopField || ctx.PictureStructure == PictureBottomField {
+		return temporalDirectMapColFieldPictureToList0(ctx, list, ref, colField)
+	}
 	target, ok := temporalDirectColocatedRefEntry(ctx, list, int(ref), colField)
 	if !ok {
 		return 0, fmt.Errorf("temporal direct missing colocated ref entry list=%d ref=%d: %w", list, ref, ErrUnsupported)
@@ -759,6 +762,91 @@ func temporalDirectMapColToList0Field(ctx h264DirectMotionContext, list int, ref
 		}
 	}
 	return 0, nil
+}
+
+func temporalDirectMapColFieldPictureToList0(ctx h264DirectMotionContext, list int, ref int8, colField bool) (int8, error) {
+	target, ok := temporalDirectColocatedFieldPictureRefEntry(ctx, list, int(ref))
+	if !ok {
+		return 0, fmt.Errorf("temporal direct missing colocated field ref entry list=%d ref=%d: %w", list, ref, ErrUnsupported)
+	}
+	if target.pictureStructure == PictureFrame {
+		target, ok = temporalDirectFrameRefAsCurrentField(ctx, target)
+		if !ok {
+			return 0, fmt.Errorf("temporal direct missing current-field target list=%d ref=%d: %w", list, ref, ErrUnsupported)
+		}
+		for i, entry := range ctx.RefEntries[0] {
+			if temporalDirectSameExactFieldRef(entry, target) {
+				return int8(i), nil
+			}
+		}
+		for i, entry := range ctx.RefEntries[0] {
+			if temporalDirectSameFieldPictureID(entry, target) {
+				return int8(i), nil
+			}
+		}
+		return 0, nil
+	}
+	for i, entry := range ctx.RefEntries[0] {
+		if temporalDirectSameFieldPictureID(entry, target) {
+			return int8(i), nil
+		}
+	}
+	for i, entry := range ctx.RefEntries[0] {
+		if temporalDirectSameExactFieldRef(entry, target) {
+			return int8(i), nil
+		}
+	}
+	_ = colField
+	return 0, nil
+}
+
+func temporalDirectFrameRefAsCurrentField(ctx h264DirectMotionContext, entry simpleRefEntry) (simpleRefEntry, bool) {
+	if ctx.PictureStructure != PictureTopField && ctx.PictureStructure != PictureBottomField {
+		return simpleRefEntry{}, false
+	}
+	entry.pictureStructure = ctx.PictureStructure
+	if entry.frame != nil {
+		poc, err := simpleFrameCurrentPOC(entry.frame, ctx.PictureStructure)
+		if err != nil {
+			return simpleRefEntry{}, false
+		}
+		entry.poc = poc
+		if !entry.long {
+			entry.picID = 2*entry.frame.frameNum + 1
+		}
+	}
+	return entry, true
+}
+
+func temporalDirectColocatedFieldPictureRefEntry(ctx h264DirectMotionContext, list int, ref int) (simpleRefEntry, bool) {
+	if len(ctx.RefEntries[1]) != 0 && ctx.RefEntries[1][0].frame != nil {
+		frame := ctx.RefEntries[1][0].frame
+		if field, ok := temporalDirectPictureFieldIndex(ctx.RefEntries[1][0].pictureStructure); ok {
+			colEntries := frame.fieldRefEntries[field][list]
+			if ref >= 0 && ref < len(colEntries) {
+				return colEntries[ref], true
+			}
+		}
+		colEntries := frame.refEntries[list]
+		if ref >= 0 && ref < len(colEntries) {
+			return colEntries[ref], true
+		}
+	}
+	if ref >= 0 && ref < len(ctx.RefEntries[list]) {
+		return ctx.RefEntries[list][ref], true
+	}
+	return simpleRefEntry{}, false
+}
+
+func temporalDirectPictureFieldIndex(pictureStructure int32) (int, bool) {
+	switch pictureStructure {
+	case PictureTopField:
+		return 0, true
+	case PictureBottomField:
+		return 1, true
+	default:
+		return 0, false
+	}
 }
 
 func temporalDirectColocatedFieldMapRefEntry(ctx h264DirectMotionContext, list int, ref int, colField bool, fieldParity int) (simpleRefEntry, bool) {
@@ -875,6 +963,16 @@ func temporalDirectSameExactFieldRef(a simpleRefEntry, b simpleRefEntry) bool {
 
 func temporalDirectSamePictureID(a simpleRefEntry, b simpleRefEntry) bool {
 	if a.long != b.long || a.picID != b.picID {
+		return false
+	}
+	return a.frame != nil || b.frame != nil || a.long || a.picID != 0
+}
+
+func temporalDirectSameFieldPictureID(a simpleRefEntry, b simpleRefEntry) bool {
+	if a.long != b.long || a.picID != b.picID {
+		return false
+	}
+	if a.frame != nil && b.frame != nil && a.frame != b.frame && !a.long && a.frame.frameNum != b.frame.frameNum {
 		return false
 	}
 	return a.frame != nil || b.frame != nil || a.long || a.picID != 0

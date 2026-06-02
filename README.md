@@ -21,7 +21,7 @@ GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealV
 GOH264_REAL_VECTOR_RAWDIFF=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorRawDiffDiagnostics
 GOH264_REAL_VECTOR_FRAMEMD5=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorFrameMD5Diagnostics
 scripts/h264-red-vector.sh mbaff        # exits non-zero at first divergent raw byte
-GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 scripts/h264-real-vector-bench.sh canl4 # oracle + peer raw-MD5 quality in pure C/Go and native C+asm/Go+asm lanes
+GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 scripts/h264-real-vector-bench.sh canl4 # oracle + peer raw-MD5 quality in pure C vs pure Go and native C+asm vs Go+asm lanes
 go run ./cmd/goh264bench -manifest testdata/h264/realvectors/manifest.jsonl -filter canl4 -iters 1 -repeats 1 -warmup 0 -ffmpeg -fair-cpu-lanes -json
 ```
 

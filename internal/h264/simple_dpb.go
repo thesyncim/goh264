@@ -416,6 +416,22 @@ func cloneSimpleRefEntries2(entries [2][]simpleRefEntry) [2][]simpleRefEntry {
 	}
 }
 
+func (f *DecodedFrame) saveRefEntries(entries [2][]simpleRefEntry, pictureStructure int32) {
+	if f == nil {
+		return
+	}
+	f.refEntries = cloneSimpleRefEntries2(entries)
+	switch pictureStructure {
+	case PictureTopField:
+		f.fieldRefEntries[0] = cloneSimpleRefEntries2(entries)
+	case PictureBottomField:
+		f.fieldRefEntries[1] = cloneSimpleRefEntries2(entries)
+	case PictureFrame:
+		f.fieldRefEntries[0] = cloneSimpleRefEntries2(entries)
+		f.fieldRefEntries[1] = cloneSimpleRefEntries2(entries)
+	}
+}
+
 func cloneSimpleRefEntries(entries []simpleRefEntry) []simpleRefEntry {
 	if len(entries) == 0 {
 		return nil
