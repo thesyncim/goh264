@@ -209,9 +209,9 @@ func main() {
 	runFFmpeg := flag.Bool("ffmpeg", false, "also run an FFmpeg baseline over the same file")
 	ffmpegBin := flag.String("ffmpeg-bin", "ffmpeg", "FFmpeg binary")
 	ffmpegThreads := flag.String("ffmpeg-threads", "1", "FFmpeg -threads value")
-	ffmpegCPUFlags := flag.String("ffmpeg-cpuflags", "", "FFmpeg -cpuflags value; empty uses the binary default/native CPU dispatch, 0 forces pure C")
+	ffmpegCPUFlags := flag.String("ffmpeg-cpuflags", "", "FFmpeg -cpuflags value; empty uses the binary default native C+asm CPU dispatch, 0 forces pure C")
 	ffmpegPureC := flag.Bool("ffmpeg-pure-c", false, "shorthand for -ffmpeg-cpuflags 0")
-	fairCPULanes := flag.Bool("fair-cpu-lanes", false, "with -ffmpeg, emit explicit pure-C-vs-pure-Go and native-CPU-vs-Go backend lanes")
+	fairCPULanes := flag.Bool("fair-cpu-lanes", false, "with -ffmpeg, emit explicit pure-C-vs-pure-Go and native-C+asm-vs-Go+asm backend lanes")
 	ffmpegPixFmt := flag.String("ffmpeg-pix-fmt", "", "FFmpeg output pixel format for -raw mode; defaults to Go raw pixel format when available")
 	strictPixFmt := flag.Bool("strict-pix-fmt", false, "reject a user-supplied -ffmpeg-pix-fmt that differs from Go raw pixel format")
 	jsonOut := flag.Bool("json", false, "print JSON")
@@ -579,7 +579,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 			meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli-fair-cpu-lanes"
 		}
 	}
-	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes preflight both FFmpeg -cpuflags 0 and native/default CPU dispatch. Primary quality_status is the manifest rawvideo oracle when available; peer_quality_status records each FFmpeg lane's rawvideo match or mismatch against the Go lane. FFmpeg timing remains a process-per-iteration CLI baseline."
+	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes preflight both pure C vs pure Go and native C+asm vs Go+asm comparison contracts. Primary quality_status is the manifest rawvideo oracle when available; peer_quality_status records each FFmpeg lane's rawvideo match or mismatch against the measured Go lane. Go result backend_kind remains explicit, so a build without Go assembly is reported as go-pure and is not a Go+asm performance claim. FFmpeg timing remains a process-per-iteration CLI baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
 }
 
@@ -1301,9 +1301,9 @@ func ffmpegBenchLanes(opts benchOptions) []ffmpegBenchLane {
 			},
 			{
 				name:           "ffmpeg-native",
-				backendKind:    "ffmpeg-native-cpu-dispatch",
+				backendKind:    "ffmpeg-native-c+asm",
 				cpuFlags:       strings.TrimSpace(opts.ffmpegCPUFlags),
-				comparisonLane: "native-cpu-vs-go-backend",
+				comparisonLane: "native-c+asm-vs-go+asm",
 			},
 		}
 	}
@@ -1331,7 +1331,7 @@ func ffmpegBackendKind(cpuFlags string) string {
 		return "ffmpeg-pure-c"
 	}
 	if cpuFlags == "" {
-		return "ffmpeg-native-cpu-dispatch"
+		return "ffmpeg-native-c+asm"
 	}
 	return "ffmpeg-cpuflags-" + cpuFlags
 }
@@ -1340,7 +1340,7 @@ func ffmpegComparisonLane(cpuFlags string) string {
 	if cpuFlags == "0" {
 		return "pure-c-vs-pure-go"
 	}
-	return "native-cpu-vs-go-backend"
+	return "native-c+asm-vs-go+asm"
 }
 
 func annotateFFmpegPeerQuality(result *benchResult, goResult benchResult) {
@@ -1445,7 +1445,7 @@ func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawO
 	result.ProcessPerIter = false
 	result.InputReadTimed = false
 	result.StdoutPipeTimed = false
-	result.Notes = append(result.Notes, "Go decoder backend is pure Go in this build; native CPU lane uses this same Go backend until Go assembly is added.")
+	result.Notes = append(result.Notes, "Go decoder backend is pure Go in this build; the native C+asm vs Go+asm fair lane remains quality-valid but is not a Go+asm performance claim until Go assembly is added.")
 	annotateBenchRates(&result)
 	return result, nil
 }
@@ -1846,7 +1846,7 @@ func benchmarkMetadata(input string, data []byte, opts benchOptions) benchMetada
 		}
 		meta.FFmpegVersion = ffmpegVersion(opts.ffmpegBin)
 		meta.FFmpegCPUFlags = ffmpegMetadataCPUFlags(opts)
-		meta.FairnessPolicy = "Single-input mode reports Go and FFmpeg timing samples with explicit backend_kind/cpu_flags fields. FFmpeg peer_quality_status is compared against the Go rawvideo byte count and raw-MD5 when -raw=true; manifest mode is required for an external rawvideo oracle quality_status. FFmpeg timing remains a process-per-iteration CLI baseline."
+		meta.FairnessPolicy = "Single-input mode reports Go and FFmpeg timing samples with explicit backend_kind/cpu_flags fields. Fair CPU lanes name pure C vs pure Go and native C+asm vs Go+asm comparison contracts, while each result's backend_kind records the backend actually measured. FFmpeg peer_quality_status is compared against the Go rawvideo byte count and raw-MD5 when -raw=true; manifest mode is required for an external rawvideo oracle quality_status. FFmpeg timing remains a process-per-iteration CLI baseline."
 	}
 	return meta
 }
@@ -1857,9 +1857,9 @@ func ffmpegMetadataCPUFlags(opts benchOptions) string {
 	}
 	if opts.fairCPULanes {
 		if strings.TrimSpace(opts.ffmpegCPUFlags) == "" {
-			return "pure-c:0,native:default"
+			return "pure-c:0,native-c+asm:default"
 		}
-		return "pure-c:0,native:" + strings.TrimSpace(opts.ffmpegCPUFlags)
+		return "pure-c:0,native-c+asm:" + strings.TrimSpace(opts.ffmpegCPUFlags)
 	}
 	if strings.TrimSpace(opts.ffmpegCPUFlags) == "" {
 		return "default"

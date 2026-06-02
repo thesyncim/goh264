@@ -6,7 +6,7 @@ Harness-first status:
 scripts/h264-real-vector-strict.sh
 scripts/h264-real-vector-red-queue.sh   # exits non-zero while known-red rows remain
 scripts/h264-real-vector-red-each.sh    # per-row red queue report
-scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for FFmpeg C/native lanes
+scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C/Go and native C+asm/Go+asm lanes
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_RED_QUEUE=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorRedQueue
@@ -19,6 +19,7 @@ go run ./cmd/goh264bench -manifest testdata/h264/realvectors/manifest.jsonl -fil
 Benchmark JSON reports selected/green/known-red counts, backend kind, CPU flags,
 comparison lane, oracle `quality_status`, and FFmpeg-vs-Go
 `peer_quality_status`. Use `-fair-cpu-lanes` for both `pure-c-vs-pure-go` and
-`native-cpu-vs-go-backend`. Pending: bulk manifests, allocation gates,
-benchstat/profile output, larger performance corpus, and in-process libavcodec
-baseline.
+`native-c+asm-vs-go+asm`; result `backend_kind` records the backend actually
+measured, so current no-asm Go builds still report `go-pure`. Pending: bulk
+manifests, allocation gates, benchstat/profile output, larger performance
+corpus, and in-process libavcodec baseline.

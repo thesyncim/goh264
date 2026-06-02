@@ -80,8 +80,8 @@ func TestFFmpegBenchLanesExposeFairCPUComparisons(t *testing.T) {
 	if lanes[0].name != "ffmpeg-pure-c" || lanes[0].cpuFlags != "0" || lanes[0].comparisonLane != "pure-c-vs-pure-go" {
 		t.Fatalf("pure-C lane = %+v, want explicit cpuflags 0 lane", lanes[0])
 	}
-	if lanes[1].name != "ffmpeg-native" || lanes[1].cpuFlags != "" || lanes[1].comparisonLane != "native-cpu-vs-go-backend" {
-		t.Fatalf("native lane = %+v, want native/default CPU dispatch lane", lanes[1])
+	if lanes[1].name != "ffmpeg-native" || lanes[1].cpuFlags != "" || lanes[1].comparisonLane != "native-c+asm-vs-go+asm" {
+		t.Fatalf("native lane = %+v, want native C+asm vs Go+asm lane", lanes[1])
 	}
 
 	lanes = ffmpegBenchLanes(benchOptions{runFFmpeg: true, ffmpegCPUFlags: "0"})
@@ -146,7 +146,7 @@ func TestAnnotateBenchResultQuality(t *testing.T) {
 				RawOutput:      true,
 				RawMD5:         "abc",
 				ParityStatus:   "rawvideo-md5-match-goh264",
-				ComparisonLane: "native-cpu-vs-go-backend",
+				ComparisonLane: "native-c+asm-vs-go+asm",
 			},
 			want:       "rawvideo-md5-match-goh264",
 			wantRef:    "goh264-rawvideo",
@@ -668,7 +668,7 @@ func TestPreflightBenchFFmpegOracleRejectsStrictPixelFormatMismatch(t *testing.T
 	}, benchOptions{
 		ffmpegPixFmt: "yuv444p",
 		strictPixFmt: true,
-	}, ffmpegBenchLane{name: "ffmpeg-native", backendKind: "ffmpeg-native-cpu-dispatch"})
+	}, ffmpegBenchLane{name: "ffmpeg-native", backendKind: "ffmpeg-native-c+asm"})
 	if err == nil || !strings.Contains(err.Error(), "manifest pixel format") {
 		t.Fatalf("preflight err = %v, want strict pixel format mismatch", err)
 	}
