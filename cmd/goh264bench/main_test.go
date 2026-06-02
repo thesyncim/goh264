@@ -72,6 +72,48 @@ func TestAnnotateBenchRatesReportsInputAndRawByteCosts(t *testing.T) {
 	}
 }
 
+func TestFFmpegBenchLanesExposeFairCPUComparisons(t *testing.T) {
+	lanes := ffmpegBenchLanes(benchOptions{runFFmpeg: true, fairCPULanes: true})
+	if len(lanes) != 2 {
+		t.Fatalf("lanes = %d, want 2", len(lanes))
+	}
+	if lanes[0].name != "ffmpeg-pure-c" || lanes[0].cpuFlags != "0" || lanes[0].comparisonLane != "pure-c-vs-pure-go" {
+		t.Fatalf("pure-C lane = %+v, want explicit cpuflags 0 lane", lanes[0])
+	}
+	if lanes[1].name != "ffmpeg-native" || lanes[1].cpuFlags != "" || lanes[1].comparisonLane != "native-cpu-vs-go-backend" {
+		t.Fatalf("native lane = %+v, want native/default CPU dispatch lane", lanes[1])
+	}
+
+	lanes = ffmpegBenchLanes(benchOptions{runFFmpeg: true, ffmpegCPUFlags: "0"})
+	if len(lanes) != 1 || lanes[0].name != "ffmpeg-pure-c" || lanes[0].backendKind != "ffmpeg-pure-c" {
+		t.Fatalf("single pure-C lane = %+v, want pure-C", lanes)
+	}
+}
+
+func TestFFmpegArgsIncludesCPUFlagsBeforeInput(t *testing.T) {
+	args := ffmpegArgs("in.264", true, "1", "yuv420p", "0")
+	got := strings.Join(args, " ")
+	want := "-v error -nostdin -cpuflags 0 -threads 1 -i in.264 -an -sn -dn -pix_fmt yuv420p -f rawvideo -"
+	if got != want {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+func TestAnnotateFFmpegPeerQuality(t *testing.T) {
+	ff := benchResult{RawOutput: true, RawMD5: "abc", BytesPerIter: 10}
+	goResult := benchResult{RawOutput: true, RawMD5: "abc", BytesPerIter: 10}
+	annotateFFmpegPeerQuality(&ff, goResult)
+	if ff.ParityStatus != "rawvideo-md5-match-goh264" {
+		t.Fatalf("parity = %q, want match", ff.ParityStatus)
+	}
+
+	ff.RawMD5 = "def"
+	annotateFFmpegPeerQuality(&ff, goResult)
+	if ff.ParityStatus != "rawvideo-md5-mismatch-goh264" || ff.ErrorClass != "raw-md5-mismatch" {
+		t.Fatalf("mismatch status/class = %q/%q, want raw md5 mismatch", ff.ParityStatus, ff.ErrorClass)
+	}
+}
+
 func TestReadBenchCorpusManifestAndValidate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "manifest.jsonl")
@@ -557,7 +599,7 @@ func TestPreflightBenchFFmpegOracleRejectsStrictPixelFormatMismatch(t *testing.T
 	}, benchOptions{
 		ffmpegPixFmt: "yuv444p",
 		strictPixFmt: true,
-	})
+	}, ffmpegBenchLane{name: "ffmpeg-native", backendKind: "ffmpeg-native-cpu-dispatch"})
 	if err == nil || !strings.Contains(err.Error(), "manifest pixel format") {
 		t.Fatalf("preflight err = %v, want strict pixel format mismatch", err)
 	}

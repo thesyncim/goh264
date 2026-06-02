@@ -28,6 +28,13 @@ if [[ "${GOH264_BENCH_FFMPEG:-0}" == "1" ]]; then
         -ffmpeg-threads "${GOH264_FFMPEG_THREADS:-1}"
         -strict-pix-fmt
     )
+    if [[ "${GOH264_BENCH_FAIR_CPU_LANES:-0}" == "1" ]]; then
+        ffmpeg_args+=(-fair-cpu-lanes)
+    elif [[ "${GOH264_BENCH_FFMPEG_PURE_C:-0}" == "1" ]]; then
+        ffmpeg_args+=(-ffmpeg-pure-c)
+    elif [[ -n "${GOH264_FFMPEG_CPUFLAGS:-}" ]]; then
+        ffmpeg_args+=(-ffmpeg-cpuflags "${GOH264_FFMPEG_CPUFLAGS}")
+    fi
 fi
 
 printf 'real-vector benchmark cache=%s fetch=%s' "$GOH264_CORPUS_CACHE" "$GOH264_CORPUS_FETCH" >&2
@@ -37,6 +44,13 @@ fi
 printf ' iters=%s repeats=%s warmup=%s max_entries=%s' "$iters" "$repeats" "$warmup" "$max_entries" >&2
 if [[ "${#ffmpeg_args[@]}" -ne 0 ]]; then
     printf ' ffmpeg=1' >&2
+    if [[ "${GOH264_BENCH_FAIR_CPU_LANES:-0}" == "1" ]]; then
+        printf ' fair_cpu_lanes=1' >&2
+    elif [[ "${GOH264_BENCH_FFMPEG_PURE_C:-0}" == "1" ]]; then
+        printf ' ffmpeg_cpuflags=0' >&2
+    elif [[ -n "${GOH264_FFMPEG_CPUFLAGS:-}" ]]; then
+        printf ' ffmpeg_cpuflags=%s' "$GOH264_FFMPEG_CPUFLAGS" >&2
+    fi
 fi
 printf '\n' >&2
 

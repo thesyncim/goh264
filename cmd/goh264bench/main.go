@@ -60,6 +60,7 @@ type benchMetadata struct {
 	VCSRevision    string `json:"vcs_revision,omitempty"`
 	VCSDirty       bool   `json:"vcs_dirty"`
 	FFmpegVersion  string `json:"ffmpeg_version,omitempty"`
+	FFmpegCPUFlags string `json:"ffmpeg_cpuflags,omitempty"`
 	ComparisonKind string `json:"comparison_kind"`
 }
 
@@ -107,6 +108,9 @@ type benchResult struct {
 	InputReadTimed    bool                   `json:"input_read_timed"`
 	StdoutPipeTimed   bool                   `json:"stdout_pipe_timed"`
 	BaselineKind      string                 `json:"baseline_kind"`
+	BackendKind       string                 `json:"backend_kind,omitempty"`
+	CPUFlags          string                 `json:"cpu_flags,omitempty"`
+	ComparisonLane    string                 `json:"comparison_lane,omitempty"`
 	Skipped           bool                   `json:"skipped,omitempty"`
 	Error             string                 `json:"error,omitempty"`
 	Notes             []string               `json:"notes,omitempty"`
@@ -137,19 +141,28 @@ type benchFrameDiagnostic struct {
 }
 
 type benchOptions struct {
-	iters         int
-	repeats       int
-	warmup        int
-	rawOutput     bool
-	runFFmpeg     bool
-	ffmpegBin     string
-	ffmpegThreads string
-	ffmpegPixFmt  string
-	strictPixFmt  bool
-	corpusFilter  string
-	failureLedger string
-	annexBInput   bool
-	diagnose      bool
+	iters          int
+	repeats        int
+	warmup         int
+	rawOutput      bool
+	runFFmpeg      bool
+	ffmpegBin      string
+	ffmpegThreads  string
+	ffmpegCPUFlags string
+	ffmpegPixFmt   string
+	fairCPULanes   bool
+	strictPixFmt   bool
+	corpusFilter   string
+	failureLedger  string
+	annexBInput    bool
+	diagnose       bool
+}
+
+type ffmpegBenchLane struct {
+	name           string
+	backendKind    string
+	cpuFlags       string
+	comparisonLane string
 }
 
 type benchCorpusEntry struct {
@@ -190,6 +203,9 @@ func main() {
 	runFFmpeg := flag.Bool("ffmpeg", false, "also run an FFmpeg baseline over the same file")
 	ffmpegBin := flag.String("ffmpeg-bin", "ffmpeg", "FFmpeg binary")
 	ffmpegThreads := flag.String("ffmpeg-threads", "1", "FFmpeg -threads value")
+	ffmpegCPUFlags := flag.String("ffmpeg-cpuflags", "", "FFmpeg -cpuflags value; empty uses the binary default/native CPU dispatch, 0 forces pure C")
+	ffmpegPureC := flag.Bool("ffmpeg-pure-c", false, "shorthand for -ffmpeg-cpuflags 0")
+	fairCPULanes := flag.Bool("fair-cpu-lanes", false, "with -ffmpeg, emit explicit pure-C-vs-pure-Go and native-CPU-vs-Go backend lanes")
 	ffmpegPixFmt := flag.String("ffmpeg-pix-fmt", "", "FFmpeg output pixel format for -raw mode; defaults to Go raw pixel format when available")
 	strictPixFmt := flag.Bool("strict-pix-fmt", false, "reject a user-supplied -ffmpeg-pix-fmt that differs from Go raw pixel format")
 	jsonOut := flag.Bool("json", false, "print JSON")
@@ -199,19 +215,28 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: goh264bench (-input file.h264 | -manifest corpus.jsonl) [-iters 5] [-repeats 1] [-warmup 1] [-ffmpeg] [-json]")
 		os.Exit(2)
 	}
+	if *ffmpegPureC && *fairCPULanes {
+		fmt.Fprintln(os.Stderr, "-ffmpeg-pure-c and -fair-cpu-lanes are mutually exclusive; fair lanes already include FFmpeg -cpuflags 0")
+		os.Exit(2)
+	}
+	if *ffmpegPureC {
+		*ffmpegCPUFlags = "0"
+	}
 	opts := benchOptions{
-		iters:         *iters,
-		repeats:       *repeats,
-		warmup:        *warmup,
-		rawOutput:     *rawOutput,
-		runFFmpeg:     *runFFmpeg,
-		ffmpegBin:     *ffmpegBin,
-		ffmpegThreads: *ffmpegThreads,
-		ffmpegPixFmt:  *ffmpegPixFmt,
-		strictPixFmt:  *strictPixFmt,
-		corpusFilter:  *corpusFilter,
-		failureLedger: *failureLedger,
-		diagnose:      *diagnose,
+		iters:          *iters,
+		repeats:        *repeats,
+		warmup:         *warmup,
+		rawOutput:      *rawOutput,
+		runFFmpeg:      *runFFmpeg,
+		ffmpegBin:      *ffmpegBin,
+		ffmpegThreads:  *ffmpegThreads,
+		ffmpegCPUFlags: *ffmpegCPUFlags,
+		ffmpegPixFmt:   *ffmpegPixFmt,
+		fairCPULanes:   *fairCPULanes,
+		strictPixFmt:   *strictPixFmt,
+		corpusFilter:   *corpusFilter,
+		failureLedger:  *failureLedger,
+		diagnose:       *diagnose,
 	}
 	report, err := buildBenchReport(*input, *manifest, *maxEntries, opts)
 	if err != nil {
@@ -267,6 +292,15 @@ func main() {
 			continue
 		}
 		fmt.Printf("%s: %.2f ms over %d repeat(s) x %d iter", r.Name, r.ElapsedMS, r.Repeats, r.Iterations)
+		if r.BackendKind != "" {
+			fmt.Printf(", backend %s", r.BackendKind)
+		}
+		if r.CPUFlags != "" {
+			fmt.Printf(", cpuflags %s", r.CPUFlags)
+		}
+		if r.ComparisonLane != "" {
+			fmt.Printf(", lane %s", r.ComparisonLane)
+		}
 		if r.EntryID != "" {
 			fmt.Printf(", entry %s", r.EntryID)
 		}
@@ -347,7 +381,7 @@ func buildBenchReport(input string, manifest string, maxEntries int, opts benchO
 		return benchReport{}, err
 	}
 	return benchReport{
-		Metadata: benchmarkMetadata(input, data, opts.runFFmpeg, opts.ffmpegBin),
+		Metadata: benchmarkMetadata(input, data, opts),
 		Results:  results,
 	}, nil
 }
@@ -363,11 +397,14 @@ func benchOneInput(input string, data []byte, opts benchOptions) ([]benchResult,
 		return nil, fmt.Errorf("-ffmpeg-pix-fmt %q does not match Go raw pixel format %q", opts.ffmpegPixFmt, goResult.RawPixelFormat)
 	}
 	if opts.runFFmpeg {
-		ffmpegResult, err := benchFFmpeg(input, int64(len(data)), opts.iters, opts.repeats, opts.warmup, opts.rawOutput, opts.ffmpegBin, opts.ffmpegThreads, opts.ffmpegPixFmt, goResult.RawPixelFormat)
-		if err != nil {
-			return nil, fmt.Errorf("ffmpeg: %w", err)
+		for _, lane := range ffmpegBenchLanes(opts) {
+			ffmpegResult, err := benchFFmpeg(input, int64(len(data)), opts.iters, opts.repeats, opts.warmup, opts.rawOutput, opts.ffmpegBin, opts.ffmpegThreads, opts.ffmpegPixFmt, goResult.RawPixelFormat, lane)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", lane.name, err)
+			}
+			annotateFFmpegPeerQuality(&ffmpegResult, goResult)
+			results = append(results, ffmpegResult)
 		}
-		results = append(results, ffmpegResult)
 	}
 	return results, nil
 }
@@ -455,8 +492,10 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		}
 		green++
 		if opts.runFFmpeg {
-			if err := preflightBenchFFmpegOracle(inputPath, entry, opts); err != nil {
-				return benchReport{}, fmt.Errorf("%s: ffmpeg oracle preflight: %w", entry.ID, err)
+			for _, lane := range ffmpegBenchLanes(opts) {
+				if err := preflightBenchFFmpegOracle(inputPath, entry, opts, lane); err != nil {
+					return benchReport{}, fmt.Errorf("%s: %s oracle preflight: %w", entry.ID, lane.name, err)
+				}
 			}
 		}
 		if maxEntries > 0 && benchmarked >= maxEntries {
@@ -482,7 +521,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		return benchReport{}, fmt.Errorf("%s: no manifest entries selected", path)
 	}
 
-	meta := benchmarkMetadata(path, manifestData, opts.runFFmpeg, opts.ffmpegBin)
+	meta := benchmarkMetadata(path, manifestData, opts)
 	meta.CorpusManifest = path
 	meta.FailureLedger = failureLedgerPath
 	meta.CorpusFilter = opts.corpusFilter
@@ -498,8 +537,11 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 	meta.ComparisonKind = "manifest-goh264-in-process"
 	if opts.runFFmpeg {
 		meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli"
+		if opts.fairCPULanes {
+			meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli-fair-cpu-lanes"
+		}
 	}
-	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run. FFmpeg timing remains a process-per-iteration CLI baseline."
+	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes preflight both FFmpeg -cpuflags 0 and native/default CPU dispatch. FFmpeg timing remains a process-per-iteration CLI baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
 }
 
@@ -573,7 +615,7 @@ func diagnoseBenchManifest(path string, maxEntries int, opts benchOptions) (benc
 		return benchReport{}, fmt.Errorf("%s: no manifest entries selected", path)
 	}
 
-	meta := benchmarkMetadata(path, manifestData, opts.runFFmpeg, opts.ffmpegBin)
+	meta := benchmarkMetadata(path, manifestData, opts)
 	meta.CorpusManifest = path
 	meta.FailureLedger = failureLedgerPath
 	meta.CorpusFilter = opts.corpusFilter
@@ -1180,27 +1222,103 @@ func preflightBenchGoOracle(input string, data []byte, entry benchCorpusEntry) e
 	return annotateBenchResultWithOracle(&result, entry)
 }
 
-func preflightBenchFFmpegOracle(input string, entry benchCorpusEntry, opts benchOptions) error {
+func preflightBenchFFmpegOracle(input string, entry benchCorpusEntry, opts benchOptions, lane ffmpegBenchLane) error {
 	pixFmt := opts.ffmpegPixFmt
 	if pixFmt == "" {
 		pixFmt = entry.PixFmt
 	} else if opts.strictPixFmt && pixFmt != entry.PixFmt {
 		return fmt.Errorf("-ffmpeg-pix-fmt %q does not match manifest pixel format %q", pixFmt, entry.PixFmt)
 	}
-	run, err := runFFmpegOnce(opts.ffmpegBin, ffmpegArgs(input, true, opts.ffmpegThreads, pixFmt), true)
+	run, err := runFFmpegOnce(opts.ffmpegBin, ffmpegArgs(input, true, opts.ffmpegThreads, pixFmt, lane.cpuFlags), true)
 	if err != nil {
 		return err
 	}
 	result := benchResult{
-		Name:           "ffmpeg",
+		Name:           lane.name,
 		Input:          input,
 		RawOutput:      true,
 		RawPixelFormat: entry.PixFmt,
 		FFmpegPixelFmt: pixFmt,
 		BytesPerIter:   run.bytes,
 		RawMD5:         run.md5,
+		BaselineKind:   "ffmpeg-cli-oracle-preflight",
+		BackendKind:    lane.backendKind,
+		CPUFlags:       lane.cpuFlags,
+		ComparisonLane: lane.comparisonLane,
 	}
 	return annotateBenchResultWithOracle(&result, entry)
+}
+
+func ffmpegBenchLanes(opts benchOptions) []ffmpegBenchLane {
+	if !opts.runFFmpeg {
+		return nil
+	}
+	if opts.fairCPULanes {
+		return []ffmpegBenchLane{
+			{
+				name:           "ffmpeg-pure-c",
+				backendKind:    "ffmpeg-pure-c",
+				cpuFlags:       "0",
+				comparisonLane: "pure-c-vs-pure-go",
+			},
+			{
+				name:           "ffmpeg-native",
+				backendKind:    "ffmpeg-native-cpu-dispatch",
+				cpuFlags:       strings.TrimSpace(opts.ffmpegCPUFlags),
+				comparisonLane: "native-cpu-vs-go-backend",
+			},
+		}
+	}
+	flags := strings.TrimSpace(opts.ffmpegCPUFlags)
+	return []ffmpegBenchLane{{
+		name:           ffmpegLaneName(flags),
+		backendKind:    ffmpegBackendKind(flags),
+		cpuFlags:       flags,
+		comparisonLane: ffmpegComparisonLane(flags),
+	}}
+}
+
+func ffmpegLaneName(cpuFlags string) string {
+	if cpuFlags == "0" {
+		return "ffmpeg-pure-c"
+	}
+	if cpuFlags == "" {
+		return "ffmpeg-native"
+	}
+	return "ffmpeg-cpuflags"
+}
+
+func ffmpegBackendKind(cpuFlags string) string {
+	if cpuFlags == "0" {
+		return "ffmpeg-pure-c"
+	}
+	if cpuFlags == "" {
+		return "ffmpeg-native-cpu-dispatch"
+	}
+	return "ffmpeg-cpuflags-" + cpuFlags
+}
+
+func ffmpegComparisonLane(cpuFlags string) string {
+	if cpuFlags == "0" {
+		return "pure-c-vs-pure-go"
+	}
+	return "native-cpu-vs-go-backend"
+}
+
+func annotateFFmpegPeerQuality(result *benchResult, goResult benchResult) {
+	if result == nil || !result.RawOutput || result.RawMD5 == "" || goResult.RawMD5 == "" {
+		return
+	}
+	if result.RawMD5 == goResult.RawMD5 && result.BytesPerIter == goResult.BytesPerIter {
+		result.ParityStatus = "rawvideo-md5-match-goh264"
+		return
+	}
+	result.ParityStatus = "rawvideo-md5-mismatch-goh264"
+	result.ErrorClass = "raw-md5-mismatch"
+	result.Notes = append(result.Notes,
+		fmt.Sprintf("quality mismatch versus Go output: ffmpeg md5=%s bytes=%d, go md5=%s bytes=%d",
+			result.RawMD5, result.BytesPerIter, goResult.RawMD5, goResult.BytesPerIter),
+	)
 }
 
 func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawOutput bool, annexBInput bool) (benchResult, error) {
@@ -1240,11 +1358,16 @@ func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawO
 
 	result := resultFromSamples("goh264", input, iters, repeats, warmup, rawOutput, framesPerIter, bytesPerIter, samples, rawMD5, "")
 	result.RawPixelFormat = pixFmt
+	if rawOutput && rawMD5 != "" {
+		result.ParityStatus = "rawvideo-md5-observed"
+	}
 	result.InputBytesPerIter = int64(len(data))
 	result.BaselineKind = "in-process-go"
+	result.BackendKind = "go-pure"
 	result.ProcessPerIter = false
 	result.InputReadTimed = false
 	result.StdoutPipeTimed = false
+	result.Notes = append(result.Notes, "Go decoder backend is pure Go in this build; native CPU lane uses this same Go backend until Go assembly is added.")
 	annotateBenchRates(&result)
 	return result, nil
 }
@@ -1358,14 +1481,14 @@ func summarizeGoFrames(frames []*goh264.Frame, rawOutput bool) (decodeGoRun, err
 	return decodeGoRun{frames: len(frames), bytes: total, md5: hashString(h), pixFmt: pixFmt, frameDiagnostics: frameDiagnostics}, nil
 }
 
-func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup int, rawOutput bool, bin string, threads string, pixFmt string, goPixFmt string) (benchResult, error) {
+func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup int, rawOutput bool, bin string, threads string, pixFmt string, goPixFmt string, lane ffmpegBenchLane) (benchResult, error) {
 	effectivePixFmt := pixFmt
 	autoPixFmt := false
 	if rawOutput && effectivePixFmt == "" && goPixFmt != "" {
 		effectivePixFmt = goPixFmt
 		autoPixFmt = true
 	}
-	args := ffmpegArgs(input, rawOutput, threads, effectivePixFmt)
+	args := ffmpegArgs(input, rawOutput, threads, effectivePixFmt, lane.cpuFlags)
 	for i := 0; i < warmup; i++ {
 		if _, err := runFFmpegOnce(bin, args, rawOutput); err != nil {
 			return benchResult{}, err
@@ -1393,11 +1516,14 @@ func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup 
 		samples = append(samples, sample)
 	}
 
-	result := resultFromSamples("ffmpeg", input, iters, repeats, warmup, rawOutput, 0, bytesPerIter, samples, rawMD5, bin+" "+joinArgs(args))
+	result := resultFromSamples(lane.name, input, iters, repeats, warmup, rawOutput, 0, bytesPerIter, samples, rawMD5, bin+" "+joinArgs(args))
 	result.RawPixelFormat = goPixFmt
 	result.FFmpegPixelFmt = effectivePixFmt
 	result.InputBytesPerIter = inputBytes
 	result.BaselineKind = "ffmpeg-cli"
+	result.BackendKind = lane.backendKind
+	result.CPUFlags = lane.cpuFlags
+	result.ComparisonLane = lane.comparisonLane
 	result.ProcessPerIter = true
 	result.InputReadTimed = true
 	result.StdoutPipeTimed = rawOutput
@@ -1457,8 +1583,11 @@ func runFFmpegOnce(bin string, args []string, rawOutput bool) (ffmpegRun, error)
 	return ffmpegRun{bytes: counter.n, md5: hashString(h)}, nil
 }
 
-func ffmpegArgs(input string, rawOutput bool, threads string, pixFmt string) []string {
+func ffmpegArgs(input string, rawOutput bool, threads string, pixFmt string, cpuFlags string) []string {
 	args := []string{"-v", "error", "-nostdin"}
+	if strings.TrimSpace(cpuFlags) != "" {
+		args = append(args, "-cpuflags", strings.TrimSpace(cpuFlags))
+	}
 	if threads != "" {
 		args = append(args, "-threads", threads)
 	}
@@ -1613,7 +1742,7 @@ func sampleStats(samples []benchSample) benchStats {
 	}
 }
 
-func benchmarkMetadata(input string, data []byte, includeFFmpeg bool, ffmpegBin string) benchMetadata {
+func benchmarkMetadata(input string, data []byte, opts benchOptions) benchMetadata {
 	sum := md5.Sum(data)
 	revision, dirty := gitMetadata()
 	modulePath, moduleVersion := moduleMetadata()
@@ -1632,11 +1761,32 @@ func benchmarkMetadata(input string, data []byte, includeFFmpeg bool, ffmpegBin 
 		VCSDirty:       dirty,
 		ComparisonKind: "goh264-in-process",
 	}
-	if includeFFmpeg {
+	if opts.runFFmpeg {
 		meta.ComparisonKind = "goh264-in-process-vs-ffmpeg-cli"
-		meta.FFmpegVersion = ffmpegVersion(ffmpegBin)
+		if opts.fairCPULanes {
+			meta.ComparisonKind = "goh264-in-process-vs-ffmpeg-cli-fair-cpu-lanes"
+		}
+		meta.FFmpegVersion = ffmpegVersion(opts.ffmpegBin)
+		meta.FFmpegCPUFlags = ffmpegMetadataCPUFlags(opts)
+		meta.FairnessPolicy = "Single-input mode reports Go and FFmpeg timing samples with explicit backend_kind/cpu_flags fields. FFmpeg result quality is compared against the Go rawvideo byte count and raw-MD5 when -raw=true; manifest mode is required for an external rawvideo oracle. FFmpeg timing remains a process-per-iteration CLI baseline."
 	}
 	return meta
+}
+
+func ffmpegMetadataCPUFlags(opts benchOptions) string {
+	if !opts.runFFmpeg {
+		return ""
+	}
+	if opts.fairCPULanes {
+		if strings.TrimSpace(opts.ffmpegCPUFlags) == "" {
+			return "pure-c:0,native:default"
+		}
+		return "pure-c:0,native:" + strings.TrimSpace(opts.ffmpegCPUFlags)
+	}
+	if strings.TrimSpace(opts.ffmpegCPUFlags) == "" {
+		return "default"
+	}
+	return strings.TrimSpace(opts.ffmpegCPUFlags)
 }
 
 func moduleMetadata() (string, string) {
