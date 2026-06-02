@@ -93,6 +93,10 @@ type benchResult struct {
 	ExpectedFrames    int           `json:"expected_frames_per_iter,omitempty"`
 	ExpectedBytes     int64         `json:"expected_bytes_per_iter,omitempty"`
 	ParityStatus      string        `json:"parity_status,omitempty"`
+	ErrorClass        string        `json:"error_class,omitempty"`
+	Surfaces          []string      `json:"surfaces,omitempty"`
+	FeatureTags       []string      `json:"feature_tags,omitempty"`
+	Source            string        `json:"source,omitempty"`
 	Command           string        `json:"command,omitempty"`
 	ProcessPerIter    bool          `json:"process_per_iter"`
 	InputReadTimed    bool          `json:"input_read_timed"`
@@ -208,6 +212,12 @@ func main() {
 			}
 			if r.Error != "" {
 				fmt.Printf(", error %s", r.Error)
+			}
+			if r.ErrorClass != "" {
+				fmt.Printf(", class %s", r.ErrorClass)
+			}
+			if len(r.FeatureTags) != 0 {
+				fmt.Printf(", features %s", strings.Join(r.FeatureTags, ","))
 			}
 			for _, note := range r.Notes {
 				fmt.Printf("\n  note: %s", note)
@@ -663,6 +673,9 @@ func annotateBenchResultWithOracle(result *benchResult, entry benchCorpusEntry) 
 	result.ExpectedPixFmt = entry.PixFmt
 	result.ExpectedFrames = entry.FrameCount
 	result.ExpectedBytes = expectedBytes
+	result.Surfaces = append(result.Surfaces[:0], entry.Surfaces...)
+	result.FeatureTags = append(result.FeatureTags[:0], entry.FeatureTags...)
+	result.Source = entry.Source
 	if result.RawMD5 != entry.RawVideoMD5 {
 		return fmt.Errorf("%s %s: raw_md5 = %s, want %s", entry.ID, result.Name, result.RawMD5, entry.RawVideoMD5)
 	}
@@ -693,6 +706,9 @@ func skippedBenchResult(entry benchCorpusEntry, reason string) benchResult {
 		ExpectedFrames:  entry.FrameCount,
 		ExpectedBytes:   int64(entry.FrameCount * entry.FrameSize),
 		ParityStatus:    entry.Expect,
+		Surfaces:        append([]string(nil), entry.Surfaces...),
+		FeatureTags:     append([]string(nil), entry.FeatureTags...),
+		Source:          entry.Source,
 		BaselineKind:    "manifest-skipped",
 		ProcessPerIter:  false,
 		InputReadTimed:  false,
@@ -716,8 +732,30 @@ func knownRedBenchResult(entry benchCorpusEntry, input string, data []byte, err 
 	}
 	if err != nil {
 		result.Error = err.Error()
+		result.ErrorClass = benchOracleFailureClass(err.Error())
 	}
 	return result
+}
+
+func benchOracleFailureClass(detail string) string {
+	switch {
+	case detail == "":
+		return ""
+	case strings.Contains(detail, "missing ") || strings.Contains(detail, "no such file"):
+		return "input-missing"
+	case strings.Contains(detail, "decode") || strings.Contains(detail, "unsupported"):
+		return "decode-error"
+	case strings.Contains(detail, "frames_per_iter") || strings.Contains(detail, "frames ="):
+		return "frame-count-mismatch"
+	case strings.Contains(detail, "raw_pixel_format") || strings.Contains(detail, "pix_fmt"):
+		return "pixel-format-mismatch"
+	case strings.Contains(detail, "bytes_per_iter") || strings.Contains(detail, "raw size") || strings.Contains(detail, "raw total"):
+		return "raw-size-mismatch"
+	case strings.Contains(detail, "raw_md5") || strings.Contains(detail, "rawvideo md5") || strings.Contains(detail, "md5 ="):
+		return "raw-md5-mismatch"
+	default:
+		return "oracle-mismatch"
+	}
 }
 
 func preflightBenchGoOracle(input string, data []byte, entry benchCorpusEntry) error {

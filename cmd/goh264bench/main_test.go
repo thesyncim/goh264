@@ -156,6 +156,12 @@ func TestBenchManifestReportsKnownRedRowsWithoutBenchmarking(t *testing.T) {
 	if len(report.Results) != 1 || !report.Results[0].Skipped || report.Results[0].ParityStatus != "known-red" {
 		t.Fatalf("result = %+v, want visible known-red skipped row", report.Results)
 	}
+	if report.Results[0].ErrorClass != "input-missing" {
+		t.Fatalf("known-red error class = %q, want input-missing", report.Results[0].ErrorClass)
+	}
+	if got := strings.Join(report.Results[0].FeatureTags, ","); got != "unsupported" {
+		t.Fatalf("known-red feature tags = %q, want unsupported", got)
+	}
 	if report.Results[0].Error == "" || !strings.Contains(report.Results[0].Error, "missing.264") {
 		t.Fatalf("known-red error = %q, want missing input detail", report.Results[0].Error)
 	}
@@ -182,6 +188,9 @@ func TestBenchManifestReportsUnsupportedRowsAsSkipped(t *testing.T) {
 	}
 	if len(report.Results) != 1 || !report.Results[0].Skipped || report.Results[0].ParityStatus != "unsupported" {
 		t.Fatalf("result = %+v, want unsupported skipped row", report.Results)
+	}
+	if got := strings.Join(report.Results[0].Surfaces, ","); got != "annexb" {
+		t.Fatalf("skipped surfaces = %q, want annexb", got)
 	}
 }
 
@@ -238,6 +247,9 @@ func TestAnnotateBenchResultWithOracle(t *testing.T) {
 		FrameCount:  2,
 		FrameSize:   16,
 		RawVideoMD5: "ffeeddccbbaa99887766554433221100",
+		Surfaces:    []string{"annexb"},
+		FeatureTags: []string{"cabac", "weighted"},
+		Source:      "FFmpeg FATE h264-conformance",
 	}
 	result := benchResult{
 		Name:           "goh264",
@@ -251,6 +263,9 @@ func TestAnnotateBenchResultWithOracle(t *testing.T) {
 	}
 	if result.EntryID != entry.ID || result.ExpectedBytes != 32 || result.ParityStatus != "rawvideo-md5-ok" {
 		t.Fatalf("annotated result = %+v", result)
+	}
+	if result.Source != entry.Source || len(result.FeatureTags) != len(entry.FeatureTags) {
+		t.Fatalf("annotated metadata = source %q tags %v, want %q/%v", result.Source, result.FeatureTags, entry.Source, entry.FeatureTags)
 	}
 
 	bad := result
@@ -270,5 +285,22 @@ func TestPreflightBenchFFmpegOracleRejectsStrictPixelFormatMismatch(t *testing.T
 	})
 	if err == nil || !strings.Contains(err.Error(), "manifest pixel format") {
 		t.Fatalf("preflight err = %v, want strict pixel format mismatch", err)
+	}
+}
+
+func TestBenchOracleFailureClass(t *testing.T) {
+	tests := map[string]string{
+		"missing /tmp/in.264; set GOH264_CORPUS_FETCH=1": "input-missing",
+		"decode: unsupported MBAFF":                      "decode-error",
+		"frames_per_iter = 2, want 3":                    "frame-count-mismatch",
+		"Go raw_pixel_format = yuv420p, want yuv422p":    "pixel-format-mismatch",
+		"bytes_per_iter = 10, want 20":                   "raw-size-mismatch",
+		"raw_md5 = abc, want def":                        "raw-md5-mismatch",
+		"unexpected oracle detail":                       "oracle-mismatch",
+	}
+	for detail, want := range tests {
+		if got := benchOracleFailureClass(detail); got != want {
+			t.Fatalf("benchOracleFailureClass(%q) = %q, want %q", detail, got, want)
+		}
 	}
 }

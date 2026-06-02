@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -127,6 +128,49 @@ func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 	}
 }
 
+func TestH264RealVectorFailureFocusedFilters(t *testing.T) {
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
+	manifestByID := make(map[string]h264CorpusEntry, len(manifest))
+	for _, entry := range manifest {
+		manifestByID[entry.ID] = entry
+	}
+
+	focusTokens := []string{"mbaff", "paff", "high", "chroma", "b-slice", "direct", "weighted"}
+	var applicable int
+	for _, token := range focusTokens {
+		token := token
+		filteredFailures := filterH264CorpusEntries(append([]h264CorpusEntry(nil), failures...), []string{token})
+		if len(filteredFailures) == 0 {
+			continue
+		}
+		applicable++
+		t.Run(token, func(t *testing.T) {
+			filteredManifest := filterH264CorpusEntries(append([]h264CorpusEntry(nil), manifest...), []string{token})
+			filteredManifestByID := make(map[string]h264CorpusEntry, len(filteredManifest))
+			for _, entry := range filteredManifest {
+				filteredManifestByID[entry.ID] = entry
+			}
+			for _, failure := range filteredFailures {
+				manifestEntry, ok := filteredManifestByID[failure.ID]
+				if !ok {
+					t.Fatalf("%s: known-red row matched filter %q but disappeared from filtered manifest", failure.ID, token)
+				}
+				if !reflect.DeepEqual(failure, manifestEntry) {
+					t.Fatalf("%s: filtered known-red row drifted from real-vector manifest\nfailure=%+v\nmanifest=%+v", failure.ID, failure, manifestEntry)
+				}
+				if _, ok := manifestByID[failure.ID]; !ok {
+					t.Fatalf("%s: known-red row missing from unfiltered manifest", failure.ID)
+				}
+			}
+			t.Logf("%s: known-red ids: %s", token, strings.Join(h264CorpusEntryIDs(filteredFailures), ","))
+		})
+	}
+	if applicable == 0 {
+		t.Fatalf("no known-red rows matched focused filters %v; failure ledger tags are %s", focusTokens, h264CorpusFailureFilterSummary(failures))
+	}
+}
+
 func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 	if !h264RealVectorsEnabled() && os.Getenv("GOH264_REAL_VECTOR_FAILURES") != "1" {
 		t.Skip("set GOH264_REAL_VECTOR_FAILURES=1, GOH264_REAL_VECTORS=1, or GOH264_ORACLE=1 to verify red public vector rows")
@@ -135,7 +179,8 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
 		failures = filterH264CorpusEntries(failures, filter)
 		if len(failures) == 0 {
-			t.Fatalf("%s: no failure entries matched GOH264_CORPUS_FILTER=%q", defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"))
+			t.Fatalf("%s: no failure entries matched GOH264_CORPUS_FILTER=%q; available known-red filters: %s",
+				defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)))
 		}
 	}
 	for _, entry := range failures {
@@ -158,7 +203,13 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 			if matches {
 				t.Fatalf("%s: failure-ledger row now matches oracle; remove it from %s", entry.ID, defaultH264RealVectorFailureManifest)
 			}
-			t.Logf("%s: still red: %s", entry.ID, detail)
+			t.Logf("%s: still red: class=%s features=%s surfaces=%s source=%q detail=%s",
+				entry.ID,
+				h264CorpusOracleFailureClass(detail),
+				strings.Join(entry.FeatureTags, ","),
+				strings.Join(entry.Surfaces, ","),
+				entry.Source,
+				detail)
 		})
 	}
 }
@@ -317,6 +368,35 @@ func h264CorpusEntrySearchFields(entry h264CorpusEntry) []string {
 	fields = append(fields, entry.GuardTags...)
 	fields = append(fields, entry.FeatureTags...)
 	return fields
+}
+
+func h264CorpusEntryIDs(entries []h264CorpusEntry) []string {
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		ids = append(ids, entry.ID)
+	}
+	return ids
+}
+
+func h264CorpusFailureFilterSummary(entries []h264CorpusEntry) string {
+	values := make(map[string]struct{})
+	for _, entry := range entries {
+		fields := []string{entry.ID, entry.Path, entry.PixFmt}
+		fields = append(fields, entry.Surfaces...)
+		fields = append(fields, entry.GuardTags...)
+		fields = append(fields, entry.FeatureTags...)
+		for _, value := range fields {
+			if value != "" {
+				values[strings.ToLower(value)] = struct{}{}
+			}
+		}
+	}
+	var sorted []string
+	for value := range values {
+		sorted = append(sorted, value)
+	}
+	sort.Strings(sorted)
+	return strings.Join(sorted, ",")
 }
 
 func TestValidateH264CorpusEntryAllowsURLBackedDecodeOK(t *testing.T) {
@@ -695,6 +775,25 @@ func h264CorpusAnnexBMatchesOracle(t *testing.T, entry h264CorpusEntry, data []b
 		return false, fmt.Sprintf("rawvideo md5 = %s, want %s", got, entry.RawVideoMD5)
 	}
 	return true, "matched rawvideo oracle"
+}
+
+func h264CorpusOracleFailureClass(detail string) string {
+	switch {
+	case detail == "":
+		return ""
+	case strings.Contains(detail, "decode error") || strings.Contains(detail, "unsupported"):
+		return "decode-error"
+	case strings.Contains(detail, "frames ="):
+		return "frame-count-mismatch"
+	case strings.Contains(detail, "pix_fmt"):
+		return "pixel-format-mismatch"
+	case strings.Contains(detail, "raw size") || strings.Contains(detail, "raw total"):
+		return "raw-size-mismatch"
+	case strings.Contains(detail, "rawvideo md5") || strings.Contains(detail, "md5 ="):
+		return "raw-md5-mismatch"
+	default:
+		return "oracle-mismatch"
+	}
 }
 
 func assertH264CorpusUnsupported(t *testing.T, entry h264CorpusEntry, err error) {
