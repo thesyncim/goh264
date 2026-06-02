@@ -529,6 +529,85 @@ func TestPredSpatialDirectFrameMBAFFFieldRefsUseFieldRefCount(t *testing.T) {
 	}
 }
 
+func TestPredSpatialDirectFieldCurrentOverFrameColocatedKeeps16x8Mismatch(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idr := &DecodedFrame{poc: 0}
+	col := &DecodedFrame{poc: 4, tables: colTables}
+	colTables.MacroblockTyp[0] = MBTypeIntra16x16
+	colTables.MacroblockTyp[colTables.MBStride] = MBType16x16 | MBTypeP0L0
+
+	initialType := MBTypeDirect2 | MBTypeL0L1 | MBTypeInterlaced
+	layout, err := m.directColocatedLayout(colTables, 0, initialType, h264DirectMotionContext{
+		RefEntries:       [2][]simpleRefEntry{nil, {{frame: col, pictureStructure: PictureFrame}}},
+		PictureStructure: PictureTopField,
+	})
+	if err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	if !layout.InterlacedMismatch {
+		t.Fatalf("layout mismatch = false, want field-current over frame colocated")
+	}
+	for i8 := 0; i8 < 4; i8++ {
+		refIndex := directColocatedRefIndex(layout, i8)
+		if refIndex < 0 || refIndex >= len(colTables.RefIndex[0]) {
+			t.Fatalf("ref index %d out of range", refIndex)
+		}
+		colTables.RefIndex[0][refIndex] = 0
+		mvIndex := layout.MVBase + (i8&1)*3 + (i8>>1)*directColocatedSub8x8RowStride(layout)
+		if mvIndex < 0 || mvIndex >= len(colTables.MotionVal[0]) {
+			t.Fatalf("mv index %d out of range", mvIndex)
+		}
+		colTables.MotionVal[0][mvIndex] = [2]int16{4, 4}
+	}
+	colZeroIndex := layout.MVBase + 0*3 + 1*directColocatedSub8x8RowStride(layout)
+	colTables.MotionVal[0][colZeroIndex] = [2]int16{1, 1}
+
+	var cache macroblockMotionCache
+	base := int(h264Scan8[0])
+	cache.Ref[0][base-1] = 0
+	cache.Ref[0][base-8] = 0
+	cache.Ref[0][base+4-8] = 0
+	cache.MV[0][base-1] = [2]int16{0, 24}
+	cache.MV[0][base-8] = [2]int16{0, 24}
+	cache.MV[0][base+4-8] = [2]int16{0, 24}
+	cache.Ref[1][base-1] = h264PartNotAvailable
+	cache.Ref[1][base-8] = h264PartNotAvailable
+	cache.Ref[1][base+4-8] = h264PartNotAvailable
+	cache.Ref[1][base-8-1] = h264PartNotAvailable
+
+	var sub [4]uint32
+	mbType := initialType
+	err = m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr, pictureStructure: PictureTopField, poc: 0}},
+			{{frame: col, pictureStructure: PictureFrame, poc: 4}},
+		},
+		PictureStructure:    PictureTopField,
+		DirectSpatialMVPred: true,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	})
+	if err != nil {
+		t.Fatalf("spatial direct mismatch failed: %v", err)
+	}
+	if !is16x8(mbType) || is16x16(mbType) || !isDirect(mbType) {
+		t.Fatalf("mbType = %#x, want direct 16x8 retained from mismatch branch", mbType)
+	}
+	if cache.MV[0][h264Scan8[8]] != ([2]int16{}) {
+		t.Fatalf("col-zero half mv = %v, want zero", cache.MV[0][h264Scan8[8]])
+	}
+	if cache.MV[0][h264Scan8[12]] != ([2]int16{0, 24}) {
+		t.Fatalf("nonzero half mv = %v, want neighbor mv", cache.MV[0][h264Scan8[12]])
+	}
+}
+
 func TestSpatialDirectColZeroUsesFFmpegUnsignedX264BuildCompare(t *testing.T) {
 	_, col, _ := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
 	col.tables.RefIndex[0][0] = -1
