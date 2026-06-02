@@ -8,6 +8,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"hash"
@@ -59,53 +60,54 @@ type benchMetadata struct {
 }
 
 type benchResult struct {
-	Name              string        `json:"name"`
-	EntryID           string        `json:"entry_id,omitempty"`
-	Input             string        `json:"input"`
-	Iterations        int           `json:"iterations"`
-	Repeats           int           `json:"repeats"`
-	Warmup            int           `json:"warmup"`
-	RawOutput         bool          `json:"raw_output"`
-	RawPixelFormat    string        `json:"raw_pixel_format,omitempty"`
-	FFmpegPixelFmt    string        `json:"ffmpeg_pixel_format,omitempty"`
-	FramesPerIter     int           `json:"frames_per_iter,omitempty"`
-	InputBytesPerIter int64         `json:"input_bytes_per_iter,omitempty"`
-	BytesPerIter      int64         `json:"bytes_per_iter,omitempty"`
-	TotalFrames       int           `json:"total_frames,omitempty"`
-	TotalBytes        int64         `json:"total_bytes,omitempty"`
-	ElapsedMS         float64       `json:"elapsed_ms"`
-	MeanElapsedMS     float64       `json:"mean_elapsed_ms,omitempty"`
-	MedianElapsedMS   float64       `json:"median_elapsed_ms,omitempty"`
-	MinElapsedMS      float64       `json:"min_elapsed_ms,omitempty"`
-	MaxElapsedMS      float64       `json:"max_elapsed_ms,omitempty"`
-	StddevElapsedMS   float64       `json:"stddev_elapsed_ms,omitempty"`
-	CVElapsed         float64       `json:"cv_elapsed,omitempty"`
-	FPS               float64       `json:"fps,omitempty"`
-	MiBPerSec         float64       `json:"mib_per_sec,omitempty"`
-	NSPerFrame        float64       `json:"ns_per_frame,omitempty"`
-	NSPerInputByte    float64       `json:"ns_per_input_byte,omitempty"`
-	NSPerRawByte      float64       `json:"ns_per_raw_byte,omitempty"`
-	AllocBytes        uint64        `json:"alloc_bytes,omitempty"`
-	Allocs            uint64        `json:"allocs,omitempty"`
-	RawMD5            string        `json:"raw_md5,omitempty"`
-	ExpectedRawMD5    string        `json:"expected_raw_md5,omitempty"`
-	ExpectedPixFmt    string        `json:"expected_raw_pixel_format,omitempty"`
-	ExpectedFrames    int           `json:"expected_frames_per_iter,omitempty"`
-	ExpectedBytes     int64         `json:"expected_bytes_per_iter,omitempty"`
-	ParityStatus      string        `json:"parity_status,omitempty"`
-	ErrorClass        string        `json:"error_class,omitempty"`
-	Surfaces          []string      `json:"surfaces,omitempty"`
-	FeatureTags       []string      `json:"feature_tags,omitempty"`
-	Source            string        `json:"source,omitempty"`
-	Command           string        `json:"command,omitempty"`
-	ProcessPerIter    bool          `json:"process_per_iter"`
-	InputReadTimed    bool          `json:"input_read_timed"`
-	StdoutPipeTimed   bool          `json:"stdout_pipe_timed"`
-	BaselineKind      string        `json:"baseline_kind"`
-	Skipped           bool          `json:"skipped,omitempty"`
-	Error             string        `json:"error,omitempty"`
-	Notes             []string      `json:"notes,omitempty"`
-	Samples           []benchSample `json:"samples,omitempty"`
+	Name              string                 `json:"name"`
+	EntryID           string                 `json:"entry_id,omitempty"`
+	Input             string                 `json:"input"`
+	Iterations        int                    `json:"iterations"`
+	Repeats           int                    `json:"repeats"`
+	Warmup            int                    `json:"warmup"`
+	RawOutput         bool                   `json:"raw_output"`
+	RawPixelFormat    string                 `json:"raw_pixel_format,omitempty"`
+	FFmpegPixelFmt    string                 `json:"ffmpeg_pixel_format,omitempty"`
+	FramesPerIter     int                    `json:"frames_per_iter,omitempty"`
+	InputBytesPerIter int64                  `json:"input_bytes_per_iter,omitempty"`
+	BytesPerIter      int64                  `json:"bytes_per_iter,omitempty"`
+	TotalFrames       int                    `json:"total_frames,omitempty"`
+	TotalBytes        int64                  `json:"total_bytes,omitempty"`
+	ElapsedMS         float64                `json:"elapsed_ms"`
+	MeanElapsedMS     float64                `json:"mean_elapsed_ms,omitempty"`
+	MedianElapsedMS   float64                `json:"median_elapsed_ms,omitempty"`
+	MinElapsedMS      float64                `json:"min_elapsed_ms,omitempty"`
+	MaxElapsedMS      float64                `json:"max_elapsed_ms,omitempty"`
+	StddevElapsedMS   float64                `json:"stddev_elapsed_ms,omitempty"`
+	CVElapsed         float64                `json:"cv_elapsed,omitempty"`
+	FPS               float64                `json:"fps,omitempty"`
+	MiBPerSec         float64                `json:"mib_per_sec,omitempty"`
+	NSPerFrame        float64                `json:"ns_per_frame,omitempty"`
+	NSPerInputByte    float64                `json:"ns_per_input_byte,omitempty"`
+	NSPerRawByte      float64                `json:"ns_per_raw_byte,omitempty"`
+	AllocBytes        uint64                 `json:"alloc_bytes,omitempty"`
+	Allocs            uint64                 `json:"allocs,omitempty"`
+	RawMD5            string                 `json:"raw_md5,omitempty"`
+	ExpectedRawMD5    string                 `json:"expected_raw_md5,omitempty"`
+	ExpectedPixFmt    string                 `json:"expected_raw_pixel_format,omitempty"`
+	ExpectedFrames    int                    `json:"expected_frames_per_iter,omitempty"`
+	ExpectedBytes     int64                  `json:"expected_bytes_per_iter,omitempty"`
+	ParityStatus      string                 `json:"parity_status,omitempty"`
+	ErrorClass        string                 `json:"error_class,omitempty"`
+	Surfaces          []string               `json:"surfaces,omitempty"`
+	FeatureTags       []string               `json:"feature_tags,omitempty"`
+	Source            string                 `json:"source,omitempty"`
+	Command           string                 `json:"command,omitempty"`
+	ProcessPerIter    bool                   `json:"process_per_iter"`
+	InputReadTimed    bool                   `json:"input_read_timed"`
+	StdoutPipeTimed   bool                   `json:"stdout_pipe_timed"`
+	BaselineKind      string                 `json:"baseline_kind"`
+	Skipped           bool                   `json:"skipped,omitempty"`
+	Error             string                 `json:"error,omitempty"`
+	Notes             []string               `json:"notes,omitempty"`
+	Samples           []benchSample          `json:"samples,omitempty"`
+	FrameDiagnostics  []benchFrameDiagnostic `json:"frame_diagnostics,omitempty"`
 }
 
 type benchSample struct {
@@ -117,6 +119,17 @@ type benchSample struct {
 	AllocBytes  uint64  `json:"alloc_bytes,omitempty"`
 	Allocs      uint64  `json:"allocs,omitempty"`
 	RawMD5      string  `json:"raw_md5,omitempty"`
+}
+
+type benchFrameDiagnostic struct {
+	Index                  int    `json:"index"`
+	RawPixelFormat         string `json:"raw_pixel_format,omitempty"`
+	ExpectedRawPixelFormat string `json:"expected_raw_pixel_format,omitempty"`
+	Bytes                  int64  `json:"bytes,omitempty"`
+	ExpectedBytes          int64  `json:"expected_bytes,omitempty"`
+	RawMD5                 string `json:"raw_md5,omitempty"`
+	ExpectedRawMD5         string `json:"expected_raw_md5,omitempty"`
+	ParityStatus           string `json:"parity_status,omitempty"`
 }
 
 type benchOptions struct {
@@ -132,6 +145,7 @@ type benchOptions struct {
 	corpusFilter  string
 	failureLedger string
 	annexBInput   bool
+	diagnose      bool
 }
 
 type benchCorpusEntry struct {
@@ -164,6 +178,7 @@ func main() {
 	maxEntries := flag.Int("max-entries", 0, "maximum decode-ok manifest entries to benchmark; 0 means all")
 	corpusFilter := flag.String("filter", os.Getenv("GOH264_CORPUS_FILTER"), "comma/space-separated manifest entry filter; defaults to GOH264_CORPUS_FILTER")
 	failureLedger := flag.String("failure-ledger", "auto", "manifest known-red ledger: auto uses failures.jsonl next to the manifest when present, off disables it, otherwise pass a JSONL path")
+	diagnose := flag.Bool("diagnose", false, "manifest mode: run oracle diagnostics instead of timing samples; includes per-frame raw MD5s when frames decode")
 	iters := flag.Int("iters", 5, "measured iterations")
 	repeats := flag.Int("repeats", 1, "measured repeat samples; each sample runs -iters decodes")
 	warmup := flag.Int("warmup", 1, "warmup iterations")
@@ -192,6 +207,7 @@ func main() {
 		strictPixFmt:  *strictPixFmt,
 		corpusFilter:  *corpusFilter,
 		failureLedger: *failureLedger,
+		diagnose:      *diagnose,
 	}
 	report, err := buildBenchReport(*input, *manifest, *maxEntries, opts)
 	if err != nil {
@@ -273,7 +289,35 @@ func main() {
 		for _, note := range r.Notes {
 			fmt.Printf("\n  note: %s", note)
 		}
+		for _, frame := range r.FrameDiagnostics {
+			printBenchFrameDiagnostic(frame)
+		}
 		fmt.Println()
+	}
+}
+
+func printBenchFrameDiagnostic(frame benchFrameDiagnostic) {
+	fmt.Printf("\n  frame[%d]:", frame.Index)
+	if frame.RawMD5 != "" {
+		fmt.Printf(" md5 %s", frame.RawMD5)
+	}
+	if frame.ExpectedRawMD5 != "" {
+		fmt.Printf(" want %s", frame.ExpectedRawMD5)
+	}
+	if frame.RawPixelFormat != "" {
+		fmt.Printf(" pix_fmt %s", frame.RawPixelFormat)
+	}
+	if frame.ExpectedRawPixelFormat != "" && frame.ExpectedRawPixelFormat != frame.RawPixelFormat {
+		fmt.Printf(" want_pix_fmt %s", frame.ExpectedRawPixelFormat)
+	}
+	if frame.Bytes != 0 || frame.ExpectedBytes != 0 {
+		fmt.Printf(" bytes %d", frame.Bytes)
+		if frame.ExpectedBytes != 0 && frame.ExpectedBytes != frame.Bytes {
+			fmt.Printf(" want %d", frame.ExpectedBytes)
+		}
+	}
+	if frame.ParityStatus != "" {
+		fmt.Printf(" parity %s", frame.ParityStatus)
 	}
 }
 
@@ -316,6 +360,9 @@ func benchOneInput(input string, data []byte, opts benchOptions) ([]benchResult,
 }
 
 func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport, error) {
+	if opts.diagnose {
+		return diagnoseBenchManifest(path, maxEntries, opts)
+	}
 	if !opts.rawOutput {
 		return benchReport{}, fmt.Errorf("manifest benchmark mode requires -raw=true so oracle rawvideo parity is checked")
 	}
@@ -431,6 +478,164 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 	}
 	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows that do not pass Go oracle preflight are emitted as skipped results with the exact error and are not timing samples. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run. FFmpeg timing remains a process-per-iteration CLI baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
+}
+
+func diagnoseBenchManifest(path string, maxEntries int, opts benchOptions) (benchReport, error) {
+	if !opts.rawOutput {
+		return benchReport{}, fmt.Errorf("manifest diagnostic mode requires -raw=true so per-frame rawvideo diagnostics are available")
+	}
+	manifestData, err := os.ReadFile(path)
+	if err != nil {
+		return benchReport{}, fmt.Errorf("read manifest: %w", err)
+	}
+	entries, err := readBenchCorpusManifest(path)
+	if err != nil {
+		return benchReport{}, err
+	}
+	failureLedger, failureLedgerPath, err := readBenchFailureLedger(path, opts.failureLedger, entries)
+	if err != nil {
+		return benchReport{}, err
+	}
+	if filter := benchCorpusFilterTokens(opts.corpusFilter); len(filter) != 0 {
+		entries = filterBenchCorpusEntries(entries, filter)
+		if len(entries) == 0 {
+			return benchReport{}, fmt.Errorf("%s: no corpus entries matched filter %q", path, opts.corpusFilter)
+		}
+	}
+
+	baseDir := filepath.Dir(path)
+	var results []benchResult
+	var diagnosed int
+	var knownRed int
+	var skipped int
+	for _, entry := range entries {
+		if maxEntries > 0 && diagnosed >= maxEntries {
+			break
+		}
+		if entry.Expect != "decode-ok" {
+			results = append(results, skippedBenchResult(entry, "manifest row is not a decode-ok oracle row and is not a diagnostic oracle row"))
+			skipped++
+			continue
+		}
+		if err := validateBenchCorpusEntry(entry); err != nil {
+			return benchReport{}, err
+		}
+		diagnosed++
+		failure, isKnownRed := failureLedger[entry.ID]
+		result := diagnoseBenchEntry(baseDir, entry)
+		if isKnownRed {
+			applyKnownRedDiagnostic(&result, failure, failureLedgerPath)
+			knownRed++
+		} else if result.ParityStatus != "rawvideo-md5-ok" {
+			result.Notes = append(result.Notes, "unexpected manifest oracle failure")
+		}
+		results = append(results, result)
+	}
+	if len(results) == 0 {
+		return benchReport{}, fmt.Errorf("%s: no manifest entries selected", path)
+	}
+
+	meta := benchmarkMetadata(path, manifestData, opts.runFFmpeg, opts.ffmpegBin)
+	meta.CorpusManifest = path
+	meta.FailureLedger = failureLedgerPath
+	meta.CorpusFilter = opts.corpusFilter
+	meta.CorpusEntries = len(entries)
+	meta.CorpusDecodeOK = diagnosed
+	meta.CorpusBench = 0
+	meta.CorpusKnownRed = knownRed
+	meta.CorpusSkipped = skipped
+	meta.ComparisonKind = "manifest-goh264-oracle-diagnostic"
+	meta.FairnessPolicy = "Manifest diagnostics run selected decode-ok rows once from the existing manifest/cache and compare Go raw pixel format, frame count, raw byte count, rawvideo MD5, and per-frame raw MD5s when frames decode. Known-red ledger rows remain marked known-red unless the decoder output actually matches the oracle, in which case they are reported as failure-ledger stale rather than green timing samples."
+	return benchReport{Metadata: meta, Results: results}, nil
+}
+
+func diagnoseBenchEntry(baseDir string, entry benchCorpusEntry) benchResult {
+	result := benchResult{
+		Name:            "goh264",
+		EntryID:         entry.ID,
+		Input:           entry.Path,
+		RawOutput:       true,
+		ExpectedRawMD5:  entry.RawVideoMD5,
+		ExpectedPixFmt:  entry.PixFmt,
+		ExpectedFrames:  entry.FrameCount,
+		ExpectedBytes:   int64(entry.FrameCount * entry.FrameSize),
+		Surfaces:        append([]string(nil), entry.Surfaces...),
+		FeatureTags:     append([]string(nil), entry.FeatureTags...),
+		Source:          entry.Source,
+		ProcessPerIter:  false,
+		InputReadTimed:  false,
+		StdoutPipeTimed: false,
+		BaselineKind:    "oracle-diagnostic",
+	}
+	inputPath, err := resolveBenchCorpusPath(baseDir, entry)
+	if err != nil {
+		applyBenchDiagnosticError(&result, err)
+		return result
+	}
+	result.Input = inputPath
+	data, err := os.ReadFile(inputPath)
+	if err != nil {
+		applyBenchDiagnosticError(&result, fmt.Errorf("%s: read input: %w", entry.ID, err))
+		return result
+	}
+	result.InputBytesPerIter = int64(len(data))
+	if err := validateBenchBitstreamMD5(entry, data); err != nil {
+		applyBenchDiagnosticError(&result, err)
+		return result
+	}
+	run, err := decodeGoOnceForFormat(data, true, entry.Format == "annexb")
+	if err != nil {
+		applyBenchDiagnosticError(&result, fmt.Errorf("decode: %w", err))
+		return result
+	}
+	result.RawPixelFormat = run.pixFmt
+	result.FramesPerIter = run.frames
+	result.BytesPerIter = run.bytes
+	result.RawMD5 = run.md5
+	result.FrameDiagnostics = append([]benchFrameDiagnostic(nil), run.frameDiagnostics...)
+	annotateBenchFrameDiagnostics(&result, entry)
+	if detail := benchOracleMismatchDetail(result, entry); detail != "" {
+		applyBenchDiagnosticError(&result, errors.New(detail))
+		return result
+	}
+	result.ParityStatus = "rawvideo-md5-ok"
+	return result
+}
+
+func applyBenchDiagnosticError(result *benchResult, err error) {
+	if result == nil || err == nil {
+		return
+	}
+	result.Error = err.Error()
+	result.ErrorClass = benchOracleFailureClass(err.Error())
+	result.ParityStatus = result.ErrorClass
+}
+
+func applyKnownRedDiagnostic(result *benchResult, failure benchCorpusEntry, ledgerPath string) {
+	if result == nil {
+		return
+	}
+	result.Skipped = true
+	result.BaselineKind = "oracle-known-red-diagnostic"
+	if ledgerPath != "" {
+		result.Notes = append(result.Notes, "failure ledger: "+ledgerPath)
+	}
+	if failure.KnownFailure != nil {
+		result.Notes = append(result.Notes, fmt.Sprintf("expected current failure: class=%s contains=%q", failure.KnownFailure.Class, failure.KnownFailure.DetailContains))
+	}
+	if result.ParityStatus == "rawvideo-md5-ok" {
+		result.ParityStatus = "rawvideo-md5-ok-failure-ledger-stale"
+		result.Notes = append(result.Notes,
+			fmt.Sprintf("entry is still listed in %s but passed Go oracle diagnostics; update the failure ledger before using this as a green benchmark lane", ledgerPath),
+		)
+		return
+	}
+	if !benchKnownFailureStillCurrent(failure, result.Error) {
+		result.ParityStatus = "known-red-signature-drift"
+		result.Notes = append(result.Notes, fmt.Sprintf("current failure signature drifted: class=%s detail=%q", result.ErrorClass, result.Error))
+		return
+	}
+	result.ParityStatus = "known-red"
 }
 
 func readBenchFailureLedger(manifestPath string, mode string, manifestEntries []benchCorpusEntry) (map[string]benchCorpusEntry, string, error) {
@@ -729,6 +934,76 @@ func annotateBenchResultWithOracle(result *benchResult, entry benchCorpusEntry) 
 	return nil
 }
 
+func annotateBenchFrameDiagnostics(result *benchResult, entry benchCorpusEntry) {
+	if result == nil {
+		return
+	}
+	for i := range result.FrameDiagnostics {
+		frame := &result.FrameDiagnostics[i]
+		if frame.Index >= entry.FrameCount {
+			frame.ParityStatus = "extra"
+			continue
+		}
+		frame.ExpectedRawPixelFormat = entry.PixFmt
+		if entry.FrameSize > 0 {
+			frame.ExpectedBytes = int64(entry.FrameSize)
+		}
+		if frame.Index < len(entry.FrameMD5) {
+			frame.ExpectedRawMD5 = entry.FrameMD5[frame.Index]
+		}
+		frame.ParityStatus = benchFrameParityStatus(*frame)
+	}
+	for i := len(result.FrameDiagnostics); i < entry.FrameCount; i++ {
+		frame := benchFrameDiagnostic{
+			Index:                  i,
+			ExpectedRawPixelFormat: entry.PixFmt,
+			ExpectedBytes:          int64(entry.FrameSize),
+			ParityStatus:           "missing",
+		}
+		if i < len(entry.FrameMD5) {
+			frame.ExpectedRawMD5 = entry.FrameMD5[i]
+		}
+		result.FrameDiagnostics = append(result.FrameDiagnostics, frame)
+	}
+}
+
+func benchFrameParityStatus(frame benchFrameDiagnostic) string {
+	switch {
+	case frame.RawPixelFormat == "":
+		return "missing"
+	case frame.ExpectedRawPixelFormat != "" && frame.RawPixelFormat != frame.ExpectedRawPixelFormat:
+		return "pixel-format-mismatch"
+	case frame.ExpectedBytes != 0 && frame.Bytes != frame.ExpectedBytes:
+		return "raw-size-mismatch"
+	case frame.ExpectedRawMD5 != "" && frame.RawMD5 != frame.ExpectedRawMD5:
+		return "raw-md5-mismatch"
+	case frame.ExpectedRawMD5 != "":
+		return "raw-md5-ok"
+	default:
+		return "raw-md5-observed"
+	}
+}
+
+func benchOracleMismatchDetail(result benchResult, entry benchCorpusEntry) string {
+	if result.Error != "" {
+		return result.Error
+	}
+	if result.FramesPerIter != entry.FrameCount {
+		return fmt.Sprintf("frames_per_iter = %d, want %d", result.FramesPerIter, entry.FrameCount)
+	}
+	if result.RawPixelFormat != entry.PixFmt {
+		return fmt.Sprintf("Go raw_pixel_format = %s, want %s", result.RawPixelFormat, entry.PixFmt)
+	}
+	expectedBytes := int64(entry.FrameCount * entry.FrameSize)
+	if result.BytesPerIter != expectedBytes {
+		return fmt.Sprintf("bytes_per_iter = %d, want %d", result.BytesPerIter, expectedBytes)
+	}
+	if result.RawMD5 != entry.RawVideoMD5 {
+		return fmt.Sprintf("raw_md5 = %s, want %s", result.RawMD5, entry.RawVideoMD5)
+	}
+	return ""
+}
+
 func skippedBenchResult(entry benchCorpusEntry, reason string) benchResult {
 	result := benchResult{
 		Name:            "goh264",
@@ -938,10 +1213,11 @@ func measureGoSample(data []byte, iters int, rawOutput bool, annexBInput bool) (
 }
 
 type decodeGoRun struct {
-	frames int
-	bytes  int64
-	md5    string
-	pixFmt string
+	frames           int
+	bytes            int64
+	md5              string
+	pixFmt           string
+	frameDiagnostics []benchFrameDiagnostic
 }
 
 func decodeGoOnce(data []byte, rawOutput bool) (decodeGoRun, error) {
@@ -971,6 +1247,10 @@ func decodeGoOnceForFormat(data []byte, rawOutput bool, annexBInput bool) (decod
 
 func summarizeGoFrames(frames []*goh264.Frame, rawOutput bool) (decodeGoRun, error) {
 	var pixFmt string
+	h := md5.New()
+	var scratch []byte
+	var total int64
+	var frameDiagnostics []benchFrameDiagnostic
 	for i, frame := range frames {
 		framePixFmt, err := frame.RawPixelFormat()
 		if err != nil {
@@ -981,26 +1261,29 @@ func summarizeGoFrames(frames []*goh264.Frame, rawOutput bool) (decodeGoRun, err
 		} else if framePixFmt != pixFmt {
 			return decodeGoRun{}, fmt.Errorf("mixed raw pixel formats: frame[0]=%s frame[%d]=%s", pixFmt, i, framePixFmt)
 		}
+		if rawOutput {
+			scratch = scratch[:0]
+			scratch, err = frame.AppendRawYUVBytesLE(scratch)
+			if err != nil {
+				return decodeGoRun{}, err
+			}
+			sum := md5.Sum(scratch)
+			total += int64(len(scratch))
+			if _, err := h.Write(scratch); err != nil {
+				return decodeGoRun{}, err
+			}
+			frameDiagnostics = append(frameDiagnostics, benchFrameDiagnostic{
+				Index:          i,
+				RawPixelFormat: framePixFmt,
+				Bytes:          int64(len(scratch)),
+				RawMD5:         hex.EncodeToString(sum[:]),
+			})
+		}
 	}
 	if !rawOutput {
 		return decodeGoRun{frames: len(frames), pixFmt: pixFmt}, nil
 	}
-	h := md5.New()
-	var scratch []byte
-	var total int64
-	for _, frame := range frames {
-		scratch = scratch[:0]
-		var err error
-		scratch, err = frame.AppendRawYUVBytesLE(scratch)
-		if err != nil {
-			return decodeGoRun{}, err
-		}
-		total += int64(len(scratch))
-		if _, err := h.Write(scratch); err != nil {
-			return decodeGoRun{}, err
-		}
-	}
-	return decodeGoRun{frames: len(frames), bytes: total, md5: hashString(h), pixFmt: pixFmt}, nil
+	return decodeGoRun{frames: len(frames), bytes: total, md5: hashString(h), pixFmt: pixFmt, frameDiagnostics: frameDiagnostics}, nil
 }
 
 func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup int, rawOutput bool, bin string, threads string, pixFmt string, goPixFmt string) (benchResult, error) {

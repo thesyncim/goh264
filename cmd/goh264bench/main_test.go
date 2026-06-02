@@ -198,6 +198,39 @@ func TestBenchManifestReportsKnownRedRowsWithoutBenchmarking(t *testing.T) {
 	}
 }
 
+func TestBenchManifestDiagnoseReportsKnownRedRows(t *testing.T) {
+	dir := t.TempDir()
+	row := `{"id":"known-red","path":"missing.264","source":"test public vectors","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":1,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","surfaces":["annexb"],"feature_tags":["unsupported"]}`
+	failureRow := `{"id":"known-red","path":"missing.264","source":"test public vectors","format":"annexb","expect":"decode-ok","pix_fmt":"yuv420p","frame_count":1,"frame_size":16,"bitstream_md5":"00112233445566778899aabbccddeeff","rawvideo_md5":"ffeeddccbbaa99887766554433221100","surfaces":["annexb"],"feature_tags":["unsupported"],"known_failure":{"class":"input-missing","detail_contains":"missing.264"}}`
+	manifestPath := filepath.Join(dir, "manifest.jsonl")
+	failurePath := filepath.Join(dir, "failures.jsonl")
+	if err := os.WriteFile(manifestPath, []byte(row+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(failurePath, []byte(failureRow+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report, err := benchManifest(manifestPath, 0, benchOptions{
+		iters:         1,
+		repeats:       1,
+		rawOutput:     true,
+		failureLedger: "auto",
+		diagnose:      true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Metadata.ComparisonKind != "manifest-goh264-oracle-diagnostic" || report.Metadata.CorpusKnownRed != 1 || report.Metadata.CorpusBench != 0 {
+		t.Fatalf("metadata = %+v, want diagnostic known-red without benchmarks", report.Metadata)
+	}
+	if len(report.Results) != 1 || !report.Results[0].Skipped || report.Results[0].BaselineKind != "oracle-known-red-diagnostic" || report.Results[0].ParityStatus != "known-red" {
+		t.Fatalf("result = %+v, want known-red diagnostic row", report.Results)
+	}
+	if report.Results[0].ErrorClass != "input-missing" || !strings.Contains(report.Results[0].Error, "missing.264") {
+		t.Fatalf("diagnostic error = class %q detail %q, want missing input", report.Results[0].ErrorClass, report.Results[0].Error)
+	}
+}
+
 func TestKnownRedBenchResultMarksSignatureDrift(t *testing.T) {
 	entry := benchCorpusEntry{
 		ID:          "known-red",
@@ -223,6 +256,61 @@ func TestKnownRedBenchResultMarksSignatureDrift(t *testing.T) {
 	}
 	if notes := strings.Join(result.Notes, "\n"); !strings.Contains(notes, "current failure signature drifted") {
 		t.Fatalf("notes = %q, want signature drift note", notes)
+	}
+}
+
+func TestApplyKnownRedDiagnosticMarksStaleLedgerWithoutGreenwashing(t *testing.T) {
+	result := benchResult{
+		ParityStatus: "rawvideo-md5-ok",
+		ErrorClass:   "",
+	}
+	failure := benchCorpusEntry{
+		ID: "known-red",
+		KnownFailure: &benchKnownFailure{
+			Class:          "raw-md5-mismatch",
+			DetailContains: "old",
+		},
+	}
+	applyKnownRedDiagnostic(&result, failure, "failures.jsonl")
+	if !result.Skipped || result.ParityStatus != "rawvideo-md5-ok-failure-ledger-stale" {
+		t.Fatalf("known-red stale diagnostic = %+v, want stale ledger status", result)
+	}
+	if notes := strings.Join(result.Notes, "\n"); !strings.Contains(notes, "passed Go oracle diagnostics") {
+		t.Fatalf("notes = %q, want stale ledger note", notes)
+	}
+}
+
+func TestAnnotateBenchFrameDiagnostics(t *testing.T) {
+	result := benchResult{
+		FrameDiagnostics: []benchFrameDiagnostic{
+			{Index: 0, RawPixelFormat: "yuv420p", Bytes: 16, RawMD5: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+			{Index: 1, RawPixelFormat: "yuv420p", Bytes: 16, RawMD5: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+			{Index: 2, RawPixelFormat: "yuv420p", Bytes: 16, RawMD5: "cccccccccccccccccccccccccccccccc"},
+		},
+	}
+	annotateBenchFrameDiagnostics(&result, benchCorpusEntry{
+		ID:         "oracle",
+		PixFmt:     "yuv420p",
+		FrameCount: 4,
+		FrameSize:  16,
+		FrameMD5: []string{
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"00000000000000000000000000000000",
+			"cccccccccccccccccccccccccccccccc",
+			"dddddddddddddddddddddddddddddddd",
+		},
+	})
+	if len(result.FrameDiagnostics) != 4 {
+		t.Fatalf("frame diagnostics = %d, want 4 including missing expected frame", len(result.FrameDiagnostics))
+	}
+	if result.FrameDiagnostics[0].ParityStatus != "raw-md5-ok" {
+		t.Fatalf("frame[0] parity = %q, want raw-md5-ok", result.FrameDiagnostics[0].ParityStatus)
+	}
+	if result.FrameDiagnostics[1].ParityStatus != "raw-md5-mismatch" || result.FrameDiagnostics[1].ExpectedRawMD5 == "" {
+		t.Fatalf("frame[1] = %+v, want md5 mismatch with expected hash", result.FrameDiagnostics[1])
+	}
+	if result.FrameDiagnostics[3].ParityStatus != "missing" || result.FrameDiagnostics[3].ExpectedRawMD5 == "" {
+		t.Fatalf("frame[3] = %+v, want missing expected frame", result.FrameDiagnostics[3])
 	}
 }
 
