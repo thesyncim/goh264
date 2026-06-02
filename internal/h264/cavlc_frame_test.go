@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestDecodeCAVLCFrameIntra4x4MacroblockWritesState(t *testing.T) {
 	m, err := newMacroblockTables(2, 2, 1)
@@ -546,7 +549,7 @@ func TestDecodeCAVLCFrameBDirectUnsupportedBeforeWriteback(t *testing.T) {
 		PPS:                 pps,
 		SPS:                 sps,
 	})
-	if err != ErrUnsupported {
+	if !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("err = %v, want ErrUnsupported", err)
 	}
 	if m.SliceTable[0] != ^uint16(0) || m.MacroblockTyp[0] != 0 {

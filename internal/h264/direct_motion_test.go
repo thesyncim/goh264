@@ -2,7 +2,11 @@
 
 package h264
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+)
 
 func TestPredTemporalDirect16x16MapsColocatedMotion(t *testing.T) {
 	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
@@ -68,6 +72,30 @@ func TestPredTemporalDirectAllowsFieldInterlacedColocatedMotion(t *testing.T) {
 	}
 	if cache.MV[0][base] != ([2]int16{2, 1}) || cache.MV[1][base] != ([2]int16{-2, -1}) {
 		t.Fatalf("field mvs = %v/%v", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
+func TestPredDirectMotionReportsUnsupportedInterlacedColocatedFrame(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0|MBTypeInterlaced)
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr}},
+			{{frame: col, pictureStructure: PictureFrame}},
+		},
+		PictureStructure:   PictureFrame,
+		Direct8x8Inference: true,
+	})
+	if !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("err = %v, want ErrUnsupported", err)
+	}
+	for _, want := range []string{"direct motion interlaced colocated", "mb_xy=0", "picture=3", "ref1_picture=3"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err = %q, want detail %q", err, want)
+		}
 	}
 }
 

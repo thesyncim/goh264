@@ -8,6 +8,8 @@
 
 package h264
 
+import "fmt"
+
 type h264DirectMotionContext struct {
 	RefEntries          [2][]simpleRefEntry
 	CurPOC              int32
@@ -25,12 +27,12 @@ func (m *macroblockTables) predDirectMotionFrame(cache *macroblockMotionCache, m
 		return err
 	}
 	if len(ctx.RefEntries[0]) == 0 || len(ctx.RefEntries[1]) == 0 || ctx.RefEntries[1][0].frame == nil {
-		return ErrUnsupported
+		return unsupportedDirectMotion("missing refs", mbXY, *mbType, 0, ctx)
 	}
 	col := ctx.RefEntries[1][0].frame
 	colTables := col.tables
 	if colTables == nil || colTables.MBWidth != m.MBWidth || colTables.MBHeight != m.MBHeight || colTables.BStride != m.BStride {
-		return ErrUnsupported
+		return unsupportedDirectMotion("missing colocated tables", mbXY, *mbType, 0, ctx)
 	}
 	if err := colTables.checkCodedMBXY(mbXY); err != nil {
 		return err
@@ -48,7 +50,7 @@ func (m *macroblockTables) predDirectMotionFrame(cache *macroblockMotionCache, m
 			(ctx.PictureStructure == PictureTopField || ctx.PictureStructure == PictureBottomField) &&
 			ctx.RefEntries[1][0].pictureStructure != PictureFrame
 		if !fieldDirect {
-			return ErrUnsupported
+			return unsupportedDirectMotion("interlaced colocated", mbXY, *mbType, mbTypeCol, ctx)
 		}
 	}
 	if ctx.DirectSpatialMVPred {
@@ -70,6 +72,15 @@ func (m *macroblockTables) predDirectMotionFrame(cache *macroblockMotionCache, m
 		*mbType |= MBType8x8 | MBTypeL0L1
 	}
 	return predTemporalDirect8x8(cache, colTables, mbXY, *mbType, directSubType, subMBType, ctx, isB8x8)
+}
+
+func unsupportedDirectMotion(reason string, mbXY int, mbType uint32, colType uint32, ctx h264DirectMotionContext) error {
+	ref1Picture := int32(0)
+	if len(ctx.RefEntries[1]) != 0 {
+		ref1Picture = ctx.RefEntries[1][0].pictureStructure
+	}
+	return fmt.Errorf("direct motion %s mb_xy=%d mb_type=%#x col_type=%#x picture=%d ref1_picture=%d: %w",
+		reason, mbXY, mbType, colType, ctx.PictureStructure, ref1Picture, ErrUnsupported)
 }
 
 func predSpatialDirectMotionFrame(cache *macroblockMotionCache, col *macroblockTables, mbXY int, mbType *uint32, subMBType *[4]uint32, ctx h264DirectMotionContext) error {
