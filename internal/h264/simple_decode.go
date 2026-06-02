@@ -546,9 +546,6 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 	if sps == nil {
 		return nil, nil, ErrInvalidData
 	}
-	if sps.FrameMBSOnlyFlag == 0 && sps.MBAFF == 0 {
-		return nil, nil, ErrUnsupported
-	}
 	if sps.FrameMBSOnlyFlag != 0 && sps.MBAFF != 0 {
 		return nil, nil, ErrUnsupported
 	}

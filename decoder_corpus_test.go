@@ -76,6 +76,21 @@ func TestH264RealVectorManifest(t *testing.T) {
 	testH264CorpusManifest(t, defaultH264RealVectorManifest)
 }
 
+func TestH264RealVectorKnownRedStrict(t *testing.T) {
+	if os.Getenv("GOH264_REAL_VECTOR_STRICT_FAILURES") != "1" {
+		t.Skip("set GOH264_REAL_VECTOR_STRICT_FAILURES=1 to run known-red public vectors as strict decode-ok oracle rows")
+	}
+	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
+	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
+		failures = filterH264CorpusEntries(failures, filter)
+		if len(failures) == 0 {
+			t.Fatalf("%s: no failure entries matched GOH264_CORPUS_FILTER=%q; available known-red filters: %s",
+				defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)))
+		}
+	}
+	testH264CorpusEntries(t, defaultH264RealVectorFailureManifest, failures)
+}
+
 func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
 	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
@@ -136,7 +151,7 @@ func TestH264RealVectorFailureFocusedFilters(t *testing.T) {
 		manifestByID[entry.ID] = entry
 	}
 
-	focusTokens := []string{"mbaff", "paff", "high", "chroma", "b-slice", "direct", "weighted"}
+	focusTokens := []string{"mbaff", "paff", "field", "high", "chroma", "b-slice", "direct", "weighted"}
 	var applicable int
 	for _, token := range focusTokens {
 		token := token
@@ -229,7 +244,10 @@ func testH264CorpusManifest(t *testing.T, manifest string) {
 			t.Fatalf("%s: no corpus entries matched GOH264_CORPUS_FILTER=%q", manifest, os.Getenv("GOH264_CORPUS_FILTER"))
 		}
 	}
+	testH264CorpusEntries(t, manifest, entries)
+}
 
+func testH264CorpusEntries(t *testing.T, manifest string, entries []h264CorpusEntry) {
 	for _, entry := range entries {
 		entry := entry
 		t.Run(entry.ID, func(t *testing.T) {

@@ -29,6 +29,7 @@ go test ./...
 GOH264_ORACLE=1 GOH264_CORPUS_FETCH=1 go test ./...
 go test . -run TestH264CorpusManifest
 GOH264_REAL_VECTORS=1 GOH264_CORPUS_FETCH=1 GOH264_CORPUS_FILTER=canl4 go test . -run TestH264RealVectorManifest
+GOH264_REAL_VECTOR_STRICT_FAILURES=1 GOH264_CORPUS_FETCH=1 GOH264_CORPUS_FILTER=mbaff go test . -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorFailureLedgerFreshness
 ```
 

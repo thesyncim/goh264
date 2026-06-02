@@ -31,9 +31,55 @@ func TestSliceMacroblockCursorFrameMappingAndAdvance(t *testing.T) {
 		t.Fatalf("advance past final MB reported more work: x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
 	}
 
-	sh.PictureStructure = PictureTopField
-	if _, err := newSliceMacroblockCursor(m, sh); err != ErrUnsupported {
-		t.Fatalf("field cursor err = %v, want ErrUnsupported", err)
+	sh.PictureStructure = -1
+	if _, err := newSliceMacroblockCursor(m, sh); err != ErrInvalidData {
+		t.Fatalf("bad picture structure cursor err = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestSliceMacroblockCursorFieldPictureMappingAndAdvance(t *testing.T) {
+	m, err := newMacroblockTables(3, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0}
+	pps := &PPS{SPS: sps}
+	for _, tt := range []struct {
+		name       string
+		picture    int32
+		wantMBY    int
+		wantMBXY   int
+		wantNextY  int
+		wantNextXY int
+	}{
+		{name: "top", picture: PictureTopField, wantMBY: 2, wantMBXY: 9, wantNextY: 2, wantNextXY: 10},
+		{name: "bottom", picture: PictureBottomField, wantMBY: 3, wantMBXY: 13, wantNextY: 3, wantNextXY: 14},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sh := &SliceHeader{
+				FirstMBAddr:      4,
+				PictureStructure: tt.picture,
+				SPS:              sps,
+				PPS:              pps,
+			}
+			cur, err := newSliceMacroblockCursor(m, sh)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !cur.FieldOrMBAFF || cur.FrameMBAFF || !cur.FieldPicture || cur.MBX != 1 || cur.MBY != tt.wantMBY || cur.MBXY != tt.wantMBXY {
+				t.Fatalf("field cursor = fieldOrMBAFF %v frameMBAFF %v fieldPicture %v x%d y%d xy%d",
+					cur.FieldOrMBAFF, cur.FrameMBAFF, cur.FieldPicture, cur.MBX, cur.MBY, cur.MBXY)
+			}
+			if _, err := cur.bottomMBAFFFrameMB(); err != ErrInvalidData {
+				t.Fatalf("field bottom MBAFF cursor err = %v, want ErrInvalidData", err)
+			}
+			if !cur.advanceFrameMB() || cur.MBX != 2 || cur.MBY != tt.wantNextY || cur.MBXY != tt.wantNextXY {
+				t.Fatalf("field advance once = x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
+			}
+			if cur.advanceFrameMB() {
+				t.Fatalf("field advance past final row reported more work: x%d y%d xy%d", cur.MBX, cur.MBY, cur.MBXY)
+			}
+		})
 	}
 }
 
@@ -54,8 +100,9 @@ func TestSliceMacroblockCursorFrameMBAFFMappingAndAdvance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cur.FieldOrMBAFF || cur.MBX != 1 || cur.MBY != 2 || cur.MBXY != 9 {
-		t.Fatalf("MBAFF cursor = fieldOrMBAFF %v x%d y%d xy%d, want true x1 y2 xy9", cur.FieldOrMBAFF, cur.MBX, cur.MBY, cur.MBXY)
+	if !cur.FieldOrMBAFF || !cur.FrameMBAFF || cur.FieldPicture || cur.MBX != 1 || cur.MBY != 2 || cur.MBXY != 9 {
+		t.Fatalf("MBAFF cursor = fieldOrMBAFF %v frameMBAFF %v fieldPicture %v x%d y%d xy%d, want true/true/false x1 y2 xy9",
+			cur.FieldOrMBAFF, cur.FrameMBAFF, cur.FieldPicture, cur.MBX, cur.MBY, cur.MBXY)
 	}
 	bottom, err := cur.bottomMBAFFFrameMB()
 	if err != nil {

@@ -98,24 +98,31 @@ func TestNewSimpleDecodedFrameAllowsFrameMBAFFStorage(t *testing.T) {
 	}
 }
 
-func TestNewSimpleDecodedFrameRejectsFieldAndInvalidMBAFFPictures(t *testing.T) {
-	for _, tt := range []struct {
-		name             string
-		frameMBSOnlyFlag int32
-		mbaff            int32
-	}{
-		{name: "pic-aff-field-capable", frameMBSOnlyFlag: 0},
-		{name: "invalid-frame-only-mbaff", frameMBSOnlyFlag: 1, mbaff: 1},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			sps := simpleDecodeFrameStorageTestSPS(10, 10, 1)
-			sps.FrameMBSOnlyFlag = tt.frameMBSOnlyFlag
-			sps.MBAFF = tt.mbaff
+func TestNewSimpleDecodedFrameAllowsFieldCapableStorage(t *testing.T) {
+	sps := simpleDecodeFrameStorageTestSPS(10, 10, 1)
+	sps.FrameMBSOnlyFlag = 0
+	sps.MBAFF = 0
 
-			if _, _, err := newSimpleDecodedFrame(sps); err != ErrUnsupported {
-				t.Fatalf("new frame error = %v, want ErrUnsupported", err)
-			}
-		})
+	frame, tables, err := newSimpleDecodedFrame(sps)
+	if err != nil {
+		t.Fatalf("new field-capable frame failed: %v", err)
+	}
+	if frame.MBWidth != int(sps.MBWidth) || frame.MBHeight != int(sps.MBHeight) || tables.MBHeight != int(sps.MBHeight) {
+		t.Fatalf("field-capable geometry frame=%dx%d tables=%dx%d want %dx%d",
+			frame.MBWidth, frame.MBHeight, tables.MBWidth, tables.MBHeight, sps.MBWidth, sps.MBHeight)
+	}
+	if len(frame.Y16) != frame.LumaStride*frame.MBHeight*16 {
+		t.Fatalf("field-capable Y16 len = %d, want %d", len(frame.Y16), frame.LumaStride*frame.MBHeight*16)
+	}
+}
+
+func TestNewSimpleDecodedFrameRejectsInvalidMBAFFPictures(t *testing.T) {
+	sps := simpleDecodeFrameStorageTestSPS(10, 10, 1)
+	sps.FrameMBSOnlyFlag = 1
+	sps.MBAFF = 1
+
+	if _, _, err := newSimpleDecodedFrame(sps); err != ErrUnsupported {
+		t.Fatalf("new frame error = %v, want ErrUnsupported", err)
 	}
 }
 
