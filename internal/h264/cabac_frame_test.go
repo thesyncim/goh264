@@ -249,7 +249,7 @@ func TestDecodeCABACFrameMBAFFFrameMacroblockDecodesAfterFieldFlag(t *testing.T)
 	wantIndexes(t, src, append(append([]int{70, 3}, repeatCABACBits(16, 68)...), []int{64, 73, 74, 75, 76, 77}...))
 }
 
-func TestDecodeCABACFrameMBAFFFieldMacroblockUnsupportedBeforeWriteback(t *testing.T) {
+func TestDecodeCABACFrameMBAFFFieldMacroblockMarksInterlaced(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -257,28 +257,37 @@ func TestDecodeCABACFrameMBAFFFieldMacroblockUnsupportedBeforeWriteback(t *testi
 	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
 	pps := cavlcFlatQMulPPS()
 	pps.SPS = sps
-	src := &scriptedCABACSource{bits: []int{1}}
+	src := &scriptedCABACSource{bits: []int{
+		0,
+		1,
+		0, 0, 0,
+		0, 0,
+		0, 0, 0, 0,
+		0,
+	}}
 	sh := &SliceHeader{
-		SliceType:        PictureTypeI,
-		SliceTypeNoS:     PictureTypeI,
+		SliceType:        PictureTypeP,
+		SliceTypeNoS:     PictureTypeP,
 		PictureStructure: PictureFrame,
 		PPS:              pps,
 		SPS:              sps,
-		QScale:           20,
+		QScale:           24,
+		RefCount:         [2]uint32{1, 0},
 	}
 	state := &cabacFrameSliceState{QScale: int(sh.QScale)}
 
 	got, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, 0, 3)
-	if err != ErrUnsupported {
-		t.Fatalf("err = %v, want ErrUnsupported", err)
+	if err != nil {
+		t.Fatalf("decode field-coded mbaff failed: %v", err)
 	}
-	if got.MBFieldDecodingFlag != 1 || state.MBFieldDecodingFlag != 1 || got.MBType != MBTypeInterlaced {
-		t.Fatalf("field result/state/type = %d/%d/%#x, want 1/1/interlaced", got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.MBType)
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	if got.MBFieldDecodingFlag != 1 || state.MBFieldDecodingFlag != 1 || got.MBType != wantType || !got.IsInter {
+		t.Fatalf("field result/state/type/inter = %d/%d/%#x/%v, want 1/1/%#x/true", got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.MBType, got.IsInter, wantType)
 	}
-	if m.SliceTable[0] != ^uint16(0) || m.MacroblockTyp[0] != 0 || m.QScaleTable[0] != 0 {
-		t.Fatalf("tables changed on unsupported field mbaff: slice/type/q = %d/%#x/%d", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0])
+	if m.SliceTable[0] != 3 || m.MacroblockTyp[0] != wantType || m.QScaleTable[0] != 24 {
+		t.Fatalf("tables slice/type/q = %d/%#x/%d, want 3/%#x/24", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0], wantType)
 	}
-	wantIndexes(t, src, []int{70})
+	wantIndexes(t, src, []int{11, 70, 14, 15, 16, 40, 47, 73, 74, 75, 76, 77})
 }
 
 func TestDecodeCABACFrameHighIntraPCMMacroblockReadsBitDepthPayload(t *testing.T) {
@@ -662,17 +671,22 @@ func TestDecodeCABACFrameMBAFFSkipReadsBottomSkipAndFieldFlag(t *testing.T) {
 	src := &scriptedCABACSource{bits: []int{1, 0, 1}}
 
 	got, err := m.decodeCABACFrameSliceMacroblock(src, sh, state, 0, 5)
-	if err != ErrUnsupported {
-		t.Fatalf("err = %v, want ErrUnsupported", err)
+	if err != nil {
+		t.Fatalf("decode field-coded mbaff skip failed: %v", err)
 	}
 	if !state.PrevMBSkipped || state.NextMBSkipped || state.LastQScaleDiff != 0 {
 		t.Fatalf("skip state prev/next/diff = %v/%v/%d, want true/false/0", state.PrevMBSkipped, state.NextMBSkipped, state.LastQScaleDiff)
 	}
-	if got.MBFieldDecodingFlag != 1 || state.MBFieldDecodingFlag != 1 {
-		t.Fatalf("field flag result/state = %d/%d, want 1/1", got.MBFieldDecodingFlag, state.MBFieldDecodingFlag)
+	wantType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip | MBTypeInterlaced
+	if !got.Skipped || !got.IsInter || got.MBType != wantType || got.MBFieldDecodingFlag != 1 || state.MBFieldDecodingFlag != 1 || got.LastQScaleDiff != 0 {
+		t.Fatalf("field skip result = skipped:%v inter:%v type:%#x field:%d/%d diff:%d, want %#x",
+			got.Skipped, got.IsInter, got.MBType, got.MBFieldDecodingFlag, state.MBFieldDecodingFlag, got.LastQScaleDiff, wantType)
 	}
-	if m.SliceTable[0] != ^uint16(0) || m.SliceTable[m.MBStride] != ^uint16(0) || m.MacroblockTyp[0] != 0 || m.MacroblockTyp[m.MBStride] != 0 {
-		t.Fatalf("tables changed on unsupported mbaff skip: top slice/type %d/%#x bottom slice/type %d/%#x", m.SliceTable[0], m.MacroblockTyp[0], m.SliceTable[m.MBStride], m.MacroblockTyp[m.MBStride])
+	if m.SliceTable[0] != 5 || m.MacroblockTyp[0] != wantType || m.QScaleTable[0] != 24 {
+		t.Fatalf("tables slice/type/q = %d/%#x/%d, want 5/%#x/24", m.SliceTable[0], m.MacroblockTyp[0], m.QScaleTable[0], wantType)
+	}
+	if m.SliceTable[m.MBStride] != ^uint16(0) || m.MacroblockTyp[m.MBStride] != 0 {
+		t.Fatalf("bottom tables changed before bottom decode: slice/type = %d/%#x", m.SliceTable[m.MBStride], m.MacroblockTyp[m.MBStride])
 	}
 	wantIndexes(t, src, []int{11, 11, 70})
 }

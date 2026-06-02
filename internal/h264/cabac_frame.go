@@ -82,9 +82,6 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 	frameMBAFF := sh.PictureStructure == PictureFrame && sh.SPS.MBAFF != 0
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
-	if frameMBAFF && (mbY&1) != 0 && state.MBFieldDecodingFlag != 0 {
-		return result, ErrUnsupported
-	}
 
 	if sh.SliceTypeNoS != PictureTypeI {
 		var skip bool
@@ -118,10 +115,9 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 				}
 				if state.MBFieldDecodingFlag != 0 {
 					result.MBType = MBTypeInterlaced
-					return result, ErrUnsupported
 				}
 			}
-			return m.writeBackCABACFrameSkipMacroblockWithDirectWorkGuard(sh, state.QScale, mbXY, sliceNum, direct, work, rejectUnsupportedHighB)
+			return m.writeBackCABACFrameSkipMacroblockWithDirectWorkFieldGuard(sh, state.QScale, mbXY, sliceNum, state.MBFieldDecodingFlag, direct, work, rejectUnsupportedHighB)
 		}
 	}
 	state.PrevMBSkipped = false
@@ -134,7 +130,6 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		result.MBFieldDecodingFlag = flag
 		if flag != 0 {
 			result.MBType = MBTypeInterlaced
-			return result, ErrUnsupported
 		}
 	}
 
@@ -150,7 +145,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		DCT8x8Allowed:          sh.PPS.Transform8x8Mode != 0,
 		DirectSpatialMVPred:    sh.DirectSpatialMVPred != 0,
 		DeblockingFilter:       sh.DeblockingFilter,
-		FieldPicture:           sh.PictureStructure != PictureFrame,
+		FieldPicture:           sh.PictureStructure != PictureFrame || state.MBFieldDecodingFlag != 0,
 		Direct:                 direct,
 		PPS:                    sh.PPS,
 		SPS:                    sh.SPS,
@@ -179,14 +174,11 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 	if in.QScale < 0 || in.QScale > qpMaxNum {
 		return result, ErrInvalidData
 	}
-	if in.MBFieldDecodingFlag != 0 {
-		result.MBFieldDecodingFlag = in.MBFieldDecodingFlag
-		result.MBType = MBTypeInterlaced
-		return result, ErrUnsupported
-	}
+	result.MBFieldDecodingFlag = in.MBFieldDecodingFlag
 	*work = frameMacroblockDecodeWork{}
 
-	neighbors, err := m.fillDecodeNeighborsFrameFields(in.MBXY, in.SliceNum, 0, in.FieldPicture)
+	fieldPicture := in.FieldPicture || in.MBFieldDecodingFlag != 0
+	neighbors, err := m.fillDecodeNeighborsFrameFields(in.MBXY, in.SliceNum, 0, fieldPicture)
 	if err != nil {
 		return result, err
 	}
@@ -194,7 +186,7 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 	if err != nil {
 		return result, err
 	}
-	if in.FieldPicture {
+	if fieldPicture {
 		base.MBType |= MBTypeInterlaced
 	}
 	result.MBType = base.MBType
@@ -219,7 +211,7 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 		ListCount:            listCount,
 		SliceTypeNoS:         in.SliceTypeNoS,
 		CABAC:                true,
-		FieldPicture:         in.FieldPicture,
+		FieldPicture:         fieldPicture,
 		ConstrainedIntraPred: in.PPS.ConstrainedIntraPred != 0,
 		DirectSpatialMVPred:  in.DirectSpatialMVPred,
 	})
@@ -372,6 +364,10 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWork(sh *S
 }
 
 func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
+	return m.writeBackCABACFrameSkipMacroblockWithDirectWorkFieldGuard(sh, qscale, mbXY, sliceNum, 0, direct, work, rejectUnsupportedHighB)
+}
+
+func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkFieldGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, mbFieldDecodingFlag int32, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	if sh == nil || work == nil {
 		return result, ErrInvalidData
@@ -380,17 +376,18 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkGuard(
 		return result, ErrInvalidData
 	}
 	if sh.SliceTypeNoS == PictureTypeB {
-		return m.writeBackCABACFrameBSkipMacroblockWithDirectWorkGuard(sh, qscale, mbXY, sliceNum, direct, work, rejectUnsupportedHighB)
+		return m.writeBackCABACFrameBSkipMacroblockWithDirectWorkFieldGuard(sh, qscale, mbXY, sliceNum, mbFieldDecodingFlag, direct, work, rejectUnsupportedHighB)
 	}
 	if sh.SliceTypeNoS != PictureTypeP {
 		return result, ErrUnsupported
 	}
 
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
-	if sh.PictureStructure != PictureFrame {
+	fieldPicture := sh.PictureStructure != PictureFrame || mbFieldDecodingFlag != 0
+	if fieldPicture {
 		mbType |= MBTypeInterlaced
 	}
-	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, sh.PictureStructure != PictureFrame)
+	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, fieldPicture)
 	if err != nil {
 		return result, err
 	}
@@ -398,8 +395,12 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkGuard(
 	if err := m.writeBackCABACPskipMacroblockWithMotion(mbXY, qscale, neighbors.motionNeighbors(mbType, 1, PictureTypeP, true, false), sliceNum, &work.Motion); err != nil {
 		return result, err
 	}
+	if fieldPicture {
+		m.MacroblockTyp[mbXY] |= MBTypeInterlaced
+	}
 
 	result.MBType = mbType
+	result.MBFieldDecodingFlag = mbFieldDecodingFlag
 	result.CBP = 0
 	result.CBPTable = 0
 	result.QScale = qscale
@@ -415,12 +416,17 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWork(sh *
 }
 
 func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
+	return m.writeBackCABACFrameBSkipMacroblockWithDirectWorkFieldGuard(sh, qscale, mbXY, sliceNum, 0, direct, work, rejectUnsupportedHighB)
+}
+
+func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkFieldGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, mbFieldDecodingFlag int32, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	mbType := MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
-	if sh.PictureStructure != PictureFrame {
+	fieldPicture := sh.PictureStructure != PictureFrame || mbFieldDecodingFlag != 0
+	if fieldPicture {
 		mbType |= MBTypeInterlaced
 	}
-	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, sh.PictureStructure != PictureFrame)
+	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, fieldPicture)
 	if err != nil {
 		return result, err
 	}
@@ -444,6 +450,7 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkGuard
 	}
 
 	result.MBType = mbType
+	result.MBFieldDecodingFlag = mbFieldDecodingFlag
 	result.CBP = 0
 	result.CBPTable = 0
 	result.QScale = qscale
