@@ -11,6 +11,7 @@ package h264
 type h264DirectMotionContext struct {
 	RefEntries          [2][]simpleRefEntry
 	CurPOC              int32
+	PictureStructure    int32
 	DirectSpatialMVPred bool
 	Direct8x8Inference  bool
 	X264Build           int32
@@ -39,8 +40,16 @@ func (m *macroblockTables) predDirectMotionFrame(cache *macroblockMotionCache, m
 	}
 
 	mbTypeCol := colTables.MacroblockTyp[mbXY]
-	if mbTypeCol&MBTypeInterlaced != 0 || *mbType&MBTypeInterlaced != 0 {
-		return ErrUnsupported
+	curInterlaced := *mbType&MBTypeInterlaced != 0
+	colInterlaced := mbTypeCol&MBTypeInterlaced != 0
+	if curInterlaced || colInterlaced {
+		fieldDirect := curInterlaced &&
+			colInterlaced &&
+			(ctx.PictureStructure == PictureTopField || ctx.PictureStructure == PictureBottomField) &&
+			ctx.RefEntries[1][0].pictureStructure != PictureFrame
+		if !fieldDirect {
+			return ErrUnsupported
+		}
 	}
 	if ctx.DirectSpatialMVPred {
 		return predSpatialDirectMotionFrame(cache, colTables, mbXY, mbType, subMBType, ctx)
@@ -493,8 +502,8 @@ func temporalDirectDistScaleFactor(ctx h264DirectMotionContext, ref0 int8) (int,
 		return 0, ErrInvalidData
 	}
 	list0 := ctx.RefEntries[0][ref0]
-	poc0 := list0.frame.poc
-	poc1 := ctx.RefEntries[1][0].frame.poc
+	poc0 := directRefPOC(list0)
+	poc1 := directRefPOC(ctx.RefEntries[1][0])
 	td := clipInt(int(int64(poc1)-int64(poc0)), -128, 127)
 	if td == 0 || list0.long {
 		return 256, nil
@@ -502,6 +511,13 @@ func temporalDirectDistScaleFactor(ctx h264DirectMotionContext, ref0 int8) (int,
 	tb := clipInt(int(int64(ctx.CurPOC)-int64(poc0)), -128, 127)
 	tx := (16384 + (absInt(td) >> 1)) / td
 	return clipInt((tb*tx+32)>>6, -1024, 1023), nil
+}
+
+func directRefPOC(entry simpleRefEntry) int32 {
+	if entry.pictureStructure == 0 && entry.poc == 0 && entry.frame != nil {
+		return entry.frame.poc
+	}
+	return entry.poc
 }
 
 func temporalDirectScaleMV(scale int, mvCol [2]int16) ([2]int16, [2]int16) {

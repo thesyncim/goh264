@@ -36,6 +36,41 @@ func TestPredTemporalDirect16x16MapsColocatedMotion(t *testing.T) {
 	}
 }
 
+func TestPredTemporalDirectAllowsFieldInterlacedColocatedMotion(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0|MBTypeInterlaced)
+	bxy := int(col.tables.MB2BXY[0])
+	col.tables.RefIndex[0][0] = 0
+	col.tables.MotionVal[0][bxy] = [2]int16{4, 2}
+	col.refEntries[0] = []simpleRefEntry{{frame: idr, pictureStructure: PictureTopField, poc: 0}}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1 | MBTypeInterlaced
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr, pictureStructure: PictureTopField, poc: 0}},
+			{{frame: col, pictureStructure: PictureTopField, poc: 4}},
+		},
+		CurPOC:             2,
+		PictureStructure:   PictureTopField,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("field temporal direct failed: %v", err)
+	}
+	wantType := MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeInterlaced
+	if mbType != wantType {
+		t.Fatalf("field mbType = %#x, want %#x", mbType, wantType)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 0 || cache.Ref[1][base] != 0 {
+		t.Fatalf("field refs = %d/%d, want 0/0", cache.Ref[0][base], cache.Ref[1][base])
+	}
+	if cache.MV[0][base] != ([2]int16{2, 1}) || cache.MV[1][base] != ([2]int16{-2, -1}) {
+		t.Fatalf("field mvs = %v/%v", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
 func TestPredTemporalDirectMapsColocatedRefByPictureID(t *testing.T) {
 	m, col, _ := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0)
 	col.tables.RefIndex[0][0] = 0

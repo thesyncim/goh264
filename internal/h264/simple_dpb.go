@@ -380,6 +380,15 @@ func (c simpleFrameRefContext) directMotionContext(frame *DecodedFrame, sh *Slic
 	var curPOC int32
 	if frame != nil {
 		curPOC = frame.poc
+		if sh != nil && sh.PictureStructure != PictureFrame {
+			if poc, err := simpleFrameCurrentPOC(frame, sh.PictureStructure); err == nil {
+				curPOC = poc
+			}
+		}
+	}
+	pictureStructure := int32(0)
+	if sh != nil {
+		pictureStructure = sh.PictureStructure
 	}
 	direct8x8 := false
 	directSpatial := false
@@ -390,6 +399,7 @@ func (c simpleFrameRefContext) directMotionContext(frame *DecodedFrame, sh *Slic
 	return h264DirectMotionContext{
 		RefEntries:          c.Entries,
 		CurPOC:              curPOC,
+		PictureStructure:    pictureStructure,
 		DirectSpatialMVPred: directSpatial,
 		Direct8x8Inference:  direct8x8,
 		X264Build:           x264Build,
