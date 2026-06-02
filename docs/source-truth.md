@@ -8,6 +8,8 @@ comparison.
 
 Public vectors: 15/26 green. Strict mode fails red rows; matrix mode logs the
 current known-red lane counts from `testdata/h264/realvectors/failures.jsonl`.
+Use `scripts/h264-red-vector.sh <filter>` to run a lane against real FATE rows
+and intentionally stop on the strict known-red failures.
 
 Still guarded: MBAFF/PIC-AFF, broad PAFF, FMO, broad slice-boundary high modes,
 12/14-bit public high streams, full error resilience, threading/SIMD, and full

@@ -90,8 +90,8 @@ func TestH264RealVectorStrictOracle(t *testing.T) {
 }
 
 func TestH264RealVectorKnownRedStrict(t *testing.T) {
-	if os.Getenv("GOH264_REAL_VECTOR_STRICT_FAILURES") != "1" {
-		t.Skip("set GOH264_REAL_VECTOR_STRICT_FAILURES=1 to run known-red public vectors as strict decode-ok oracle rows")
+	if !h264RealVectorRedOracleEnabled() {
+		t.Skip("set GOH264_REAL_VECTOR_RED=1 or GOH264_REAL_VECTOR_STRICT_FAILURES=1 to run known-red public vectors as strict decode-ok oracle rows")
 	}
 	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
 	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
@@ -386,6 +386,10 @@ func h264RealVectorsEnabled() bool {
 	return os.Getenv("GOH264_REAL_VECTORS") == "1" || os.Getenv("GOH264_ORACLE") == "1"
 }
 
+func h264RealVectorRedOracleEnabled() bool {
+	return os.Getenv("GOH264_REAL_VECTOR_RED") == "1" || os.Getenv("GOH264_REAL_VECTOR_STRICT_FAILURES") == "1"
+}
+
 func testH264CorpusManifest(t *testing.T, manifest string) {
 	entries := readH264CorpusManifest(t, manifest)
 	if len(entries) == 0 {
@@ -453,6 +457,25 @@ func TestH264CorpusManifestPaths(t *testing.T) {
 	t.Setenv("GOH264_CORPUS_MANIFESTS", strings.Join([]string{"one.jsonl", "two.jsonl"}, string(os.PathListSeparator)))
 	if got := h264CorpusManifestPaths(); len(got) != 2 || got[0] != "one.jsonl" || got[1] != "two.jsonl" {
 		t.Fatalf("manifest list = %v, want one.jsonl/two.jsonl", got)
+	}
+}
+
+func TestH264RealVectorRedOracleEnv(t *testing.T) {
+	t.Setenv("GOH264_REAL_VECTOR_RED", "")
+	t.Setenv("GOH264_REAL_VECTOR_STRICT_FAILURES", "")
+	if h264RealVectorRedOracleEnabled() {
+		t.Fatal("red oracle disabled env returned enabled")
+	}
+
+	t.Setenv("GOH264_REAL_VECTOR_RED", "1")
+	if !h264RealVectorRedOracleEnabled() {
+		t.Fatal("GOH264_REAL_VECTOR_RED=1 did not enable red oracle")
+	}
+
+	t.Setenv("GOH264_REAL_VECTOR_RED", "")
+	t.Setenv("GOH264_REAL_VECTOR_STRICT_FAILURES", "1")
+	if !h264RealVectorRedOracleEnabled() {
+		t.Fatal("GOH264_REAL_VECTOR_STRICT_FAILURES=1 did not enable red oracle")
 	}
 }
 
