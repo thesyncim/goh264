@@ -93,14 +93,7 @@ func TestH264RealVectorKnownRedStrict(t *testing.T) {
 	if !h264RealVectorRedOracleEnabled() {
 		t.Skip("set GOH264_REAL_VECTOR_RED=1 or GOH264_REAL_VECTOR_STRICT_FAILURES=1 to run known-red public vectors as strict decode-ok oracle rows")
 	}
-	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
-	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
-		failures = filterH264CorpusEntries(failures, filter)
-		if len(failures) == 0 {
-			t.Fatalf("%s: no failure entries matched GOH264_CORPUS_FILTER=%q; available known-red filters: %s",
-				defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)))
-		}
-	}
+	failures := h264RealVectorFailureEntriesForEnv(t, readH264CorpusManifest(t, defaultH264RealVectorFailureManifest))
 	testH264CorpusEntries(t, defaultH264RealVectorFailureManifest, failures)
 }
 
@@ -109,14 +102,7 @@ func TestH264RealVectorKnownRedFilterSelected(t *testing.T) {
 		t.Skip("set GOH264_REAL_VECTOR_RED=1 or GOH264_REAL_VECTOR_STRICT_FAILURES=1 to require that the current filter selects known-red rows")
 	}
 	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
-	filter := h264CorpusFilterTokens()
-	if len(filter) != 0 {
-		failures = filterH264CorpusEntries(failures, filter)
-	}
-	if len(failures) == 0 {
-		t.Fatalf("%s: no failure entries matched GOH264_CORPUS_FILTER=%q; available known-red filters: %s",
-			defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)))
-	}
+	failures = h264RealVectorFailureEntriesForEnv(t, failures)
 	t.Logf("known-red filter selected=%d ids=%s", len(failures), strings.Join(h264CorpusEntryIDs(failures), ","))
 }
 
@@ -252,14 +238,7 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 	if !h264RealVectorsEnabled() && os.Getenv("GOH264_REAL_VECTOR_FAILURES") != "1" {
 		t.Skip("set GOH264_REAL_VECTOR_FAILURES=1, GOH264_REAL_VECTORS=1, or GOH264_ORACLE=1 to verify red public vector rows")
 	}
-	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
-	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
-		failures = filterH264CorpusEntries(failures, filter)
-		if len(failures) == 0 {
-			t.Fatalf("%s: no failure entries matched GOH264_CORPUS_FILTER=%q; available known-red filters: %s",
-				defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)))
-		}
-	}
+	failures := h264RealVectorFailureEntriesForEnv(t, readH264CorpusManifest(t, defaultH264RealVectorFailureManifest))
 	for _, entry := range failures {
 		entry := entry
 		t.Run(entry.ID, func(t *testing.T) {
@@ -300,6 +279,7 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 			t.Fatalf("%s: no manifest entries matched GOH264_CORPUS_FILTER=%q; available filters: %s",
 				defaultH264RealVectorManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(readH264CorpusManifest(t, defaultH264RealVectorManifest)))
 		}
+		h264RealVectorFailureEntriesForEnv(t, failures)
 	}
 
 	var green, knownRed int
@@ -404,6 +384,22 @@ func h264RealVectorsEnabled() bool {
 
 func h264RealVectorRedOracleEnabled() bool {
 	return os.Getenv("GOH264_REAL_VECTOR_RED") == "1" || os.Getenv("GOH264_REAL_VECTOR_STRICT_FAILURES") == "1"
+}
+
+func h264RealVectorFailureEntriesForEnv(t *testing.T, failures []h264CorpusEntry) []h264CorpusEntry {
+	t.Helper()
+	if len(failures) == 0 {
+		t.Fatalf("%s: failure ledger is empty; red-vector gates have no known-red rows", defaultH264RealVectorFailureManifest)
+	}
+	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
+		filtered := filterH264CorpusEntries(append([]h264CorpusEntry(nil), failures...), filter)
+		if len(filtered) == 0 {
+			t.Fatalf("%s: no known-red entries matched GOH264_CORPUS_FILTER=%q; available known-red filters: %s",
+				defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(failures))
+		}
+		return filtered
+	}
+	return failures
 }
 
 func testH264CorpusManifest(t *testing.T, manifest string) {
@@ -642,19 +638,23 @@ func h264CorpusCountSummary(counts map[string]int) string {
 }
 
 func TestH264CorpusOracleFailureClass(t *testing.T) {
-	tests := map[string]string{
-		"missing /tmp/in.264; set GOH264_CORPUS_FETCH=1": "input-missing",
-		"decode error: unsupported MBAFF":                "decode-error",
-		"frames = 2, want 3":                             "frame-count-mismatch",
-		"frame[0] pix_fmt = yuv420p, want yuv422p":       "pixel-format-mismatch",
-		"frame[0] raw size = 10, want 20":                "raw-size-mismatch",
-		"bitstream_md5 = abc, want def":                  "bitstream-md5-mismatch",
-		"rawvideo md5 = abc, want def":                   "raw-md5-mismatch",
-		"unexpected oracle detail":                       "oracle-mismatch",
+	tests := []struct {
+		detail string
+		want   string
+	}{
+		{"missing /tmp/in.264; set GOH264_CORPUS_FETCH=1", "input-missing"},
+		{"decode error: unsupported MBAFF", "decode-error"},
+		{"decode error: temporal direct missing colocated ref entry: h264: unsupported bitstream feature", "decode-error"},
+		{"frames = 2, want 3", "frame-count-mismatch"},
+		{"frame[0] pix_fmt = yuv420p, want yuv422p", "pixel-format-mismatch"},
+		{"frame[0] raw size = 10, want 20", "raw-size-mismatch"},
+		{"bitstream_md5 = abc, want def", "bitstream-md5-mismatch"},
+		{"rawvideo md5 = abc, want def", "raw-md5-mismatch"},
+		{"unexpected oracle detail", "oracle-mismatch"},
 	}
-	for detail, want := range tests {
-		if got := h264CorpusOracleFailureClass(detail); got != want {
-			t.Fatalf("h264CorpusOracleFailureClass(%q) = %q, want %q", detail, got, want)
+	for _, tt := range tests {
+		if got := h264CorpusOracleFailureClass(tt.detail); got != tt.want {
+			t.Fatalf("h264CorpusOracleFailureClass(%q) = %q, want %q", tt.detail, got, tt.want)
 		}
 	}
 }
@@ -1042,10 +1042,10 @@ func h264CorpusOracleFailureClass(detail string) string {
 	switch {
 	case detail == "":
 		return ""
-	case strings.Contains(detail, "missing ") || strings.Contains(detail, "no such file"):
-		return "input-missing"
 	case strings.Contains(detail, "decode") || strings.Contains(detail, "unsupported"):
 		return "decode-error"
+	case strings.HasPrefix(detail, "missing ") || strings.Contains(detail, "no such file"):
+		return "input-missing"
 	case strings.Contains(detail, "frames ="):
 		return "frame-count-mismatch"
 	case strings.Contains(detail, "pix_fmt"):

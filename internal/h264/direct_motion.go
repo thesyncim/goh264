@@ -57,7 +57,11 @@ func (m *macroblockTables) predDirectMotionFrame(cache *macroblockMotionCache, m
 		return err
 	}
 	if ctx.DirectSpatialMVPred {
-		return predSpatialDirectMotionFrame(cache, colTables, layout, mbType, subMBType, ctx)
+		if err := predSpatialDirectMotionFrame(cache, colTables, layout, mbType, subMBType, ctx); err != nil {
+			return fmt.Errorf("spatial direct mb_xy=%d layout_mb_xy=%d col_type=%#x/%#x cur_field=%t col_field=%t mismatch=%t: %w",
+				mbXY, layout.MBXY, layout.MBTypeCol[0], layout.MBTypeCol[1], layout.CurInterlaced, layout.ColInterlaced, layout.InterlacedMismatch, err)
+		}
+		return nil
 	}
 
 	isB8x8 := is8x8(*mbType)
@@ -73,11 +77,19 @@ func (m *macroblockTables) predDirectMotionFrame(cache *macroblockMotionCache, m
 		} else {
 			*mbType |= MBType8x8 | MBTypeL0L1
 		}
-		return predTemporalDirect8x8(cache, colTables, layout, *mbType, directSubType, subMBType, ctx, isB8x8)
+		if err := predTemporalDirect8x8(cache, colTables, layout, *mbType, directSubType, subMBType, ctx, isB8x8); err != nil {
+			return fmt.Errorf("temporal direct mb_xy=%d layout_mb_xy=%d col_type=%#x/%#x cur_field=%t col_field=%t mismatch=%t: %w",
+				mbXY, layout.MBXY, layout.MBTypeCol[0], layout.MBTypeCol[1], layout.CurInterlaced, layout.ColInterlaced, layout.InterlacedMismatch, err)
+		}
+		return nil
 	}
 	if !isB8x8 && (layout.MBTypeCol[0]&(MBType16x16|MBTypeIntra4x4|MBTypeIntra16x16|MBTypeIntraPCM)) != 0 {
 		*mbType |= MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2
-		return predTemporalDirect16x16(cache, colTables, layout, ctx)
+		if err := predTemporalDirect16x16(cache, colTables, layout, ctx); err != nil {
+			return fmt.Errorf("temporal direct mb_xy=%d layout_mb_xy=%d col_type=%#x/%#x cur_field=%t col_field=%t mismatch=%t: %w",
+				mbXY, layout.MBXY, layout.MBTypeCol[0], layout.MBTypeCol[1], layout.CurInterlaced, layout.ColInterlaced, layout.InterlacedMismatch, err)
+		}
+		return nil
 	}
 	if !isB8x8 && (layout.MBTypeCol[0]&(MBType16x8|MBType8x16)) != 0 {
 		*mbType |= MBTypeL0L1 | MBTypeDirect2 | (layout.MBTypeCol[0] & (MBType16x8 | MBType8x16))
@@ -87,7 +99,11 @@ func (m *macroblockTables) predDirectMotionFrame(cache *macroblockMotionCache, m
 		}
 		*mbType |= MBType8x8 | MBTypeL0L1
 	}
-	return predTemporalDirect8x8(cache, colTables, layout, *mbType, directSubType, subMBType, ctx, isB8x8)
+	if err := predTemporalDirect8x8(cache, colTables, layout, *mbType, directSubType, subMBType, ctx, isB8x8); err != nil {
+		return fmt.Errorf("temporal direct mb_xy=%d layout_mb_xy=%d col_type=%#x/%#x cur_field=%t col_field=%t mismatch=%t: %w",
+			mbXY, layout.MBXY, layout.MBTypeCol[0], layout.MBTypeCol[1], layout.CurInterlaced, layout.ColInterlaced, layout.InterlacedMismatch, err)
+	}
+	return nil
 }
 
 func (m *macroblockTables) directColocatedLayout(col *macroblockTables, mbXY int, mbType uint32, ctx h264DirectMotionContext) (directColocatedLayout, error) {
@@ -201,7 +217,8 @@ func unsupportedDirectMotion(reason string, mbXY int, mbType uint32, colType uin
 }
 
 func predSpatialDirectMotionFrame(cache *macroblockMotionCache, col *macroblockTables, layout directColocatedLayout, mbType *uint32, subMBType *[4]uint32, ctx h264DirectMotionContext) error {
-	ref, mv, err := spatialDirectNeighborRefsAndMVs(cache, ctx)
+	frameMBAFF := ctx.PictureStructure == PictureFrame && layout.CurInterlaced
+	ref, mv, err := spatialDirectNeighborRefsAndMVs(cache, ctx, frameMBAFF)
 	if err != nil {
 		return err
 	}
@@ -255,7 +272,7 @@ func predSpatialDirectMotionFrame(cache *macroblockMotionCache, col *macroblockT
 	return predSpatialDirect8x8(cache, col, layout, mbType, directSubType, subMBType, ref, mv, ctx, isB8x8)
 }
 
-func spatialDirectNeighborRefsAndMVs(cache *macroblockMotionCache, ctx h264DirectMotionContext) ([2]int8, [2][2]int16, error) {
+func spatialDirectNeighborRefsAndMVs(cache *macroblockMotionCache, ctx h264DirectMotionContext, frameMBAFFField bool) ([2]int8, [2][2]int16, error) {
 	var ref [2]int8
 	var mv [2][2]int16
 	if cache == nil {
@@ -275,7 +292,7 @@ func spatialDirectNeighborRefsAndMVs(cache *macroblockMotionCache, ctx h264Direc
 		if ref[list] < 0 {
 			continue
 		}
-		if int(ref[list]) >= len(ctx.RefEntries[list]) || ctx.RefEntries[list][ref[list]].frame == nil {
+		if !spatialDirectRefEntryAvailable(ctx, list, ref[list], frameMBAFFField) {
 			return ref, mv, ErrInvalidData
 		}
 		a := cache.MV[list][base-1]
@@ -293,6 +310,17 @@ func spatialDirectNeighborRefsAndMVs(cache *macroblockMotionCache, ctx h264Direc
 		}
 	}
 	return ref, mv, nil
+}
+
+func spatialDirectRefEntryAvailable(ctx h264DirectMotionContext, list int, ref int8, frameMBAFFField bool) bool {
+	if list < 0 || list > 1 || ref < 0 || len(ctx.RefEntries[list]) == 0 {
+		return false
+	}
+	idx := int(ref)
+	if frameMBAFFField {
+		idx >>= 1
+	}
+	return idx >= 0 && idx < len(ctx.RefEntries[list]) && ctx.RefEntries[list][idx].frame != nil
 }
 
 func predSpatialDirect16x16(cache *macroblockMotionCache, col *macroblockTables, layout directColocatedLayout, ref [2]int8, mv [2][2]int16, ctx h264DirectMotionContext) error {
@@ -446,7 +474,7 @@ func predTemporalDirect16x16(cache *macroblockMotionCache, col *macroblockTables
 		return nil
 	}
 
-	ref0, list, err := temporalDirectColocatedRefListAt(col, layout.RefBase, ctx)
+	ref0, list, err := temporalDirectColocatedRefListAt(col, layout.RefBase, ctx, layout.MBTypeCol[0]&MBTypeInterlaced != 0)
 	if err != nil {
 		return err
 	}
@@ -483,7 +511,7 @@ func predTemporalDirect8x8(cache *macroblockMotionCache, col *macroblockTables, 
 			continue
 		}
 		refIndex := directColocatedRefIndex(layout, i8)
-		ref0, list, err := temporalDirectColocatedRefListAt(col, refIndex, ctx)
+		ref0, list, err := temporalDirectColocatedRefListAt(col, refIndex, ctx, layout.MBTypeCol[i8>>1]&MBTypeInterlaced != 0)
 		if err != nil {
 			return err
 		}
@@ -531,14 +559,14 @@ func predTemporalDirect8x8(cache *macroblockMotionCache, col *macroblockTables, 
 	return nil
 }
 
-func temporalDirectColocatedRefList(col *macroblockTables, mbXY int, i8 int, ctx h264DirectMotionContext) (int8, int, error) {
+func temporalDirectColocatedRefList(col *macroblockTables, mbXY int, i8 int, ctx h264DirectMotionContext, colField bool) (int8, int, error) {
 	if col == nil || i8 < 0 || i8 > 3 {
 		return 0, 0, ErrInvalidData
 	}
-	return temporalDirectColocatedRefListAt(col, 4*mbXY+i8, ctx)
+	return temporalDirectColocatedRefListAt(col, 4*mbXY+i8, ctx, colField)
 }
 
-func temporalDirectColocatedRefListAt(col *macroblockTables, refIndex int, ctx h264DirectMotionContext) (int8, int, error) {
+func temporalDirectColocatedRefListAt(col *macroblockTables, refIndex int, ctx h264DirectMotionContext, colField bool) (int8, int, error) {
 	if col == nil {
 		return 0, 0, ErrInvalidData
 	}
@@ -555,7 +583,7 @@ func temporalDirectColocatedRefListAt(col *macroblockTables, refIndex int, ctx h
 		ref = col.RefIndex[1][refIndex]
 		list = 1
 	}
-	ref0, err := temporalDirectMapColToList0(ctx, list, ref)
+	ref0, err := temporalDirectMapColToList0(ctx, list, ref, colField)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -606,19 +634,19 @@ func directColocatedSub8x8RowStride(layout directColocatedLayout) int {
 	return 3 * layout.B4Stride
 }
 
-func temporalDirectMapColToList0(ctx h264DirectMotionContext, list int, ref int8) (int8, error) {
+func temporalDirectMapColToList0(ctx h264DirectMotionContext, list int, ref int8, colField bool) (int8, error) {
 	if list < 0 || list > 1 || ref < 0 {
 		return 0, ErrInvalidData
 	}
 	if len(ctx.RefEntries[0]) == 0 {
 		return 0, ErrInvalidData
 	}
-	target, ok := temporalDirectColocatedRefEntry(ctx, list, int(ref))
+	target, ok := temporalDirectColocatedRefEntry(ctx, list, int(ref), colField)
 	if !ok {
-		return 0, ErrUnsupported
+		return 0, fmt.Errorf("temporal direct missing colocated ref entry list=%d ref=%d: %w", list, ref, ErrUnsupported)
 	}
 	for i, entry := range ctx.RefEntries[0] {
-		if entry.frame != nil && target.frame != nil && entry.frame == target.frame {
+		if temporalDirectSameFrameRef(entry, target) {
 			return int8(i), nil
 		}
 		if temporalDirectSamePictureID(entry, target) {
@@ -628,9 +656,14 @@ func temporalDirectMapColToList0(ctx h264DirectMotionContext, list int, ref int8
 	return 0, nil
 }
 
-func temporalDirectColocatedRefEntry(ctx h264DirectMotionContext, list int, ref int) (simpleRefEntry, bool) {
+func temporalDirectColocatedRefEntry(ctx h264DirectMotionContext, list int, ref int, colField bool) (simpleRefEntry, bool) {
 	if len(ctx.RefEntries[1]) != 0 && ctx.RefEntries[1][0].frame != nil {
 		colEntries := ctx.RefEntries[1][0].frame.refEntries[list]
+		if colField {
+			if entry, ok := temporalDirectVirtualFieldRefEntry(colEntries, ref); ok {
+				return entry, true
+			}
+		}
 		if ref < len(colEntries) {
 			return colEntries[ref], true
 		}
@@ -639,6 +672,38 @@ func temporalDirectColocatedRefEntry(ctx h264DirectMotionContext, list int, ref 
 		return ctx.RefEntries[list][ref], true
 	}
 	return simpleRefEntry{}, false
+}
+
+func temporalDirectVirtualFieldRefEntry(entries []simpleRefEntry, ref int) (simpleRefEntry, bool) {
+	if ref < 0 {
+		return simpleRefEntry{}, false
+	}
+	base := ref >> 1
+	if base >= len(entries) {
+		return simpleRefEntry{}, false
+	}
+	entry := entries[base]
+	entry.pictureStructure = PictureTopField
+	if ref&1 != 0 {
+		entry.pictureStructure = PictureBottomField
+	}
+	if entry.frame != nil {
+		if poc, err := simpleFrameCurrentPOC(entry.frame, entry.pictureStructure); err == nil {
+			entry.poc = poc
+		}
+	}
+	return entry, true
+}
+
+func temporalDirectSameFrameRef(a simpleRefEntry, b simpleRefEntry) bool {
+	if a.long != b.long || a.frame == nil || b.frame == nil || a.frame != b.frame {
+		return false
+	}
+	return a.pictureStructure == b.pictureStructure ||
+		a.pictureStructure == PictureFrame ||
+		b.pictureStructure == PictureFrame ||
+		a.pictureStructure == 0 ||
+		b.pictureStructure == 0
 }
 
 func temporalDirectSamePictureID(a simpleRefEntry, b simpleRefEntry) bool {

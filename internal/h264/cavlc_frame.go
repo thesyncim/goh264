@@ -113,7 +113,11 @@ func (m *macroblockTables) decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb
 					}
 				}
 			}
-			return m.writeBackCAVLCFrameSkipMacroblockWithDirectWorkFieldGuard(sh, state.QScale, mbXY, sliceNum, state.MBFieldDecodingFlag, direct, work, rejectUnsupportedHighB)
+			result, err := m.writeBackCAVLCFrameSkipMacroblockWithDirectWorkFieldGuard(sh, state.QScale, mbXY, sliceNum, state.MBFieldDecodingFlag, direct, work, rejectUnsupportedHighB)
+			if err != nil {
+				return result, fmt.Errorf("skip field=%d: %w", state.MBFieldDecodingFlag, err)
+			}
+			return result, nil
 		}
 		state.MBSkipRun = cavlcMBSkipRunUnset
 	}
@@ -331,19 +335,24 @@ func (m *macroblockTables) writeBackCAVLCFrameBSkipMacroblockWithDirectWorkField
 	if fieldPicture {
 		mbType |= MBTypeInterlaced
 	}
-	neighbors, err := m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, fieldPicture)
+	frameMBAFF := sh.PictureStructure == PictureFrame && sh.SPS != nil && sh.SPS.MBAFF != 0
+	neighbors, err := m.fillDecodeNeighborsFrameEntropy(mbXY, sliceNum, mbType, fieldPicture, frameMBAFF)
 	if err != nil {
 		return result, err
 	}
 	*work = frameMacroblockDecodeWork{}
 	if direct.DirectSpatialMVPred {
-		if err := m.fillMotionDecodeCaches(&work.Motion, neighbors.motionNeighbors(mbType, 2, PictureTypeB, false, true)); err != nil {
+		motionNeighbors := neighbors.motionNeighbors(mbType, 2, PictureTypeB, false, true)
+		if err := m.fillMotionDecodeCaches(&work.Motion, motionNeighbors); err != nil {
 			return result, err
+		}
+		if frameMBAFF {
+			h264MapMBAFFMotionNeighbors(&work.Motion, motionNeighbors)
 		}
 	}
 	var subMBType [4]uint32
 	if err := m.predDirectMotionFrame(&work.Motion, mbXY, &mbType, &subMBType, direct); err != nil {
-		return result, err
+		return result, fmt.Errorf("bskip direct field=%t type=%#x: %w", fieldPicture, mbType, err)
 	}
 	if rejectUnsupportedHighB {
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &subMBType, 0, 0); err != nil {

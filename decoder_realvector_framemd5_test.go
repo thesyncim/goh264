@@ -25,14 +25,7 @@ func TestH264RealVectorFrameMD5Diagnostics(t *testing.T) {
 		t.Fatalf("ffmpeg oracle not found (%s): %v", ffmpeg, err)
 	}
 
-	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
-	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
-		failures = filterH264CorpusEntries(failures, filter)
-		if len(failures) == 0 {
-			t.Fatalf("%s: no failure entries matched GOH264_CORPUS_FILTER=%q; available known-red filters: %s",
-				defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"), h264CorpusFailureFilterSummary(readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)))
-		}
-	}
+	failures := h264RealVectorFailureEntriesForEnv(t, readH264CorpusManifest(t, defaultH264RealVectorFailureManifest))
 
 	var selected int
 	for _, entry := range failures {

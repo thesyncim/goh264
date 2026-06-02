@@ -771,6 +771,76 @@ func TestDecodeCABACFrameMBAFFBottomSkipReusesDecodedNextSkip(t *testing.T) {
 	wantIndexes(t, src, []int{11, 11})
 }
 
+func TestWriteBackCABACFrameMBAFFBSpatialSkipMapsFieldNeighborMotion(t *testing.T) {
+	m, err := newMacroblockTables(2, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(2, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const sliceNum = uint16(13)
+	mbXY := 1
+	leftXY := 0
+	leftType := MBTypeInterlaced | MBType16x16 | MBTypeP0L0 | MBTypeP1L0
+	m.SliceTable[leftXY] = sliceNum
+	m.MacroblockTyp[leftXY] = leftType
+	m.RefIndex[0][4*leftXY+1] = 2
+	m.MotionVal[0][int(m.MB2BXY[leftXY])+3] = [2]int16{4, 5}
+
+	colTables.MacroblockTyp[mbXY] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0
+	past0 := &DecodedFrame{poc: -2}
+	past1 := &DecodedFrame{poc: 0}
+	col := &DecodedFrame{
+		poc:    4,
+		tables: colTables,
+		refEntries: [2][]simpleRefEntry{
+			{{frame: past0}, {frame: past1}},
+		},
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1, Direct8x8InferenceFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	sh := &SliceHeader{
+		SliceTypeNoS:     PictureTypeB,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           22,
+	}
+	var work frameMacroblockDecodeWork
+
+	got, err := m.writeBackCABACFrameBSkipMacroblockWithDirectWorkFieldGuard(sh, 22, mbXY, sliceNum, 0, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: past0}, {frame: past1}},
+			{{frame: col}},
+		},
+		CurPOC:              2,
+		PictureStructure:    PictureFrame,
+		DirectSpatialMVPred: true,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	}, &work, false)
+	if err != nil {
+		t.Fatalf("write back CABAC MBAFF spatial B-skip failed: %v", err)
+	}
+	if !got.Skipped || !got.IsInter || got.MBFieldDecodingFlag != 0 || got.MBType&MBTypeInterlaced != 0 || !isDirect(got.MBType) || !is16x16(got.MBType) {
+		t.Fatalf("result skipped/inter/field/type = %v/%v/%d/%#x, want frame-coded direct 16x16 skip", got.Skipped, got.IsInter, got.MBFieldDecodingFlag, got.MBType)
+	}
+	if got.Neighbors.LeftXY[h264LeftTop] != leftXY || got.Neighbors.LeftType[h264LeftTop] != leftType {
+		t.Fatalf("left neighbor = xy %d type %#x, want %d/%#x", got.Neighbors.LeftXY[h264LeftTop], got.Neighbors.LeftType[h264LeftTop], leftXY, leftType)
+	}
+	bXY := int(m.MB2BXY[mbXY])
+	if m.RefIndex[0][4*mbXY] != 1 || m.MotionVal[0][bXY] != ([2]int16{4, 10}) {
+		t.Fatalf("mapped list0 ref/mv = %d/%v, want 1/[4 10]", m.RefIndex[0][4*mbXY], m.MotionVal[0][bXY])
+	}
+	if work.Motion.Ref[0][int(h264Scan8[0])-1] != 1 || work.Motion.MV[0][int(h264Scan8[0])-1] != ([2]int16{4, 10}) {
+		t.Fatalf("mapped neighbor cache ref/mv = %d/%v, want 1/[4 10]", work.Motion.Ref[0][int(h264Scan8[0])-1], work.Motion.MV[0][int(h264Scan8[0])-1])
+	}
+}
+
 func TestDecodeCABACFrameBDirectUnsupportedBeforeWriteback(t *testing.T) {
 	m, err := newMacroblockTables(1, 1, 1)
 	if err != nil {

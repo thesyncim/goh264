@@ -238,6 +238,60 @@ func TestPredTemporalDirectMapsColocatedRefByPictureID(t *testing.T) {
 	}
 }
 
+func TestPredTemporalDirectMapsMBAFFColocatedFieldRef(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables.MacroblockTyp[0] = MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	colTables.RefIndex[0][0] = 3
+	colTables.MotionVal[0][colTables.MB2BXY[0]] = [2]int16{4, 2}
+
+	past0 := &DecodedFrame{poc: -4, fieldPOC: [2]int32{-4, -2}, frameNum: 0}
+	past1 := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 2}, frameNum: 1}
+	col := &DecodedFrame{
+		poc:      4,
+		fieldPOC: [2]int32{4, 6},
+		tables:   colTables,
+		refEntries: [2][]simpleRefEntry{
+			{
+				{frame: past0, picID: past0.frameNum, pictureStructure: PictureFrame, poc: past0.poc},
+				{frame: past1, picID: past1.frameNum, pictureStructure: PictureFrame, poc: past1.poc},
+			},
+		},
+	}
+
+	var cache macroblockMotionCache
+	var sub [4]uint32
+	mbType := MBTypeDirect2 | MBTypeL0L1
+	err = m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: past0, picID: past0.frameNum, pictureStructure: PictureFrame, poc: past0.poc},
+				{frame: past1, picID: past1.frameNum, pictureStructure: PictureFrame, poc: past1.poc},
+			},
+			{{frame: col, pictureStructure: PictureFrame, poc: col.poc}},
+		},
+		CurPOC:             2,
+		PictureStructure:   PictureFrame,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("temporal direct MBAFF field colmap failed: %v", err)
+	}
+	base := int(h264Scan8[0])
+	if cache.Ref[0][base] != 1 || cache.Ref[1][base] != 0 {
+		t.Fatalf("refs = %d/%d, want mapped list0 ref 1 and list1 ref 0", cache.Ref[0][base], cache.Ref[1][base])
+	}
+	if cache.MV[0][base] != ([2]int16{2, 2}) || cache.MV[1][base] != ([2]int16{-2, -2}) {
+		t.Fatalf("mvs = %v/%v, want field-ref temporal scale", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
 func TestPredTemporalDirectColocatedRefMapMissingFallsBackToZero(t *testing.T) {
 	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0)
 	col.tables.RefIndex[0][0] = 1
@@ -426,6 +480,52 @@ func TestPredSpatialDirectColZeroClearsZeroRefs(t *testing.T) {
 	}
 	if cache.MV[0][base] != ([2]int16{}) || cache.MV[1][base] != ([2]int16{}) {
 		t.Fatalf("col-zero mvs = %v/%v, want zero", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
+func TestPredSpatialDirectFrameMBAFFFieldRefsUseFieldRefCount(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBTypeIntra4x4|MBTypeInterlaced)
+	secondRef := &DecodedFrame{poc: -2}
+
+	var cache macroblockMotionCache
+	base := int(h264Scan8[0])
+	for list, ref := range [2]int8{2, 1} {
+		cache.Ref[list][base-1] = ref
+		cache.Ref[list][base-8] = ref
+		cache.Ref[list][base+4-8] = ref
+		cache.MV[list][base-1] = [2]int16{int16(3 + list), int16(5 + list)}
+		cache.MV[list][base-8] = [2]int16{int16(7 + list), int16(9 + list)}
+		cache.MV[list][base+4-8] = [2]int16{int16(11 + list), int16(13 + list)}
+	}
+
+	sub := [4]uint32{
+		MBType16x16 | MBTypeP0L0,
+		MBTypeDirect2,
+		MBType16x16 | MBTypeP0L0,
+		MBTypeDirect2,
+	}
+	mbType := MBType8x8 | MBTypeL0L1 | MBTypeInterlaced
+	err := m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr}, {frame: secondRef}},
+			{{frame: col}},
+		},
+		PictureStructure:    PictureFrame,
+		DirectSpatialMVPred: true,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	})
+	if err != nil {
+		t.Fatalf("frame-mbaff field spatial direct failed: %v", err)
+	}
+	for _, i8 := range []int{1, 3} {
+		start := int(h264Scan8[4*i8])
+		if cache.Ref[0][start] != 2 || cache.Ref[1][start] != 1 {
+			t.Fatalf("direct sub[%d] refs = %d/%d, want field refs 2/1", i8, cache.Ref[0][start], cache.Ref[1][start])
+		}
+	}
+	if sub[1] != (MBType16x16|MBTypeL0L1|MBTypeDirect2) || sub[3] != (MBType16x16|MBTypeL0L1|MBTypeDirect2) {
+		t.Fatalf("direct sub types = %#x/%#x, want spatial direct 8x8 sub type", sub[1], sub[3])
 	}
 }
 

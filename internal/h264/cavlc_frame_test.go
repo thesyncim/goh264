@@ -589,3 +589,74 @@ func TestDecodeCAVLCFrameBDirectUnsupportedBeforeWriteback(t *testing.T) {
 		t.Fatalf("state changed on unsupported direct: slice/type = %d/%#x", m.SliceTable[0], m.MacroblockTyp[0])
 	}
 }
+
+func TestWriteBackCAVLCFrameMBAFFBskipMapsSpatialDirectNeighborRefs(t *testing.T) {
+	m, err := newMacroblockTables(3, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colTables, err := newMacroblockTables(3, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1, Direct8x8InferenceFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	sh := &SliceHeader{
+		SliceType:        PictureTypeB,
+		SliceTypeNoS:     PictureTypeB,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+	}
+	sliceNum := uint16(9)
+	mbXY := 2*m.MBStride + 1
+	neighborType := MBType16x16 | MBTypeL0L1 | MBTypeInterlaced
+	for _, xy := range []int{mbXY - 1, mbXY - m.MBStride - 1, mbXY - m.MBStride, mbXY - m.MBStride + 1} {
+		m.SliceTable[xy] = sliceNum
+		m.MacroblockTyp[xy] = neighborType
+		for list := 0; list < 2; list++ {
+			for i := 0; i < 4; i++ {
+				m.RefIndex[list][4*xy+i] = 2
+			}
+			bxy := int(m.MB2BXY[xy])
+			m.MotionVal[list][bxy+3] = [2]int16{6, 8}
+			m.MotionVal[list][bxy+3*m.BStride] = [2]int16{10, 12}
+			m.MotionVal[list][bxy+3+3*m.BStride] = [2]int16{14, 16}
+		}
+	}
+	for xy := range colTables.MacroblockTyp {
+		colTables.MacroblockTyp[xy] = MBType16x16 | MBTypeP0L0
+	}
+	idr := &DecodedFrame{poc: 0}
+	secondRef := &DecodedFrame{poc: -2}
+	col := &DecodedFrame{
+		poc:    4,
+		tables: colTables,
+		refEntries: [2][]simpleRefEntry{
+			{{frame: idr}, {frame: secondRef}},
+			{{frame: idr}, {frame: secondRef}},
+		},
+	}
+	var work frameMacroblockDecodeWork
+
+	got, err := m.writeBackCAVLCFrameBSkipMacroblockWithDirectWorkFieldGuard(sh, 22, mbXY, sliceNum, 0, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: idr}, {frame: secondRef}},
+			{{frame: col}, {frame: secondRef}},
+		},
+		PictureStructure:    PictureFrame,
+		DirectSpatialMVPred: true,
+		Direct8x8Inference:  true,
+		X264Build:           165,
+	}, &work, false)
+	if err != nil {
+		t.Fatalf("write back frame-mbaff spatial bskip failed: %v", err)
+	}
+	if got.MBType&MBTypeInterlaced != 0 || !got.Skipped || !isDirect(got.MBType) {
+		t.Fatalf("result type/skipped = %#x/%v, want frame-coded direct skip", got.MBType, got.Skipped)
+	}
+	if m.RefIndex[0][4*mbXY] != 1 || m.RefIndex[1][4*mbXY] != 1 {
+		t.Fatalf("written refs = %d/%d, want MBAFF-mapped frame refs 1/1", m.RefIndex[0][4*mbXY], m.RefIndex[1][4*mbXY])
+	}
+}
