@@ -604,7 +604,8 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 		fillMVDRectangle(&motion.MVD[0], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
 		fillMVDRectangle(&motion.MVD[1], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
 	} else {
-		if err := m.decodeCABACInterMotionSyntax(src, &mb, motion, in.MBXY, in.SliceTypeNoS, listCount, in.RefCount, in.Direct); err != nil {
+		predCtx := m.frameMotionPredContext(in.MBXY, in.FrameMBAFF, cacheResult.Neighbors, base.MBType, listCount, in.SliceTypeNoS, true, in.DirectSpatialMVPred)
+		if err := m.decodeCABACInterMotionSyntax(src, &mb, motion, in.MBXY, in.SliceTypeNoS, listCount, in.RefCount, in.Direct, predCtx); err != nil {
 			return result, fmt.Errorf("inter_motion field=%t type=%#x refs=%d/%d: %w", in.FieldPicture, base.MBType, in.RefCount[0], in.RefCount[1], err)
 		}
 	}
@@ -692,7 +693,7 @@ func readCABACIntraPCMBytes(src cabacSyntaxSource, sps *SPS) ([]byte, error) {
 	return pcmSrc.intraPCMBytes(n)
 }
 
-func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, mb *cavlcInterMacroblockSyntax, motion *macroblockMotionCache, mbXY int, sliceTypeNoS int32, listCount int, refCount [2]uint32, direct h264DirectMotionContext) error {
+func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, mb *cavlcInterMacroblockSyntax, motion *macroblockMotionCache, mbXY int, sliceTypeNoS int32, listCount int, refCount [2]uint32, direct h264DirectMotionContext, predCtx *h264MotionPredContext) error {
 	if src == nil || mb == nil || motion == nil || listCount < 0 || listCount > 2 || isIntra(mb.MBType) {
 		return ErrInvalidData
 	}
@@ -761,7 +762,7 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 				for j := 0; j < int(mb.SubPartitionCount[i]); j++ {
 					index := 4*i + blockWidth*j
 					ref := motion.Ref[list][h264Scan8[index]]
-					pred, err := predMotion(motion, index, blockWidth, list, ref)
+					pred, err := predMotionWithContext(motion, index, blockWidth, list, ref, predCtx)
 					if err != nil {
 						return fmt.Errorf("pred list=%d sub=%d n=%d width=%d ref=%d: %w", list, i, index, blockWidth, ref, err)
 					}
@@ -795,7 +796,7 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 				continue
 			}
 			ref := motion.Ref[list][h264Scan8[0]]
-			pred, err := predMotion(motion, 0, 4, list, ref)
+			pred, err := predMotionWithContext(motion, 0, 4, list, ref, predCtx)
 			if err != nil {
 				return fmt.Errorf("pred list=%d n=0 width=4 ref=%d: %w", list, ref, err)
 			}
@@ -835,7 +836,7 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 				}
 				index := 8 * i
 				ref := motion.Ref[list][start]
-				pred, err := pred16x8Motion(motion, index, list, ref)
+				pred, err := pred16x8MotionWithContext(motion, index, list, ref, predCtx)
 				if err != nil {
 					return fmt.Errorf("pred16x8 list=%d part=%d n=%d ref=%d: %w", list, i, index, ref, err)
 				}
@@ -845,7 +846,8 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 				}
 				mb.MVD[list][index] = mvd
 				fillMVDRectangle(&motion.MVD[list], start, 4, 2, 8, mvda)
-				fillMotionRectangle(&motion.MV[list], start, 4, 2, 8, addMVD(pred, mvd))
+				mv := addMVD(pred, mvd)
+				fillMotionRectangle(&motion.MV[list], start, 4, 2, 8, mv)
 			}
 		}
 		return nil
@@ -876,7 +878,7 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 				}
 				index := 4 * i
 				ref := motion.Ref[list][start]
-				pred, err := pred8x16Motion(motion, index, list, ref)
+				pred, err := pred8x16MotionWithContext(motion, index, list, ref, predCtx)
 				if err != nil {
 					return fmt.Errorf("pred8x16 list=%d part=%d n=%d ref=%d: %w", list, i, index, ref, err)
 				}

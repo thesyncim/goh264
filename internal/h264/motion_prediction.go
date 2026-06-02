@@ -27,6 +27,31 @@ func midPred(a int, b int, c int) int {
 }
 
 func fetchDiagonalMV(cache *macroblockMotionCache, i int, list int, partWidth int) ([2]int16, int8, error) {
+	return fetchDiagonalMVWithContext(cache, i, list, partWidth, nil)
+}
+
+type h264MotionPredContext struct {
+	Tables     *macroblockTables
+	MBXY       int
+	FrameMBAFF bool
+	Neighbors  motionDecodeNeighbors
+}
+
+func (m *macroblockTables) frameMotionPredContext(mbXY int, frameMBAFF bool, neighbors macroblockDecodeNeighbors, mbType uint32, listCount int, sliceTypeNoS int32, cabac bool, directSpatial bool) *h264MotionPredContext {
+	if m == nil || !frameMBAFF {
+		return nil
+	}
+	motionNeighbors := neighbors.motionNeighbors(mbType, listCount, sliceTypeNoS, cabac, directSpatial)
+	motionNeighbors.FrameMBAFF = true
+	return &h264MotionPredContext{
+		Tables:     m,
+		MBXY:       mbXY,
+		FrameMBAFF: true,
+		Neighbors:  motionNeighbors,
+	}
+}
+
+func fetchDiagonalMVWithContext(cache *macroblockMotionCache, i int, list int, partWidth int, predCtx *h264MotionPredContext) ([2]int16, int8, error) {
 	var zero [2]int16
 	if cache == nil || list < 0 || list > 1 || (partWidth != 1 && partWidth != 2 && partWidth != 4) {
 		return zero, 0, ErrInvalidData
@@ -36,6 +61,9 @@ func fetchDiagonalMV(cache *macroblockMotionCache, i int, list int, partWidth in
 		return zero, 0, err
 	}
 	topRightRef := cache.Ref[list][topRight]
+	if mv, ref, ok, err := fetchDiagonalMVMBAFF(cache, i, list, topRightRef, predCtx); ok || err != nil {
+		return mv, ref, err
+	}
 	if topRightRef != h264PartNotAvailable {
 		return cache.MV[list][topRight], topRightRef, nil
 	}
@@ -47,7 +75,76 @@ func fetchDiagonalMV(cache *macroblockMotionCache, i int, list int, partWidth in
 	return cache.MV[list][topLeft], cache.Ref[list][topLeft], nil
 }
 
+func fetchDiagonalMVMBAFF(cache *macroblockMotionCache, i int, list int, topRightRef int8, predCtx *h264MotionPredContext) ([2]int16, int8, bool, error) {
+	var zero [2]int16
+	if predCtx == nil || !predCtx.FrameMBAFF || predCtx.Tables == nil || cache == nil {
+		return zero, 0, false, nil
+	}
+	base := int(h264Scan8[0])
+	if topRightRef != h264PartNotAvailable || i < base+8 || (i&7) != 4 || cache.Ref[list][base-1] == h264PartNotAvailable {
+		return zero, 0, false, nil
+	}
+	mbField := predCtx.Neighbors.MBType&MBTypeInterlaced != 0
+	leftField := predCtx.Neighbors.LeftType[h264LeftTop]&MBTypeInterlaced != 0
+	if !mbField && leftField {
+		xy := predCtx.Neighbors.LeftXY[h264LeftTop] + predCtx.Tables.MBStride
+		y4 := ((predCtx.MBXY / predCtx.Tables.MBStride) & 1) * 2
+		y4 += i >> 5
+		return predCtx.fetchDiagonalMVMBAFFSource(list, xy, y4, true)
+	}
+	if mbField && !leftField {
+		left := h264LeftTop
+		if i >= 36 {
+			left = h264LeftBot
+		}
+		xy := predCtx.Neighbors.LeftXY[left]
+		y4 := (i >> 2) & 3
+		return predCtx.fetchDiagonalMVMBAFFSource(list, xy, y4, false)
+	}
+	return zero, 0, false, nil
+}
+
+func (predCtx *h264MotionPredContext) fetchDiagonalMVMBAFFSource(list int, xy int, y4 int, frameFromField bool) ([2]int16, int8, bool, error) {
+	var zero [2]int16
+	m := predCtx.Tables
+	if m == nil || list < 0 || list > 1 || y4 < 0 {
+		return zero, 0, true, ErrInvalidData
+	}
+	typeXY := xy + (y4>>2)*m.MBStride
+	if err := m.checkMBXY(typeXY); err != nil {
+		return zero, 0, true, err
+	}
+	if !usesList(m.MacroblockTyp[typeXY], list) {
+		return zero, h264ListNotUsed, true, nil
+	}
+	if err := m.checkMBXY(xy); err != nil {
+		return zero, 0, true, err
+	}
+	mvIdx := int(m.MB2BXY[xy]) + 3 + y4*m.BStride
+	if err := checkRange(len(m.MotionVal[list]), mvIdx, 1); err != nil {
+		return zero, 0, true, err
+	}
+	refIdx := 4*xy + 1 + (y4 &^ 1)
+	if err := checkRange(len(m.RefIndex[list]), refIdx, 1); err != nil {
+		return zero, 0, true, err
+	}
+	mv := m.MotionVal[list][mvIdx]
+	ref := m.RefIndex[list][refIdx]
+	if frameFromField {
+		ref >>= 1
+		mv[1] = int16(int(mv[1]) * 2)
+	} else {
+		ref = int8(int(ref) * 2)
+		mv[1] /= 2
+	}
+	return mv, ref, true, nil
+}
+
 func predMotion(cache *macroblockMotionCache, n int, partWidth int, list int, ref int8) ([2]int16, error) {
+	return predMotionWithContext(cache, n, partWidth, list, ref, nil)
+}
+
+func predMotionWithContext(cache *macroblockMotionCache, n int, partWidth int, list int, ref int8, predCtx *h264MotionPredContext) ([2]int16, error) {
 	var pred [2]int16
 	if cache == nil || n < 0 || n >= 16 || list < 0 || list > 1 || (partWidth != 1 && partWidth != 2 && partWidth != 4) {
 		return pred, ErrInvalidData
@@ -58,7 +155,7 @@ func predMotion(cache *macroblockMotionCache, n int, partWidth int, list int, re
 	leftRef := cache.Ref[list][index8-1]
 	a := cache.MV[list][index8-1]
 	b := cache.MV[list][index8-8]
-	c, diagonalRef, err := fetchDiagonalMV(cache, index8, list, partWidth)
+	c, diagonalRef, err := fetchDiagonalMVWithContext(cache, index8, list, partWidth, predCtx)
 	if err != nil {
 		return pred, err
 	}
@@ -87,6 +184,10 @@ func predMotion(cache *macroblockMotionCache, n int, partWidth int, list int, re
 }
 
 func pred16x8Motion(cache *macroblockMotionCache, n int, list int, ref int8) ([2]int16, error) {
+	return pred16x8MotionWithContext(cache, n, list, ref, nil)
+}
+
+func pred16x8MotionWithContext(cache *macroblockMotionCache, n int, list int, ref int8, predCtx *h264MotionPredContext) ([2]int16, error) {
 	var pred [2]int16
 	if cache == nil || list < 0 || list > 1 {
 		return pred, ErrInvalidData
@@ -102,10 +203,14 @@ func pred16x8Motion(cache *macroblockMotionCache, n int, list int, ref int8) ([2
 			return cache.MV[list][index], nil
 		}
 	}
-	return predMotion(cache, n, 4, list, ref)
+	return predMotionWithContext(cache, n, 4, list, ref, predCtx)
 }
 
 func pred8x16Motion(cache *macroblockMotionCache, n int, list int, ref int8) ([2]int16, error) {
+	return pred8x16MotionWithContext(cache, n, list, ref, nil)
+}
+
+func pred8x16MotionWithContext(cache *macroblockMotionCache, n int, list int, ref int8, predCtx *h264MotionPredContext) ([2]int16, error) {
 	var pred [2]int16
 	if cache == nil || list < 0 || list > 1 {
 		return pred, ErrInvalidData
@@ -116,7 +221,7 @@ func pred8x16Motion(cache *macroblockMotionCache, n int, list int, ref int8) ([2
 			return cache.MV[list][index], nil
 		}
 	} else {
-		c, diagonalRef, err := fetchDiagonalMV(cache, int(h264Scan8[4]), list, 2)
+		c, diagonalRef, err := fetchDiagonalMVWithContext(cache, int(h264Scan8[4]), list, 2, predCtx)
 		if err != nil {
 			return pred, err
 		}
@@ -124,7 +229,7 @@ func pred8x16Motion(cache *macroblockMotionCache, n int, list int, ref int8) ([2
 			return c, nil
 		}
 	}
-	return predMotion(cache, n, 2, list, ref)
+	return predMotionWithContext(cache, n, 2, list, ref, predCtx)
 }
 
 func (m *macroblockTables) predPSkipMotion(cache *macroblockMotionCache, n motionDecodeNeighbors) error {
@@ -269,11 +374,15 @@ func h264FixPskipMVForMBAFF(n motionDecodeNeighbors, neighborType uint32, ref in
 }
 
 func fillCAVLCInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacroblockSyntax, listCount int) error {
+	return fillCAVLCInterMotionCacheWithContext(cache, mb, listCount, nil)
+}
+
+func fillCAVLCInterMotionCacheWithContext(cache *macroblockMotionCache, mb *cavlcInterMacroblockSyntax, listCount int, predCtx *h264MotionPredContext) error {
 	if cache == nil || mb == nil || listCount < 0 || listCount > 2 {
 		return ErrInvalidData
 	}
 	if mb.PartitionCount == 4 {
-		return fillCAVLCSubInterMotionCache(cache, mb, listCount)
+		return fillCAVLCSubInterMotionCacheWithContext(cache, mb, listCount, predCtx)
 	}
 	if is16x16(mb.MBType) {
 		for list := 0; list < listCount; list++ {
@@ -288,7 +397,7 @@ func fillCAVLCInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacro
 				continue
 			}
 			ref := int8(mb.Ref[list][0])
-			pred, err := predMotion(cache, 0, 4, list, ref)
+			pred, err := predMotionWithContext(cache, 0, 4, list, ref, predCtx)
 			if err != nil {
 				return err
 			}
@@ -311,7 +420,7 @@ func fillCAVLCInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacro
 				mv := [2]int16{}
 				if isDir(mb.MBType, i, list) {
 					ref := int8(mb.Ref[list][i])
-					pred, err := pred16x8Motion(cache, 8*i, list, ref)
+					pred, err := pred16x8MotionWithContext(cache, 8*i, list, ref, predCtx)
 					if err != nil {
 						return err
 					}
@@ -337,7 +446,7 @@ func fillCAVLCInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacro
 				mv := [2]int16{}
 				if isDir(mb.MBType, i, list) {
 					ref := int8(mb.Ref[list][i])
-					pred, err := pred8x16Motion(cache, i*4, list, ref)
+					pred, err := pred8x16MotionWithContext(cache, i*4, list, ref, predCtx)
 					if err != nil {
 						return err
 					}
@@ -352,6 +461,10 @@ func fillCAVLCInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacro
 }
 
 func fillCAVLCSubInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMacroblockSyntax, listCount int) error {
+	return fillCAVLCSubInterMotionCacheWithContext(cache, mb, listCount, nil)
+}
+
+func fillCAVLCSubInterMotionCacheWithContext(cache *macroblockMotionCache, mb *cavlcInterMacroblockSyntax, listCount int, predCtx *h264MotionPredContext) error {
 	for list := 0; list < listCount; list++ {
 		for i := 0; i < 4; i++ {
 			start := int(h264Scan8[4*i])
@@ -375,7 +488,7 @@ func fillCAVLCSubInterMotionCache(cache *macroblockMotionCache, mb *cavlcInterMa
 			for j := 0; j < int(mb.SubPartitionCount[i]); j++ {
 				index := 4*i + blockWidth*j
 				ref := cache.Ref[list][h264Scan8[index]]
-				pred, err := predMotion(cache, index, blockWidth, list, ref)
+				pred, err := predMotionWithContext(cache, index, blockWidth, list, ref, predCtx)
 				if err != nil {
 					return err
 				}

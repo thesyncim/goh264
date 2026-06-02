@@ -227,7 +227,7 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 		}
 		return result, nil
 	}
-	result, err = m.decodeCAVLCFrameInterMacroblock(gb, in, base, &work.Residual, &work.Motion, listCount, result)
+	result, err = m.decodeCAVLCFrameInterMacroblock(gb, in, base, &work.Residual, &work.Motion, listCount, cacheResult, result)
 	if err != nil {
 		return result, fmt.Errorf("inter field=%t type=%#x refs=%d/%d: %w", fieldPicture, base.MBType, in.RefCount[0], in.RefCount[1], err)
 	}
@@ -407,7 +407,7 @@ func (m *macroblockTables) decodeCAVLCFrameIntraMacroblock(gb *bitReader, in cav
 	return result, nil
 }
 
-func (m *macroblockTables) decodeCAVLCFrameInterMacroblock(gb *bitReader, in cavlcFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, motion *macroblockMotionCache, listCount int, result cavlcFrameMacroblockResult) (cavlcFrameMacroblockResult, error) {
+func (m *macroblockTables) decodeCAVLCFrameInterMacroblock(gb *bitReader, in cavlcFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, motion *macroblockMotionCache, listCount int, cacheResult frameMacroblockDecodeCacheResult, result cavlcFrameMacroblockResult) (cavlcFrameMacroblockResult, error) {
 	var mb cavlcInterMacroblockSyntax
 	mb.cavlcMacroblockSyntax = base
 	var err error
@@ -443,7 +443,8 @@ func (m *macroblockTables) decodeCAVLCFrameInterMacroblock(gb *bitReader, in cav
 			return result, err
 		}
 	}
-	if err := m.writeBackCAVLCInterMacroblock(in.MBXY, &mb, residual, motion, listCount, in.SliceTypeNoS, in.SliceNum); err != nil {
+	predCtx := m.frameMotionPredContext(in.MBXY, in.FrameMBAFF, cacheResult.Neighbors, base.MBType, listCount, in.SliceTypeNoS, false, in.DirectSpatialMVPred)
+	if err := m.writeBackCAVLCInterMacroblockWithContext(in.MBXY, &mb, residual, motion, listCount, in.SliceTypeNoS, in.SliceNum, predCtx); err != nil {
 		return result, err
 	}
 

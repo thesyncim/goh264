@@ -106,6 +106,10 @@ func (m *macroblockTables) writeBackCABACIntraMacroblockWithChromaPred(mbXY int,
 }
 
 func (m *macroblockTables) writeBackCAVLCInterMacroblock(mbXY int, mb *cavlcInterMacroblockSyntax, c *cavlcResidualContext, cache *macroblockMotionCache, listCount int, sliceTypeNoS int32, sliceNum uint16) error {
+	return m.writeBackCAVLCInterMacroblockWithContext(mbXY, mb, c, cache, listCount, sliceTypeNoS, sliceNum, nil)
+}
+
+func (m *macroblockTables) writeBackCAVLCInterMacroblockWithContext(mbXY int, mb *cavlcInterMacroblockSyntax, c *cavlcResidualContext, cache *macroblockMotionCache, listCount int, sliceTypeNoS int32, sliceNum uint16, predCtx *h264MotionPredContext) error {
 	if mb == nil || c == nil || cache == nil || isIntra(mb.MBType) {
 		return ErrInvalidData
 	}
@@ -114,7 +118,7 @@ func (m *macroblockTables) writeBackCAVLCInterMacroblock(mbXY int, mb *cavlcInte
 			return err
 		}
 	} else if isInter(mb.MBType) {
-		if err := fillCAVLCInterMotionCache(cache, mb, listCount); err != nil {
+		if err := fillCAVLCInterMotionCacheWithContext(cache, mb, listCount, predCtx); err != nil {
 			return err
 		}
 		if err := m.writeBackMotion(mbXY, mb.MBType, sliceTypeNoS, false, &mb.SubMBType, cache); err != nil {

@@ -96,6 +96,85 @@ func TestPredPartitionFastPaths(t *testing.T) {
 	}
 }
 
+func TestPred16x8MotionFrameMBAFFFetchesMixedLeftFieldDiagonal(t *testing.T) {
+	m, err := newMacroblockTables(3, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mbXY := 1 + 2*m.MBStride
+	leftTopXY := mbXY - 1
+	leftBottomXY := leftTopXY + m.MBStride
+	m.MacroblockTyp[leftBottomXY] = MBTypeInterlaced | MBType16x16 | MBTypeP0L0
+	m.RefIndex[0][4*leftBottomXY+1] = 3
+	m.MotionVal[0][int(m.MB2BXY[leftBottomXY])+3] = [2]int16{11, -44}
+
+	var cache macroblockMotionCache
+	base := int(h264Scan8[0])
+	lower := int(h264Scan8[8])
+	cache.Ref[0][base-1] = 0
+	cache.Ref[0][lower-1] = 0
+	cache.MV[0][lower-1] = [2]int16{0, -90}
+	cache.Ref[0][lower-8] = 0
+	cache.Ref[0][lower-8+4] = h264PartNotAvailable
+
+	predCtx := &h264MotionPredContext{
+		Tables:     m,
+		MBXY:       mbXY,
+		FrameMBAFF: true,
+		Neighbors: motionDecodeNeighbors{
+			MBType:   MBType16x8 | MBTypeP0L0 | MBTypeP1L0,
+			LeftType: [2]uint32{MBTypeInterlaced | MBType16x16 | MBTypeP0L0, MBTypeInterlaced | MBType16x16 | MBTypeP0L0},
+			LeftXY:   [2]int{leftTopXY, leftTopXY},
+		},
+	}
+	got, err := pred16x8MotionWithContext(&cache, 8, 0, 1, predCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != ([2]int16{11, -88}) {
+		t.Fatalf("mixed left field diagonal pred = %v, want [11 -88]", got)
+	}
+}
+
+func TestPred16x8MotionFrameMBAFFFetchesMixedLeftFrameDiagonal(t *testing.T) {
+	m, err := newMacroblockTables(3, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mbXY := 1 + 2*m.MBStride
+	leftTopXY := mbXY - 1
+	m.MacroblockTyp[leftTopXY] = MBType16x16 | MBTypeP0L0
+	m.RefIndex[0][4*leftTopXY+3] = 1
+	m.MotionVal[0][int(m.MB2BXY[leftTopXY])+3+3*m.BStride] = [2]int16{7, -44}
+
+	var cache macroblockMotionCache
+	base := int(h264Scan8[0])
+	lower := int(h264Scan8[8])
+	cache.Ref[0][base-1] = 0
+	cache.Ref[0][lower-1] = 0
+	cache.MV[0][lower-1] = [2]int16{0, -90}
+	cache.Ref[0][lower-8] = 0
+	cache.Ref[0][lower-8+4] = h264PartNotAvailable
+
+	predCtx := &h264MotionPredContext{
+		Tables:     m,
+		MBXY:       mbXY,
+		FrameMBAFF: true,
+		Neighbors: motionDecodeNeighbors{
+			MBType:   MBTypeInterlaced | MBType16x8 | MBTypeP0L0 | MBTypeP1L0,
+			LeftType: [2]uint32{MBType16x16 | MBTypeP0L0, MBType16x16 | MBTypeP0L0},
+			LeftXY:   [2]int{leftTopXY, leftTopXY + m.MBStride},
+		},
+	}
+	got, err := pred16x8MotionWithContext(&cache, 8, 0, 2, predCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != ([2]int16{7, -22}) {
+		t.Fatalf("mixed left frame diagonal pred = %v, want [7 -22]", got)
+	}
+}
+
 func TestPredPSkipMotionMedianAndZero(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {
