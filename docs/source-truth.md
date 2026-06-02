@@ -1,39 +1,16 @@
 # Source Truth
 
-Upstream is FFmpeg `n8.0.1`,
-`894da5ca7d742e4429ffb2af534fcda0103ef593`. Only the `libavcodec` H.264
-decoder path is in scope.
+Scope: FFmpeg `n8.0.1` H.264 decoder path only.
 
-## Proved Surface
+Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12
+fixtures, public FATE vector harness, frame-MD5 diagnostics, and CLI benchmark
+comparison.
 
-- Packet/API: Annex B, AVC/NALFF, `avcC`, auto detection, configured samples,
-  delayed flush, and the documented side-data subset.
-- Core 8-bit: progressive frame-picture IDR/P/B with CAVLC/CABAC handoff,
-  DPB/reorder, weighted/direct motion, reconstruction, and fixture-proved
-  deblocking.
-- High internals: 9/10/12/14-bit scalar DSP and uint16 frame/ref/output planes.
-- Public High10/High12: only manifest-backed lanes. Latest addition is High10
-  CAVLC temporal B8x8 direct-sub with visible luma residual.
-- External FATE vectors: URL-backed, gated by `GOH264_REAL_VECTORS=1` or
-  `GOH264_ORACLE=1`; red rows live in `realvectors/failures.jsonl`.
+Public vectors: 13/26 green. Red rows are not hidden; each has a known-failure
+signature in `testdata/h264/realvectors/failures.jsonl`.
 
-Canonical fixture detail lives in `testdata/h264/corpus/manifest.jsonl`, not in
-Markdown.
+Still guarded: MBAFF/PIC-AFF, broad PAFF, FMO, broad slice-boundary high modes,
+12/14-bit public high streams, full error resilience, threading/SIMD, and full
+libavcodec delayed-output behavior.
 
-## Proof Commands
-
-```sh
-go test ./...
-GOH264_ORACLE=1 GOH264_CORPUS_FETCH=1 go test ./...
-GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run TestH264RealVectorFailureLedgerFreshness
-go run ./cmd/goh264bench -manifest testdata/h264/corpus/manifest.jsonl -iters 1 -repeats 1 -warmup 0 -ffmpeg -json
-```
-
-## Still Guarded
-
-P IntraPCM, P 8x8-DCT intra, deblock-enabled weighted partitioned P, mixed
-direct/explicit B8x8, CABAC/implicit/deblock direct-sub residual variants,
-broader high B deblock residual lanes, public chroma/B-slice slice-boundary
-modes, broader 12-bit and all 14-bit public streams, GBR/RGB, field/MBAFF, FMO,
-threading/SIMD, broad error resilience, and full libavcodec delayed-output
-behavior.
+Canonical detail lives in manifests and tests, not Markdown.
