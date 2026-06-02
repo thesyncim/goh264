@@ -31,7 +31,20 @@ fi
 printf '\n'
 GOH264_REAL_VECTOR_MATRIX=1 go test . -run '^TestH264RealVectorFailureMatrix$' -count=1 -v
 
-printf '\nframe-MD5 diagnostics (raw-MD5 lanes exit here with the first divergent frame)'
+printf '\nraw-diff diagnostics (raw-MD5 lanes exit here with the first divergent raw byte)'
+if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
+    printf ' filter=%s' "$GOH264_CORPUS_FILTER"
+fi
+printf '\n'
+set +e
+GOH264_REAL_VECTOR_RAWDIFF=1 go test . -run '^TestH264RealVectorRawDiffDiagnostics$' -count=1 -v
+rawdiff_status=$?
+set -e
+if [[ "$rawdiff_status" -ne 0 ]]; then
+    exit "$rawdiff_status"
+fi
+
+printf '\nframe-MD5 diagnostics (fallback: raw-MD5 lanes exit here with the first divergent frame)'
 if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
     printf ' filter=%s' "$GOH264_CORPUS_FILTER"
 fi
