@@ -17,6 +17,7 @@ func TestHigh10DirectResidualFixtureMacroblockSyntax(t *testing.T) {
 		cbpTable      int
 	}{
 		{name: "cavlc-direct-sub", file: "high10_direct_sub_residual_cavlc.h264", wantDirectSub: true, cbpTable: 0x1001},
+		{name: "cabac-direct-sub", file: "high10_direct_sub_residual_cabac.h264", cabac: true, wantDirectSub: true, cbpTable: 0x1},
 		{name: "cabac-b16x16-direct", file: "high10_direct_b_residual_cabac.h264", cabac: true, cbpTable: 0x1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
