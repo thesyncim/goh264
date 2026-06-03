@@ -207,14 +207,13 @@ func cavlcCodeBytes(bits uint8, length uint8) []byte {
 }
 
 func cavlcBitString(s string) []byte {
-	var out uint32
+	out := make([]byte, (len(s)+7)/8)
 	for i := 0; i < len(s); i++ {
-		out <<= 1
 		if s[i] == '1' {
-			out |= 1
+			out[i>>3] |= 1 << (7 - uint(i&7))
 		}
 	}
-	return cavlcBitsToBytes(out, uint8(len(s)))
+	return out
 }
 
 func cavlcBitsToBytes(bits uint32, length uint8) []byte {
