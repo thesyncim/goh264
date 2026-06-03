@@ -1373,12 +1373,29 @@ func (d *simpleFrameDPB) drainOutputFrames(flush bool) ([]*DecodedFrame, error) 
 			d.nextOutputedPOC = frame.poc
 			d.nextOutputedValid = true
 		}
-		out = append(out, frame)
+		outputRecovered := d.markOutputFrameRecovered(frame)
+		if outputRecovered {
+			out = append(out, frame)
+		}
 		if !flush {
 			break
 		}
 	}
 	return out, nil
+}
+
+// markOutputFrameRecovered mirrors FFmpeg n8.0.1 h264_select_output_frame and
+// send_next_delayed_frame: once a recovered picture reaches display order, all
+// later pictures in display order inherit SEI recovery. Unrecovered pictures
+// are withheld unless the caller uses an explicit output-corrupt mode, which
+// this simple decoder facade intentionally does not expose.
+func (d *simpleFrameDPB) markOutputFrameRecovered(frame *DecodedFrame) bool {
+	if d == nil || frame == nil {
+		return false
+	}
+	d.frameRecovered |= frame.recovered
+	frame.recovered |= d.frameRecovered & simpleFrameRecoveredSEI
+	return frame.recovered != 0
 }
 
 func (d *simpleFrameDPB) nextOutputFrameIndex() int {

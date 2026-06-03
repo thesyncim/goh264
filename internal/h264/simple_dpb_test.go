@@ -556,6 +556,7 @@ func TestSimpleFrameDPBDelaysBOutputUntilFlush(t *testing.T) {
 	p.poc = 4
 	b := simpleDPBTestFrame(sps, 2)
 	b.poc = 2
+	recoverSimpleDPBTestFrames(idr, p, b)
 
 	if err := dpb.holdOutputFrame(idr, simpleDPBTestPOCHeader(sps, NALIDRSlice, PictureTypeI, 0, 0)); err != nil {
 		t.Fatal(err)
@@ -610,6 +611,7 @@ func TestSimpleFrameDPBInfersReorderDelayFromPOCGap(t *testing.T) {
 	p.poc = 4
 	b := simpleDPBTestFrame(sps, 2)
 	b.poc = 2
+	recoverSimpleDPBTestFrames(idr, p, b)
 
 	if err := dpb.holdOutputFrame(idr, simpleDPBTestPOCHeader(sps, NALIDRSlice, PictureTypeI, 0, 0)); err != nil {
 		t.Fatal(err)
@@ -688,6 +690,7 @@ func TestSimpleFrameDPBPrimesReorderDelayFromLeadingLowerPOC(t *testing.T) {
 	idr.idrKeyFrame = true
 	lower := simpleDPBTestFrame(sps, 1)
 	lower.poc = 65540
+	recoverSimpleDPBTestFrames(idr, lower)
 	if err := dpb.holdOutputFrame(idr, idrHeader); err != nil {
 		t.Fatal(err)
 	}
@@ -773,6 +776,7 @@ func TestSimpleFrameDPBPrimesReorderDelayAcrossTwoFuturePOCs(t *testing.T) {
 		frames[i].poc = poc
 	}
 	frames[0].idrKeyFrame = true
+	recoverSimpleDPBTestFrames(frames...)
 
 	var out []*DecodedFrame
 	for i, frame := range frames {
@@ -880,6 +884,7 @@ func TestSimpleFrameDPBOutputsLeadingMMCOResetBeforeLowerPOC(t *testing.T) {
 	reset.mmcoReset = true
 	lower := simpleDPBTestFrame(sps, 1)
 	lower.poc = 37
+	recoverSimpleDPBTestFrames(reset, lower)
 	dpb := simpleFrameDPB{
 		delayed:    []*DecodedFrame{reset, lower},
 		hasBFrames: 1,
@@ -894,6 +899,65 @@ func TestSimpleFrameDPBOutputsLeadingMMCOResetBeforeLowerPOC(t *testing.T) {
 	}
 	if len(dpb.delayed) != 1 || dpb.delayed[0] != lower {
 		t.Fatalf("delayed after reset output = %v, want lower picture retained", dpb.delayed)
+	}
+}
+
+func TestSimpleFrameDPBDropsUnrecoveredOutputUntilSEIRecovery(t *testing.T) {
+	sps := simpleDPBTestSPS(4)
+	sps.BitstreamRestrictionFlag = 1
+	sps.NumReorderFrames = 3
+	var dpb simpleFrameDPB
+	dpb.reset()
+
+	leading0 := simpleDPBTestFrame(sps, 60)
+	leading0.poc = 10
+	leading1 := simpleDPBTestFrame(sps, 59)
+	leading1.poc = 12
+	leading2 := simpleDPBTestFrame(sps, 60)
+	leading2.poc = 14
+	recovery := simpleDPBTestFrame(sps, 58)
+	recovery.poc = 16
+	recovery.recovered = simpleFrameRecoveredSEI
+	after := simpleDPBTestFrame(sps, 62)
+	after.poc = 18
+
+	frames := []*DecodedFrame{leading0, leading1, leading2, recovery, after}
+	headers := []*SliceHeader{
+		simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeB, 60, 10),
+		simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeB, 59, 12),
+		simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeB, 60, 14),
+		simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeI, 58, 16),
+		simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeP, 62, 18),
+	}
+
+	var out []*DecodedFrame
+	for i, frame := range frames {
+		if err := dpb.holdOutputFrame(frame, headers[i]); err != nil {
+			t.Fatalf("hold frame %d: %v", i, err)
+		}
+		got, err := dpb.drainOutputFrames(false)
+		if err != nil {
+			t.Fatalf("drain frame %d: %v", i, err)
+		}
+		out = append(out, got...)
+	}
+	got, err := dpb.drainOutputFrames(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = append(out, got...)
+
+	want := []*DecodedFrame{recovery, after}
+	if len(out) != len(want) {
+		t.Fatalf("output len = %d, want %d", len(out), len(want))
+	}
+	for i := range want {
+		if out[i] != want[i] {
+			t.Fatalf("output[%d] = %p, want %p", i, out[i], want[i])
+		}
+	}
+	if after.recovered&simpleFrameRecoveredSEI == 0 {
+		t.Fatalf("post-recovery frame recovered = %#x, want SEI propagation", after.recovered)
 	}
 }
 
@@ -1189,6 +1253,12 @@ func simpleDPBTestFrame(sps *SPS, frameNum uint32) *DecodedFrame {
 		BitDepthChroma:   int(sps.BitDepthChroma),
 		frameMBSOnlyFlag: sps.FrameMBSOnlyFlag,
 		frameNum:         frameNum,
+	}
+}
+
+func recoverSimpleDPBTestFrames(frames ...*DecodedFrame) {
+	for _, frame := range frames {
+		frame.recovered |= simpleFrameRecoveredIDR
 	}
 }
 
