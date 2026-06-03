@@ -685,6 +685,76 @@ func TestTemporalDirectFrameMBAFFBottomFieldColmapUsesRFieldXOR(t *testing.T) {
 	}
 }
 
+func TestPredTemporalDirectFieldPictureUsesMBAFFColocatedFieldRefOffset(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colMBs, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 0}, frameNum: 2}
+	past := &DecodedFrame{poc: 6, fieldPOC: [2]int32{6, 8}, frameNum: 1}
+	wrong := &DecodedFrame{poc: 8, fieldPOC: [2]int32{8, 10}, frameNum: 4}
+	col := &DecodedFrame{
+		poc:      10,
+		fieldPOC: [2]int32{10, 12},
+		frameNum: 3,
+		mbaff:    true,
+		tables:   colMBs,
+		refEntries: [2][]simpleRefEntry{
+			{
+				{frame: past, picID: past.frameNum, pictureStructure: PictureFrame, poc: past.poc},
+				{frame: target, picID: target.frameNum, pictureStructure: PictureFrame, poc: target.poc},
+			},
+		},
+		fieldRefEntries: [2][2][]simpleRefEntry{
+			{
+				{
+					{frame: past, picID: 2*past.frameNum + 1, pictureStructure: PictureTopField, poc: past.fieldPOC[0]},
+					{frame: past, picID: 2*past.frameNum + 2, pictureStructure: PictureBottomField, poc: past.fieldPOC[1]},
+					{frame: wrong, picID: 2*wrong.frameNum + 1, pictureStructure: PictureTopField, poc: wrong.fieldPOC[0]},
+				},
+			},
+		},
+	}
+	colMBs.MacroblockTyp[0] = MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colMBs.MacroblockTyp[colMBs.MBStride] = MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colMBs.RefIndex[0][3] = 2
+	colMBs.MotionVal[0][int(colMBs.MB2BXY[0])+3+3*colMBs.BStride] = [2]int16{11, 7}
+
+	var cache macroblockMotionCache
+	sub := [4]uint32{MBTypeDirect2, MBTypeDirect2, MBTypeDirect2, MBTypeDirect2}
+	mbType := MBType8x8 | MBTypeL0L1 | MBTypeInterlaced
+	err = m.predDirectMotionFrame(&cache, 0, &mbType, &sub, h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: past, picID: 2*past.frameNum + 1, pictureStructure: PictureTopField, poc: past.fieldPOC[0]},
+				{frame: target, picID: target.frameNum, pictureStructure: PictureFrame, poc: target.poc},
+				{frame: target, picID: 2*target.frameNum + 1, pictureStructure: PictureTopField, poc: target.fieldPOC[0]},
+				{frame: past, picID: 2*past.frameNum + 2, pictureStructure: PictureBottomField, poc: past.fieldPOC[1]},
+				{frame: wrong, picID: 2*wrong.frameNum + 1, pictureStructure: PictureTopField, poc: wrong.fieldPOC[0]},
+			},
+			{{frame: col, pictureStructure: PictureTopField, poc: col.fieldPOC[0]}},
+		},
+		CurPOC:             6,
+		CurFieldPOC:        [2]int32{6, 8},
+		PictureStructure:   PictureTopField,
+		Direct8x8Inference: true,
+	})
+	if err != nil {
+		t.Fatalf("field-picture MBAFF colocated direct failed: %v", err)
+	}
+	base := int(h264Scan8[12])
+	if cache.Ref[0][base] != 2 || cache.Ref[1][base] != 0 {
+		t.Fatalf("direct refs = %d/%d, want 2/0", cache.Ref[0][base], cache.Ref[1][base])
+	}
+	if cache.MV[0][base] != ([2]int16{7, 4}) || cache.MV[1][base] != ([2]int16{-4, -3}) {
+		t.Fatalf("direct mvs = %v/%v, want FFmpeg-scaled field refs", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
 func TestTemporalDirectFrameMBAFFBottomFieldColmapKeepsFieldPictureRefSlot(t *testing.T) {
 	past := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 2}, frameNum: 7}
 	col := &DecodedFrame{

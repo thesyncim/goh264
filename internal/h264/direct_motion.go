@@ -690,7 +690,24 @@ func temporalDirectColocatedRefListAtLayout(col *macroblockTables, refIndex int,
 	if ctx.PictureStructure == PictureFrame && !layout.CurInterlaced && colField {
 		return temporalDirectColocatedRefListAtFrameColField(col, refIndex, ctx, directColocatedParity(ctx))
 	}
-	return temporalDirectColocatedRefListAtField(col, refIndex, ctx, colField, temporalDirectFieldParity(ctx, layout))
+	fieldParity := temporalDirectFieldParity(ctx, layout)
+	if fieldParity < 0 && colField &&
+		len(ctx.RefEntries[1]) != 0 && ctx.RefEntries[1][0].frame != nil &&
+		ctx.RefEntries[1][0].frame.mbaff {
+		// FFmpeg applies ref_offset=16 for field-picture direct blocks that
+		// look through a field-coded macroblock in an MBAFF colocated parent.
+		switch ctx.PictureStructure {
+		case PictureTopField:
+			if ref0, list, err := temporalDirectColocatedRefListAtField(col, refIndex, ctx, colField, 0); err == nil && ref0 >= 0 && int(ref0) < len(ctx.RefEntries[0]) {
+				return ref0, list, nil
+			}
+		case PictureBottomField:
+			if ref0, list, err := temporalDirectColocatedRefListAtField(col, refIndex, ctx, colField, 1); err == nil && ref0 >= 0 && int(ref0) < len(ctx.RefEntries[0]) {
+				return ref0, list, nil
+			}
+		}
+	}
+	return temporalDirectColocatedRefListAtField(col, refIndex, ctx, colField, fieldParity)
 }
 
 func temporalDirectColocatedRefListAtField(col *macroblockTables, refIndex int, ctx h264DirectMotionContext, colField bool, fieldParity int) (int8, int, error) {
