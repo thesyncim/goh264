@@ -22,7 +22,8 @@ CAVLC High14 IntraPCM and mixed no-residual Intra4x4/Intra16x16 plus
 Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
 combined luma/chroma residual plus P-skip/P16x16.
 
-Next: more public 12/14-bit streams, then field/MBAFF.
+Next: high-bit-depth field-coded public rows and more public 12/14-bit streams,
+then field/MBAFF.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and
 `testdata/h264/realvectors/manifest.jsonl`.
