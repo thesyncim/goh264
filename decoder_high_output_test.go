@@ -24,13 +24,13 @@ func TestFrameRawPixelFormatAndSize(t *testing.T) {
 			wantBPS:    2,
 		},
 		{
-			name: "gray12le",
+			name: "monochrome-yuv420p12le",
 			frame: Frame{
 				Width: 3, Height: 2, ChromaFormatIDC: 0,
 				BitDepthLuma: 12,
 			},
-			wantFormat: "gray12le",
-			wantBytes:  12,
+			wantFormat: "yuv420p12le",
+			wantBytes:  20,
 			wantBPS:    2,
 		},
 		{
@@ -146,6 +146,46 @@ func TestFrameAppendRawYUVBytesLEUses8BitByteSurface(t *testing.T) {
 	}
 	if string(got) != string([]byte{1, 2, 3, 4, 5, 6}) {
 		t.Fatalf("AppendRawYUVBytesLE = %v, want [1 2 3 4 5 6]", got)
+	}
+}
+
+func TestFrameAppendRawYUVBytesLEExpandsMonochromeToYUV420(t *testing.T) {
+	frame := Frame{
+		Width:           4,
+		Height:          2,
+		ChromaFormatIDC: 0,
+		BitDepthLuma:    10,
+		YStride:         4,
+		Y16:             []uint16{1, 2, 3, 4, 5, 6, 7, 8},
+	}
+
+	got, err := frame.AppendRawYUVBytesLE(nil)
+	if err != nil {
+		t.Fatalf("AppendRawYUVBytesLE error = %v", err)
+	}
+	wantSamples := []uint16{1, 2, 3, 4, 5, 6, 7, 8, 512, 512, 512, 512}
+	want := rawUint16LE(wantSamples)
+	if string(got) != string(want) {
+		t.Fatalf("AppendRawYUVBytesLE = %v, want %v", got, want)
+	}
+}
+
+func TestFrameAppendRawYUVExpands8BitMonochromeWithoutChromaDepth(t *testing.T) {
+	frame := Frame{
+		Width:           2,
+		Height:          2,
+		ChromaFormatIDC: 0,
+		BitDepthLuma:    8,
+		YStride:         2,
+		Y:               []byte{1, 2, 3, 4},
+	}
+
+	got, err := frame.AppendRawYUV(nil)
+	if err != nil {
+		t.Fatalf("AppendRawYUV error = %v", err)
+	}
+	if string(got) != string([]byte{1, 2, 3, 4, 128, 128}) {
+		t.Fatalf("AppendRawYUV = %v, want [1 2 3 4 128 128]", got)
 	}
 }
 

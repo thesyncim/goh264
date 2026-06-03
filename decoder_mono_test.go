@@ -111,7 +111,7 @@ func TestFFmpegFrameMD5OracleTestsrc16Monochrome(t *testing.T) {
 				"-f", "h264",
 				"-i", path,
 				"-an", "-sn", "-dn",
-				"-pix_fmt", "gray",
+				"-pix_fmt", "yuv420p",
 				"-f", "framemd5",
 				"-",
 			)
@@ -119,8 +119,20 @@ func TestFFmpegFrameMD5OracleTestsrc16Monochrome(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ffmpeg framemd5: %v", err)
 			}
-			for i, hash := range tt.want {
-				line := []byte(fmt.Sprintf("0, %10d, %10d,        1,      256, %s", i, i, hash))
+			frames, err := NewDecoder().DecodeAnnexBFrames(decodeHexFixture(t, tt.hex))
+			if err != nil {
+				t.Fatalf("go decode: %v", err)
+			}
+			if len(frames) != len(tt.want) {
+				t.Fatalf("go frames = %d, want %d", len(frames), len(tt.want))
+			}
+			for i, frame := range frames {
+				raw, err := frame.AppendRawYUV(nil)
+				if err != nil {
+					t.Fatalf("go frame[%d] raw yuv: %v", i, err)
+				}
+				got := md5.Sum(raw)
+				line := []byte(fmt.Sprintf("0, %10d, %10d,        1,      384, %s", i, i, hex.EncodeToString(got[:])))
 				if !bytes.Contains(out, line) {
 					t.Fatalf("frame[%d] missing %q in framemd5:\n%s", i, line, out)
 				}
@@ -171,16 +183,24 @@ func assertMonoFrameMD5Strings(t *testing.T, frames []*Frame, want []string) {
 		if frame.Width != 16 || frame.Height != 16 || frame.ChromaFormatIDC != 0 || frame.BitDepthLuma != 8 || frame.BitDepthChroma != 8 {
 			t.Fatalf("frame[%d] metadata = %dx%d chroma %d depth %d/%d", i, frame.Width, frame.Height, frame.ChromaFormatIDC, frame.BitDepthLuma, frame.BitDepthChroma)
 		}
+		if pixFmt, err := frame.RawPixelFormat(); err != nil || pixFmt != "yuv420p" {
+			t.Fatalf("frame[%d] RawPixelFormat = %q/%v, want yuv420p/nil", i, pixFmt, err)
+		}
 		raw, err := frame.AppendRawYUV(nil)
 		if err != nil {
 			t.Fatalf("frame[%d] raw yuv: %v", i, err)
 		}
-		if len(raw) != 256 {
-			t.Fatalf("frame[%d] raw frame size = %d, want 256", i, len(raw))
+		if len(raw) != 384 {
+			t.Fatalf("frame[%d] raw frame size = %d, want 384", i, len(raw))
 		}
-		got := md5.Sum(raw)
+		got := md5.Sum(raw[:256])
 		if hex.EncodeToString(got[:]) != want[i] {
 			t.Fatalf("frame[%d] md5 = %x, want %s", i, got, want[i])
+		}
+		for j, sample := range raw[256:] {
+			if sample != 0x80 {
+				t.Fatalf("frame[%d] neutral chroma[%d] = %d, want 128", i, j, sample)
+			}
 		}
 	}
 }

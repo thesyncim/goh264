@@ -994,7 +994,7 @@ func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
 		return dst, ErrInvalidData
 	}
-	if f.BitDepthLuma != 8 || f.BitDepthChroma != 8 {
+	if f.BitDepthLuma != 8 || (f.ChromaFormatIDC != 0 && f.BitDepthChroma != 8) {
 		return dst, ErrUnsupported
 	}
 	return f.appendRawYUVBytes8(dst)
@@ -1018,9 +1018,7 @@ func (f *Frame) RawPixelFormat() (string, error) {
 	}
 	base := ""
 	switch f.ChromaFormatIDC {
-	case 0:
-		base = "gray"
-	case 1:
+	case 0, 1:
 		base = "yuv420p"
 	case 2:
 		base = "yuv422p"
@@ -1067,6 +1065,13 @@ func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 			return dst, err
 		}
 	}
+	if f.ChromaFormatIDC == 0 {
+		chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, 1)
+		if err != nil {
+			return dst, err
+		}
+		return appendNeutralRawUint16Samples(dst, chromaWidth*chromaHeight*2, neutralRawChromaSample(depth)), nil
+	}
 	if chromaWidth == 0 || chromaHeight == 0 {
 		return dst, nil
 	}
@@ -1107,6 +1112,13 @@ func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
 			return dst, err
 		}
 	}
+	if f.ChromaFormatIDC == 0 {
+		chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, 1)
+		if err != nil {
+			return dst, err
+		}
+		return appendNeutralRawUint16LE(dst, chromaWidth*chromaHeight*2, neutralRawChromaSample(depth)), nil
+	}
 	if chromaWidth == 0 || chromaHeight == 0 {
 		return dst, nil
 	}
@@ -1138,6 +1150,13 @@ func (f *Frame) appendRawYUVBytes8(dst []byte) ([]byte, error) {
 	for y := 0; y < f.Height; y++ {
 		row := (f.CropTop+y)*f.YStride + f.CropLeft
 		dst = append(dst, f.Y[row:row+f.Width]...)
+	}
+	if f.ChromaFormatIDC == 0 {
+		chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, 1)
+		if err != nil {
+			return dst, err
+		}
+		return appendNeutralRawBytes(dst, chromaWidth*chromaHeight*2, byte(neutralRawChromaSample(8))), nil
 	}
 
 	chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, f.ChromaFormatIDC)
@@ -1219,6 +1238,12 @@ func (f *Frame) rawYUVSampleCount() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if f.ChromaFormatIDC == 0 {
+		chromaWidth, chromaHeight, err = frameChromaSize(f.Width, f.Height, 1)
+		if err != nil {
+			return 0, err
+		}
+	}
 	return f.Width*f.Height + 2*chromaWidth*chromaHeight, nil
 }
 
@@ -1261,6 +1286,31 @@ func appendRawUint16Samples(dst []uint16, samples []uint16, maxSample uint16) ([
 		dst = append(dst, sample)
 	}
 	return dst, nil
+}
+
+func neutralRawChromaSample(depth int) uint16 {
+	return uint16(1 << uint(depth-1))
+}
+
+func appendNeutralRawBytes(dst []byte, count int, sample byte) []byte {
+	for i := 0; i < count; i++ {
+		dst = append(dst, sample)
+	}
+	return dst
+}
+
+func appendNeutralRawUint16Samples(dst []uint16, count int, sample uint16) []uint16 {
+	for i := 0; i < count; i++ {
+		dst = append(dst, sample)
+	}
+	return dst
+}
+
+func appendNeutralRawUint16LE(dst []byte, count int, sample uint16) []byte {
+	for i := 0; i < count; i++ {
+		dst = append(dst, byte(sample), byte(sample>>8))
+	}
+	return dst
 }
 
 func appendRawUint16LE(dst []byte, samples []uint16, maxSample uint16) ([]byte, error) {
