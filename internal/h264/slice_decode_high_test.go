@@ -164,10 +164,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 		{name: "14-bit-deblock", bitDepth: 14, chroma: 14, format: 1, deblock: true, slice: PictureTypeI},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeI},
 		{name: "monochrome", bitDepth: 10, chroma: 10, format: 0, slice: PictureTypeI},
-		{name: "high10-422-deblock-disabled", bitDepth: 10, chroma: 10, format: 2, slice: PictureTypeI},
-		{name: "high10-444-deblock-disabled", bitDepth: 10, chroma: 10, format: 3, slice: PictureTypeI},
-		{name: "high12-422-deblock-disabled", bitDepth: 12, chroma: 12, format: 2, slice: PictureTypeI},
-		{name: "high12-444-deblock-disabled", bitDepth: 12, chroma: 12, format: 3, slice: PictureTypeI},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -240,20 +236,23 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12SliceBoundaryDeb
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12ChromaDeblocking(t *testing.T) {
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12ChromaFrameDeblocking(t *testing.T) {
 	for _, bitDepth := range []int32{10, 12} {
 		for _, chromaFormatIDC := range []int{2, 3} {
-			for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
-				t.Run(bitDepthName(bitDepth)+"/"+chromaFormatName(chromaFormatIDC)+"/"+pictureTypeName(sliceType), func(t *testing.T) {
-					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, chromaFormatIDC, 2, true, sliceType)
-					if sliceType == PictureTypeP {
-						sh.RefCount = [2]uint32{1, 0}
-					}
+			for _, deblockMode := range []int32{0, 1} {
+				for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+					t.Run(fmt.Sprintf("%s/%s/deblock%d/%s", bitDepthName(bitDepth), chromaFormatName(chromaFormatIDC), deblockMode, pictureTypeName(sliceType)), func(t *testing.T) {
+						m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, chromaFormatIDC, 2, deblockMode != 0, sliceType)
+						sh.DeblockingFilter = deblockMode
+						if sliceType == PictureTypeP {
+							sh.RefCount = [2]uint32{1, 0}
+						}
 
-					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-						t.Fatalf("high chroma deblock validation err = %v, want nil", err)
-					}
-				})
+						if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+							t.Fatalf("high chroma frame deblock validation err = %v, want nil", err)
+						}
+					})
+				}
 			}
 		}
 	}
@@ -306,22 +305,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *tes
 				sh.SliceTypeNoS = PictureTypeB
 				sh.RefCount = [2]uint32{1, 1}
 				sh.DeblockingFilter = 2
-			},
-		},
-		{
-			name:     "10-bit/chroma-deblock-disabled",
-			bitDepth: 10,
-			run: func(sh *SliceHeader) {
-				sh.SPS.ChromaFormatIDC = 2
-				sh.DeblockingFilter = 0
-			},
-		},
-		{
-			name:     "12-bit/chroma-deblock-disabled",
-			bitDepth: 12,
-			run: func(sh *SliceHeader) {
-				sh.SPS.ChromaFormatIDC = 2
-				sh.DeblockingFilter = 0
 			},
 		},
 	} {
@@ -434,12 +417,14 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 	}{
 		{name: "9-bit", bitDepth: 9, chroma: 9, format: 1, slice: PictureTypeP},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeP},
-		{name: "high10-422-deblock-disabled", bitDepth: 10, chroma: 10, format: 2, slice: PictureTypeP},
-		{name: "high10-444-deblock-disabled", bitDepth: 10, chroma: 10, format: 3, slice: PictureTypeP},
+		{name: "high10-422-weighted-chroma-deblock-disabled", bitDepth: 10, chroma: 10, format: 2, slice: PictureTypeP},
+		{name: "high10-444-weighted-chroma-deblock-disabled", bitDepth: 10, chroma: 10, format: 3, slice: PictureTypeP},
 		{name: "high10-422-weighted-chroma-deblock", bitDepth: 10, chroma: 10, format: 2, deblock: true, slice: PictureTypeP},
 		{name: "high10-444-weighted-chroma-deblock", bitDepth: 10, chroma: 10, format: 3, deblock: true, slice: PictureTypeP},
 		{name: "high10-422-weighted-chroma-slice-boundary-deblock", bitDepth: 10, chroma: 10, format: 2, deblockMode: 2, slice: PictureTypeP},
 		{name: "high10-444-weighted-chroma-slice-boundary-deblock", bitDepth: 10, chroma: 10, format: 3, deblockMode: 2, slice: PictureTypeP},
+		{name: "high12-422-weighted-chroma-deblock-disabled", bitDepth: 12, chroma: 12, format: 2, slice: PictureTypeP},
+		{name: "high12-444-weighted-chroma-deblock-disabled", bitDepth: 12, chroma: 12, format: 3, slice: PictureTypeP},
 		{name: "high12-422-weighted-chroma-deblock", bitDepth: 12, chroma: 12, format: 2, deblock: true, slice: PictureTypeP},
 		{name: "high12-444-weighted-chroma-deblock", bitDepth: 12, chroma: 12, format: 3, deblock: true, slice: PictureTypeP},
 		{name: "high12-422-weighted-chroma-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 2, deblockMode: 2, slice: PictureTypeP},
@@ -1427,7 +1412,9 @@ func TestDecodeCABACFrameSliceHighReconstructsP16x16NoResidual(t *testing.T) {
 }
 
 func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBeforeEntropy(t *testing.T) {
-	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 2, false, PictureTypeI)
+	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 2, true, PictureTypeB)
+	sh.DeblockingFilter = 2
+	sh.RefCount = [2]uint32{1, 1}
 	gb := newBitReader(cavlcIntraPCMBytes(h264ReconstructIntraPCMHigh(1, 10, 5)))
 
 	_, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 2})
