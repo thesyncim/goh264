@@ -7,8 +7,9 @@ fixtures including High10 unweighted 4:2:2/4:4:4 I/P chroma
 no-deblock plus weighted 4:2:2/4:4:4 luma-only/chroma P frame deblock modes 0/1 and
 slice-boundary mode-2 deblock, High12 CAVLC IntraPCM, mixed no-residual
 intra, plus
-Intra16x16 luma, chroma, and combined luma/chroma residual, internal
-High12 no-deblock unweighted/weighted P-skip/P16x16/partitioned P and
+Intra16x16 luma, chroma, and combined luma/chroma residual plus public
+P-skip, internal High12 no-deblock weighted P-skip and
+unweighted/weighted P16x16/partitioned P plus
 P16x16 residual handoff plus no-deblock/mode-1 I/P deblock including
 unweighted 4:2:2/4:4:4 I/P chroma deblock plus 4:2:0 I/P
 slice-boundary mode-2 deblock and unweighted 4:2:2/4:4:4 I/P chroma
