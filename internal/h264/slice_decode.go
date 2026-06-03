@@ -460,7 +460,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 
 func isPublicHighFrameBitDepthCandidate(bitDepth int32) bool {
 	switch bitDepth {
-	case 8, 10, 12:
+	case 8, 10, 12, 14:
 		return true
 	default:
 		return false
@@ -481,6 +481,12 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 		return true
 	case 12:
 		return sh.SPS.ChromaFormatIDC == 1 &&
+			sh.SliceTypeNoS == PictureTypeI &&
+			sh.DeblockingFilter == 0
+	case 14:
+		return sh.PPS != nil &&
+			sh.PPS.CABAC == 0 &&
+			sh.SPS.ChromaFormatIDC == 1 &&
 			sh.SliceTypeNoS == PictureTypeI &&
 			sh.DeblockingFilter == 0
 	default:

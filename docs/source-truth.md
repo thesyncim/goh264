@@ -2,7 +2,7 @@
 
 Scope: FFmpeg `n8.0.1` H.264 decoder path only.
 
-Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12
+Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures, public FATE vector harness, raw-diff/frame-MD5 diagnostics, and CLI
 benchmark comparison.
 
