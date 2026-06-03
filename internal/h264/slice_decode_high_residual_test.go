@@ -214,14 +214,17 @@ func TestDecodeCABACFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.
 
 func TestDecodeFrameSliceHighReconstructsBSkipFromDirectRefs(t *testing.T) {
 	for _, tt := range []struct {
-		name          string
-		directSpatial bool
-		cabac         bool
+		name            string
+		directSpatial   bool
+		cabac           bool
+		implicitDeblock bool
 	}{
 		{name: "cavlc-temporal"},
 		{name: "cavlc-spatial", directSpatial: true},
 		{name: "cabac-temporal", cabac: true},
 		{name: "cabac-spatial", directSpatial: true, cabac: true},
+		{name: "cavlc-implicit-deblock-temporal", implicitDeblock: true},
+		{name: "cabac-implicit-deblock-spatial", directSpatial: true, cabac: true, implicitDeblock: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
@@ -230,12 +233,19 @@ func TestDecodeFrameSliceHighReconstructsBSkipFromDirectRefs(t *testing.T) {
 			if tt.cabac {
 				sh.PPS.CABAC = 1
 			}
+			if tt.implicitDeblock {
+				sh.DeblockingFilter = 1
+				sh.PPS.WeightedBipredIDC = 2
+			}
 			refs, direct := highBSkipDirectRefsHigh(t, tt.directSpatial)
 			in := h264FrameSliceDecodeInputHigh{
 				SliceNum:      61,
 				Refs:          refs,
 				Direct:        direct,
 				MotionScratch: makeH264MotionCompScratchHigh(dst),
+			}
+			if tt.implicitDeblock {
+				in.PredWeight = neutralImplicitBipredWeightTable()
 			}
 
 			var got h264FrameSliceDecodeResult
@@ -267,6 +277,13 @@ func TestDecodeFrameSliceHighReconstructsBSkipFromDirectRefs(t *testing.T) {
 			assertH264RowsHigh(t, tt.name+" high bskip cr", dst.Cr, 0, dst.ChromaStride, 8, 8, refs[0][0].Cr, refs[0][0].ChromaStride)
 		})
 	}
+}
+
+func neutralImplicitBipredWeightTable() *PredWeightTable {
+	pwt := &PredWeightTable{UseWeight: 2, UseWeightChroma: 2}
+	pwt.ImplicitWeight[0][0][0] = 32
+	pwt.ImplicitWeight[0][0][1] = 32
+	return pwt
 }
 
 func TestDecodeFrameSliceHighReconstructsBDirectSubFromDirectRefs(t *testing.T) {
@@ -357,14 +374,24 @@ func TestDecodeFrameSliceHighReconstructsBDirectSubFromDirectRefs(t *testing.T) 
 func TestDecodeFrameSliceHighReconstructsTopLevelBDirect8x8FromDirectRefs(t *testing.T) {
 	for _, tt := range []struct {
 		name               string
+		cabac              bool
 		direct8x8Inference bool
 	}{
 		{
-			name:               "direct-8x8-inference",
+			name:               "cavlc-direct-8x8-inference",
 			direct8x8Inference: true,
 		},
 		{
-			name: "direct-sub-4x4",
+			name: "cavlc-direct-sub-4x4",
+		},
+		{
+			name:               "cabac-direct-8x8-inference",
+			cabac:              true,
+			direct8x8Inference: true,
+		},
+		{
+			name:  "cabac-direct-sub-4x4",
+			cabac: true,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -372,6 +399,9 @@ func TestDecodeFrameSliceHighReconstructsTopLevelBDirect8x8FromDirectRefs(t *tes
 			sh.QScale = 22
 			sh.RefCount = [2]uint32{1, 1}
 			sh.SPS.Direct8x8InferenceFlag = boolToInt32(tt.direct8x8Inference)
+			if tt.cabac {
+				sh.PPS.CABAC = 1
+			}
 			refs, direct := highBSkipDirectRefsHigh(t, false)
 			direct.Direct8x8Inference = tt.direct8x8Inference
 			direct.RefEntries[1][0].frame.tables.MacroblockTyp[0] = MBType8x8 | MBTypeP0L0
@@ -382,13 +412,23 @@ func TestDecodeFrameSliceHighReconstructsTopLevelBDirect8x8FromDirectRefs(t *tes
 				MotionScratch: makeH264MotionCompScratchHigh(dst),
 			}
 
-			gb := newBitReader(cavlcBitString("111"))
-			got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, in)
+			var got h264FrameSliceDecodeResult
+			var err error
+			if tt.cabac {
+				src := &scriptedCABACSource{
+					bits:  []int{0, 0, 0, 0, 0, 0, 0},
+					terms: []int{1},
+				}
+				got, err = m.decodeCABACFrameSliceHigh(src, dst, sh, in)
+			} else {
+				gb := newBitReader(cavlcBitString("111"))
+				got, err = m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, in)
+				if err == nil && gb.bitPos != 3 {
+					t.Fatalf("CAVLC top-level B direct consumed %d bits, want 3", gb.bitPos)
+				}
+			}
 			if err != nil {
 				t.Fatalf("decode high top-level B direct 8x8 failed: %v", err)
-			}
-			if gb.bitPos != 3 {
-				t.Fatalf("CAVLC top-level B direct consumed %d bits, want 3", gb.bitPos)
 			}
 			if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
 				t.Fatalf("slice result = %+v, want one top-level B direct MB frame end", got)

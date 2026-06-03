@@ -579,6 +579,7 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b implicit weighted top-level direct 8x8 remains guarded", sh: bImplicitWeightedSlice, mbType: MBType8x8 | MBTypeL0L1 | MBTypeDirect2, sub: &bExplicitSub, want: ErrUnsupported},
 		{name: "b deblock skip cbp remains guarded", sh: bDeblockSlice, mbType: bSkip, cbp: 1, want: ErrUnsupported},
 		{name: "b deblock skip cbp table remains guarded", sh: bDeblockSlice, mbType: bSkip, cbpTable: 1, want: ErrUnsupported},
+		{name: "b deblock implicit weighted direct skip cbp remains guarded", sh: bImplicitDeblockSlice, mbType: bSkip, cbp: 1, want: ErrUnsupported},
 		{name: "b deblock direct sub cbp", sh: bDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1},
 		{name: "b deblock direct sub cbp table", sh: bDeblockSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbpTable: 1},
 		{name: "b deblock partitioned residual", sh: bDeblockSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1},
@@ -600,10 +601,16 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsImplicitWeightedB16
 	for _, tt := range []struct {
 		name     string
 		pps      *PPS
+		mbType   uint32
+		cbp      int
 		cbpTable int
 	}{
-		{name: "cavlc", pps: &PPS{WeightedBipredIDC: 2}, cbpTable: 0xf00f},
-		{name: "cabac", pps: &PPS{CABAC: 1, WeightedBipredIDC: 2}, cbpTable: 0xf},
+		{name: "cavlc explicit", pps: &PPS{WeightedBipredIDC: 2}, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, cbp: 0xf, cbpTable: 0xf00f},
+		{name: "cabac explicit", pps: &PPS{CABAC: 1, WeightedBipredIDC: 2}, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, cbp: 0xf, cbpTable: 0xf},
+		{name: "cavlc temporal direct", pps: &PPS{WeightedBipredIDC: 2}, mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2, cbp: 0x31, cbpTable: 0xf031},
+		{name: "cabac temporal direct", pps: &PPS{CABAC: 1, WeightedBipredIDC: 2}, mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2, cbp: 0x31, cbpTable: 0x31},
+		{name: "cavlc spatial direct skip", pps: &PPS{WeightedBipredIDC: 2}, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip},
+		{name: "cabac spatial direct skip", pps: &PPS{CABAC: 1, WeightedBipredIDC: 2}, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			sh := &SliceHeader{
@@ -611,8 +618,7 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsImplicitWeightedB16
 				DeblockingFilter: 1,
 				PPS:              tt.pps,
 			}
-			mbType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
-			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, nil, 0xf, tt.cbpTable); err != nil {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, tt.mbType, nil, tt.cbp, tt.cbpTable); err != nil {
 				t.Fatalf("validate implicit weighted B16x16 deblock err = %v, want nil", err)
 			}
 		})
