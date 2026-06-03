@@ -710,14 +710,15 @@ func (f *DecodedFrame) picturePlanesHigh() h264PicturePlanesHigh {
 		return h264PicturePlanesHigh{}
 	}
 	return h264PicturePlanesHigh{
-		Y:               f.Y16,
-		Cb:              f.Cb16,
-		Cr:              f.Cr16,
-		LumaStride:      f.LumaStride,
-		ChromaStride:    f.ChromaStride,
-		MBWidth:         f.MBWidth,
-		MBHeight:        f.MBHeight,
-		ChromaFormatIDC: f.ChromaFormatIDC,
+		Y:                f.Y16,
+		Cb:               f.Cb16,
+		Cr:               f.Cr16,
+		LumaStride:       f.LumaStride,
+		ChromaStride:     f.ChromaStride,
+		MBWidth:          f.MBWidth,
+		MBHeight:         f.MBHeight,
+		ChromaFormatIDC:  f.ChromaFormatIDC,
+		PictureStructure: PictureFrame,
 	}
 }
 

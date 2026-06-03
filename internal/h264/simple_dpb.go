@@ -502,7 +502,11 @@ func applySimpleFieldRefPlane(pic *h264PicturePlanes, pictureStructure int32) {
 }
 
 func applySimpleFieldRefPlaneHigh(pic *h264PicturePlanesHigh, pictureStructure int32) {
-	if pic == nil || pictureStructure == PictureFrame {
+	if pic == nil {
+		return
+	}
+	pic.PictureStructure = pictureStructure
+	if pictureStructure == PictureFrame {
 		return
 	}
 	if pictureStructure == PictureBottomField {

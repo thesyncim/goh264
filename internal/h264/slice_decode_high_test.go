@@ -147,6 +147,65 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsFrameMBAFFGeometry(t *testing.T
 	}
 }
 
+func TestH264FrameMBAFFReconstructViewHighKeepsFrameCodedMacroblocksInFrameView(t *testing.T) {
+	dst := makeH264SliceDecodePictureHigh(1, 4, 1)
+	ref := makeH264SliceDecodePictureHigh(1, 4, 1)
+	refs := [2][]*h264PicturePlanesHigh{{ref}}
+	cur := sliceMacroblockCursor{FrameMBAFF: true, MBY: 2, PixelMBY: 2}
+	var refPlanes [2][32]h264PicturePlanesHigh
+	var refPtrs [2][32]*h264PicturePlanesHigh
+
+	view, mbY, gotRefs, err := h264FrameMBAFFReconstructViewHigh(dst, cur, MBTypeIntra4x4, refs, &refPlanes, &refPtrs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.PictureStructure != PictureFrame || view.LumaStride != dst.LumaStride || view.ChromaStride != dst.ChromaStride || view.MBHeight != dst.MBHeight || mbY != cur.PixelMBY {
+		t.Fatalf("frame-coded high view picture/stride/chroma/height/mbY = %d/%d/%d/%d/%d, want %d/%d/%d/%d/%d",
+			view.PictureStructure, view.LumaStride, view.ChromaStride, view.MBHeight, mbY,
+			PictureFrame, dst.LumaStride, dst.ChromaStride, dst.MBHeight, cur.PixelMBY)
+	}
+	if len(gotRefs[0]) != 1 || gotRefs[0][0] != ref {
+		t.Fatalf("frame-coded high refs = %#v, want original ref", gotRefs[0])
+	}
+}
+
+func TestH264FrameMBAFFReconstructViewHighMapsBottomFieldDestinationAndRefs(t *testing.T) {
+	dst := makeH264SliceDecodePictureHigh(1, 4, 1)
+	ref0 := makeH264SliceDecodePictureHigh(1, 4, 1)
+	ref1 := makeH264SliceDecodePictureHigh(1, 4, 1)
+	refs := [2][]*h264PicturePlanesHigh{{ref0, ref1}}
+	cur := sliceMacroblockCursor{FrameMBAFF: true, MBY: 1, PixelMBY: 1}
+	var refPlanes [2][32]h264PicturePlanesHigh
+	var refPtrs [2][32]*h264PicturePlanesHigh
+
+	view, mbY, gotRefs, err := h264FrameMBAFFReconstructViewHigh(dst, cur, MBTypeInterlaced|MBType16x16|MBTypeP0L0, refs, &refPlanes, &refPtrs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.PictureStructure != PictureBottomField || view.LumaStride != dst.LumaStride*2 || view.ChromaStride != dst.ChromaStride*2 || view.MBHeight != 2 || mbY != 0 {
+		t.Fatalf("bottom high field view picture/stride/chroma/height/mbY = %d/%d/%d/%d/%d",
+			view.PictureStructure, view.LumaStride, view.ChromaStride, view.MBHeight, mbY)
+	}
+	if &view.Y[0] != &dst.Y[dst.LumaStride] || &view.Cb[0] != &dst.Cb[dst.ChromaStride] || &view.Cr[0] != &dst.Cr[dst.ChromaStride] {
+		t.Fatalf("bottom high field view does not start on the second frame line")
+	}
+	if len(gotRefs[0]) != 4 {
+		t.Fatalf("high field refs len = %d, want 4", len(gotRefs[0]))
+	}
+	if gotRefs[0][0].PictureStructure != PictureBottomField || &gotRefs[0][0].Y[0] != &ref0.Y[ref0.LumaStride] {
+		t.Fatalf("high ref0 maps to bottom field of frame 0")
+	}
+	if gotRefs[0][1].PictureStructure != PictureTopField || &gotRefs[0][1].Y[0] != &ref0.Y[0] {
+		t.Fatalf("high ref1 maps to top field of frame 0")
+	}
+	if gotRefs[0][2].PictureStructure != PictureBottomField || &gotRefs[0][2].Y[0] != &ref1.Y[ref1.LumaStride] {
+		t.Fatalf("high ref2 maps to bottom field of frame 1")
+	}
+	if gotRefs[0][3].PictureStructure != PictureTopField || &gotRefs[0][3].Y[0] != &ref1.Y[0] {
+		t.Fatalf("high ref3 maps to top field of frame 1")
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -664,6 +723,63 @@ func TestDecodeCAVLCFrameSliceHighReconstructsIntraPCMRun(t *testing.T) {
 	if gb.bitsLeft() != 0 {
 		t.Fatalf("bits left = %d, want 0", gb.bitsLeft())
 	}
+}
+
+func TestDecodeCAVLCFrameSliceHighFrameMBAFFReconstructsFieldCodedPCMPair(t *testing.T) {
+	const bitDepth = 10
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps := &SPS{BitDepthLuma: bitDepth, BitDepthChroma: bitDepth, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 0, MBAFF: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	sh := &SliceHeader{
+		FirstMBAddr:      0,
+		SliceType:        PictureTypeI,
+		SliceTypeNoS:     PictureTypeI,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           20,
+		DeblockingFilter: 0,
+	}
+	dst := makeH264SliceDecodePictureHigh(1, 2, 1)
+	pcmTop := h264ReconstructIntraPCMHigh(1, bitDepth, 37)
+	pcmBottom := h264ReconstructIntraPCMHigh(1, bitDepth, 91)
+	buf := append(cavlcMBAFFIntraPCMBytes(1, pcmTop), cavlcIntraPCMBytes(pcmBottom)...)
+	gb := newBitReader(buf)
+
+	got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 23})
+	if err != nil {
+		t.Fatalf("decode high frame-MBAFF cavlc slice failed: %v", err)
+	}
+	if got.Macroblocks != 2 || got.LastMBXY != m.MBStride || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want MBAFF pair ending at mb_xy %d", got, m.MBStride)
+	}
+	top := *dst
+	applySimpleFieldRefPlaneHigh(&top, PictureTopField)
+	assertH264SliceDecodePCMHigh(t, &top, 0, 0, h264ReconstructIntraPCMSamples(1, bitDepth, 37))
+	bottom := *dst
+	applySimpleFieldRefPlaneHigh(&bottom, PictureBottomField)
+	assertH264SliceDecodePCMHigh(t, &bottom, 0, 0, h264ReconstructIntraPCMSamples(1, bitDepth, 91))
+	for _, mbXY := range []int{0, m.MBStride} {
+		if m.MacroblockTyp[mbXY] != MBTypeIntraPCM|MBTypeInterlaced || m.CBPTable[mbXY] != 0 || m.QScaleTable[mbXY] != 0 || m.SliceTable[mbXY] != 23 {
+			t.Fatalf("tables[%d] type/cbp/q/slice = %#x/%#x/%d/%d", mbXY, m.MacroblockTyp[mbXY], m.CBPTable[mbXY], m.QScaleTable[mbXY], m.SliceTable[mbXY])
+		}
+	}
+	if gb.bitsLeft() != 0 {
+		t.Fatalf("bits left = %d, want 0", gb.bitsLeft())
+	}
+}
+
+func cavlcMBAFFIntraPCMBytes(fieldFlag int, pcm []byte) []byte {
+	header := []byte{0x06, 0x80}
+	if fieldFlag != 0 {
+		header = []byte{0x86, 0x80}
+	}
+	out := append([]byte(nil), header...)
+	return append(out, pcm...)
 }
 
 func TestDecodeCAVLCFrameSliceHigh14ReconstructsIntraPCM(t *testing.T) {
@@ -1601,11 +1717,12 @@ func highFrameSliceDecodeFixtureWithMBWidth(t *testing.T, bitDepth int32, chroma
 func makeH264SliceDecodePictureHigh(mbWidth int, mbHeight int, chromaFormatIDC int) *h264PicturePlanesHigh {
 	chromaWidth, chromaHeight := h264ChromaFrameSize(mbWidth, mbHeight, chromaFormatIDC)
 	p := &h264PicturePlanesHigh{
-		Y:               make([]uint16, mbWidth*16*mbHeight*16),
-		LumaStride:      mbWidth * 16,
-		MBWidth:         mbWidth,
-		MBHeight:        mbHeight,
-		ChromaFormatIDC: chromaFormatIDC,
+		Y:                make([]uint16, mbWidth*16*mbHeight*16),
+		LumaStride:       mbWidth * 16,
+		MBWidth:          mbWidth,
+		MBHeight:         mbHeight,
+		ChromaFormatIDC:  chromaFormatIDC,
+		PictureStructure: PictureFrame,
 	}
 	if chromaFormatIDC != 0 {
 		p.ChromaStride = chromaWidth

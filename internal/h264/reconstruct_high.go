@@ -7,12 +7,13 @@
 package h264
 
 type h264PicturePlanesHigh struct {
-	Y, Cb, Cr       []uint16
-	LumaStride      int
-	ChromaStride    int
-	MBWidth         int
-	MBHeight        int
-	ChromaFormatIDC int
+	Y, Cb, Cr        []uint16
+	LumaStride       int
+	ChromaStride     int
+	MBWidth          int
+	MBHeight         int
+	ChromaFormatIDC  int
+	PictureStructure int32
 }
 
 type h264FrameMBReconstructInputHigh struct {

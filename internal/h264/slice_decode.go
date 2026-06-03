@@ -210,11 +210,48 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.Inter.SubMBType, mb.CBP, mb.CBPTable); err != nil {
 			return result, fmt.Errorf("validate high cavlc mb_xy=%d: %w", cur.MBXY, err)
 		}
-		if err := h264HLDecodeFrameMacroblockHigh(&dstView, h264FrameMBReconstructInputHighFromCAVLC(sh, cur, mb, &work, in)); err != nil {
+		var refPlanes [2][32]h264PicturePlanesHigh
+		var refPtrs [2][32]*h264PicturePlanesHigh
+		reconDst, reconMBY, reconRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, cur, mb.MBType, in.Refs, &refPlanes, &refPtrs)
+		if err != nil {
+			return result, fmt.Errorf("reconstruct high cavlc mb_xy=%d view: %w", cur.MBXY, err)
+		}
+		reconIn := h264FrameMBReconstructInputHighFromCAVLC(sh, cur, mb, &work, in)
+		reconIn.MBY = reconMBY
+		reconIn.Refs = reconRefs
+		if err := h264HLDecodeFrameMacroblockHigh(&reconDst, reconIn); err != nil {
 			return result, fmt.Errorf("reconstruct high cavlc mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
+		if cur.FrameMBAFF {
+			bottom, err := cur.bottomMBAFFFrameMB()
+			if err != nil {
+				return result, err
+			}
+			var bottomWork frameMacroblockDecodeWork
+			bottomMB, err := m.decodeCAVLCFrameSliceMacroblockWithDirectWorkGuard(gb, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork, sh.SliceTypeNoS == PictureTypeB)
+			if err != nil {
+				return result, fmt.Errorf("cavlc high mb_xy=%d bit=%d: %w", bottom.MBXY, gb.bitPos, err)
+			}
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, bottomMB.MBType, &bottomMB.Inter.SubMBType, bottomMB.CBP, bottomMB.CBPTable); err != nil {
+				return result, fmt.Errorf("validate high cavlc mb_xy=%d: %w", bottom.MBXY, err)
+			}
+			var bottomRefPlanes [2][32]h264PicturePlanesHigh
+			var bottomRefPtrs [2][32]*h264PicturePlanesHigh
+			bottomDst, bottomMBY, bottomRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, bottom, bottomMB.MBType, in.Refs, &bottomRefPlanes, &bottomRefPtrs)
+			if err != nil {
+				return result, fmt.Errorf("reconstruct high cavlc mb_xy=%d view: %w", bottom.MBXY, err)
+			}
+			bottomIn := h264FrameMBReconstructInputHighFromCAVLC(sh, bottom, bottomMB, &bottomWork, in)
+			bottomIn.MBY = bottomMBY
+			bottomIn.Refs = bottomRefs
+			if err := h264HLDecodeFrameMacroblockHigh(&bottomDst, bottomIn); err != nil {
+				return result, fmt.Errorf("reconstruct high cavlc mb_xy=%d: %w", bottom.MBXY, err)
+			}
+			result.Macroblocks++
+			result.LastMBXY = bottom.MBXY
+		}
 
 		if !cur.advanceFrameMB() {
 			result.EndOfFrame = true
@@ -341,11 +378,48 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.Inter.SubMBType, mb.CBP, mb.CBPTable); err != nil {
 			return result, fmt.Errorf("validate high cabac mb_xy=%d: %w", cur.MBXY, err)
 		}
-		if err := h264HLDecodeFrameMacroblockHigh(&dstView, h264FrameMBReconstructInputHighFromCABAC(sh, cur, mb, &work, in)); err != nil {
+		var refPlanes [2][32]h264PicturePlanesHigh
+		var refPtrs [2][32]*h264PicturePlanesHigh
+		reconDst, reconMBY, reconRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, cur, mb.MBType, in.Refs, &refPlanes, &refPtrs)
+		if err != nil {
+			return result, fmt.Errorf("reconstruct high cabac mb_xy=%d view: %w", cur.MBXY, err)
+		}
+		reconIn := h264FrameMBReconstructInputHighFromCABAC(sh, cur, mb, &work, in)
+		reconIn.MBY = reconMBY
+		reconIn.Refs = reconRefs
+		if err := h264HLDecodeFrameMacroblockHigh(&reconDst, reconIn); err != nil {
 			return result, fmt.Errorf("reconstruct high cabac mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
 		result.LastMBXY = cur.MBXY
+		if cur.FrameMBAFF {
+			bottom, err := cur.bottomMBAFFFrameMB()
+			if err != nil {
+				return result, err
+			}
+			var bottomWork frameMacroblockDecodeWork
+			bottomMB, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuard(src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork, sh.SliceTypeNoS == PictureTypeB)
+			if err != nil {
+				return result, fmt.Errorf("cabac high mb_xy=%d: %w", bottom.MBXY, err)
+			}
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, bottomMB.MBType, &bottomMB.Inter.SubMBType, bottomMB.CBP, bottomMB.CBPTable); err != nil {
+				return result, fmt.Errorf("validate high cabac mb_xy=%d: %w", bottom.MBXY, err)
+			}
+			var bottomRefPlanes [2][32]h264PicturePlanesHigh
+			var bottomRefPtrs [2][32]*h264PicturePlanesHigh
+			bottomDst, bottomMBY, bottomRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, bottom, bottomMB.MBType, in.Refs, &bottomRefPlanes, &bottomRefPtrs)
+			if err != nil {
+				return result, fmt.Errorf("reconstruct high cabac mb_xy=%d view: %w", bottom.MBXY, err)
+			}
+			bottomIn := h264FrameMBReconstructInputHighFromCABAC(sh, bottom, bottomMB, &bottomWork, in)
+			bottomIn.MBY = bottomMBY
+			bottomIn.Refs = bottomRefs
+			if err := h264HLDecodeFrameMacroblockHigh(&bottomDst, bottomIn); err != nil {
+				return result, fmt.Errorf("reconstruct high cabac mb_xy=%d: %w", bottom.MBXY, err)
+			}
+			result.Macroblocks++
+			result.LastMBXY = bottom.MBXY
+		}
 
 		eos := src.terminate() != 0
 		if !cur.advanceFrameMB() {
@@ -1039,6 +1113,58 @@ func h264MBAFFFieldRefViews(refs [2][]*h264PicturePlanes, parity int, planes *[2
 				pictureStructure = PictureBottomField
 			}
 			applySimpleFieldRefPlane(&planes[list][ref], pictureStructure)
+			ptrs[list][ref] = &planes[list][ref]
+		}
+		out[list] = ptrs[list][:len(refs[list])*2]
+	}
+	return out, nil
+}
+
+func h264FrameMBAFFReconstructViewHigh(dst *h264PicturePlanesHigh, cur sliceMacroblockCursor, mbType uint32, refs [2][]*h264PicturePlanesHigh, refPlanes *[2][32]h264PicturePlanesHigh, refPtrs *[2][32]*h264PicturePlanesHigh) (h264PicturePlanesHigh, int, [2][]*h264PicturePlanesHigh, error) {
+	if dst == nil {
+		return h264PicturePlanesHigh{}, 0, refs, ErrInvalidData
+	}
+	view := *dst
+	mbY := cur.PixelMBY
+	if !cur.FrameMBAFF || mbType&MBTypeInterlaced == 0 {
+		return view, mbY, refs, nil
+	}
+	if refPlanes == nil || refPtrs == nil || cur.MBY < 0 {
+		return h264PicturePlanesHigh{}, 0, refs, ErrInvalidData
+	}
+	pictureStructure := PictureTopField
+	if cur.MBY&1 != 0 {
+		pictureStructure = PictureBottomField
+	}
+	applySimpleFieldRefPlaneHigh(&view, pictureStructure)
+	fieldRefs, err := h264MBAFFFieldRefViewsHigh(refs, cur.MBY&1, refPlanes, refPtrs)
+	if err != nil {
+		return h264PicturePlanesHigh{}, 0, refs, err
+	}
+	return view, cur.MBY >> 1, fieldRefs, nil
+}
+
+func h264MBAFFFieldRefViewsHigh(refs [2][]*h264PicturePlanesHigh, parity int, planes *[2][32]h264PicturePlanesHigh, ptrs *[2][32]*h264PicturePlanesHigh) ([2][]*h264PicturePlanesHigh, error) {
+	var out [2][]*h264PicturePlanesHigh
+	if planes == nil || ptrs == nil || parity < 0 || parity > 1 {
+		return out, ErrInvalidData
+	}
+	for list := 0; list < 2; list++ {
+		if len(refs[list])*2 > len(planes[list]) {
+			return out, ErrUnsupported
+		}
+		for ref := 0; ref < len(refs[list])*2; ref++ {
+			mapped := ref ^ parity
+			frameIndex := mapped >> 1
+			if refs[list][frameIndex] == nil {
+				return out, ErrInvalidData
+			}
+			planes[list][ref] = *refs[list][frameIndex]
+			pictureStructure := PictureTopField
+			if mapped&1 != 0 {
+				pictureStructure = PictureBottomField
+			}
+			applySimpleFieldRefPlaneHigh(&planes[list][ref], pictureStructure)
 			ptrs[list][ref] = &planes[list][ref]
 		}
 		out[list] = ptrs[list][:len(refs[list])*2]
