@@ -25,6 +25,8 @@ type h264FrameMBReconstructInput struct {
 	Motion              *macroblockMotionCache
 	Refs                [2][]*h264PicturePlanes
 	PredWeight          *PredWeightTable
+	MotionWeightMBY     int
+	UseMotionWeightMBY  bool
 	MotionScratch       *h264MotionCompScratch
 	TransformBypass     bool
 	DeblockingFilter    bool
@@ -84,7 +86,11 @@ func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstru
 			return ErrInvalidData
 		}
 		if in.PredWeight != nil {
-			if err := h264HLMotionFrameWeighted(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.PredWeight, in.MotionScratch); err != nil {
+			weightMBY := in.MBY
+			if in.UseMotionWeightMBY {
+				weightMBY = in.MotionWeightMBY
+			}
+			if err := h264HLMotionFrameWeightedWithWeightY(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch); err != nil {
 				return err
 			}
 		} else if err := h264HLMotionFrameWithScratch(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch); err != nil {
@@ -127,7 +133,11 @@ func h264HLDecodeFrameMacroblock444(dst *h264PicturePlanes, dstY int, dstCb int,
 			return ErrInvalidData
 		}
 		if in.PredWeight != nil {
-			if err := h264HLMotionFrameWeighted(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.PredWeight, in.MotionScratch); err != nil {
+			weightMBY := in.MBY
+			if in.UseMotionWeightMBY {
+				weightMBY = in.MotionWeightMBY
+			}
+			if err := h264HLMotionFrameWeightedWithWeightY(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch); err != nil {
 				return err
 			}
 		} else if err := h264HLMotionFrameWithScratch(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch); err != nil {

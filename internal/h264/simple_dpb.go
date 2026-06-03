@@ -351,8 +351,14 @@ func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (
 			return ctx, err
 		}
 		if sh.PPS != nil && sh.PPS.WeightedBipredIDC == 2 {
-			if err := initImplicitBWeightTable(&sh.PredWeightTable, lists, sh.RefCount, curPOC); err != nil {
+			frameMBAFF := sh.PictureStructure == PictureFrame && sh.SPS.FrameMBSOnlyFlag == 0 && sh.SPS.MBAFF != 0
+			if err := initImplicitBWeightTable(&sh.PredWeightTable, lists, sh.RefCount, curPOC, frameMBAFF); err != nil {
 				return ctx, err
+			}
+			if frameMBAFF {
+				if err := initImplicitBWeightTableFrameMBAFF(&sh.PredWeightTable, lists, sh.RefCount, frame); err != nil {
+					return ctx, err
+				}
 			}
 		}
 		ctx.Entries[0] = cloneSimpleRefEntries(lists[0])
@@ -833,7 +839,7 @@ func (d *simpleFrameDPB) buildPRefEntries(sh *SliceHeader) ([]simpleRefEntry, er
 
 // initImplicitBWeightTable is a progressive frame-picture port of FFmpeg
 // n8.0.1 libavcodec/h264_slice.c implicit_weight_table(field=-1).
-func initImplicitBWeightTable(pwt *PredWeightTable, lists [2][]simpleRefEntry, refCount [2]uint32, curPOC int32) error {
+func initImplicitBWeightTable(pwt *PredWeightTable, lists [2][]simpleRefEntry, refCount [2]uint32, curPOC int32, frameMBAFF bool) error {
 	if pwt == nil {
 		return ErrInvalidData
 	}
@@ -848,7 +854,7 @@ func initImplicitBWeightTable(pwt *PredWeightTable, lists [2][]simpleRefEntry, r
 		refCount0 > len(pwt.ImplicitWeight) || refCount1 > len(pwt.ImplicitWeight[0]) {
 		return ErrInvalidData
 	}
-	if refCount0 == 1 && refCount1 == 1 &&
+	if !frameMBAFF && refCount0 == 1 && refCount1 == 1 &&
 		int64(simpleRefEntryPOC(lists[0][0]))+int64(simpleRefEntryPOC(lists[1][0])) == 2*int64(curPOC) {
 		pwt.UseWeight = 0
 		pwt.UseWeightChroma = 0
@@ -881,6 +887,74 @@ func initImplicitBWeightTable(pwt *PredWeightTable, lists [2][]simpleRefEntry, r
 		}
 	}
 	return nil
+}
+
+// initImplicitBWeightTableFrameMBAFF mirrors FFmpeg n8.0.1
+// implicit_weight_table(field=0/1) for this port's compact MBAFF field-ref list.
+func initImplicitBWeightTableFrameMBAFF(pwt *PredWeightTable, lists [2][]simpleRefEntry, refCount [2]uint32, frame *DecodedFrame) error {
+	if pwt == nil || frame == nil {
+		return ErrInvalidData
+	}
+	refCount0 := int(refCount[0])
+	refCount1 := int(refCount[1])
+	if refCount0 <= 0 || refCount1 <= 0 || refCount0 > len(lists[0]) || refCount1 > len(lists[1]) ||
+		refCount0*2 > len(pwt.ImplicitWeight) || refCount1*2 > len(pwt.ImplicitWeight[0]) {
+		return ErrInvalidData
+	}
+	pwt.UseWeight = 2
+	pwt.UseWeightChroma = 2
+	pwt.LumaLog2WeightDenom = 5
+	pwt.ChromaLog2WeightDenom = 5
+
+	for field := 0; field < 2; field++ {
+		curPOC := int(frame.fieldPOC[field])
+		for ref0 := 0; ref0 < refCount0*2; ref0++ {
+			poc0, long0, err := implicitMBAFFFieldRefPOC(lists[0], ref0, field)
+			if err != nil {
+				return err
+			}
+			for ref1 := 0; ref1 < refCount1*2; ref1++ {
+				poc1, long1, err := implicitMBAFFFieldRefPOC(lists[1], ref1, field)
+				if err != nil {
+					return err
+				}
+				w := int32(32)
+				if !long0 && !long1 {
+					td := clipInt(poc1-poc0, -128, 127)
+					if td != 0 {
+						tb := clipInt(curPOC-poc0, -128, 127)
+						tx := (16384 + (absInt(td) >> 1)) / td
+						distScaleFactor := (tb*tx + 32) >> 8
+						if distScaleFactor >= -64 && distScaleFactor <= 128 {
+							w = int32(64 - distScaleFactor)
+						}
+					}
+				}
+				pwt.ImplicitWeight[ref0][ref1][field] = w
+			}
+		}
+	}
+	return nil
+}
+
+func implicitMBAFFFieldRefPOC(list []simpleRefEntry, ref int, field int) (int, bool, error) {
+	if ref < 0 || field < 0 || field > 1 {
+		return 0, false, ErrInvalidData
+	}
+	mapped := ref ^ field
+	frameIndex := mapped >> 1
+	if frameIndex < 0 || frameIndex >= len(list) || list[frameIndex].frame == nil {
+		return 0, false, ErrInvalidData
+	}
+	pictureStructure := PictureTopField
+	if mapped&1 != 0 {
+		pictureStructure = PictureBottomField
+	}
+	poc, err := simpleFrameCurrentPOC(list[frameIndex].frame, pictureStructure)
+	if err != nil {
+		return 0, false, err
+	}
+	return int(poc), list[frameIndex].long, nil
 }
 
 func (d *simpleFrameDPB) buildDefaultPRefList(sh *SliceHeader) ([]simpleRefEntry, error) {

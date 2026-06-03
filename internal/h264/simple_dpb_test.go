@@ -485,6 +485,57 @@ func TestSimpleFrameDPBDisablesSymmetricImplicitBWeights(t *testing.T) {
 	}
 }
 
+func TestSimpleFrameDPBFrameMBAFFKeepsSymmetricImplicitBWeights(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sps.FrameMBSOnlyFlag = 0
+	sps.MBAFF = 1
+	pps := &PPS{SPS: sps, WeightedBipredIDC: 2}
+	past := simpleDPBTestFrame(sps, 0)
+	past.poc = 0
+	past.fieldPOC = [2]int32{0, 2}
+	future := simpleDPBTestFrame(sps, 1)
+	future.poc = 6
+	future.fieldPOC = [2]int32{6, 8}
+	current := simpleDPBTestFrame(sps, 2)
+	current.poc = 3
+	current.fieldPOC = [2]int32{2, 4}
+	dpb := simpleFrameDPB{short: []*DecodedFrame{future, past}}
+	sh := simpleDPBTestBHeader(sps, 2, 1, 1)
+	sh.PPS = pps
+
+	if _, err := dpb.buildRefLists(sh, current); err != nil {
+		t.Fatal(err)
+	}
+	if sh.PredWeightTable.UseWeight != 2 || sh.PredWeightTable.UseWeightChroma != 2 {
+		t.Fatalf("frame-MBAFF use_weight = %d/%d, want implicit", sh.PredWeightTable.UseWeight, sh.PredWeightTable.UseWeightChroma)
+	}
+	if sh.PredWeightTable.LumaLog2WeightDenom != 5 || sh.PredWeightTable.ChromaLog2WeightDenom != 5 {
+		t.Fatalf("frame-MBAFF denom = %d/%d, want 5/5", sh.PredWeightTable.LumaLog2WeightDenom, sh.PredWeightTable.ChromaLog2WeightDenom)
+	}
+}
+
+func TestInitImplicitBWeightTableFrameMBAFFUsesXoredFieldRefs(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	frame0 := simpleDPBTestFrame(sps, 0)
+	frame0.fieldPOC = [2]int32{0, 10}
+	frame1 := simpleDPBTestFrame(sps, 1)
+	frame1.fieldPOC = [2]int32{8, 20}
+	current := simpleDPBTestFrame(sps, 2)
+	current.fieldPOC = [2]int32{2, 14}
+	lists := [2][]simpleRefEntry{
+		{{frame: frame0, pictureStructure: PictureFrame, poc: frame0.poc}},
+		{{frame: frame1, pictureStructure: PictureFrame, poc: frame1.poc}},
+	}
+	var pwt PredWeightTable
+
+	if err := initImplicitBWeightTableFrameMBAFF(&pwt, lists, [2]uint32{1, 1}, current); err != nil {
+		t.Fatal(err)
+	}
+	if got := pwt.ImplicitWeight[0][0]; got != [2]int32{48, 39} {
+		t.Fatalf("compact ref 0/0 weights = %v, want top=48 bottom=39", got)
+	}
+}
+
 func TestSimpleFrameDPBDelaysBOutputUntilFlush(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	sps.BitstreamRestrictionFlag = 1

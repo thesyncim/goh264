@@ -34,6 +34,8 @@ type h264FrameMBReconstructInputHigh struct {
 	Motion              *macroblockMotionCache
 	Refs                [2][]*h264PicturePlanesHigh
 	PredWeight          *PredWeightTable
+	MotionWeightMBY     int
+	UseMotionWeightMBY  bool
 	MotionScratch       *h264MotionCompScratchHigh
 	TransformBypass     bool
 	DeblockingFilter    bool
@@ -94,7 +96,11 @@ func h264HLDecodeFrameMacroblockHigh(dst *h264PicturePlanesHigh, in h264FrameMBR
 			return ErrInvalidData
 		}
 		if in.PredWeight != nil {
-			if err := h264HLMotionFrameWeightedHigh(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.PredWeight, in.MotionScratch, in.BitDepth); err != nil {
+			weightMBY := in.MBY
+			if in.UseMotionWeightMBY {
+				weightMBY = in.MotionWeightMBY
+			}
+			if err := h264HLMotionFrameWeightedHighWithWeightY(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch, in.BitDepth); err != nil {
 				return err
 			}
 		} else if err := h264HLMotionFrameWithScratchHigh(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch, in.BitDepth); err != nil {
@@ -137,7 +143,11 @@ func h264HLDecodeFrameMacroblock444High(dst *h264PicturePlanesHigh, dstY int, ds
 			return ErrInvalidData
 		}
 		if in.PredWeight != nil {
-			if err := h264HLMotionFrameWeightedHigh(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.PredWeight, in.MotionScratch, in.BitDepth); err != nil {
+			weightMBY := in.MBY
+			if in.UseMotionWeightMBY {
+				weightMBY = in.MotionWeightMBY
+			}
+			if err := h264HLMotionFrameWeightedHighWithWeightY(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch, in.BitDepth); err != nil {
 				return err
 			}
 		} else if err := h264HLMotionFrameWithScratchHigh(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch, in.BitDepth); err != nil {
