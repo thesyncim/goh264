@@ -259,22 +259,24 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12ChromaDeblocking
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12ChromaSliceBoundaryDeblocking(t *testing.T) {
-	for _, chromaFormatIDC := range []int{2, 3} {
-		for _, cabac := range []int32{0, 1} {
-			for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
-				t.Run(fmt.Sprintf("%s/cabac%d/%s", chromaFormatName(chromaFormatIDC), cabac, pictureTypeName(sliceType)), func(t *testing.T) {
-					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, chromaFormatIDC, 2, true, sliceType)
-					sh.PPS.CABAC = cabac
-					sh.DeblockingFilter = 2
-					if sliceType == PictureTypeP {
-						sh.RefCount = [2]uint32{1, 0}
-					}
+func TestValidateSimpleFrameSliceDecodeHighAllowsChromaSliceBoundaryDeblocking(t *testing.T) {
+	for _, bitDepth := range []int32{10, 12} {
+		for _, chromaFormatIDC := range []int{2, 3} {
+			for _, cabac := range []int32{0, 1} {
+				for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+					t.Run(fmt.Sprintf("%s/%s/cabac%d/%s", bitDepthName(bitDepth), chromaFormatName(chromaFormatIDC), cabac, pictureTypeName(sliceType)), func(t *testing.T) {
+						m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, chromaFormatIDC, 2, true, sliceType)
+						sh.PPS.CABAC = cabac
+						sh.DeblockingFilter = 2
+						if sliceType == PictureTypeP {
+							sh.RefCount = [2]uint32{1, 0}
+						}
 
-					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-						t.Fatalf("high12 %s slice-boundary deblock validation err = %v, want nil", chromaFormatName(chromaFormatIDC), err)
-					}
-				})
+						if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+							t.Fatalf("%s %s slice-boundary deblock validation err = %v, want nil", bitDepthName(bitDepth), chromaFormatName(chromaFormatIDC), err)
+						}
+					})
+				}
 			}
 		}
 	}
@@ -320,22 +322,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *tes
 			run: func(sh *SliceHeader) {
 				sh.SPS.ChromaFormatIDC = 2
 				sh.DeblockingFilter = 0
-			},
-		},
-		{
-			name:     "10-bit/chroma422-slice-boundary-mode",
-			bitDepth: 10,
-			run: func(sh *SliceHeader) {
-				sh.SPS.ChromaFormatIDC = 2
-				sh.DeblockingFilter = 2
-			},
-		},
-		{
-			name:     "10-bit/chroma444-slice-boundary-mode",
-			bitDepth: 10,
-			run: func(sh *SliceHeader) {
-				sh.SPS.ChromaFormatIDC = 3
-				sh.DeblockingFilter = 2
 			},
 		},
 	} {
@@ -452,6 +438,8 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 		{name: "high10-444-deblock-disabled", bitDepth: 10, chroma: 10, format: 3, slice: PictureTypeP},
 		{name: "high10-422-weighted-chroma-deblock", bitDepth: 10, chroma: 10, format: 2, deblock: true, slice: PictureTypeP},
 		{name: "high10-444-weighted-chroma-deblock", bitDepth: 10, chroma: 10, format: 3, deblock: true, slice: PictureTypeP},
+		{name: "high10-422-weighted-chroma-slice-boundary-deblock", bitDepth: 10, chroma: 10, format: 2, deblockMode: 2, slice: PictureTypeP},
+		{name: "high10-444-weighted-chroma-slice-boundary-deblock", bitDepth: 10, chroma: 10, format: 3, deblockMode: 2, slice: PictureTypeP},
 		{name: "high12-422-weighted-chroma-deblock", bitDepth: 12, chroma: 12, format: 2, deblock: true, slice: PictureTypeP},
 		{name: "high12-444-weighted-chroma-deblock", bitDepth: 12, chroma: 12, format: 3, deblock: true, slice: PictureTypeP},
 		{name: "high12-422-weighted-chroma-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 2, deblockMode: 2, slice: PictureTypeP},
@@ -1439,8 +1427,7 @@ func TestDecodeCABACFrameSliceHighReconstructsP16x16NoResidual(t *testing.T) {
 }
 
 func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBeforeEntropy(t *testing.T) {
-	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 2, true, PictureTypeI)
-	sh.DeblockingFilter = 2
+	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 2, false, PictureTypeI)
 	gb := newBitReader(cavlcIntraPCMBytes(h264ReconstructIntraPCMHigh(1, 10, 5)))
 
 	_, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 2})
@@ -1455,10 +1442,11 @@ func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBeforeEntropy(t *testing.T) 
 	}
 }
 
-func TestDecodeFrameSliceDataHighRejectsUnsupportedChromaSliceBoundaryBeforeStartup(t *testing.T) {
-	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 2, true, PictureTypeI)
+func TestDecodeFrameSliceDataHighRejectsUnsupportedChromaBSliceBoundaryBeforeStartup(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixture(t, 10, 2, true, PictureTypeB)
 	sh.PPS.CABAC = 1
 	sh.DeblockingFilter = 2
+	sh.RefCount = [2]uint32{1, 1}
 	gb := newBitReader([]byte{0xe0})
 	if _, err := gb.readBits(3); err != nil {
 		t.Fatal(err)

@@ -6,7 +6,8 @@ Proved: selected High10 IDR/I/P/B plus public High10 intra, weighted/
 partitioned/direct-sub lanes, CAVLC direct-sub residual, CABAC fixture
 direct-sub residual, CABAC B16x16 direct residual, CABAC direct-sub residual
 handoff/full slice plus implicit/deblock full slice, selected deblock lanes
-plus fixture-backed high-B residual filter, slice-boundary IDR/P, public
+plus fixture-backed high-B residual filter, slice-boundary IDR/P, and
+unweighted 4:2:2/4:4:4 I/P chroma slice-boundary mode-2 deblock, public
 High12 IntraPCM plus mixed no-residual Intra4x4/Intra16x16 and
 Intra16x16 luma, chroma, and combined luma/chroma residual, internal
 High12 Intra16x16 luma-AC, luma-DC+AC, and luma/chroma-DC plus

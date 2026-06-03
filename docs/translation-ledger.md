@@ -6,7 +6,7 @@
 | slice headers/ref lists/DPB | `slice.go`, `simple_dpb.go` | partial | unit, MD5 |
 | CAVLC/CABAC macroblocks | `cavlc*.go`, `cabac*.go` | partial | unit, MD5 |
 | prediction/MC/IDCT/deblock | `pred*.go`, `motion_comp*.go`, `idct.go`, `loop_filter.go` | partial; MBAFF direct field maps + field-ref deblock | unit, C oracle, MD5 |
-| public decoder/output | `decoder.go`, `simple_decode.go` | partial | corpus, FATE, FFmpeg oracle fixtures including High12 no-residual, internal High12 weighted/unweighted P-skip/P16x16/partitioned P plus mode-1 deblock scope with unweighted 4:2:2/4:4:4 I/P chroma deblock, 4:2:0 I/P slice-boundary mode-2 deblock, unweighted 4:2:2/4:4:4 I/P chroma slice-boundary mode-2 deblock, and High12/High14 luma/chroma residual |
+| public decoder/output | `decoder.go`, `simple_decode.go` | partial | corpus, FATE, FFmpeg oracle fixtures including High12 no-residual, internal High12 weighted/unweighted P-skip/P16x16/partitioned P plus mode-1 deblock scope with unweighted 4:2:2/4:4:4 I/P chroma deblock, 4:2:0 I/P slice-boundary mode-2 deblock, High10/High12 unweighted 4:2:2/4:4:4 I/P chroma slice-boundary mode-2 deblock, and High12/High14 luma/chroma residual |
 | benchmark/oracle harness | `decoder_corpus_test.go`, `cmd/goh264bench` | replaced | FATE, smoke |
 
 Known deviations are in `testdata/h264/realvectors/failures.jsonl` when present.
