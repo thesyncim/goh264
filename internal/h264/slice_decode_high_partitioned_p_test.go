@@ -134,6 +134,69 @@ func TestDecodeFrameSliceHighReconstructsPartitionedPNoResidual(t *testing.T) {
 	}
 }
 
+func TestDecodeFrameSliceHigh12ReconstructsWeightedPartitionedPNoResidual(t *testing.T) {
+	const bitDepth = 12
+
+	for _, tt := range []struct {
+		name      string
+		cavlcBits string
+		cabacBits []int
+		wantType  uint32
+	}{
+		{
+			name:      "p16x8",
+			cavlcBits: "101011111",
+			cabacBits: []int{0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			wantType:  MBType16x8 | MBTypeP0L0 | MBTypeP1L0,
+		},
+		{
+			name:      "p8x16",
+			cavlcBits: "101111111",
+			cabacBits: []int{0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			wantType:  MBType8x16 | MBTypeP0L0 | MBTypeP1L0,
+		},
+		{
+			name:      "p8x8",
+			cavlcBits: "1001001111111111111",
+			cabacBits: []int{0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			wantType:  MBType8x8 | MBTypeP0L0 | MBTypeP1L0,
+		},
+	} {
+		t.Run("cavlc-"+tt.name, func(t *testing.T) {
+			m, dst, sh, ref := highPartitionedPFrameSliceDecodeFixture(t, bitDepth, false)
+			pwt := highWeightedPPredWeightTable()
+			sh.PPS.WeightedPred = 1
+			sh.PredWeightTable = pwt
+			gb := newBitReader(cavlcBitString(tt.cavlcBits))
+
+			got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{
+				SliceNum:      75,
+				Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+				PredWeight:    &sh.PredWeightTable,
+				MotionScratch: makeH264MotionCompScratchHigh(dst),
+			})
+			want := h264HighWeightedPReference(t, ref, &pwt, bitDepth)
+			assertHighPartitionedPSliceResult(t, got, err, m, dst, want, tt.wantType, 75)
+		})
+		t.Run("cabac-"+tt.name, func(t *testing.T) {
+			m, dst, sh, ref := highPartitionedPFrameSliceDecodeFixture(t, bitDepth, true)
+			pwt := highWeightedPPredWeightTable()
+			sh.PPS.WeightedPred = 1
+			sh.PredWeightTable = pwt
+			src := &scriptedCABACSource{bits: tt.cabacBits, terms: []int{1}}
+
+			got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{
+				SliceNum:      77,
+				Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+				PredWeight:    &sh.PredWeightTable,
+				MotionScratch: makeH264MotionCompScratchHigh(dst),
+			})
+			want := h264HighWeightedPReference(t, ref, &pwt, bitDepth)
+			assertHighPartitionedPSliceResult(t, got, err, m, dst, want, tt.wantType, 77)
+		})
+	}
+}
+
 func highPartitionedPFrameSliceDecodeFixture(t *testing.T, bitDepth int32, cabac bool) (*macroblockTables, *h264PicturePlanesHigh, *SliceHeader, *h264PicturePlanesHigh) {
 	t.Helper()
 	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
@@ -149,7 +212,7 @@ func highPartitionedPFrameSliceDecodeFixture(t *testing.T, bitDepth int32, cabac
 	return m, dst, sh, ref
 }
 
-func assertHighPartitionedPSliceResult(t *testing.T, got h264FrameSliceDecodeResult, err error, m *macroblockTables, dst *h264PicturePlanesHigh, ref *h264PicturePlanesHigh, wantType uint32, wantSlice uint16) {
+func assertHighPartitionedPSliceResult(t *testing.T, got h264FrameSliceDecodeResult, err error, m *macroblockTables, dst *h264PicturePlanesHigh, want *h264PicturePlanesHigh, wantType uint32, wantSlice uint16) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("decode high partitioned P failed: %v", err)
@@ -161,7 +224,7 @@ func assertHighPartitionedPSliceResult(t *testing.T, got h264FrameSliceDecodeRes
 		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d, want %#x/0/24/%d",
 			m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0], wantType, wantSlice)
 	}
-	assertH264RowsHigh(t, "high partitioned p y", dst.Y, 0, dst.LumaStride, 16, 16, ref.Y, ref.LumaStride)
-	assertH264RowsHigh(t, "high partitioned p cb", dst.Cb, 0, dst.ChromaStride, 8, 8, ref.Cb, ref.ChromaStride)
-	assertH264RowsHigh(t, "high partitioned p cr", dst.Cr, 0, dst.ChromaStride, 8, 8, ref.Cr, ref.ChromaStride)
+	assertH264RowsHigh(t, "high partitioned p y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+	assertH264RowsHigh(t, "high partitioned p cb", dst.Cb, 0, dst.ChromaStride, 8, 8, want.Cb, want.ChromaStride)
+	assertH264RowsHigh(t, "high partitioned p cr", dst.Cr, 0, dst.ChromaStride, 8, 8, want.Cr, want.ChromaStride)
 }

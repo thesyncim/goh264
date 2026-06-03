@@ -1333,6 +1333,37 @@ static void run_high10_weighted_p16x16_420(void)
     print_mb_high("high10_weighted_p16x16_420", &dst, 1, 1);
 }
 
+static void run_high12_weighted_p16x8_420(void)
+{
+    PicHigh dst, ref0;
+    PicHigh *refs[2][2] = {{0}};
+    MotionCtx ctx;
+    PWT pwt;
+    init_pic_high(&dst, 1, 12, 457);
+    init_pic_high(&ref0, 1, 12, 509);
+    refs[0][0] = &ref0;
+    init_motion(&ctx);
+    init_pwt(&pwt);
+    set_ref_mv(&ctx, 0, 0, 0, 3, 5);
+    set_ref_mv(&ctx, 0, 8, 0, 7, 11);
+    pwt.use_weight = 1;
+    pwt.use_weight_chroma = 1;
+    pwt.luma_log2_weight_denom = 2;
+    pwt.chroma_log2_weight_denom = 1;
+    pwt.luma_weight[0][0][0] = 3;
+    pwt.luma_weight[0][0][1] = -2;
+    pwt.chroma_weight[0][0][0][0] = 2;
+    pwt.chroma_weight[0][0][0][1] = 1;
+    pwt.chroma_weight[0][0][1][0] = -1;
+    pwt.chroma_weight[0][0][1][1] = 3;
+
+    mc_part_weighted_high(&dst, refs, &ctx, &pwt, 1, 1, 0, 0, 0, 8, 8, 0, 0,
+                          8, 8, 16, 1, 0);
+    mc_part_weighted_high(&dst, refs, &ctx, &pwt, 1, 1, 8, 1, 0, 8, 8, 0, 4,
+                          8, 8, 16, 1, 0);
+    print_mb_high("high12_weighted_p16x8_420", &dst, 1, 1);
+}
+
 static void run_high12_weighted_implicit_b16x8_422(void)
 {
     PicHigh dst, ref0, ref1;
@@ -1387,6 +1418,7 @@ int main(void)
     run_high10_p16x16_420();
     run_high12_b16x8_444();
     run_high10_weighted_p16x16_420();
+    run_high12_weighted_p16x8_420();
     run_high12_weighted_implicit_b16x8_422();
     run_high12_edge_p16x16_420();
     return 0;
@@ -1489,6 +1521,7 @@ func h264MotionCompOracleWant(t *testing.T) string {
 	appendH264MotionCompOracleHigh10P16x16(t, &b)
 	appendH264MotionCompOracleHigh12B16x8(t, &b)
 	appendH264MotionCompOracleHigh10WeightedP16x16(t, &b)
+	appendH264MotionCompOracleHigh12WeightedP16x8(t, &b)
 	appendH264MotionCompOracleHigh12WeightedImplicitB16x8(t, &b)
 	appendH264MotionCompOracleHigh12EdgeP16x16(t, &b)
 	return b.String()
@@ -1676,6 +1709,31 @@ func appendH264MotionCompOracleHigh10WeightedP16x16(t *testing.T, b *strings.Bui
 		t.Fatal(err)
 	}
 	printH264MotionCompMBHigh(b, "high10_weighted_p16x16_420", dst, 1, 1)
+}
+
+func appendH264MotionCompOracleHigh12WeightedP16x8(t *testing.T, b *strings.Builder) {
+	const bitDepth = 12
+	dst := makeH264MotionCompPictureHigh(1, bitDepth, 457)
+	ref0 := makeH264MotionCompPictureHigh(1, bitDepth, 509)
+	refs := [2][]*h264PicturePlanesHigh{{ref0}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+	cache.Ref[0][h264Scan8[8]] = 0
+	cache.MV[0][h264Scan8[0]] = [2]int16{3, 5}
+	cache.MV[0][h264Scan8[8]] = [2]int16{7, 11}
+	pwt := h264MotionCompTestPWT(1)
+	pwt.UseWeight = 1
+	pwt.UseWeightChroma = 1
+	pwt.LumaLog2WeightDenom = 2
+	pwt.ChromaLog2WeightDenom = 1
+	pwt.LumaWeight[0][0] = [2]int32{3, -2}
+	pwt.ChromaWeight[0][0][0] = [2]int32{2, 1}
+	pwt.ChromaWeight[0][0][1] = [2]int32{-1, 3}
+	mbType := MBType16x8 | MBTypeP0L0 | MBTypeP1L0
+	if err := h264HLMotionFrameHighOracle(dst, refs, &cache, mbType, [4]uint32{}, 1, 1, 1, bitDepth, &pwt, nil); err != nil {
+		t.Fatal(err)
+	}
+	printH264MotionCompMBHigh(b, "high12_weighted_p16x8_420", dst, 1, 1)
 }
 
 func appendH264MotionCompOracleHigh12WeightedImplicitB16x8(t *testing.T, b *strings.Builder) {
