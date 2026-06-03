@@ -530,12 +530,16 @@ func TestInitImplicitBWeightTableFrameMBAFFUsesXoredFieldRefs(t *testing.T) {
 		{{frame: frame1, pictureStructure: PictureFrame, poc: frame1.poc}},
 	}
 	var pwt PredWeightTable
+	pwt.ImplicitWeight[0][0] = [2]int32{7, 9}
 
 	if err := initImplicitBWeightTableFrameMBAFF(&pwt, lists, [2]uint32{1, 1}, current); err != nil {
 		t.Fatal(err)
 	}
-	if got := pwt.ImplicitWeight[0][0]; got != [2]int32{48, 39} {
-		t.Fatalf("compact ref 0/0 weights = %v, want top=48 bottom=39", got)
+	if got := pwt.ImplicitWeight[0][0]; got != [2]int32{7, 9} {
+		t.Fatalf("frame ref 0/0 weights = %v, want preserved", got)
+	}
+	if got := pwt.ImplicitWeight[16][16]; got != [2]int32{48, 39} {
+		t.Fatalf("MBAFF field ref 0/0 weights = %v, want top=48 bottom=39", got)
 	}
 }
 

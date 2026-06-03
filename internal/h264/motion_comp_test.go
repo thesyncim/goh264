@@ -150,6 +150,25 @@ func TestH264HLMotionFrameImplicitWeightedPartitionedBWeight32FallsBackToStd(t *
 	requireH264MotionCompMBEqual(t, dst, want, mbX, mbY)
 }
 
+func TestH264MCPartUsesWeightedKeepsMBAFFFieldWeightsOffset(t *testing.T) {
+	cache := makeH264MotionCompBipredCache(0, 0)
+	pwt := h264MotionCompTestPWT(1)
+	pwt.UseWeight = 2
+	pwt.UseWeightChroma = 2
+	pwt.ImplicitWeight[0][0] = [2]int32{32, 32}
+	pwt.ImplicitWeight[16][16] = [2]int32{21, 32}
+
+	frameMBType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+	if h264MCPartUsesWeighted(&pwt, &cache, frameMBType, 0, true, true, 0) {
+		t.Fatalf("frame-coded implicit weight used MBAFF field offset")
+	}
+
+	fieldMBType := frameMBType | MBTypeInterlaced
+	if !h264MCPartUsesWeighted(&pwt, &cache, fieldMBType, 0, true, true, 0) {
+		t.Fatalf("field-coded MBAFF implicit weight did not use offset")
+	}
+}
+
 func TestH264HLMotionFrameImplicitWeightedUsesOriginalMBAFFParity(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 33)
 	want := makeH264MotionCompPicture(1, 33)

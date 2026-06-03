@@ -1017,8 +1017,11 @@ func initImplicitBWeightTable(pwt *PredWeightTable, lists [2][]simpleRefEntry, r
 	return nil
 }
 
+const h264ImplicitMBAFFWeightOffset = 16
+
 // initImplicitBWeightTableFrameMBAFF mirrors FFmpeg n8.0.1
-// implicit_weight_table(field=0/1) for this port's compact MBAFF field-ref list.
+// implicit_weight_table(field=0/1): MBAFF field-ref weights live at +16
+// so frame-ref weights at 0..ref_count remain intact for frame-coded MBs.
 func initImplicitBWeightTableFrameMBAFF(pwt *PredWeightTable, lists [2][]simpleRefEntry, refCount [2]uint32, frame *DecodedFrame) error {
 	if pwt == nil || frame == nil {
 		return ErrInvalidData
@@ -1026,7 +1029,8 @@ func initImplicitBWeightTableFrameMBAFF(pwt *PredWeightTable, lists [2][]simpleR
 	refCount0 := int(refCount[0])
 	refCount1 := int(refCount[1])
 	if refCount0 <= 0 || refCount1 <= 0 || refCount0 > len(lists[0]) || refCount1 > len(lists[1]) ||
-		refCount0*2 > len(pwt.ImplicitWeight) || refCount1*2 > len(pwt.ImplicitWeight[0]) {
+		h264ImplicitMBAFFWeightOffset+refCount0*2 > len(pwt.ImplicitWeight) ||
+		h264ImplicitMBAFFWeightOffset+refCount1*2 > len(pwt.ImplicitWeight[0]) {
 		return ErrInvalidData
 	}
 	pwt.UseWeight = 2
@@ -1058,7 +1062,7 @@ func initImplicitBWeightTableFrameMBAFF(pwt *PredWeightTable, lists [2][]simpleR
 						}
 					}
 				}
-				pwt.ImplicitWeight[ref0][ref1][field] = w
+				pwt.ImplicitWeight[h264ImplicitMBAFFWeightOffset+ref0][h264ImplicitMBAFFWeightOffset+ref1][field] = w
 			}
 		}
 	}

@@ -107,7 +107,7 @@ func h264HLMotionFrameCoreHigh(dst *h264PicturePlanesHigh, refs [2][]*h264Pictur
 func h264MCPartFrameHigh(dst *h264PicturePlanesHigh, refs [2][]*h264PicturePlanesHigh, cache *macroblockMotionCache, mbX int, mbY int, mbType uint32, part int, n int, square bool, height int, delta int, xOffset int, yOffset int, qpelSize int, chromaWidth int, lumaWeightWidth int, listCount int, pwt *PredWeightTable, scratch *h264MotionCompScratchHigh, weightMBY int, bitDepth int) error {
 	list0 := isDir(mbType, part, 0)
 	list1 := isDir(mbType, part, 1)
-	if h264MCPartUsesWeighted(pwt, cache, n, list0, list1, weightMBY) {
+	if h264MCPartUsesWeighted(pwt, cache, mbType, n, list0, list1, weightMBY) {
 		return h264MCPartFrameWeightedHigh(dst, refs, cache, mbX, mbY, mbType, part, n, square, height, delta, xOffset, yOffset, qpelSize, chromaWidth, lumaWeightWidth, listCount, pwt, scratch, weightMBY, bitDepth)
 	}
 	return h264MCPartFrameStdHigh(dst, refs, cache, mbX, mbY, mbType, part, n, square, height, delta, xOffset, yOffset, qpelSize, chromaWidth, listCount, scratch, bitDepth)
@@ -196,7 +196,11 @@ func h264MCPartFrameWeightedHigh(dst *h264PicturePlanesHigh, refs [2][]*h264Pict
 			return ErrInvalidData
 		}
 		if pwt.UseWeight == 2 {
-			weight0 := int(pwt.ImplicitWeight[refn0][refn1][weightMBY&1])
+			weightRef0, weightRef1 := h264ImplicitWeightIndexes(mbType, refn0, refn1)
+			if weightRef0 >= len(pwt.ImplicitWeight) || weightRef1 >= len(pwt.ImplicitWeight[0]) {
+				return ErrInvalidData
+			}
+			weight0 := int(pwt.ImplicitWeight[weightRef0][weightRef1][weightMBY&1])
 			weight1 := 64 - weight0
 			if err := h264BiweightPixelsHigh(dst.Y[dstY:], scratch.Y, dst.LumaStride, height, 5, weight0, weight1, 0, lumaWeightWidth, bitDepth); err != nil {
 				return err
