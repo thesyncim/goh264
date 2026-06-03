@@ -619,8 +619,13 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 			if mbType == MBTypeIntraPCM {
 				return nil
 			}
-			if sh.SPS.BitDepthLuma == 12 && (mbType == MBTypeIntra4x4 || mbType == MBTypeIntra16x16) && cbp == 0 && cbpTable == 0 {
-				return nil
+			if sh.SPS.BitDepthLuma == 12 {
+				if (mbType == MBTypeIntra4x4 || mbType == MBTypeIntra16x16) && cbp == 0 && cbpTable == 0 {
+					return nil
+				}
+				if mbType == MBTypeIntra16x16 && cbp == 0 && cbpTable == 0x100 {
+					return nil
+				}
 			}
 			return ErrUnsupported
 		}

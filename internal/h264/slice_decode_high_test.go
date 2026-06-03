@@ -390,8 +390,14 @@ func TestValidateHighFrameSliceReconstructAllowsHigh12IntraNoResidual(t *testing
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0); err != nil {
 		t.Fatalf("high12 Intra16x16 no-residual reconstruct validation err = %v, want nil", err)
 	}
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0x100); err != nil {
+		t.Fatalf("high12 Intra16x16 luma-DC residual reconstruct validation err = %v, want nil", err)
+	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 1, 1); err != ErrUnsupported {
 		t.Fatalf("high12 Intra16x16 residual reconstruct validation err = %v, want ErrUnsupported", err)
+	}
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0x101); err != ErrUnsupported {
+		t.Fatalf("high12 Intra16x16 mixed residual reconstruct validation err = %v, want ErrUnsupported", err)
 	}
 }
 
@@ -511,6 +517,30 @@ func TestDecodeCAVLCFrameSliceHigh12ReconstructsIntra16x16NoResidual(t *testing.
 	}
 }
 
+func TestDecodeCAVLCFrameSliceHigh12ReconstructsIntra16x16LumaDCResidual(t *testing.T) {
+	const bitDepth = 12
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeI)
+	gb := newBitReader(cavlcBitString("00100110101"))
+
+	got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 25})
+	if err != nil {
+		t.Fatalf("decode high cavlc intra16x16 luma-DC residual slice failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one-MB frame end", got)
+	}
+	want := h264High12Intra16x16LumaDCResidualExpected(t, sh.PPS, int(sh.QScale))
+	assertH264RowsHigh(t, "cavlc high12 intra16x16 luma-DC y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+	assertH264RowsHigh(t, "cavlc high12 intra16x16 luma-DC cb", dst.Cb, 0, dst.ChromaStride, 8, 8, want.Cb, want.ChromaStride)
+	assertH264RowsHigh(t, "cavlc high12 intra16x16 luma-DC cr", dst.Cr, 0, dst.ChromaStride, 8, 8, want.Cr, want.ChromaStride)
+	if m.MacroblockTyp[0] != MBTypeIntra16x16 || m.CBPTable[0] != 0 || m.QScaleTable[0] != 20 || m.SliceTable[0] != 25 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	if gb.bitPos != 11 {
+		t.Fatalf("consumed %d bits, want 11", gb.bitPos)
+	}
+}
+
 func TestDecodeCABACFrameSliceHighReconstructsIntra4x4NoResidual(t *testing.T) {
 	for _, bitDepth := range []int32{10, 12} {
 		t.Run(bitDepthName(bitDepth), func(t *testing.T) {
@@ -572,6 +602,36 @@ func TestDecodeCABACFrameSliceHigh12ReconstructsIntra16x16NoResidual(t *testing.
 		t.Fatalf("pcm reads = %v, want none", src.pcmReadSizes)
 	}
 	wantIndexes(t, src, []int{3, 6, 7, 9, 10, 64, 60, 88})
+}
+
+func TestDecodeCABACFrameSliceHigh12ReconstructsIntra16x16LumaDCResidual(t *testing.T) {
+	const bitDepth = 12
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeI)
+	sh.PPS.CABAC = 1
+	src := &scriptedCABACSource{
+		bits:  []int{1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0},
+		signs: []int32{1},
+		terms: []int{0, 1},
+	}
+
+	got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: 27})
+	if err != nil {
+		t.Fatalf("decode high cabac intra16x16 luma-DC residual slice failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one-MB frame end", got)
+	}
+	want := h264High12Intra16x16LumaDCResidualExpected(t, sh.PPS, int(sh.QScale))
+	assertH264RowsHigh(t, "cabac high12 intra16x16 luma-DC y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+	assertH264RowsHigh(t, "cabac high12 intra16x16 luma-DC cb", dst.Cb, 0, dst.ChromaStride, 8, 8, want.Cb, want.ChromaStride)
+	assertH264RowsHigh(t, "cabac high12 intra16x16 luma-DC cr", dst.Cr, 0, dst.ChromaStride, 8, 8, want.Cr, want.ChromaStride)
+	if m.MacroblockTyp[0] != MBTypeIntra16x16 || m.CBPTable[0] != 0x100 || m.QScaleTable[0] != 20 || m.SliceTable[0] != 27 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	if len(src.pcmReadSizes) != 0 {
+		t.Fatalf("pcm reads = %v, want none", src.pcmReadSizes)
+	}
+	wantIndexes(t, src, []int{3, 6, 7, 9, 10, 64, 60, 88, 105, 166, 228})
 }
 
 func TestDecodeCAVLCFrameSliceHighReconstructsPIntra4x4NoResidual(t *testing.T) {
@@ -888,6 +948,32 @@ func makeH264SliceDecodePictureHigh(mbWidth int, mbHeight int, chromaFormatIDC i
 		p.ChromaStride = chromaWidth
 		p.Cb = make([]uint16, chromaWidth*chromaHeight)
 		p.Cr = make([]uint16, chromaWidth*chromaHeight)
+	}
+	return p
+}
+
+func h264High12Intra16x16LumaDCResidualExpected(t *testing.T, pps *PPS, qscale int) *h264PicturePlanesHigh {
+	t.Helper()
+
+	const bitDepth = 12
+	p := makeH264SliceDecodePictureHigh(1, 1, 1)
+	base := uint16(1 << (bitDepth - 1))
+	fillH264HighResidualPlane(p.Y, base)
+	fillH264HighResidualPlane(p.Cb, base)
+	fillH264HighResidualPlane(p.Cr, base)
+
+	var residual cavlcResidualContext
+	residual.MBLumaDC[0][0] = 1
+	residual.NonZeroCountCache[h264Scan8[lumaDCBlockIndex]] = 1
+	if err := h264LumaDCDequantIDCTHigh(residual.MB[:16*16], &residual.MBLumaDC[0], int(pps.Dequant4Buffer[0][qscale][0])); err != nil {
+		t.Fatal(err)
+	}
+	blockOffset, err := h264FrameBlockOffsets(p.LumaStride, p.ChromaStride, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h264IDCTAdd16IntraPlaneHigh(p.Y, &blockOffset, residual.MB[:], p.LumaStride, &residual.NonZeroCountCache, 0, bitDepth); err != nil {
+		t.Fatal(err)
 	}
 	return p
 }
