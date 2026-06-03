@@ -24,8 +24,8 @@ func TestDecodeConfiguredAVCHigh10RetainsReferenceForResidualP(t *testing.T) {
 	if _, err := fresh.ParseAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fresh.DecodeConfiguredAVC(samples[1]); !errors.Is(err, ErrInvalidData) {
-		t.Fatalf("P sample without retained reference err = %v, want ErrInvalidData", err)
+	if _, err := fresh.DecodeConfiguredAVC(samples[1]); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("P sample without retained reference err = %v, want ErrUnsupported", err)
 	}
 
 	dec := NewDecoder()

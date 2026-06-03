@@ -1078,6 +1078,31 @@ func TestSimpleFrameDPBFrameNumGapsShortenAcrossWrap(t *testing.T) {
 	}
 }
 
+func TestSimpleFrameDPBFrameNumGapsBootstrapMidStream(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sps.Log2MaxFrameNum = 5
+	var dpb simpleFrameDPB
+	dpb.reset()
+	sh := &SliceHeader{
+		NALType:          NALSlice,
+		SPS:              sps,
+		FrameNum:         27,
+		PictureStructure: PictureFrame,
+	}
+
+	if err := dpb.handleFrameNumGaps(sh, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := simpleDPBFrameNums(dpb.short), []uint32{26, 25}; !uint32SlicesEqual(got, want) {
+		t.Fatalf("bootstrap gap refs = %v, want %v", got, want)
+	}
+	for _, frame := range dpb.short {
+		if frame == nil || !frame.invalidGap {
+			t.Fatalf("bootstrap gap frame invalid marker = %v for refs %v", frame, simpleDPBFrameNums(dpb.short))
+		}
+	}
+}
+
 func TestSimpleFrameDPBSlidingWindowCountsLongRefs(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	long := simpleDPBTestFrame(sps, 10)

@@ -209,9 +209,6 @@ func (d *simpleFrameDPB) handleFrameNumGaps(sh *SliceHeader, firstField bool) er
 	if sh.NALType == NALIDRSlice || firstField || sh.PictureStructure != PictureFrame {
 		return nil
 	}
-	if d.poc.prevFrameNum < 0 {
-		return nil
-	}
 	if sh.SPS.Log2MaxFrameNum <= 0 || sh.SPS.Log2MaxFrameNum >= 31 {
 		return ErrInvalidData
 	}
