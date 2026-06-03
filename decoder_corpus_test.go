@@ -756,7 +756,7 @@ func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 	}
 	for _, surface := range entry.Surfaces {
 		switch surface {
-		case "annexb", "avc", "configured-avc", "configured-samples", "auto":
+		case "annexb", "avc", "avc4", "configured-avc", "configured-avc4", "configured-samples", "auto":
 		default:
 			t.Fatalf("%s: unknown surface %q", entry.ID, surface)
 		}
@@ -870,44 +870,58 @@ func decodeH264CorpusSurface(t *testing.T, entry h264CorpusEntry, surface string
 	case "annexb":
 		return NewDecoder().DecodeAnnexBFrames(data)
 	case "avc":
-		for _, nalLengthSize := range []int{2, 3, 4} {
-			frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
-			if err != nil {
-				return nil, fmt.Errorf("nal length size %d: %w", nalLengthSize, err)
-			}
-			if entry.Expect == "decode-ok" {
-				assertH264CorpusFrames(t, entry, frames)
-			}
-			if nalLengthSize == 4 {
-				return frames, nil
-			}
-		}
+		return decodeH264CorpusAVCSurface(t, entry, data, []int{2, 3, 4})
+	case "avc4":
+		return decodeH264CorpusAVCSurface(t, entry, data, []int{4})
 	case "configured-avc":
-		for _, nalLengthSize := range []int{2, 3, 4} {
-			config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-			frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
-			if err != nil {
-				return nil, fmt.Errorf("nal length size %d: %w", nalLengthSize, err)
-			}
-			if entry.Expect == "decode-ok" {
-				assertH264CorpusFrames(t, entry, frames)
-			}
-			if nalLengthSize == 4 {
-				return frames, nil
-			}
-		}
+		return decodeH264CorpusConfiguredAVCSurface(t, entry, data, []int{2, 3, 4})
+	case "configured-avc4":
+		return decodeH264CorpusConfiguredAVCSurface(t, entry, data, []int{4})
 	case "configured-samples":
-		return decodeH264CorpusConfiguredSamples(t, entry, data, false)
+		return decodeH264CorpusConfiguredSamples(t, entry, data, false, []int{2, 3, 4})
 	case "auto":
-		return decodeH264CorpusConfiguredSamples(t, entry, data, true)
+		return decodeH264CorpusConfiguredSamples(t, entry, data, true, []int{2, 3, 4})
 	}
 	return nil, fmt.Errorf("unsupported corpus surface %q", surface)
 }
 
-func decodeH264CorpusConfiguredSamples(t *testing.T, entry h264CorpusEntry, data []byte, auto bool) ([]*Frame, error) {
+func decodeH264CorpusAVCSurface(t *testing.T, entry h264CorpusEntry, data []byte, nalLengthSizes []int) ([]*Frame, error) {
 	t.Helper()
 	var final []*Frame
-	for _, nalLengthSize := range []int{2, 3, 4} {
+	for _, nalLengthSize := range nalLengthSizes {
+		frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
+		if err != nil {
+			return nil, fmt.Errorf("nal length size %d: %w", nalLengthSize, err)
+		}
+		if entry.Expect == "decode-ok" {
+			assertH264CorpusFrames(t, entry, frames)
+		}
+		final = frames
+	}
+	return final, nil
+}
+
+func decodeH264CorpusConfiguredAVCSurface(t *testing.T, entry h264CorpusEntry, data []byte, nalLengthSizes []int) ([]*Frame, error) {
+	t.Helper()
+	var final []*Frame
+	for _, nalLengthSize := range nalLengthSizes {
+		config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
+		frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+		if err != nil {
+			return nil, fmt.Errorf("nal length size %d: %w", nalLengthSize, err)
+		}
+		if entry.Expect == "decode-ok" {
+			assertH264CorpusFrames(t, entry, frames)
+		}
+		final = frames
+	}
+	return final, nil
+}
+
+func decodeH264CorpusConfiguredSamples(t *testing.T, entry h264CorpusEntry, data []byte, auto bool, nalLengthSizes []int) ([]*Frame, error) {
+	t.Helper()
+	var final []*Frame
+	for _, nalLengthSize := range nalLengthSizes {
 		config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
 		dec := NewDecoder()
 		var frames []*Frame

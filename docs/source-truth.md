@@ -29,7 +29,7 @@ non-conformance Annex B FATE rows covering extreme plane prediction,
 reference-list-mod overflow recovery, and missing-frame recovery, with
 packetized/configured surfaces proven for reference-list-mod overflow,
 missing-frame, timecode, and BBC2 recovery/PAFF,
-lossless High444 transform-bypass Annex B,
+lossless High444 transform-bypass Annex B plus 4-byte AVC/configuration-record surfaces,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
