@@ -16,10 +16,11 @@ slice-boundary mode-2 deblock and unweighted 4:2:2/4:4:4 I/P chroma
 slice-boundary mode-2 deblock, High14 CAVLC IntraPCM, mixed no-residual
 intra, separate and combined Intra16x16 luma/chroma residual plus
 P-skip/P16x16, High10 frame-MBAFF field-coded CAVLC IntraPCM
-entropy/reconstruct pairing, public FATE vector harness,
+entropy/reconstruct pairing plus public High10/High422 field-coded
+frame-MBAFF deblock rows, public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 44/44 green. Matrix mode is the safe-point gate. Red-queue
+Public vectors: 48/48 green. Matrix mode is the safe-point gate. Red-queue
 scripts intentionally exit non-zero only while rows in
 `testdata/h264/realvectors/failures.jsonl` remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or
@@ -28,9 +29,8 @@ single-lane script exits at the first divergent raw byte for raw-MD5 rows.
 Use `scripts/h264-real-vector-red-each.sh` for per-known-red logs plus a TSV
 summary of first-divergence evidence.
 
-Still guarded: unselected MBAFF/PIC-AFF/PAFF, FMO, high-bit-depth frame-MBAFF
-deblock for public field-coded rows, broad slice-boundary high modes, broader
-12/14-bit public high streams, full error resilience, threading/SIMD, and full
-libavcodec delayed-output behavior.
+Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, FMO, broad
+slice-boundary high modes, broader 12/14-bit public high streams, full error
+resilience, threading/SIMD, and full libavcodec delayed-output behavior.
 
 Canonical detail lives in manifests and tests, not Markdown.

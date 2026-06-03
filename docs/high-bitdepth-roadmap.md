@@ -20,11 +20,12 @@ I/P chroma no-deblock/mode-1 deblock plus unweighted 4:2:2/4:4:4 I/P chroma
 slice-boundary mode-2 deblock, plus
 CAVLC High14 IntraPCM and mixed no-residual Intra4x4/Intra16x16 plus
 Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
-combined luma/chroma residual plus P-skip/P16x16, and High10 frame-MBAFF
-field-coded CAVLC IntraPCM entropy/reconstruct pairing.
+combined luma/chroma residual plus P-skip/P16x16, High10 frame-MBAFF
+field-coded CAVLC IntraPCM entropy/reconstruct pairing, and public High10/
+High422 field-coded frame-MBAFF deblock rows.
 
-Next: high-bit-depth frame-MBAFF deblock for public field-coded rows, more
-public 12/14-bit streams, then broader field/MBAFF.
+Next: more public 12/14-bit streams, then broader high-bit-depth field/MBAFF
+motion and PIC-AFF/PAFF.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and
 `testdata/h264/realvectors/manifest.jsonl`.
