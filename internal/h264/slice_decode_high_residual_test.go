@@ -354,6 +354,56 @@ func TestDecodeFrameSliceHighReconstructsBDirectSubFromDirectRefs(t *testing.T) 
 	}
 }
 
+func TestDecodeFrameSliceHighReconstructsTopLevelBDirect8x8FromDirectRefs(t *testing.T) {
+	for _, tt := range []struct {
+		name               string
+		direct8x8Inference bool
+	}{
+		{
+			name:               "direct-8x8-inference",
+			direct8x8Inference: true,
+		},
+		{
+			name: "direct-sub-4x4",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+			sh.QScale = 22
+			sh.RefCount = [2]uint32{1, 1}
+			sh.SPS.Direct8x8InferenceFlag = boolToInt32(tt.direct8x8Inference)
+			refs, direct := highBSkipDirectRefsHigh(t, false)
+			direct.Direct8x8Inference = tt.direct8x8Inference
+			direct.RefEntries[1][0].frame.tables.MacroblockTyp[0] = MBType8x8 | MBTypeP0L0
+			in := h264FrameSliceDecodeInputHigh{
+				SliceNum:      63,
+				Refs:          refs,
+				Direct:        direct,
+				MotionScratch: makeH264MotionCompScratchHigh(dst),
+			}
+
+			gb := newBitReader(cavlcBitString("111"))
+			got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, in)
+			if err != nil {
+				t.Fatalf("decode high top-level B direct 8x8 failed: %v", err)
+			}
+			if gb.bitPos != 3 {
+				t.Fatalf("CAVLC top-level B direct consumed %d bits, want 3", gb.bitPos)
+			}
+			if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+				t.Fatalf("slice result = %+v, want one top-level B direct MB frame end", got)
+			}
+			wantMBType := MBType8x8 | MBTypeL0L1 | MBTypeDirect2
+			if m.MacroblockTyp[0] != wantMBType || m.CBPTable[0] != 0 || m.QScaleTable[0] != 22 || m.SliceTable[0] != 63 {
+				t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+			}
+			assertH264RowsHigh(t, tt.name+" high top-level direct y", dst.Y, 0, dst.LumaStride, 16, 16, refs[0][0].Y, refs[0][0].LumaStride)
+			assertH264RowsHigh(t, tt.name+" high top-level direct cb", dst.Cb, 0, dst.ChromaStride, 8, 8, refs[0][0].Cb, refs[0][0].ChromaStride)
+			assertH264RowsHigh(t, tt.name+" high top-level direct cr", dst.Cr, 0, dst.ChromaStride, 8, 8, refs[0][0].Cr, refs[0][0].ChromaStride)
+		})
+	}
+}
+
 func TestDecodeFrameSliceHighReconstructsPartitionedBExplicit(t *testing.T) {
 	b8x8 := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
 	allL0Sub := [4]uint32{

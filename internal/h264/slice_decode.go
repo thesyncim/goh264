@@ -790,7 +790,7 @@ func isHighBExplicitSubMBType(subType uint32) bool {
 }
 
 func isHighB8x8DirectSubMacroblock(mbType uint32, subMBType *[4]uint32) bool {
-	if subMBType == nil || !isHighB8x8DirectSubCarrier(mbType) {
+	if subMBType == nil || !(isHighB8x8DirectSubCarrier(mbType) || isHighB8x8TopLevelDirectMacroblock(mbType)) {
 		return false
 	}
 	for i := 0; i < 4; i++ {
@@ -811,6 +811,10 @@ func isHighBResolvedDirectSubMBType(subType uint32) bool {
 	default:
 		return false
 	}
+}
+
+func isHighB8x8TopLevelDirectMacroblock(mbType uint32) bool {
+	return mbType == MBType8x8|MBTypeL0L1|MBTypeDirect2
 }
 
 func isHighB16x16DirectMacroblock(mbType uint32) bool {

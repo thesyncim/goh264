@@ -120,6 +120,45 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsNeutralB8x8DirectSu
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsTopLevelB8x8Direct(t *testing.T) {
+	sh := &SliceHeader{SliceTypeNoS: PictureTypeB, PPS: &PPS{}}
+	mbType := MBType8x8 | MBTypeL0L1 | MBTypeDirect2
+
+	for _, tt := range []struct {
+		name     string
+		sub      [4]uint32
+		cbp      int
+		cbpTable int
+	}{
+		{
+			name: "direct 8x8 inference",
+			sub: [4]uint32{
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+			},
+		},
+		{
+			name: "direct sub 4x4 residual",
+			sub: [4]uint32{
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+				MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
+			},
+			cbp:      0x1,
+			cbpTable: 0x1001,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &tt.sub, tt.cbp, tt.cbpTable); err != nil {
+				t.Fatalf("validate high top-level B direct 8x8 err = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsNeutralBDeblockingDirectSkip(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
@@ -527,7 +566,7 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsPResidualGuardBoun
 		{name: "b direct sub cbp", sh: bSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbp: 1},
 		{name: "b direct sub cbp table", sh: bSlice, mbType: bDirectSubCarrier, sub: &bDirectSub, cbpTable: 1},
 		{name: "b mixed direct sub", sh: bSlice, mbType: bDirectSubCarrier, sub: &bMixedDirectSub, want: ErrUnsupported},
-		{name: "b top-level direct 8x8 remains guarded", sh: bSlice, mbType: MBType8x8 | MBTypeL0L1 | MBTypeDirect2, sub: &bDirectSub, want: ErrUnsupported},
+		{name: "b top-level direct 8x8 explicit sub remains guarded", sh: bSlice, mbType: MBType8x8 | MBTypeL0L1 | MBTypeDirect2, sub: &bExplicitSub, want: ErrUnsupported},
 		{name: "b explicit direct sub mix remains guarded", sh: bSlice, mbType: bDirectSubCarrier, sub: &bMixedExplicitDirectSub, want: ErrUnsupported},
 		{name: "b explicit 16x8 direct flag remains guarded", sh: bSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeDirect2, want: ErrUnsupported},
 		{name: "b explicit 16x8 skip remains guarded", sh: bSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip, want: ErrUnsupported},
