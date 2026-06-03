@@ -505,7 +505,7 @@ func isHigh12Frame420Scope(sh *SliceHeader) bool {
 			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh))
 	case 2:
 		return sh.SliceTypeNoS == PictureTypeI ||
-			(sh.SliceTypeNoS == PictureTypeP && isHighFramePNoWeightScope(sh))
+			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh))
 	default:
 		return false
 	}
@@ -528,15 +528,6 @@ func isHigh12ChromaFrameDeblockScope(sh *SliceHeader) bool {
 		return false
 	}
 	return true
-}
-
-func isHighFramePNoWeightScope(sh *SliceHeader) bool {
-	if sh == nil || sh.PPS == nil || sh.SliceTypeNoS != PictureTypeP {
-		return false
-	}
-	return sh.PPS.WeightedPred == 0 &&
-		sh.PredWeightTable.UseWeight == 0 &&
-		sh.PredWeightTable.UseWeightChroma == 0
 }
 
 func isHighFramePScope(sh *SliceHeader) bool {

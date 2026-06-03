@@ -370,14 +370,12 @@ func TestDecodeFrameSliceDataHighRejectsBInputPredWeightBeforeEntropy(t *testing
 
 func TestValidateSimpleFrameSliceDecodeHighAllowsWeightedPMetadata(t *testing.T) {
 	for _, bitDepth := range []int32{10, 12} {
-		for _, deblock := range []bool{false, true} {
-			name := bitDepthName(bitDepth) + "/no-deblock"
-			if deblock {
-				name = bitDepthName(bitDepth) + "/deblock"
-			}
+		for _, deblockMode := range []int32{0, 1, 2} {
+			name := fmt.Sprintf("%s/deblock-mode-%d", bitDepthName(bitDepth), deblockMode)
 			t.Run(name, func(t *testing.T) {
-				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, deblock, PictureTypeP)
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 2, deblockMode != 0, PictureTypeP)
 				sh.RefCount = [2]uint32{1, 0}
+				sh.DeblockingFilter = deblockMode
 				sh.PPS.WeightedPred = 1
 				sh.PredWeightTable = highWeightedPPredWeightTable()
 
@@ -400,7 +398,6 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 		slice       int32
 	}{
 		{name: "9-bit", bitDepth: 9, chroma: 9, format: 1, slice: PictureTypeP},
-		{name: "12-bit-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 1, deblockMode: 2, slice: PictureTypeP},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeP},
 		{name: "high10-422-deblock-disabled", bitDepth: 10, chroma: 10, format: 2, slice: PictureTypeP},
 		{name: "high10-444-deblock-disabled", bitDepth: 10, chroma: 10, format: 3, slice: PictureTypeP},
@@ -408,6 +405,8 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 		{name: "high10-444-weighted-chroma-deblock", bitDepth: 10, chroma: 10, format: 3, deblock: true, slice: PictureTypeP},
 		{name: "high12-422-weighted-chroma-deblock", bitDepth: 12, chroma: 12, format: 2, deblock: true, slice: PictureTypeP},
 		{name: "high12-444-weighted-chroma-deblock", bitDepth: 12, chroma: 12, format: 3, deblock: true, slice: PictureTypeP},
+		{name: "high12-422-weighted-chroma-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 2, deblockMode: 2, slice: PictureTypeP},
+		{name: "high12-444-weighted-chroma-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 3, deblockMode: 2, slice: PictureTypeP},
 		{name: "b-slice", bitDepth: 10, chroma: 10, format: 1, slice: PictureTypeB},
 	}
 	for _, tt := range tests {
