@@ -4,11 +4,11 @@ High-bit-depth decode is fixture-gated, not generally admitted.
 
 Proved: selected High10 IDR/I/P/B plus public High10 intra, weighted/
 partitioned/direct-sub lanes, CAVLC direct-sub residual, CABAC B16x16 direct
-residual, selected deblock lanes, slice-boundary IDR/P, and High12 IntraPCM
-plus no-residual Intra4x4.
+residual, CABAC direct-sub residual handoff, selected deblock lanes,
+slice-boundary IDR/P, and High12 IntraPCM plus no-residual Intra4x4.
 
-Next: CABAC/implicit/deblock direct-sub residual, high B deblock residual,
-broader 12/14-bit public streams, then field/MBAFF.
+Next: CABAC fixture/implicit/deblock direct-sub residual, high B deblock
+residual, broader 12/14-bit public streams, then field/MBAFF.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and
 `testdata/h264/realvectors/manifest.jsonl`.

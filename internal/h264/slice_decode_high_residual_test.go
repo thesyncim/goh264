@@ -89,6 +89,75 @@ func TestHighP16x16ResidualHandoffReconstructsExactLuma(t *testing.T) {
 	}
 }
 
+func TestHighBDirectSubCABACHandoffReconstructsExactLuma(t *testing.T) {
+	const bitDepth = 10
+	const cbp = 0x01
+	const cbpTable = 0x01
+
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeB)
+	sh.PPS.CABAC = 1
+	sh.QScale = 22
+	sh.RefCount = [2]uint32{1, 1}
+	sh.SPS.Direct8x8InferenceFlag = 1
+
+	cur, err := newSliceMacroblockCursor(m, sh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs, direct := highBSkipDirectRefsHigh(t, false)
+	direct.Direct8x8Inference = true
+	in := h264FrameSliceDecodeInputHigh{
+		Refs:          refs,
+		Direct:        direct,
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	}
+
+	work, changed := h264HighP16x16LumaResidualWork()
+	mbType := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	subMBType := [4]uint32{MBTypeDirect2, MBTypeDirect2, MBTypeDirect2, MBTypeDirect2}
+	if err := m.predDirectMotionFrame(&work.Motion, 0, &mbType, &subMBType, direct); err != nil {
+		t.Fatalf("predict direct-sub motion failed: %v", err)
+	}
+	if !isHighB8x8DirectSubMacroblock(mbType, &subMBType) {
+		t.Fatalf("direct-sub shape = %#x/%#x, want resolved B8x8 direct-sub", mbType, subMBType)
+	}
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &subMBType, cbp, cbpTable); err != nil {
+		t.Fatalf("validate direct-sub residual err = %v, want nil", err)
+	}
+
+	reconstruct := h264FrameMBReconstructInputHighFromCABAC(sh, cur, cabacFrameMacroblockResult{
+		MBType:   mbType,
+		CBP:      cbp,
+		CBPTable: cbpTable,
+		QScale:   int(sh.QScale),
+		ChromaQP: [2]uint8{uint8(sh.QScale), uint8(sh.QScale)},
+		Inter: cavlcInterMacroblockSyntax{
+			SubMBType: subMBType,
+		},
+		IsInter: true,
+	}, &work, in)
+	if reconstruct.MBType != mbType || reconstruct.SubMBType != subMBType || reconstruct.CBP != cbp || reconstruct.BitDepth != bitDepth || reconstruct.PredWeight != nil || reconstruct.DeblockingFilter {
+		t.Fatalf("handoff = type %#x sub %#x cbp %#x depth %d pwt %v deblock %v",
+			reconstruct.MBType, reconstruct.SubMBType, reconstruct.CBP, reconstruct.BitDepth, reconstruct.PredWeight, reconstruct.DeblockingFilter)
+	}
+
+	if err := h264HLDecodeFrameMacroblockHigh(dst, reconstruct); err != nil {
+		t.Fatalf("reconstruct high B direct-sub residual failed: %v", err)
+	}
+
+	want := cloneH264HighResidualPicture(refs[0][0])
+	applyH264HighP16x16LumaResidualExpected(t, want, changed, bitDepth)
+	assertH264RowsHigh(t, "cabac high b direct-sub residual y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+	assertH264RowsHigh(t, "cabac high b direct-sub residual cb", dst.Cb, 0, dst.ChromaStride, 8, 8, want.Cb, want.ChromaStride)
+	assertH264RowsHigh(t, "cabac high b direct-sub residual cr", dst.Cr, 0, dst.ChromaStride, 8, 8, want.Cr, want.ChromaStride)
+
+	for _, block := range changed {
+		if got := reconstruct.Residual.MB[block.index*16]; got != 0 {
+			t.Fatalf("direct-sub residual block %d was not cleared: %d", block.index, got)
+		}
+	}
+}
+
 func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 	t.Run("b direct 16x16 macroblock", func(t *testing.T) {
 		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
