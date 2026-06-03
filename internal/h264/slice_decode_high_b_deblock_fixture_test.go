@@ -373,6 +373,92 @@ func TestHigh10BSkipAndDirectSubDeblockFixtureMacroblockSyntax(t *testing.T) {
 	}
 }
 
+func TestHigh10BResidualDeblockFixtureFiltersInternalHighEdges(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		file  string
+		cabac bool
+	}{
+		{name: "cavlc", file: "high10_b_deblock_cavlc.h264"},
+		{name: "cabac", file: "high10_b_deblock_cabac.h264", cabac: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "h264", tt.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			nals, err := SplitAnnexB(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var spsList [maxSPSCount]*SPS
+			var ppsList [maxPPSCount]*PPS
+			for _, nal := range nals {
+				switch nal.Type {
+				case NALSPS:
+					sps, err := DecodeSPS(nal.RBSP)
+					if err != nil {
+						t.Fatal(err)
+					}
+					spsList[sps.SPSID] = sps
+				case NALPPS:
+					pps, err := DecodePPS(nal.RBSP, &spsList)
+					if err != nil {
+						t.Fatal(err)
+					}
+					ppsList[pps.PPSID] = pps
+				case NALSlice:
+					sh, payload, err := parseSliceHeaderWithPayload(nal, &ppsList)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if sh.SliceTypeNoS != PictureTypeB {
+						continue
+					}
+					if sh.DeblockingFilter != 1 || sh.SPS.BitDepthLuma != 10 || sh.SPS.ChromaFormatIDC != 1 {
+						t.Fatalf("B slice deblock/depth/chroma = %d/%d/%d, want High10 4:2:0 deblock enabled",
+							sh.DeblockingFilter, sh.SPS.BitDepthLuma, sh.SPS.ChromaFormatIDC)
+					}
+
+					m, got := decodeHigh10BDeblockFixtureTablesWithDirect8x8(t, sh, &payload, tt.cabac, 1, false, true)
+					mb := got[0]
+					wantType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+					if mb.MBType != wantType || mb.CBP == 0 || mb.CBPTable == 0 || m.CBPTable[0] == 0 || !hasHigh10FixtureNonZeroCount(m.NonZeroCount[0]) {
+						t.Fatalf("B fixture table type/cbp/cbpTable/table/nnz = %#x/%#x/%#x/%#x/%v, want residual B16x16 writeback",
+							mb.MBType, mb.CBP, mb.CBPTable, m.CBPTable[0], m.NonZeroCount[0])
+					}
+
+					dst := makeH264SliceDecodePictureHigh(1, 1, 1)
+					fillHighLoopFilterStep(dst.Y, dst.LumaStride, 16, 16, 8, 400, 404)
+					fillHighLoopFilterStep(dst.Cb, dst.ChromaStride, 8, 8, 4, 300, 304)
+					fillHighLoopFilterStep(dst.Cr, dst.ChromaStride, 8, 8, 4, 200, 204)
+					yBefore := [2]uint16{dst.Y[7], dst.Y[8]}
+					cbBefore := [2]uint16{dst.Cb[3], dst.Cb[4]}
+					crBefore := [2]uint16{dst.Cr[3], dst.Cr[4]}
+					params := make([]h264LoopFilterSliceParams, int(m.SliceTable[0])+1)
+					params[m.SliceTable[0]] = h264LoopFilterSliceParamsFromHeader(sh)
+
+					if err := m.filterFrameHigh(dst, params); err != nil {
+						t.Fatalf("filter high B deblock fixture: %v", err)
+					}
+					if dst.Y[7] == yBefore[0] || dst.Y[8] == yBefore[1] {
+						t.Fatalf("High10 B residual deblock fixture left luma internal edge untouched: %v -> [%d %d]",
+							yBefore, dst.Y[7], dst.Y[8])
+					}
+					if dst.Cb[3] == cbBefore[0] || dst.Cb[4] == cbBefore[1] ||
+						dst.Cr[3] == crBefore[0] || dst.Cr[4] == crBefore[1] {
+						t.Fatalf("High10 B residual deblock fixture left chroma internal edge untouched: cb %v -> [%d %d] cr %v -> [%d %d]",
+							cbBefore, dst.Cb[3], dst.Cb[4], crBefore, dst.Cr[3], dst.Cr[4])
+					}
+					return
+				}
+			}
+			t.Fatal("B slice not found")
+		})
+	}
+}
+
 func decodeHigh10BDeblockFixtureMacroblock(t *testing.T, sh *SliceHeader, payload *bitReader, cabac bool) cavlcFrameMacroblockResult {
 	t.Helper()
 	return decodeHigh10BDeblockFixtureMacroblocks(t, sh, payload, cabac, 1, false)[0]
@@ -384,6 +470,12 @@ func decodeHigh10BDeblockFixtureMacroblocks(t *testing.T, sh *SliceHeader, paylo
 }
 
 func decodeHigh10BDeblockFixtureMacroblocksWithDirect8x8(t *testing.T, sh *SliceHeader, payload *bitReader, cabac bool, mbWidth int, directSpatial bool, direct8x8 bool) []cavlcFrameMacroblockResult {
+	t.Helper()
+	_, got := decodeHigh10BDeblockFixtureTablesWithDirect8x8(t, sh, payload, cabac, mbWidth, directSpatial, direct8x8)
+	return got
+}
+
+func decodeHigh10BDeblockFixtureTablesWithDirect8x8(t *testing.T, sh *SliceHeader, payload *bitReader, cabac bool, mbWidth int, directSpatial bool, direct8x8 bool) (*macroblockTables, []cavlcFrameMacroblockResult) {
 	t.Helper()
 
 	m, err := newMacroblockTables(mbWidth, 1, 1)
@@ -411,7 +503,7 @@ func decodeHigh10BDeblockFixtureMacroblocksWithDirect8x8(t *testing.T, sh *Slice
 				Inter:    mb.Inter,
 			})
 		}
-		return got
+		return m, got
 	}
 	state := newCAVLCFrameSliceState(int(sh.QScale))
 	for mbXY := 0; mbXY < mbWidth; mbXY++ {
@@ -421,7 +513,7 @@ func decodeHigh10BDeblockFixtureMacroblocksWithDirect8x8(t *testing.T, sh *Slice
 		}
 		got = append(got, mb)
 	}
-	return got
+	return m, got
 }
 
 func high10BDeblockDirectMotionContext(t *testing.T, mbWidth int, directSpatial bool, direct8x8 bool) h264DirectMotionContext {
@@ -460,6 +552,15 @@ func high10BDeblockDirectMotionContext(t *testing.T, mbWidth int, directSpatial 
 		Direct8x8Inference:  direct8x8,
 		X264Build:           165,
 	}
+}
+
+func hasHigh10FixtureNonZeroCount(nnz [h264MBNonZeroCountSize]uint8) bool {
+	for _, v := range nnz {
+		if v != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func boolToInt32(v bool) int32 {
