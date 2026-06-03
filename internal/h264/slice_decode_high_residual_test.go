@@ -491,6 +491,69 @@ func TestDecodeCABACFrameSliceHighReconstructsBDirectSubResidualFromDirectRefs(t
 	assertH264RowsHigh(t, "cabac high b direct-sub decoded residual cr", dst.Cr, 0, dst.ChromaStride, 8, 8, refs[0][0].Cr, refs[0][0].ChromaStride)
 }
 
+func TestDecodeCABACFrameSliceHighReconstructsImplicitDeblockBDirectSubResidualFromDirectRefs(t *testing.T) {
+	const bitDepth = 10
+	const decodedLumaDelta = 5
+	const decodedResidualDC = (decodedLumaDelta << 6) - 32
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeB)
+	sh.PPS.CABAC = 1
+	sh.PPS.WeightedBipredIDC = 2
+	sh.DeblockingFilter = 1
+	sh.QScale = 22
+	sh.RefCount = [2]uint32{1, 1}
+	sh.SPS.Direct8x8InferenceFlag = 1
+
+	refs, direct := highBSkipDirectRefsHigh(t, false)
+	direct.Direct8x8Inference = true
+	fillH264HighResidualPlane(refs[1][0].Y, 677)
+	fillH264HighResidualPlane(refs[1][0].Cb, 711)
+	fillH264HighResidualPlane(refs[1][0].Cr, 753)
+	pwt := &PredWeightTable{UseWeight: 2, UseWeightChroma: 2}
+	pwt.ImplicitWeight[0][0][0] = 21
+	pwt.ImplicitWeight[0][0][1] = 21
+	in := h264FrameSliceDecodeInputHigh{
+		SliceNum:      66,
+		Refs:          refs,
+		Direct:        direct,
+		PredWeight:    pwt,
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	}
+	src := &scriptedCABACSource{
+		bits: []int{
+			0,
+			1, 1, 1, 1, 1, 1,
+			0, 0, 0, 0,
+			1, 0, 0, 0,
+			0,
+			0,
+			1, 1, 1, 0, 0, 0, 0,
+		},
+		signs: []int32{int32((decodedResidualDC << 6) - 32)},
+		terms: []int{1},
+	}
+
+	got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, in)
+	if err != nil {
+		t.Fatalf("decode implicit deblock high B direct-sub residual failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one implicit deblock B direct-sub residual MB frame end", got)
+	}
+	wantMBType := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	if m.MacroblockTyp[0] != wantMBType || m.CBPTable[0] != 0x1 || m.QScaleTable[0] != 22 || m.SliceTable[0] != 66 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+
+	want := makeH264SliceDecodePictureHigh(1, 1, 1)
+	fillH264HighResidualPlane(want.Y, h264HighImplicitBWeightSample(refs[0][0].Y[0], refs[1][0].Y[0], 21, bitDepth))
+	fillH264HighResidualPlane(want.Cb, h264HighImplicitBWeightSample(refs[0][0].Cb[0], refs[1][0].Cb[0], 21, bitDepth))
+	fillH264HighResidualPlane(want.Cr, h264HighImplicitBWeightSample(refs[0][0].Cr[0], refs[1][0].Cr[0], 21, bitDepth))
+	applyH264HighP16x16LumaResidualExpected(t, want, []h264HighResidualLumaBlock{{index: 0, dc: decodedLumaDelta}}, bitDepth)
+	assertH264RowsHigh(t, "cabac implicit deblock high b direct-sub residual y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+	assertH264RowsHigh(t, "cabac implicit deblock high b direct-sub residual cb", dst.Cb, 0, dst.ChromaStride, 8, 8, want.Cb, want.ChromaStride)
+	assertH264RowsHigh(t, "cabac implicit deblock high b direct-sub residual cr", dst.Cr, 0, dst.ChromaStride, 8, 8, want.Cr, want.ChromaStride)
+}
+
 func TestDecodeFrameSliceHighReconstructsTopLevelBDirect8x8FromDirectRefs(t *testing.T) {
 	for _, tt := range []struct {
 		name               string
@@ -864,6 +927,14 @@ func applyH264HighP16x16LumaResidualExpected(t *testing.T, pic *h264PicturePlane
 			}
 		}
 	}
+}
+
+func h264HighImplicitBWeightSample(past uint16, future uint16, weight0 int, bitDepth int) uint16 {
+	weight1 := 64 - weight0
+	shift := bitDepth - 8
+	offset := int(int32(uint32(0) << uint(shift)))
+	scaledOffset := int(int32(uint32((offset+1)|1) << 5))
+	return clipUintBitDepth((int(future)*weight1+int(past)*weight0+scaledOffset)>>6, bitDepth)
 }
 
 func fillH264HighResidualPlane(p []uint16, v uint16) {
