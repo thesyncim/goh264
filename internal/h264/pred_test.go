@@ -208,6 +208,84 @@ func TestH264Pred8x8LFilterAddWrapsAndClears(t *testing.T) {
 	}
 }
 
+func TestH264Pred8x8LAddUsesUnfilteredEdgesAndClears(t *testing.T) {
+	const stride = 28
+	const offset = 5*stride + 5
+
+	pix := makePredictionFixture(stride, 18)
+	block := makePredictionBlock(64)
+	wantCol := [8]uint8{}
+	v := pix[offset-stride]
+	for y := 0; y < 8; y++ {
+		v += uint8(dctcoef8Value(block[y*8]))
+		wantCol[y] = v
+	}
+	if err := h264Pred8x8LVerticalAdd(pix, offset, block, stride); err != nil {
+		t.Fatal(err)
+	}
+	for y, want := range wantCol {
+		if got := pix[offset+y*stride]; got != want {
+			t.Fatalf("vertical add y=%d got=%d want=%d", y, got, want)
+		}
+	}
+	for i, coeff := range block {
+		if coeff != 0 {
+			t.Fatalf("vertical add block[%d] = %d, want cleared", i, coeff)
+		}
+	}
+
+	pix = makePredictionFixture(stride, 18)
+	block = makePredictionBlock(64)
+	wantRow := [8]uint8{}
+	v = pix[offset-1]
+	for x := 0; x < 8; x++ {
+		v += uint8(dctcoef8Value(block[x]))
+		wantRow[x] = v
+	}
+	if err := h264Pred8x8LHorizontalAdd(pix, offset, block, stride); err != nil {
+		t.Fatal(err)
+	}
+	for x, want := range wantRow {
+		if got := pix[offset+x]; got != want {
+			t.Fatalf("horizontal add x=%d got=%d want=%d", x, got, want)
+		}
+	}
+	for i, coeff := range block {
+		if coeff != 0 {
+			t.Fatalf("horizontal add block[%d] = %d, want cleared", i, coeff)
+		}
+	}
+}
+
+func TestH264Pred8x8LHighAddUsesUnfilteredEdgesAndClears(t *testing.T) {
+	const stride = 12
+	const offset = 3*stride + 3
+	pix := make([]uint16, stride*12)
+	for i := range pix {
+		pix[i] = uint16(1000 + i)
+	}
+	block := makePredictionBlock(64)
+	want := [8]uint16{}
+	v := pix[offset-1]
+	for x := 0; x < 8; x++ {
+		v += uint16(uint32(block[x]))
+		want[x] = v
+	}
+	if err := h264Pred8x8LHorizontalAddHigh(pix, offset, block, stride, 10); err != nil {
+		t.Fatal(err)
+	}
+	for x, w := range want {
+		if got := pix[offset+x]; got != w {
+			t.Fatalf("high horizontal add x=%d got=%d want=%d", x, got, w)
+		}
+	}
+	for i, coeff := range block {
+		if coeff != 0 {
+			t.Fatalf("high horizontal add block[%d] = %d, want cleared", i, coeff)
+		}
+	}
+}
+
 func TestH264Pred4x4AddWrapsAndClears(t *testing.T) {
 	const stride = 8
 	const offset = 2*stride + 2

@@ -387,14 +387,17 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 			st.frame.saveRefEntries(refctx.Entries, sh.PictureStructure)
 			var result h264FrameSliceDecodeResult
 			completeFrameNow := false
+			direct := refctx.directMotionContext(st.frame, sh, sei)
 			if st.frame.BitDepthLuma == 8 {
 				pic := st.frame.picturePlanes()
 				result, err = st.tables.decodeFrameSliceData(&payload, &pic, sh, h264FrameSliceDecodeInput{
 					SliceNum:      st.sliceNum,
 					Refs:          refctx.Refs,
-					Direct:        refctx.directMotionContext(st.frame, sh, sei),
+					Direct:        direct,
 					PredWeight:    &sh.PredWeightTable,
 					MotionScratch: st.motionScratch,
+					X264Build:     direct.X264Build,
+					X264BuildSet:  true,
 				})
 				completeFrameNow = result.EndOfFrame && (!fieldPicture || decodingComplementaryField)
 				if err == nil && result.EndOfFrame {
@@ -412,9 +415,11 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				result, err = st.tables.decodeFrameSliceDataHigh(&payload, &pic, sh, h264FrameSliceDecodeInputHigh{
 					SliceNum:      st.sliceNum,
 					Refs:          refctx.RefsHigh,
-					Direct:        refctx.directMotionContext(st.frame, sh, sei),
+					Direct:        direct,
 					PredWeight:    &sh.PredWeightTable,
 					MotionScratch: st.motionScratchHigh,
+					X264Build:     direct.X264Build,
+					X264BuildSet:  true,
 				})
 				completeFrameNow = result.EndOfFrame && (!fieldPicture || decodingComplementaryField)
 				if err == nil && completeFrameNow {

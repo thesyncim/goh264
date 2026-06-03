@@ -43,6 +43,8 @@ type h264FrameMBReconstructInputHigh struct {
 	ConstrainedIntra444 bool
 	BitDepth            int
 	IntraPCM            []byte
+	X264Build           int32
+	X264BuildSet        bool
 }
 
 func h264MaxQPForBitDepth(bitDepth int) int {
@@ -110,11 +112,11 @@ func h264HLDecodeFrameMacroblockHigh(dst *h264PicturePlanesHigh, in h264FrameMBR
 	}
 
 	profileIDC := h264ProfileIDCFromPPS(in.PPS)
-	if err := h264HLDecodeMBIDCTLumaHigh(dst.Y[dstY:], dst.LumaStride, &blockOffset, in.MBType, in.CBP, in.Residual, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC, in.BitDepth); err != nil {
+	if err := h264HLDecodeMBIDCTLumaHigh(dst.Y, dstY, dst.LumaStride, &blockOffset, in.MBType, in.CBP, in.Residual, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC, in.BitDepth); err != nil {
 		return err
 	}
 	if dst.ChromaFormatIDC != 0 && in.CBP&0x30 != 0 {
-		return h264HLDecodeMBIDCTChromaHigh(dst.Cb[dstCb:], dst.Cr[dstCr:], dst.ChromaStride, &blockOffset, dst.ChromaFormatIDC, in.MBType, in.CBP, in.ChromaQP, in.PPS, in.Residual, in.TransformBypass, int(in.ChromaPredMode), profileIDC, in.BitDepth)
+		return h264HLDecodeMBIDCTChromaHigh(dst.Cb, dst.Cr, dstCb, dstCr, dst.ChromaStride, &blockOffset, dst.ChromaFormatIDC, in.MBType, in.CBP, in.ChromaQP, in.PPS, in.Residual, in.TransformBypass, int(in.ChromaPredMode), profileIDC, in.BitDepth)
 	}
 	return nil
 }
@@ -156,7 +158,7 @@ func h264HLDecodeFrameMacroblock444High(dst *h264PicturePlanesHigh, dstY int, ds
 		}
 	}
 	for p := 0; p < 3; p++ {
-		if err := h264HLDecodeMBIDCTLumaPlaneHigh(dest[p][offset[p]:], stride[p], blockOffset, in.MBType, in.CBP, in.Residual, p, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC, in.BitDepth); err != nil {
+		if err := h264HLDecodeMBIDCTLumaPlaneHigh(dest[p], offset[p], stride[p], blockOffset, in.MBType, in.CBP, in.Residual, p, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC, in.BitDepth); err != nil {
 			return err
 		}
 	}
@@ -256,7 +258,7 @@ func h264HLDecodeFrameIntraPredictHigh(dst *h264PicturePlanesHigh, dstY int, dst
 		}
 	}
 	if isIntra4x4(in.MBType) {
-		return h264HLDecodeMBPredictLumaIntra4x4High(dst.Y, dstY, dst.LumaStride, blockOffset, in.MBType, in.Intra4x4PredCache, in.TopLeftAvailable, in.TopRightAvailable, in.Residual, in.TransformBypass, h264ProfileIDCFromPPS(in.PPS), in.BitDepth)
+		return h264HLDecodeMBPredictLumaIntra4x4High(dst.Y, dstY, dst.LumaStride, blockOffset, in.MBType, in.Intra4x4PredCache, in.TopLeftAvailable, in.TopRightAvailable, in.Residual, in.TransformBypass, h264ProfileIDCFromPPS(in.PPS), in.BitDepth, in.X264Build, in.X264BuildSet)
 	}
 	if !isIntra16x16(in.MBType) {
 		return ErrUnsupported
@@ -266,7 +268,7 @@ func h264HLDecodeFrameIntraPredictHigh(dst *h264PicturePlanesHigh, dstY int, dst
 
 func h264HLDecodeFrameIntraPredictLumaPlaneHigh(dest []uint16, baseOffset int, stride int, blockOffset *[48]int, in h264FrameMBReconstructInputHigh, plane int) error {
 	if isIntra4x4(in.MBType) {
-		return h264HLDecodeMBPredictLumaIntra4x4PlaneHigh(dest, baseOffset, stride, blockOffset, in.MBType, in.Intra4x4PredCache, in.TopLeftAvailable, in.TopRightAvailable, in.Residual, plane, in.TransformBypass, h264ProfileIDCFromPPS(in.PPS), in.BitDepth)
+		return h264HLDecodeMBPredictLumaIntra4x4PlaneHigh(dest, baseOffset, stride, blockOffset, in.MBType, in.Intra4x4PredCache, in.TopLeftAvailable, in.TopRightAvailable, in.Residual, plane, in.TransformBypass, h264ProfileIDCFromPPS(in.PPS), in.BitDepth, in.X264Build, in.X264BuildSet)
 	}
 	if !isIntra16x16(in.MBType) {
 		return ErrUnsupported
@@ -303,52 +305,56 @@ func h264HLDecodeMBPredictLumaIntra16x16PlaneHigh(destY []uint16, offset int, st
 	return nil
 }
 
-func h264HLDecodeMBIDCTLumaHigh(destY []uint16, stride int, blockOffset *[48]int, mbType uint32, cbp int, residual *cavlcResidualContext, transformBypass bool, intra16x16PredMode int, profileIDC int32, bitDepth int) error {
-	return h264HLDecodeMBIDCTLumaPlaneHigh(destY, stride, blockOffset, mbType, cbp, residual, 0, transformBypass, intra16x16PredMode, profileIDC, bitDepth)
+func h264HLDecodeMBIDCTLumaHigh(destY []uint16, baseY int, stride int, blockOffset *[48]int, mbType uint32, cbp int, residual *cavlcResidualContext, transformBypass bool, intra16x16PredMode int, profileIDC int32, bitDepth int) error {
+	return h264HLDecodeMBIDCTLumaPlaneHigh(destY, baseY, stride, blockOffset, mbType, cbp, residual, 0, transformBypass, intra16x16PredMode, profileIDC, bitDepth)
 }
 
-func h264HLDecodeMBIDCTLumaPlaneHigh(destY []uint16, stride int, blockOffset *[48]int, mbType uint32, cbp int, residual *cavlcResidualContext, plane int, transformBypass bool, intra16x16PredMode int, profileIDC int32, bitDepth int) error {
+func h264HLDecodeMBIDCTLumaPlaneHigh(destY []uint16, baseY int, stride int, blockOffset *[48]int, mbType uint32, cbp int, residual *cavlcResidualContext, plane int, transformBypass bool, intra16x16PredMode int, profileIDC int32, bitDepth int) error {
 	if residual == nil {
+		return ErrInvalidData
+	}
+	if baseY < 0 || baseY > len(destY) {
 		return ErrInvalidData
 	}
 	if plane < 0 || plane > 2 {
 		return ErrInvalidData
 	}
+	destMB := destY[baseY:]
 	if isIntra4x4(mbType) {
 		return nil
 	}
 	if isIntra16x16(mbType) {
 		if transformBypass {
 			if profileIDC == 244 && intra16x16PredMode == intraPred8x8Vertical {
-				return h264Pred16x16VerticalAddAtHigh(destY, blockOffset, plane*16, residual.MB[plane*16*16:], stride, bitDepth)
+				return h264Pred16x16VerticalAddAtHigh(destY, baseY, blockOffset, plane*16, residual.MB[plane*16*16:], stride, bitDepth)
 			}
 			if profileIDC == 244 && intra16x16PredMode == intraPred8x8Horizontal {
-				return h264Pred16x16HorizontalAddAtHigh(destY, blockOffset, plane*16, residual.MB[plane*16*16:], stride, bitDepth)
+				return h264Pred16x16HorizontalAddAtHigh(destY, baseY, blockOffset, plane*16, residual.MB[plane*16*16:], stride, bitDepth)
 			}
-			return h264AddPixels16BypassPlaneHigh(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, true, bitDepth)
+			return h264AddPixels16BypassPlaneHigh(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, true, bitDepth)
 		}
-		return h264IDCTAdd16IntraPlaneHigh(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, bitDepth)
+		return h264IDCTAdd16IntraPlaneHigh(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, bitDepth)
 	}
 	if cbp&15 == 0 {
 		return nil
 	}
 	if transformBypass {
 		if is8x8DCT(mbType) {
-			return h264AddPixels8Bypass4PlaneHigh(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, bitDepth)
+			return h264AddPixels8Bypass4PlaneHigh(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, bitDepth)
 		}
-		return h264AddPixels16BypassPlaneHigh(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, false, bitDepth)
+		return h264AddPixels16BypassPlaneHigh(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, false, bitDepth)
 	}
 	if is8x8DCT(mbType) {
-		return h264IDCT8Add4PlaneHigh(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, bitDepth)
+		return h264IDCT8Add4PlaneHigh(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, bitDepth)
 	}
-	return h264IDCTAdd16PlaneHigh(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, bitDepth)
+	return h264IDCTAdd16PlaneHigh(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, bitDepth)
 }
 
-func h264HLDecodeMBPredictLumaIntra4x4High(destY []uint16, baseOffset int, stride int, blockOffset *[48]int, mbType uint32, predCache *[h264IntraPredModeCacheSize]int8, topLeftAvailable uint16, topRightAvailable uint16, residual *cavlcResidualContext, transformBypass bool, profileIDC int32, bitDepth int) error {
-	return h264HLDecodeMBPredictLumaIntra4x4PlaneHigh(destY, baseOffset, stride, blockOffset, mbType, predCache, topLeftAvailable, topRightAvailable, residual, 0, transformBypass, profileIDC, bitDepth)
+func h264HLDecodeMBPredictLumaIntra4x4High(destY []uint16, baseOffset int, stride int, blockOffset *[48]int, mbType uint32, predCache *[h264IntraPredModeCacheSize]int8, topLeftAvailable uint16, topRightAvailable uint16, residual *cavlcResidualContext, transformBypass bool, profileIDC int32, bitDepth int, x264Build int32, x264BuildSet bool) error {
+	return h264HLDecodeMBPredictLumaIntra4x4PlaneHigh(destY, baseOffset, stride, blockOffset, mbType, predCache, topLeftAvailable, topRightAvailable, residual, 0, transformBypass, profileIDC, bitDepth, x264Build, x264BuildSet)
 }
 
-func h264HLDecodeMBPredictLumaIntra4x4PlaneHigh(destY []uint16, baseOffset int, stride int, blockOffset *[48]int, mbType uint32, predCache *[h264IntraPredModeCacheSize]int8, topLeftAvailable uint16, topRightAvailable uint16, residual *cavlcResidualContext, plane int, transformBypass bool, profileIDC int32, bitDepth int) error {
+func h264HLDecodeMBPredictLumaIntra4x4PlaneHigh(destY []uint16, baseOffset int, stride int, blockOffset *[48]int, mbType uint32, predCache *[h264IntraPredModeCacheSize]int8, topLeftAvailable uint16, topRightAvailable uint16, residual *cavlcResidualContext, plane int, transformBypass bool, profileIDC int32, bitDepth int, x264Build int32, x264BuildSet bool) error {
 	if blockOffset == nil || predCache == nil || residual == nil {
 		return ErrInvalidData
 	}
@@ -365,7 +371,15 @@ func h264HLDecodeMBPredictLumaIntra4x4PlaneHigh(destY []uint16, baseOffset int, 
 			hasTopRight := ((uint32(topRightAvailable) << uint(i)) & 0x4000) != 0
 			block := residual.MB[index*16 : index*16+64]
 			if transformBypass && profileIDC == 244 && (dir == int(intraPredVertical) || dir == int(intraPredHorizontal)) {
-				if dir == int(intraPredVertical) {
+				if h264X264BuildUsesUnfiltered8x8LAdd(x264Build, x264BuildSet) {
+					if dir == int(intraPredVertical) {
+						if err := h264Pred8x8LVerticalAddHigh(destY, offset, block, stride, bitDepth); err != nil {
+							return err
+						}
+					} else if err := h264Pred8x8LHorizontalAddHigh(destY, offset, block, stride, bitDepth); err != nil {
+						return err
+					}
+				} else if dir == int(intraPredVertical) {
 					if err := h264Pred8x8LVerticalFilterAddHigh(destY, offset, block, stride, hasTopLeft, hasTopRight, bitDepth); err != nil {
 						return err
 					}
@@ -595,8 +609,11 @@ func h264AddPixels8Bypass4PlaneHigh(dst []uint16, blockOffset *[48]int, block []
 	return nil
 }
 
-func h264HLDecodeMBIDCTChromaHigh(destCb []uint16, destCr []uint16, stride int, blockOffset *[48]int, chromaFormatIDC int, mbType uint32, cbp int, chromaQP [2]uint8, pps *PPS, residual *cavlcResidualContext, transformBypass bool, chromaPredMode int, profileIDC int32, bitDepth int) error {
+func h264HLDecodeMBIDCTChromaHigh(destCb []uint16, destCr []uint16, baseCb int, baseCr int, stride int, blockOffset *[48]int, chromaFormatIDC int, mbType uint32, cbp int, chromaQP [2]uint8, pps *PPS, residual *cavlcResidualContext, transformBypass bool, chromaPredMode int, profileIDC int32, bitDepth int) error {
 	if pps == nil || residual == nil {
+		return ErrInvalidData
+	}
+	if baseCb < 0 || baseCb > len(destCb) || baseCr < 0 || baseCr > len(destCr) {
 		return ErrInvalidData
 	}
 	if cbp&0x30 == 0 {
@@ -620,7 +637,7 @@ func h264HLDecodeMBIDCTChromaHigh(destCb []uint16, destCr []uint16, stride int, 
 		cqm0, cqm1 = 1, 2
 	}
 	if transformBypass {
-		return h264HLDecodeMBAddChromaBypassHigh(destCb, destCr, stride, blockOffset, chromaFormatIDC, mbType, chromaPredMode, profileIDC, residual, bitDepth)
+		return h264HLDecodeMBAddChromaBypassHigh(destCb, destCr, baseCb, baseCr, stride, blockOffset, chromaFormatIDC, mbType, chromaPredMode, profileIDC, residual, bitDepth)
 	}
 	if residual.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+0]] != 0 {
 		if err := h264ChromaDCDequantIDCTByFormatHigh(residual.MB[16*16:], int(pps.Dequant4Buffer[cqm0][qp0][0]), chromaFormatIDC); err != nil {
@@ -632,7 +649,7 @@ func h264HLDecodeMBIDCTChromaHigh(destCb []uint16, destCr []uint16, stride int, 
 			return err
 		}
 	}
-	dest := [2][]uint16{destCb, destCr}
+	dest := [2][]uint16{destCb[baseCb:], destCr[baseCr:]}
 	if chromaFormatIDC == 2 {
 		return h264IDCTAdd8_422High(&dest, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, bitDepth)
 	}
@@ -642,29 +659,33 @@ func h264HLDecodeMBIDCTChromaHigh(destCb []uint16, destCr []uint16, stride int, 
 	return ErrInvalidData
 }
 
-func h264HLDecodeMBAddChromaBypassHigh(destCb []uint16, destCr []uint16, stride int, blockOffset *[48]int, chromaFormatIDC int, mbType uint32, chromaPredMode int, profileIDC int32, residual *cavlcResidualContext, bitDepth int) error {
+func h264HLDecodeMBAddChromaBypassHigh(destCb []uint16, destCr []uint16, baseCb int, baseCr int, stride int, blockOffset *[48]int, chromaFormatIDC int, mbType uint32, chromaPredMode int, profileIDC int32, residual *cavlcResidualContext, bitDepth int) error {
 	if blockOffset == nil || residual == nil {
 		return ErrInvalidData
 	}
+	if baseCb < 0 || baseCb > len(destCb) || baseCr < 0 || baseCr > len(destCr) {
+		return ErrInvalidData
+	}
 	dest := [2][]uint16{destCb, destCr}
+	base := [2]int{baseCb, baseCr}
 	if isIntra(mbType) && profileIDC == 244 && (chromaPredMode == intraPred8x8Vertical || chromaPredMode == intraPred8x8Horizontal) {
 		for plane := 0; plane < 2; plane++ {
 			baseBlock := 16 + plane*16
 			block := residual.MB[baseBlock*16:]
 			if chromaFormatIDC == 1 {
 				if chromaPredMode == intraPred8x8Vertical {
-					if err := h264Pred8x8VerticalAddAtHigh(dest[plane], blockOffset, baseBlock, block, stride, bitDepth); err != nil {
+					if err := h264Pred8x8VerticalAddAtHigh(dest[plane], base[plane], blockOffset, baseBlock, block, stride, bitDepth); err != nil {
 						return err
 					}
-				} else if err := h264Pred8x8HorizontalAddAtHigh(dest[plane], blockOffset, baseBlock, block, stride, bitDepth); err != nil {
+				} else if err := h264Pred8x8HorizontalAddAtHigh(dest[plane], base[plane], blockOffset, baseBlock, block, stride, bitDepth); err != nil {
 					return err
 				}
 			} else if chromaFormatIDC == 2 {
 				if chromaPredMode == intraPred8x8Vertical {
-					if err := h264Pred8x16VerticalAddAtHigh(dest[plane], blockOffset, baseBlock, block, stride, bitDepth); err != nil {
+					if err := h264Pred8x16VerticalAddAtHigh(dest[plane], base[plane], blockOffset, baseBlock, block, stride, bitDepth); err != nil {
 						return err
 					}
-				} else if err := h264Pred8x16HorizontalAddAtHigh(dest[plane], blockOffset, baseBlock, block, stride, bitDepth); err != nil {
+				} else if err := h264Pred8x16HorizontalAddAtHigh(dest[plane], base[plane], blockOffset, baseBlock, block, stride, bitDepth); err != nil {
 					return err
 				}
 			} else {
@@ -680,7 +701,7 @@ func h264HLDecodeMBAddChromaBypassHigh(destCb []uint16, destCr []uint16, stride 
 			if residual.NonZeroCountCache[h264Scan8[i]] == 0 && residual.MB[i*16] == 0 {
 				continue
 			}
-			dstBlock, err := transformBlockDestinationHigh(dest[plane], blockOffset[i], stride, 4)
+			dstBlock, err := transformBlockDestinationHigh(dest[plane], base[plane]+blockOffset[i], stride, 4)
 			if err != nil {
 				return err
 			}
@@ -693,7 +714,7 @@ func h264HLDecodeMBAddChromaBypassHigh(destCb []uint16, destCr []uint16, stride 
 				if residual.NonZeroCountCache[h264Scan8[i+4]] == 0 && residual.MB[i*16] == 0 {
 					continue
 				}
-				dstBlock, err := transformBlockDestinationHigh(dest[plane], blockOffset[i+4], stride, 4)
+				dstBlock, err := transformBlockDestinationHigh(dest[plane], base[plane]+blockOffset[i+4], stride, 4)
 				if err != nil {
 					return err
 				}
@@ -706,7 +727,7 @@ func h264HLDecodeMBAddChromaBypassHigh(destCb []uint16, destCr []uint16, stride 
 	return nil
 }
 
-func h264Pred8x8VerticalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
+func h264Pred8x8VerticalAddAtHigh(pix []uint16, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
 	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
 		return err
 	}
@@ -714,14 +735,14 @@ func h264Pred8x8VerticalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBase
 		return ErrInvalidData
 	}
 	for i := 0; i < 4; i++ {
-		if err := h264Pred4x4VerticalAddHigh(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
+		if err := h264Pred4x4VerticalAddHigh(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred8x8HorizontalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
+func h264Pred8x8HorizontalAddAtHigh(pix []uint16, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
 	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
 		return err
 	}
@@ -729,14 +750,14 @@ func h264Pred8x8HorizontalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBa
 		return ErrInvalidData
 	}
 	for i := 0; i < 4; i++ {
-		if err := h264Pred4x4HorizontalAddHigh(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
+		if err := h264Pred4x4HorizontalAddHigh(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred16x16VerticalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
+func h264Pred16x16VerticalAddAtHigh(pix []uint16, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
 	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
 		return err
 	}
@@ -744,14 +765,14 @@ func h264Pred16x16VerticalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBa
 		return ErrInvalidData
 	}
 	for i := 0; i < 16; i++ {
-		if err := h264Pred4x4VerticalAddHigh(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
+		if err := h264Pred4x4VerticalAddHigh(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred16x16HorizontalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
+func h264Pred16x16HorizontalAddAtHigh(pix []uint16, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
 	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
 		return err
 	}
@@ -759,14 +780,14 @@ func h264Pred16x16HorizontalAddAtHigh(pix []uint16, blockOffset *[48]int, offset
 		return ErrInvalidData
 	}
 	for i := 0; i < 16; i++ {
-		if err := h264Pred4x4HorizontalAddHigh(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
+		if err := h264Pred4x4HorizontalAddHigh(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred8x16VerticalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
+func h264Pred8x16VerticalAddAtHigh(pix []uint16, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
 	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
 		return err
 	}
@@ -774,19 +795,19 @@ func h264Pred8x16VerticalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBas
 		return ErrInvalidData
 	}
 	for i := 0; i < 4; i++ {
-		if err := h264Pred4x4VerticalAddHigh(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
+		if err := h264Pred4x4VerticalAddHigh(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
 			return err
 		}
 	}
 	for i := 4; i < 8; i++ {
-		if err := h264Pred4x4VerticalAddHigh(pix, blockOffset[offsetBase+i+4], block[i*16:i*16+16], stride, bitDepth); err != nil {
+		if err := h264Pred4x4VerticalAddHigh(pix, pixBase+blockOffset[offsetBase+i+4], block[i*16:i*16+16], stride, bitDepth); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred8x16HorizontalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
+func h264Pred8x16HorizontalAddAtHigh(pix []uint16, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int, bitDepth int) error {
 	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
 		return err
 	}
@@ -794,12 +815,12 @@ func h264Pred8x16HorizontalAddAtHigh(pix []uint16, blockOffset *[48]int, offsetB
 		return ErrInvalidData
 	}
 	for i := 0; i < 4; i++ {
-		if err := h264Pred4x4HorizontalAddHigh(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
+		if err := h264Pred4x4HorizontalAddHigh(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride, bitDepth); err != nil {
 			return err
 		}
 	}
 	for i := 4; i < 8; i++ {
-		if err := h264Pred4x4HorizontalAddHigh(pix, blockOffset[offsetBase+i+4], block[i*16:i*16+16], stride, bitDepth); err != nil {
+		if err := h264Pred4x4HorizontalAddHigh(pix, pixBase+blockOffset[offsetBase+i+4], block[i*16:i*16+16], stride, bitDepth); err != nil {
 			return err
 		}
 	}

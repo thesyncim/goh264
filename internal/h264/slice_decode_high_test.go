@@ -1782,7 +1782,7 @@ func h264HighIntra16x16ChromaDCResidualExpected(t *testing.T, bitDepth int, pps 
 		t.Fatal(err)
 	}
 	chromaQP := [2]uint8{pps.ChromaQPTable[0][qscale], pps.ChromaQPTable[1][qscale]}
-	if err := h264HLDecodeMBIDCTChromaHigh(p.Cb, p.Cr, p.ChromaStride, &blockOffset, 1, MBTypeIntra16x16, 0x10, chromaQP, pps, &residual, false, intraPredDC1288x8, 0, bitDepth); err != nil {
+	if err := h264HLDecodeMBIDCTChromaHigh(p.Cb, p.Cr, 0, 0, p.ChromaStride, &blockOffset, 1, MBTypeIntra16x16, 0x10, chromaQP, pps, &residual, false, intraPredDC1288x8, 0, bitDepth); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -1809,7 +1809,7 @@ func h264HighIntra16x16ChromaACResidualExpected(t *testing.T, bitDepth int, pps 
 		t.Fatal(err)
 	}
 	chromaQP := [2]uint8{pps.ChromaQPTable[0][qscale], pps.ChromaQPTable[1][qscale]}
-	if err := h264HLDecodeMBIDCTChromaHigh(p.Cb, p.Cr, p.ChromaStride, &blockOffset, 1, MBTypeIntra16x16, 0x20, chromaQP, pps, &residual, false, intraPredDC1288x8, 0, bitDepth); err != nil {
+	if err := h264HLDecodeMBIDCTChromaHigh(p.Cb, p.Cr, 0, 0, p.ChromaStride, &blockOffset, 1, MBTypeIntra16x16, 0x20, chromaQP, pps, &residual, false, intraPredDC1288x8, 0, bitDepth); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -1838,7 +1838,7 @@ func h264HighIntra16x16ChromaDCACResidualExpected(t *testing.T, bitDepth int, pp
 		t.Fatal(err)
 	}
 	chromaQP := [2]uint8{pps.ChromaQPTable[0][qscale], pps.ChromaQPTable[1][qscale]}
-	if err := h264HLDecodeMBIDCTChromaHigh(p.Cb, p.Cr, p.ChromaStride, &blockOffset, 1, MBTypeIntra16x16, 0x20, chromaQP, pps, &residual, false, intraPredDC1288x8, 0, bitDepth); err != nil {
+	if err := h264HLDecodeMBIDCTChromaHigh(p.Cb, p.Cr, 0, 0, p.ChromaStride, &blockOffset, 1, MBTypeIntra16x16, 0x20, chromaQP, pps, &residual, false, intraPredDC1288x8, 0, bitDepth); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -1877,7 +1877,7 @@ func h264HighIntra16x16LumaChromaResidualExpected(t *testing.T, bitDepth int, pp
 		t.Fatal(err)
 	}
 	chromaQP := [2]uint8{pps.ChromaQPTable[0][qscale], pps.ChromaQPTable[1][qscale]}
-	if err := h264HLDecodeMBIDCTChromaHigh(p.Cb, p.Cr, p.ChromaStride, &blockOffset, 1, MBTypeIntra16x16, 0x20, chromaQP, pps, &residual, false, intraPredDC1288x8, 0, bitDepth); err != nil {
+	if err := h264HLDecodeMBIDCTChromaHigh(p.Cb, p.Cr, 0, 0, p.ChromaStride, &blockOffset, 1, MBTypeIntra16x16, 0x20, chromaQP, pps, &residual, false, intraPredDC1288x8, 0, bitDepth); err != nil {
 		t.Fatal(err)
 	}
 	return p

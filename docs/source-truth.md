@@ -29,10 +29,11 @@ non-conformance Annex B FATE rows covering extreme plane prediction,
 reference-list-mod overflow recovery, and missing-frame recovery, with
 packetized/configured surfaces proven for reference-list-mod overflow,
 missing-frame, timecode, and BBC2 recovery/PAFF,
+lossless High444 transform-bypass Annex B,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 190/190 green. Matrix mode is the safe-point gate. Red-queue
+Public vectors: 191/191 green. Matrix mode is the safe-point gate. Red-queue
 scripts intentionally exit non-zero only while rows in
 `testdata/h264/realvectors/failures.jsonl` remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or

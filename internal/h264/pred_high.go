@@ -956,6 +956,52 @@ func h264Pred8x8LHorizontalFilterAddHigh(pix []uint16, offset int, block []int32
 	return nil
 }
 
+func h264Pred8x8LVerticalAddHigh(pix []uint16, offset int, block []int32, stride int, bitDepth int) error {
+	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
+		return err
+	}
+	if len(block) < 64 {
+		return ErrInvalidData
+	}
+	if err := checkPrediction8x8LArgsHigh(pix, offset, stride, false, true, 7); err != nil {
+		return err
+	}
+	for x := 0; x < 8; x++ {
+		v := pix[offset-stride+x]
+		for y := 0; y < 7; y++ {
+			v += uint16(uint32(block[y*8+x]))
+			pix[offset+x+y*stride] = v
+		}
+		pix[offset+x+7*stride] = v + uint16(uint32(block[56+x]))
+	}
+	clearInt32(block[:64])
+	return nil
+}
+
+func h264Pred8x8LHorizontalAddHigh(pix []uint16, offset int, block []int32, stride int, bitDepth int) error {
+	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
+		return err
+	}
+	if len(block) < 64 {
+		return ErrInvalidData
+	}
+	if err := checkPrediction8x8LArgsHigh(pix, offset, stride, true, false, -1); err != nil {
+		return err
+	}
+	for y := 0; y < 8; y++ {
+		row := offset + y*stride
+		src := y * 8
+		v := pix[row-1]
+		for x := 0; x < 7; x++ {
+			v += uint16(uint32(block[src+x]))
+			pix[row+x] = v
+		}
+		pix[row+7] = v + uint16(uint32(block[src+7]))
+	}
+	clearInt32(block[:64])
+	return nil
+}
+
 func h264Pred4x4VerticalAddHigh(pix []uint16, offset int, block []int32, stride int, bitDepth int) error {
 	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
 		return err

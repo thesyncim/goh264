@@ -834,6 +834,46 @@ func h264Pred8x8LHorizontalFilterAdd(pix []uint8, offset int, block []int32, str
 	return nil
 }
 
+func h264Pred8x8LVerticalAdd(pix []uint8, offset int, block []int32, stride int) error {
+	if len(block) < 64 {
+		return ErrInvalidData
+	}
+	if err := checkPrediction8x8LArgs(pix, offset, stride, false, true, 7); err != nil {
+		return err
+	}
+	for x := 0; x < 8; x++ {
+		v := pix[offset-stride+x]
+		for y := 0; y < 7; y++ {
+			v += uint8(dctcoef8Value(block[y*8+x]))
+			pix[offset+x+y*stride] = v
+		}
+		pix[offset+x+7*stride] = v + uint8(dctcoef8Value(block[56+x]))
+	}
+	clearInt32(block[:64])
+	return nil
+}
+
+func h264Pred8x8LHorizontalAdd(pix []uint8, offset int, block []int32, stride int) error {
+	if len(block) < 64 {
+		return ErrInvalidData
+	}
+	if err := checkPrediction8x8LArgs(pix, offset, stride, true, false, -1); err != nil {
+		return err
+	}
+	for y := 0; y < 8; y++ {
+		row := offset + y*stride
+		src := y * 8
+		v := pix[row-1]
+		for x := 0; x < 7; x++ {
+			v += uint8(dctcoef8Value(block[src+x]))
+			pix[row+x] = v
+		}
+		pix[row+7] = v + uint8(dctcoef8Value(block[src+7]))
+	}
+	clearInt32(block[:64])
+	return nil
+}
+
 func h264Pred4x4VerticalAdd(pix []uint8, offset int, block []int32, stride int) error {
 	if err := checkPredictionArgs(pix, offset, stride, 4, 4, 0, 1); err != nil {
 		return err

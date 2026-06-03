@@ -4,6 +4,27 @@ package h264
 
 import "testing"
 
+func TestH264X264BuildUsesUnfiltered8x8LAddMatchesFFmpegUnsignedCompare(t *testing.T) {
+	cases := []struct {
+		name  string
+		set   bool
+		build int32
+		want  bool
+	}{
+		{name: "unset defaults to minus one", set: false, build: 0, want: false},
+		{name: "negative explicit build", set: true, build: -1, want: false},
+		{name: "old build", set: true, build: 67, want: true},
+		{name: "last old build", set: true, build: 150, want: true},
+		{name: "first filtered build", set: true, build: 151, want: false},
+		{name: "new build", set: true, build: 165, want: false},
+	}
+	for _, tc := range cases {
+		if got := h264X264BuildUsesUnfiltered8x8LAdd(tc.build, tc.set); got != tc.want {
+			t.Fatalf("%s: got %t want %t", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestH264HLDecodeFrameMacroblockIntra16x16Reconstructs420(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
 	residual := h264ReconstructResidual420()
@@ -370,6 +391,44 @@ func TestH264HLDecodeFrameMacroblockHighIntra8x8Reconstructs422(t *testing.T) {
 	}
 	if residual.MB[0] != 0 || residual.MB[4*16] != 0 || residual.MB[16*16] != 0 {
 		t.Fatalf("high intra8x8 residual blocks were not cleared after reconstruction: %d/%d/%d", residual.MB[0], residual.MB[4*16], residual.MB[16*16])
+	}
+}
+
+func TestH264HLDecodeFrameMacroblockHighTransformBypassUsesFrameBase(t *testing.T) {
+	const bitDepth = 10
+	dst := makeH264ReconstructHighPicture(1, 37)
+	residual := h264ReconstructResidual420()
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{ProfileIDC: 244}
+	mbX, mbY := 1, 1
+	yOff, cbOff, _, err := h264MBDestPartOffsetsHigh(dst, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeY := dst.Y[yOff]
+	beforeCb := dst.Cb[cbOff]
+
+	if err := h264HLDecodeFrameMacroblockHigh(dst, h264FrameMBReconstructInputHigh{
+		MBType:             MBTypeIntra16x16,
+		MBX:                mbX,
+		MBY:                mbY,
+		CBP:                0x31,
+		QScale:             0,
+		ChromaQP:           [2]uint8{0, 0},
+		ChromaPredMode:     int32(intraPred8x8Horizontal),
+		Intra16x16PredMode: int8(intraPred8x8Horizontal),
+		PPS:                pps,
+		Residual:           &residual,
+		TransformBypass:    true,
+		BitDepth:           bitDepth,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if dst.Y[yOff] == beforeY || dst.Cb[cbOff] == beforeCb {
+		t.Fatalf("high transform-bypass samples did not change: y %d->%d cb %d->%d", beforeY, dst.Y[yOff], beforeCb, dst.Cb[cbOff])
+	}
+	if residual.MB[0] != 0 || residual.MB[16*16] != 0 {
+		t.Fatalf("high transform-bypass residual was not cleared: %d/%d", residual.MB[0], residual.MB[16*16])
 	}
 }
 

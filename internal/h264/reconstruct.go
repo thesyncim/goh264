@@ -32,6 +32,8 @@ type h264FrameMBReconstructInput struct {
 	DeblockingFilter    bool
 	ConstrainedIntra444 bool
 	IntraPCM            []byte
+	X264Build           int32
+	X264BuildSet        bool
 }
 
 func h264ProfileIDCFromPPS(pps *PPS) int32 {
@@ -39,6 +41,13 @@ func h264ProfileIDCFromPPS(pps *PPS) int32 {
 		return pps.SPS.ProfileIDC
 	}
 	return 0
+}
+
+func h264X264BuildUsesUnfiltered8x8LAdd(x264Build int32, x264BuildSet bool) bool {
+	if !x264BuildSet {
+		x264Build = -1
+	}
+	return uint32(x264Build) < 151
 }
 
 func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstructInput) error {
@@ -99,11 +108,11 @@ func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstru
 	}
 
 	profileIDC := h264ProfileIDCFromPPS(in.PPS)
-	if err := h264HLDecodeMBIDCTLuma(dst.Y[dstY:], dst.LumaStride, &blockOffset, in.MBType, in.CBP, in.Residual, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC); err != nil {
+	if err := h264HLDecodeMBIDCTLuma(dst.Y, dstY, dst.LumaStride, &blockOffset, in.MBType, in.CBP, in.Residual, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC); err != nil {
 		return err
 	}
 	if dst.ChromaFormatIDC != 0 && in.CBP&0x30 != 0 {
-		return h264HLDecodeMBIDCTChroma(dst.Cb[dstCb:], dst.Cr[dstCr:], dst.ChromaStride, &blockOffset, dst.ChromaFormatIDC, in.MBType, in.CBP, in.ChromaQP, in.PPS, in.Residual, in.TransformBypass, int(in.ChromaPredMode), profileIDC)
+		return h264HLDecodeMBIDCTChroma(dst.Cb, dst.Cr, dstCb, dstCr, dst.ChromaStride, &blockOffset, dst.ChromaFormatIDC, in.MBType, in.CBP, in.ChromaQP, in.PPS, in.Residual, in.TransformBypass, int(in.ChromaPredMode), profileIDC)
 	}
 	return nil
 }
@@ -145,7 +154,7 @@ func h264HLDecodeFrameMacroblock444(dst *h264PicturePlanes, dstY int, dstCb int,
 		}
 	}
 	for p := 0; p < 3; p++ {
-		if err := h264HLDecodeMBIDCTLumaPlane(dest[p][offset[p]:], stride[p], blockOffset, in.MBType, in.CBP, in.Residual, p, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC); err != nil {
+		if err := h264HLDecodeMBIDCTLumaPlane(dest[p], offset[p], stride[p], blockOffset, in.MBType, in.CBP, in.Residual, p, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC); err != nil {
 			return err
 		}
 	}
@@ -207,7 +216,7 @@ func h264HLDecodeFrameIntraPredict(dst *h264PicturePlanes, dstY int, dstCb int, 
 		}
 	}
 	if isIntra4x4(in.MBType) {
-		return h264HLDecodeMBPredictLumaIntra4x4(dst.Y, dstY, dst.LumaStride, blockOffset, in.MBType, in.Intra4x4PredCache, in.TopLeftAvailable, in.TopRightAvailable, in.Residual, in.TransformBypass, h264ProfileIDCFromPPS(in.PPS))
+		return h264HLDecodeMBPredictLumaIntra4x4(dst.Y, dstY, dst.LumaStride, blockOffset, in.MBType, in.Intra4x4PredCache, in.TopLeftAvailable, in.TopRightAvailable, in.Residual, in.TransformBypass, h264ProfileIDCFromPPS(in.PPS), in.X264Build, in.X264BuildSet)
 	}
 	if !isIntra16x16(in.MBType) {
 		return ErrUnsupported
@@ -217,7 +226,7 @@ func h264HLDecodeFrameIntraPredict(dst *h264PicturePlanes, dstY int, dstCb int, 
 
 func h264HLDecodeFrameIntraPredictLumaPlane(dest []uint8, baseOffset int, stride int, blockOffset *[48]int, in h264FrameMBReconstructInput, plane int) error {
 	if isIntra4x4(in.MBType) {
-		return h264HLDecodeMBPredictLumaIntra4x4Plane(dest, baseOffset, stride, blockOffset, in.MBType, in.Intra4x4PredCache, in.TopLeftAvailable, in.TopRightAvailable, in.Residual, plane, in.TransformBypass, h264ProfileIDCFromPPS(in.PPS))
+		return h264HLDecodeMBPredictLumaIntra4x4Plane(dest, baseOffset, stride, blockOffset, in.MBType, in.Intra4x4PredCache, in.TopLeftAvailable, in.TopRightAvailable, in.Residual, plane, in.TransformBypass, h264ProfileIDCFromPPS(in.PPS), in.X264Build, in.X264BuildSet)
 	}
 	if !isIntra16x16(in.MBType) {
 		return ErrUnsupported
@@ -254,52 +263,56 @@ func h264HLDecodeMBPredictLumaIntra16x16Plane(destY []uint8, offset int, stride 
 	return nil
 }
 
-func h264HLDecodeMBIDCTLuma(destY []uint8, stride int, blockOffset *[48]int, mbType uint32, cbp int, residual *cavlcResidualContext, transformBypass bool, intra16x16PredMode int, profileIDC int32) error {
-	return h264HLDecodeMBIDCTLumaPlane(destY, stride, blockOffset, mbType, cbp, residual, 0, transformBypass, intra16x16PredMode, profileIDC)
+func h264HLDecodeMBIDCTLuma(destY []uint8, baseY int, stride int, blockOffset *[48]int, mbType uint32, cbp int, residual *cavlcResidualContext, transformBypass bool, intra16x16PredMode int, profileIDC int32) error {
+	return h264HLDecodeMBIDCTLumaPlane(destY, baseY, stride, blockOffset, mbType, cbp, residual, 0, transformBypass, intra16x16PredMode, profileIDC)
 }
 
-func h264HLDecodeMBIDCTLumaPlane(destY []uint8, stride int, blockOffset *[48]int, mbType uint32, cbp int, residual *cavlcResidualContext, plane int, transformBypass bool, intra16x16PredMode int, profileIDC int32) error {
+func h264HLDecodeMBIDCTLumaPlane(destY []uint8, baseY int, stride int, blockOffset *[48]int, mbType uint32, cbp int, residual *cavlcResidualContext, plane int, transformBypass bool, intra16x16PredMode int, profileIDC int32) error {
 	if residual == nil {
+		return ErrInvalidData
+	}
+	if baseY < 0 || baseY > len(destY) {
 		return ErrInvalidData
 	}
 	if plane < 0 || plane > 2 {
 		return ErrInvalidData
 	}
+	destMB := destY[baseY:]
 	if isIntra4x4(mbType) {
 		return nil
 	}
 	if isIntra16x16(mbType) {
 		if transformBypass {
 			if profileIDC == 244 && intra16x16PredMode == intraPred8x8Vertical {
-				return h264Pred16x16VerticalAddAt(destY, blockOffset, plane*16, residual.MB[plane*16*16:], stride)
+				return h264Pred16x16VerticalAddAt(destY, baseY, blockOffset, plane*16, residual.MB[plane*16*16:], stride)
 			}
 			if profileIDC == 244 && intra16x16PredMode == intraPred8x8Horizontal {
-				return h264Pred16x16HorizontalAddAt(destY, blockOffset, plane*16, residual.MB[plane*16*16:], stride)
+				return h264Pred16x16HorizontalAddAt(destY, baseY, blockOffset, plane*16, residual.MB[plane*16*16:], stride)
 			}
-			return h264AddPixels16BypassPlane(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, true)
+			return h264AddPixels16BypassPlane(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, true)
 		}
-		return h264IDCTAdd16IntraPlane(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane)
+		return h264IDCTAdd16IntraPlane(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane)
 	}
 	if cbp&15 == 0 {
 		return nil
 	}
 	if transformBypass {
 		if is8x8DCT(mbType) {
-			return h264AddPixels8Bypass4Plane(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane)
+			return h264AddPixels8Bypass4Plane(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane)
 		}
-		return h264AddPixels16BypassPlane(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, false)
+		return h264AddPixels16BypassPlane(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane, false)
 	}
 	if is8x8DCT(mbType) {
-		return h264IDCT8Add4Plane(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane)
+		return h264IDCT8Add4Plane(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane)
 	}
-	return h264IDCTAdd16Plane(destY, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane)
+	return h264IDCTAdd16Plane(destMB, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache, plane)
 }
 
-func h264HLDecodeMBPredictLumaIntra4x4(destY []uint8, baseOffset int, stride int, blockOffset *[48]int, mbType uint32, predCache *[h264IntraPredModeCacheSize]int8, topLeftAvailable uint16, topRightAvailable uint16, residual *cavlcResidualContext, transformBypass bool, profileIDC int32) error {
-	return h264HLDecodeMBPredictLumaIntra4x4Plane(destY, baseOffset, stride, blockOffset, mbType, predCache, topLeftAvailable, topRightAvailable, residual, 0, transformBypass, profileIDC)
+func h264HLDecodeMBPredictLumaIntra4x4(destY []uint8, baseOffset int, stride int, blockOffset *[48]int, mbType uint32, predCache *[h264IntraPredModeCacheSize]int8, topLeftAvailable uint16, topRightAvailable uint16, residual *cavlcResidualContext, transformBypass bool, profileIDC int32, x264Build int32, x264BuildSet bool) error {
+	return h264HLDecodeMBPredictLumaIntra4x4Plane(destY, baseOffset, stride, blockOffset, mbType, predCache, topLeftAvailable, topRightAvailable, residual, 0, transformBypass, profileIDC, x264Build, x264BuildSet)
 }
 
-func h264HLDecodeMBPredictLumaIntra4x4Plane(destY []uint8, baseOffset int, stride int, blockOffset *[48]int, mbType uint32, predCache *[h264IntraPredModeCacheSize]int8, topLeftAvailable uint16, topRightAvailable uint16, residual *cavlcResidualContext, plane int, transformBypass bool, profileIDC int32) error {
+func h264HLDecodeMBPredictLumaIntra4x4Plane(destY []uint8, baseOffset int, stride int, blockOffset *[48]int, mbType uint32, predCache *[h264IntraPredModeCacheSize]int8, topLeftAvailable uint16, topRightAvailable uint16, residual *cavlcResidualContext, plane int, transformBypass bool, profileIDC int32, x264Build int32, x264BuildSet bool) error {
 	if blockOffset == nil || predCache == nil || residual == nil {
 		return ErrInvalidData
 	}
@@ -316,7 +329,15 @@ func h264HLDecodeMBPredictLumaIntra4x4Plane(destY []uint8, baseOffset int, strid
 			hasTopRight := ((uint32(topRightAvailable) << uint(i)) & 0x4000) != 0
 			block := residual.MB[index*16 : index*16+64]
 			if transformBypass && profileIDC == 244 && (dir == int(intraPredVertical) || dir == int(intraPredHorizontal)) {
-				if dir == int(intraPredVertical) {
+				if h264X264BuildUsesUnfiltered8x8LAdd(x264Build, x264BuildSet) {
+					if dir == int(intraPredVertical) {
+						if err := h264Pred8x8LVerticalAdd(destY, offset, block, stride); err != nil {
+							return err
+						}
+					} else if err := h264Pred8x8LHorizontalAdd(destY, offset, block, stride); err != nil {
+						return err
+					}
+				} else if dir == int(intraPredVertical) {
 					if err := h264Pred8x8LVerticalFilterAdd(destY, offset, block, stride, hasTopLeft, hasTopRight); err != nil {
 						return err
 					}
@@ -546,8 +567,11 @@ func h264LumaDCDirect(output []int32, input *[16]int32) {
 	}
 }
 
-func h264HLDecodeMBIDCTChroma(destCb []uint8, destCr []uint8, stride int, blockOffset *[48]int, chromaFormatIDC int, mbType uint32, cbp int, chromaQP [2]uint8, pps *PPS, residual *cavlcResidualContext, transformBypass bool, chromaPredMode int, profileIDC int32) error {
+func h264HLDecodeMBIDCTChroma(destCb []uint8, destCr []uint8, baseCb int, baseCr int, stride int, blockOffset *[48]int, chromaFormatIDC int, mbType uint32, cbp int, chromaQP [2]uint8, pps *PPS, residual *cavlcResidualContext, transformBypass bool, chromaPredMode int, profileIDC int32) error {
 	if pps == nil || residual == nil {
+		return ErrInvalidData
+	}
+	if baseCb < 0 || baseCb > len(destCb) || baseCr < 0 || baseCr > len(destCr) {
 		return ErrInvalidData
 	}
 	if cbp&0x30 == 0 {
@@ -570,7 +594,7 @@ func h264HLDecodeMBIDCTChroma(destCb []uint8, destCr []uint8, stride int, blockO
 		cqm0, cqm1 = 1, 2
 	}
 	if transformBypass {
-		return h264HLDecodeMBAddChromaBypass(destCb, destCr, stride, blockOffset, chromaFormatIDC, mbType, chromaPredMode, profileIDC, residual)
+		return h264HLDecodeMBAddChromaBypass(destCb, destCr, baseCb, baseCr, stride, blockOffset, chromaFormatIDC, mbType, chromaPredMode, profileIDC, residual)
 	}
 	if residual.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+0]] != 0 {
 		if err := h264ChromaDCDequantIDCTByFormat(residual.MB[16*16:], int(pps.Dequant4Buffer[cqm0][qp0][0]), chromaFormatIDC); err != nil {
@@ -582,7 +606,7 @@ func h264HLDecodeMBIDCTChroma(destCb []uint8, destCr []uint8, stride int, blockO
 			return err
 		}
 	}
-	dest := [2][]uint8{destCb, destCr}
+	dest := [2][]uint8{destCb[baseCb:], destCr[baseCr:]}
 	if chromaFormatIDC == 2 {
 		return h264IDCTAdd8_422(&dest, blockOffset, residual.MB[:], stride, &residual.NonZeroCountCache)
 	}
@@ -592,29 +616,33 @@ func h264HLDecodeMBIDCTChroma(destCb []uint8, destCr []uint8, stride int, blockO
 	return ErrInvalidData
 }
 
-func h264HLDecodeMBAddChromaBypass(destCb []uint8, destCr []uint8, stride int, blockOffset *[48]int, chromaFormatIDC int, mbType uint32, chromaPredMode int, profileIDC int32, residual *cavlcResidualContext) error {
+func h264HLDecodeMBAddChromaBypass(destCb []uint8, destCr []uint8, baseCb int, baseCr int, stride int, blockOffset *[48]int, chromaFormatIDC int, mbType uint32, chromaPredMode int, profileIDC int32, residual *cavlcResidualContext) error {
 	if blockOffset == nil || residual == nil {
 		return ErrInvalidData
 	}
+	if baseCb < 0 || baseCb > len(destCb) || baseCr < 0 || baseCr > len(destCr) {
+		return ErrInvalidData
+	}
 	dest := [2][]uint8{destCb, destCr}
+	base := [2]int{baseCb, baseCr}
 	if isIntra(mbType) && profileIDC == 244 && (chromaPredMode == intraPred8x8Vertical || chromaPredMode == intraPred8x8Horizontal) {
 		for plane := 0; plane < 2; plane++ {
 			baseBlock := 16 + plane*16
 			block := residual.MB[baseBlock*16:]
 			if chromaFormatIDC == 1 {
 				if chromaPredMode == intraPred8x8Vertical {
-					if err := h264Pred8x8VerticalAddAt(dest[plane], blockOffset, baseBlock, block, stride); err != nil {
+					if err := h264Pred8x8VerticalAddAt(dest[plane], base[plane], blockOffset, baseBlock, block, stride); err != nil {
 						return err
 					}
-				} else if err := h264Pred8x8HorizontalAddAt(dest[plane], blockOffset, baseBlock, block, stride); err != nil {
+				} else if err := h264Pred8x8HorizontalAddAt(dest[plane], base[plane], blockOffset, baseBlock, block, stride); err != nil {
 					return err
 				}
 			} else if chromaFormatIDC == 2 {
 				if chromaPredMode == intraPred8x8Vertical {
-					if err := h264Pred8x16VerticalAddAt(dest[plane], blockOffset, baseBlock, block, stride); err != nil {
+					if err := h264Pred8x16VerticalAddAt(dest[plane], base[plane], blockOffset, baseBlock, block, stride); err != nil {
 						return err
 					}
-				} else if err := h264Pred8x16HorizontalAddAt(dest[plane], blockOffset, baseBlock, block, stride); err != nil {
+				} else if err := h264Pred8x16HorizontalAddAt(dest[plane], base[plane], blockOffset, baseBlock, block, stride); err != nil {
 					return err
 				}
 			} else {
@@ -630,7 +658,7 @@ func h264HLDecodeMBAddChromaBypass(destCb []uint8, destCr []uint8, stride int, b
 			if residual.NonZeroCountCache[h264Scan8[i]] == 0 && dctcoef8Value(residual.MB[i*16]) == 0 {
 				continue
 			}
-			dstBlock, err := transformBlockDestination(dest[plane], blockOffset[i], stride, 4)
+			dstBlock, err := transformBlockDestination(dest[plane], base[plane]+blockOffset[i], stride, 4)
 			if err != nil {
 				return err
 			}
@@ -643,7 +671,7 @@ func h264HLDecodeMBAddChromaBypass(destCb []uint8, destCr []uint8, stride int, b
 				if residual.NonZeroCountCache[h264Scan8[i+4]] == 0 && dctcoef8Value(residual.MB[i*16]) == 0 {
 					continue
 				}
-				dstBlock, err := transformBlockDestination(dest[plane], blockOffset[i+4], stride, 4)
+				dstBlock, err := transformBlockDestination(dest[plane], base[plane]+blockOffset[i+4], stride, 4)
 				if err != nil {
 					return err
 				}
@@ -656,82 +684,82 @@ func h264HLDecodeMBAddChromaBypass(destCb []uint8, destCr []uint8, stride int, b
 	return nil
 }
 
-func h264Pred8x8VerticalAddAt(pix []uint8, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
+func h264Pred8x8VerticalAddAt(pix []uint8, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
 	if blockOffset == nil || offsetBase < 0 || offsetBase+4 > len(blockOffset) || len(block) < 4*16 {
 		return ErrInvalidData
 	}
 	for i := 0; i < 4; i++ {
-		if err := h264Pred4x4VerticalAdd(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
+		if err := h264Pred4x4VerticalAdd(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred8x8HorizontalAddAt(pix []uint8, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
+func h264Pred8x8HorizontalAddAt(pix []uint8, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
 	if blockOffset == nil || offsetBase < 0 || offsetBase+4 > len(blockOffset) || len(block) < 4*16 {
 		return ErrInvalidData
 	}
 	for i := 0; i < 4; i++ {
-		if err := h264Pred4x4HorizontalAdd(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
+		if err := h264Pred4x4HorizontalAdd(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred16x16VerticalAddAt(pix []uint8, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
+func h264Pred16x16VerticalAddAt(pix []uint8, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
 	if blockOffset == nil || offsetBase < 0 || offsetBase+16 > len(blockOffset) || len(block) < 16*16 {
 		return ErrInvalidData
 	}
 	for i := 0; i < 16; i++ {
-		if err := h264Pred4x4VerticalAdd(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
+		if err := h264Pred4x4VerticalAdd(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred16x16HorizontalAddAt(pix []uint8, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
+func h264Pred16x16HorizontalAddAt(pix []uint8, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
 	if blockOffset == nil || offsetBase < 0 || offsetBase+16 > len(blockOffset) || len(block) < 16*16 {
 		return ErrInvalidData
 	}
 	for i := 0; i < 16; i++ {
-		if err := h264Pred4x4HorizontalAdd(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
+		if err := h264Pred4x4HorizontalAdd(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred8x16VerticalAddAt(pix []uint8, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
+func h264Pred8x16VerticalAddAt(pix []uint8, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
 	if blockOffset == nil || offsetBase < 0 || offsetBase+12 > len(blockOffset) || len(block) < 8*16 {
 		return ErrInvalidData
 	}
 	for i := 0; i < 4; i++ {
-		if err := h264Pred4x4VerticalAdd(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
+		if err := h264Pred4x4VerticalAdd(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
 			return err
 		}
 	}
 	for i := 4; i < 8; i++ {
-		if err := h264Pred4x4VerticalAdd(pix, blockOffset[offsetBase+i+4], block[i*16:i*16+16], stride); err != nil {
+		if err := h264Pred4x4VerticalAdd(pix, pixBase+blockOffset[offsetBase+i+4], block[i*16:i*16+16], stride); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func h264Pred8x16HorizontalAddAt(pix []uint8, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
+func h264Pred8x16HorizontalAddAt(pix []uint8, pixBase int, blockOffset *[48]int, offsetBase int, block []int32, stride int) error {
 	if blockOffset == nil || offsetBase < 0 || offsetBase+12 > len(blockOffset) || len(block) < 8*16 {
 		return ErrInvalidData
 	}
 	for i := 0; i < 4; i++ {
-		if err := h264Pred4x4HorizontalAdd(pix, blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
+		if err := h264Pred4x4HorizontalAdd(pix, pixBase+blockOffset[offsetBase+i], block[i*16:i*16+16], stride); err != nil {
 			return err
 		}
 	}
 	for i := 4; i < 8; i++ {
-		if err := h264Pred4x4HorizontalAdd(pix, blockOffset[offsetBase+i+4], block[i*16:i*16+16], stride); err != nil {
+		if err := h264Pred4x4HorizontalAdd(pix, pixBase+blockOffset[offsetBase+i+4], block[i*16:i*16+16], stride); err != nil {
 			return err
 		}
 	}

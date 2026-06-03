@@ -16,6 +16,8 @@ type h264FrameSliceDecodeInput struct {
 	Direct        h264DirectMotionContext
 	PredWeight    *PredWeightTable
 	MotionScratch *h264MotionCompScratch
+	X264Build     int32
+	X264BuildSet  bool
 }
 
 type h264FrameSliceDecodeInputHigh struct {
@@ -24,6 +26,8 @@ type h264FrameSliceDecodeInputHigh struct {
 	Direct        h264DirectMotionContext
 	PredWeight    *PredWeightTable
 	MotionScratch *h264MotionCompScratchHigh
+	X264Build     int32
+	X264BuildSet  bool
 }
 
 type h264FrameSliceDecodeResult struct {
@@ -1198,6 +1202,8 @@ func h264FrameMBReconstructInputFromCAVLC(sh *SliceHeader, cur sliceMacroblockCu
 		MotionScratch:      in.MotionScratch,
 		TransformBypass:    sh.SPS.TransformBypass != 0 && mb.QScale == 0,
 		IntraPCM:           mb.IntraPCM,
+		X264Build:          in.X264Build,
+		X264BuildSet:       in.X264BuildSet,
 	}
 }
 
@@ -1229,6 +1235,8 @@ func h264FrameMBReconstructInputHighFromCAVLC(sh *SliceHeader, cur sliceMacroblo
 		DeblockingFilter:   sh.DeblockingFilter != 0,
 		BitDepth:           int(sh.SPS.BitDepthLuma),
 		IntraPCM:           mb.IntraPCM,
+		X264Build:          in.X264Build,
+		X264BuildSet:       in.X264BuildSet,
 	}
 }
 
@@ -1260,6 +1268,8 @@ func h264FrameMBReconstructInputHighFromCABAC(sh *SliceHeader, cur sliceMacroblo
 		DeblockingFilter:   sh.DeblockingFilter != 0,
 		BitDepth:           int(sh.SPS.BitDepthLuma),
 		IntraPCM:           mb.IntraPCM,
+		X264Build:          in.X264Build,
+		X264BuildSet:       in.X264BuildSet,
 	}
 }
 
@@ -1289,5 +1299,7 @@ func h264FrameMBReconstructInputFromCABAC(sh *SliceHeader, cur sliceMacroblockCu
 		MotionScratch:      in.MotionScratch,
 		TransformBypass:    sh.SPS.TransformBypass != 0 && mb.QScale == 0,
 		IntraPCM:           mb.IntraPCM,
+		X264Build:          in.X264Build,
+		X264BuildSet:       in.X264BuildSet,
 	}
 }
