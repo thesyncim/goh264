@@ -585,6 +585,52 @@ func TestDecodeCABACFrameB8x8DirectSubMacroblocks(t *testing.T) {
 	}
 }
 
+func TestDecodeCABACFrameBDirectSkips8x8DCTWhenDirectInferenceDisabled(t *testing.T) {
+	m, col, idr := newTemporalDirectTestTables(t, MBType16x16|MBTypeP0L0|MBTypeP1L0)
+	col.tables.RefIndex[0][0] = 0
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, FrameMBSOnlyFlag: 1}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	src := &scriptedCABACSource{bits: []int{
+		0,
+		1, 0, 0, 0,
+		0,
+		0,
+		0, 0, 0, 0,
+	}}
+
+	got, err := m.decodeCABACFrameMacroblock(src, cabacFrameMacroblockInput{
+		MBXY:          0,
+		SliceNum:      12,
+		SliceType:     PictureTypeB,
+		SliceTypeNoS:  PictureTypeB,
+		QScale:        18,
+		RefCount:      [2]uint32{1, 1},
+		DCT8x8Allowed: true,
+		Direct: h264DirectMotionContext{
+			RefEntries: [2][]simpleRefEntry{
+				{{frame: idr}},
+				{{frame: col}},
+			},
+			CurPOC: 2,
+		},
+		PPS: pps,
+		SPS: sps,
+	})
+	if err != nil {
+		t.Fatalf("decode cabac b-direct failed: %v", err)
+	}
+	if got.MBType&MBType8x8DCT != 0 || m.MacroblockTyp[0]&MBType8x8DCT != 0 {
+		t.Fatalf("direct mb type includes 8x8DCT: result %#x table %#x", got.MBType, m.MacroblockTyp[0])
+	}
+	for _, idx := range src.indexes {
+		if idx == 399 {
+			t.Fatalf("read transform_size_8x8 flag context 399 for direct mb with inference disabled: indexes %v", src.indexes)
+		}
+	}
+	wantIndexes(t, src, []int{27, 73, 73, 73, 76, 77, 60, 93, 93, 93, 93})
+}
+
 func TestDecodeCABACFrameSlicePskipWritesCABACSkipState(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {

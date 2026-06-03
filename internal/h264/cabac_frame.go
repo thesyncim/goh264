@@ -597,12 +597,14 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, motion *macroblockMotionCache, listCount int, cacheResult frameMacroblockDecodeCacheResult, result cabacFrameMacroblockResult) (cabacFrameMacroblockResult, error) {
 	var mb cavlcInterMacroblockSyntax
 	mb.cavlcMacroblockSyntax = base
+	dct8x8Allowed := in.DCT8x8Allowed
 	if isDirect(base.MBType) {
 		if err := m.predDirectMotionFrame(motion, in.MBXY, &mb.MBType, &mb.SubMBType, in.Direct); err != nil {
 			return result, err
 		}
 		fillMVDRectangle(&motion.MVD[0], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
 		fillMVDRectangle(&motion.MVD[1], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
+		dct8x8Allowed = dct8x8Allowed && in.SPS.Direct8x8InferenceFlag != 0
 	} else {
 		predCtx := m.frameMotionPredContext(in.MBXY, in.FrameMBAFF, cacheResult.Neighbors, base.MBType, listCount, in.SliceTypeNoS, true, in.DirectSpatialMVPred)
 		if err := m.decodeCABACInterMotionSyntax(src, &mb, motion, in.MBXY, in.SliceTypeNoS, listCount, in.RefCount, in.Direct, predCtx); err != nil {
@@ -614,7 +616,6 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	if in.SPS.ChromaFormatIDC == 1 || in.SPS.ChromaFormatIDC == 2 {
 		mb.CBP |= decodeCABACMBCBPChroma(src, cacheResult.Residual.LeftCBP, cacheResult.Residual.TopCBP) << 4
 	}
-	dct8x8Allowed := in.DCT8x8Allowed
 	if mb.PartitionCount == 4 {
 		dct8x8Allowed = subMBTypesAllowDCT8x8(dct8x8Allowed, &mb.SubMBType, in.SPS.Direct8x8InferenceFlag != 0)
 	}
