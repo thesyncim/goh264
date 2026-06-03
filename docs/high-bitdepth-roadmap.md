@@ -24,8 +24,8 @@ combined luma/chroma residual plus P-skip/P16x16, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, and public High10/
 High422 field-coded frame-MBAFF deblock rows.
 
-Next: more public 12/14-bit streams, then broader high-bit-depth field/MBAFF
-motion and PIC-AFF/PAFF.
+Next: public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
+then broader high-bit-depth field/MBAFF motion and PIC-AFF/PAFF.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and
 `testdata/h264/realvectors/manifest.jsonl`.
