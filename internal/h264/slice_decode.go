@@ -564,8 +564,7 @@ func isHigh10ChromaWeightedPFrameDeblockScope(sh *SliceHeader) bool {
 		sh.SliceTypeNoS == PictureTypeP &&
 		(sh.DeblockingFilter == 0 || sh.DeblockingFilter == 1) &&
 		sh.PPS.WeightedPred != 0 &&
-		sh.PredWeightTable.UseWeight != 0 &&
-		sh.PredWeightTable.UseWeightChroma != 0
+		sh.PredWeightTable.UseWeight != 0
 }
 
 func isHighFramePScope(sh *SliceHeader) bool {

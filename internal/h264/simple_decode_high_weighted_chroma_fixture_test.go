@@ -17,22 +17,31 @@ func TestDecodeAnnexBSimpleHigh10WeightedChromaPFixtures(t *testing.T) {
 		chromaFormatIDC int
 		profileIDC      int32
 		deblockMode     int32
+		chromaWeighted  bool
 	}{
-		{name: "422-cavlc", file: "high10_weighted422_cavlc_p.h264", chromaFormatIDC: 2, profileIDC: 122},
-		{name: "422-cabac", file: "high10_weighted422_cabac_p.h264", cabac: 1, chromaFormatIDC: 2, profileIDC: 122},
-		{name: "444-cavlc", file: "high10_weighted444_cavlc_p.h264", chromaFormatIDC: 3, profileIDC: 244},
-		{name: "444-cabac", file: "high10_weighted444_cabac_p.h264", cabac: 1, chromaFormatIDC: 3, profileIDC: 244},
-		{name: "422-deblock-cavlc", file: "high10_weighted422_deblock_cavlc_p.h264", chromaFormatIDC: 2, profileIDC: 122, deblockMode: 1},
-		{name: "422-deblock-cabac", file: "high10_weighted422_deblock_cabac_p.h264", cabac: 1, chromaFormatIDC: 2, profileIDC: 122, deblockMode: 1},
-		{name: "444-deblock-cavlc", file: "high10_weighted444_deblock_cavlc_p.h264", chromaFormatIDC: 3, profileIDC: 244, deblockMode: 1},
-		{name: "444-deblock-cabac", file: "high10_weighted444_deblock_cabac_p.h264", cabac: 1, chromaFormatIDC: 3, profileIDC: 244, deblockMode: 1},
+		{name: "422-cavlc", file: "high10_weighted422_cavlc_p.h264", chromaFormatIDC: 2, profileIDC: 122, chromaWeighted: true},
+		{name: "422-cabac", file: "high10_weighted422_cabac_p.h264", cabac: 1, chromaFormatIDC: 2, profileIDC: 122, chromaWeighted: true},
+		{name: "444-cavlc", file: "high10_weighted444_cavlc_p.h264", chromaFormatIDC: 3, profileIDC: 244, chromaWeighted: true},
+		{name: "444-cabac", file: "high10_weighted444_cabac_p.h264", cabac: 1, chromaFormatIDC: 3, profileIDC: 244, chromaWeighted: true},
+		{name: "422-deblock-cavlc", file: "high10_weighted422_deblock_cavlc_p.h264", chromaFormatIDC: 2, profileIDC: 122, deblockMode: 1, chromaWeighted: true},
+		{name: "422-deblock-cabac", file: "high10_weighted422_deblock_cabac_p.h264", cabac: 1, chromaFormatIDC: 2, profileIDC: 122, deblockMode: 1, chromaWeighted: true},
+		{name: "444-deblock-cavlc", file: "high10_weighted444_deblock_cavlc_p.h264", chromaFormatIDC: 3, profileIDC: 244, deblockMode: 1, chromaWeighted: true},
+		{name: "444-deblock-cabac", file: "high10_weighted444_deblock_cabac_p.h264", cabac: 1, chromaFormatIDC: 3, profileIDC: 244, deblockMode: 1, chromaWeighted: true},
+		{name: "422-luma-cavlc", file: "high10_luma_weighted422_cavlc_p.h264", chromaFormatIDC: 2, profileIDC: 122},
+		{name: "422-luma-cabac", file: "high10_luma_weighted422_cabac_p.h264", cabac: 1, chromaFormatIDC: 2, profileIDC: 122},
+		{name: "444-luma-cavlc", file: "high10_luma_weighted444_cavlc_p.h264", chromaFormatIDC: 3, profileIDC: 244},
+		{name: "444-luma-cabac", file: "high10_luma_weighted444_cabac_p.h264", cabac: 1, chromaFormatIDC: 3, profileIDC: 244},
+		{name: "422-luma-deblock-cavlc", file: "high10_luma_weighted422_deblock_cavlc_p.h264", chromaFormatIDC: 2, profileIDC: 122, deblockMode: 1},
+		{name: "422-luma-deblock-cabac", file: "high10_luma_weighted422_deblock_cabac_p.h264", cabac: 1, chromaFormatIDC: 2, profileIDC: 122, deblockMode: 1},
+		{name: "444-luma-deblock-cavlc", file: "high10_luma_weighted444_deblock_cavlc_p.h264", chromaFormatIDC: 3, profileIDC: 244, deblockMode: 1},
+		{name: "444-luma-deblock-cabac", file: "high10_luma_weighted444_deblock_cabac_p.h264", cabac: 1, chromaFormatIDC: 3, profileIDC: 244, deblockMode: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := os.ReadFile(highWeightedChromaPFixturePath(t, tt.file))
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertHigh10WeightedChromaPFixtureHeaders(t, data, tt.cabac, tt.chromaFormatIDC, tt.profileIDC, tt.deblockMode)
+			assertHigh10WeightedChromaPFixtureHeaders(t, data, tt.cabac, tt.chromaFormatIDC, tt.profileIDC, tt.deblockMode, tt.chromaWeighted)
 
 			frames, err := DecodeAnnexBSimpleFrames(data)
 			if err != nil {
@@ -52,7 +61,7 @@ func TestDecodeAnnexBSimpleHigh10WeightedChromaPFixtures(t *testing.T) {
 	}
 }
 
-func assertHigh10WeightedChromaPFixtureHeaders(t *testing.T, data []byte, cabac int32, chromaFormatIDC int, profileIDC int32, deblockMode int32) {
+func assertHigh10WeightedChromaPFixtureHeaders(t *testing.T, data []byte, cabac int32, chromaFormatIDC int, profileIDC int32, deblockMode int32, wantChromaWeighted bool) {
 	t.Helper()
 
 	nals, err := SplitAnnexB(data)
@@ -63,6 +72,7 @@ func assertHigh10WeightedChromaPFixtureHeaders(t *testing.T, data []byte, cabac 
 	var spsList [maxSPSCount]*SPS
 	var ppsList [maxPPSCount]*PPS
 	var pSlices int
+	var lumaWeightedPSlices int
 	var chromaWeightedPSlices int
 	for _, nal := range nals {
 		switch nal.Type {
@@ -105,6 +115,9 @@ func assertHigh10WeightedChromaPFixtureHeaders(t *testing.T, data []byte, cabac 
 						sh.ListCount, sh.RefCount[0], sh.PPS)
 				}
 				pSlices++
+				if sh.PredWeightTable.UseWeight != 0 {
+					lumaWeightedPSlices++
+				}
 				if sh.PredWeightTable.UseWeightChroma != 0 {
 					chromaWeightedPSlices++
 				}
@@ -116,8 +129,14 @@ func assertHigh10WeightedChromaPFixtureHeaders(t *testing.T, data []byte, cabac 
 	if pSlices != 4 {
 		t.Fatalf("P slices = %d, want 4", pSlices)
 	}
-	if chromaWeightedPSlices == 0 {
+	if lumaWeightedPSlices == 0 {
+		t.Fatal("weighted chroma P fixture has no luma-weighted P slices")
+	}
+	if wantChromaWeighted && chromaWeightedPSlices == 0 {
 		t.Fatal("weighted chroma P fixture has no chroma-weighted P slices")
+	}
+	if !wantChromaWeighted && chromaWeightedPSlices != 0 {
+		t.Fatalf("luma-only weighted P fixture has %d chroma-weighted P slices, want 0", chromaWeightedPSlices)
 	}
 }
 

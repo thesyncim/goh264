@@ -293,21 +293,34 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaWeightedPFrameDeblo
 					t.Fatalf("high chroma weighted P validation err = %v, want nil", err)
 				}
 			})
+
+			t.Run(fmt.Sprintf("%s/deblock%d/luma-only-weighted-p", chromaFormatName(chromaFormatIDC), deblockMode), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, deblockMode != 0, PictureTypeP)
+				sh.DeblockingFilter = deblockMode
+				sh.RefCount = [2]uint32{1, 0}
+				sh.PPS.WeightedPred = 1
+				sh.PredWeightTable = highWeightedPPredWeightTable()
+				sh.PredWeightTable.UseWeightChroma = 0
+
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high chroma luma-only weighted P validation err = %v, want nil", err)
+				}
+			})
 		}
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighRejectsHigh10ChromaLumaOnlyWeightedP(t *testing.T) {
+func TestValidateSimpleFrameSliceDecodeHighRejectsHigh10ChromaChromaOnlyWeightedP(t *testing.T) {
 	for _, chromaFormatIDC := range []int{2, 3} {
 		t.Run(chromaFormatName(chromaFormatIDC), func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, false, PictureTypeP)
 			sh.RefCount = [2]uint32{1, 0}
 			sh.PPS.WeightedPred = 1
 			sh.PredWeightTable = highWeightedPPredWeightTable()
-			sh.PredWeightTable.UseWeightChroma = 0
+			sh.PredWeightTable.UseWeight = 0
 
 			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
-				t.Fatalf("high chroma luma-only weighted P validation err = %v, want ErrUnsupported", err)
+				t.Fatalf("high chroma chroma-only weighted P validation err = %v, want ErrUnsupported", err)
 			}
 		})
 	}
