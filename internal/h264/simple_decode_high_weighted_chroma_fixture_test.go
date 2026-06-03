@@ -16,18 +16,23 @@ func TestDecodeAnnexBSimpleHigh10WeightedChromaPFixtures(t *testing.T) {
 		cabac           int32
 		chromaFormatIDC int
 		profileIDC      int32
+		deblockMode     int32
 	}{
 		{name: "422-cavlc", file: "high10_weighted422_cavlc_p.h264", chromaFormatIDC: 2, profileIDC: 122},
 		{name: "422-cabac", file: "high10_weighted422_cabac_p.h264", cabac: 1, chromaFormatIDC: 2, profileIDC: 122},
 		{name: "444-cavlc", file: "high10_weighted444_cavlc_p.h264", chromaFormatIDC: 3, profileIDC: 244},
 		{name: "444-cabac", file: "high10_weighted444_cabac_p.h264", cabac: 1, chromaFormatIDC: 3, profileIDC: 244},
+		{name: "422-deblock-cavlc", file: "high10_weighted422_deblock_cavlc_p.h264", chromaFormatIDC: 2, profileIDC: 122, deblockMode: 1},
+		{name: "422-deblock-cabac", file: "high10_weighted422_deblock_cabac_p.h264", cabac: 1, chromaFormatIDC: 2, profileIDC: 122, deblockMode: 1},
+		{name: "444-deblock-cavlc", file: "high10_weighted444_deblock_cavlc_p.h264", chromaFormatIDC: 3, profileIDC: 244, deblockMode: 1},
+		{name: "444-deblock-cabac", file: "high10_weighted444_deblock_cabac_p.h264", cabac: 1, chromaFormatIDC: 3, profileIDC: 244, deblockMode: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := os.ReadFile(highWeightedChromaPFixturePath(t, tt.file))
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertHigh10WeightedChromaPFixtureHeaders(t, data, tt.cabac, tt.chromaFormatIDC, tt.profileIDC)
+			assertHigh10WeightedChromaPFixtureHeaders(t, data, tt.cabac, tt.chromaFormatIDC, tt.profileIDC, tt.deblockMode)
 
 			frames, err := DecodeAnnexBSimpleFrames(data)
 			if err != nil {
@@ -47,7 +52,7 @@ func TestDecodeAnnexBSimpleHigh10WeightedChromaPFixtures(t *testing.T) {
 	}
 }
 
-func assertHigh10WeightedChromaPFixtureHeaders(t *testing.T, data []byte, cabac int32, chromaFormatIDC int, profileIDC int32) {
+func assertHigh10WeightedChromaPFixtureHeaders(t *testing.T, data []byte, cabac int32, chromaFormatIDC int, profileIDC int32, deblockMode int32) {
 	t.Helper()
 
 	nals, err := SplitAnnexB(data)
@@ -91,8 +96,8 @@ func assertHigh10WeightedChromaPFixtureHeaders(t *testing.T, data []byte, cabac 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if sh.PictureStructure != PictureFrame || sh.DeblockingFilter != 0 {
-				t.Fatalf("slice picture/deblock = %d/%d, want frame/disabled", sh.PictureStructure, sh.DeblockingFilter)
+			if sh.PictureStructure != PictureFrame || sh.DeblockingFilter != deblockMode {
+				t.Fatalf("slice picture/deblock = %d/%d, want frame/%d", sh.PictureStructure, sh.DeblockingFilter, deblockMode)
 			}
 			if sh.SliceTypeNoS == PictureTypeP {
 				if sh.ListCount != 1 || sh.RefCount[0] != 1 || sh.PPS == nil || sh.PPS.WeightedPred != 1 {
