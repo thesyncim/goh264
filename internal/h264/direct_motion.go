@@ -696,18 +696,68 @@ func temporalDirectColocatedRefListAtLayout(col *macroblockTables, refIndex int,
 		ctx.RefEntries[1][0].frame.mbaff {
 		// FFmpeg applies ref_offset=16 for field-picture direct blocks that
 		// look through a field-coded macroblock in an MBAFF colocated parent.
-		switch ctx.PictureStructure {
-		case PictureTopField:
-			if ref0, list, err := temporalDirectColocatedRefListAtField(col, refIndex, ctx, colField, 0); err == nil && ref0 >= 0 && int(ref0) < len(ctx.RefEntries[0]) {
-				return ref0, list, nil
-			}
-		case PictureBottomField:
-			if ref0, list, err := temporalDirectColocatedRefListAtField(col, refIndex, ctx, colField, 1); err == nil && ref0 >= 0 && int(ref0) < len(ctx.RefEntries[0]) {
-				return ref0, list, nil
-			}
+		if ref0, list, err := temporalDirectColocatedMBAFFFieldRefListAt(col, refIndex, ctx); err == nil && ref0 >= 0 && int(ref0) < len(ctx.RefEntries[0]) {
+			return ref0, list, nil
 		}
 	}
 	return temporalDirectColocatedRefListAtField(col, refIndex, ctx, colField, fieldParity)
+}
+
+func temporalDirectColocatedMBAFFFieldRefListAt(col *macroblockTables, refIndex int, ctx h264DirectMotionContext) (int8, int, error) {
+	if col == nil {
+		return 0, 0, ErrInvalidData
+	}
+	if err := checkRange(len(col.RefIndex[0]), refIndex, 1); err != nil {
+		return 0, 0, err
+	}
+	ref := col.RefIndex[0][refIndex]
+	list := 0
+	if ref < 0 {
+		if err := checkRange(len(col.RefIndex[1]), refIndex, 1); err != nil {
+			return 0, 0, err
+		}
+		ref = col.RefIndex[1][refIndex]
+		list = 1
+	}
+	ref0, err := temporalDirectMapMBAFFFieldPictureRefOffset(ctx, list, int(ref))
+	if err != nil {
+		return 0, 0, err
+	}
+	return ref0, list, nil
+}
+
+func temporalDirectMapMBAFFFieldPictureRefOffset(ctx h264DirectMotionContext, list int, ref int) (int8, error) {
+	if list < 0 || list > 1 || ref < 0 || len(ctx.RefEntries[0]) == 0 {
+		return 0, ErrInvalidData
+	}
+	field, ok := temporalDirectPictureFieldIndex(ctx.PictureStructure)
+	if !ok {
+		return 0, ErrInvalidData
+	}
+	oldRef := ref >> 1
+	targetField := (ref & 1) ^ field
+	target, ok := temporalDirectColocatedRefEntry(ctx, list, oldRef, false)
+	if !ok {
+		return 0, fmt.Errorf("temporal direct missing MBAFF colocated ref_offset entry list=%d ref=%d: %w", list, ref, ErrUnsupported)
+	}
+	target, ok = temporalDirectEntryAsField(target, temporalDirectPictureStructureForField(targetField))
+	if !ok {
+		return 0, fmt.Errorf("temporal direct invalid MBAFF colocated ref_offset field list=%d ref=%d: %w", list, ref, ErrUnsupported)
+	}
+	if target.frame != nil && !target.long {
+		target.picID = 2*target.frame.frameNum + uint32(targetField) + 1
+	}
+	for i, entry := range ctx.RefEntries[0] {
+		if temporalDirectSameExactFieldRef(entry, target) {
+			return int8(i), nil
+		}
+	}
+	for i, entry := range ctx.RefEntries[0] {
+		if temporalDirectSameFieldPictureID(entry, target) {
+			return int8(i), nil
+		}
+	}
+	return 0, nil
 }
 
 func temporalDirectColocatedRefListAtField(col *macroblockTables, refIndex int, ctx h264DirectMotionContext, colField bool, fieldParity int) (int8, int, error) {
