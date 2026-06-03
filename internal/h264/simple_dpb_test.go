@@ -363,6 +363,26 @@ func TestSimpleRecoveryPointMarksImmediateRecoveryKeyFrame(t *testing.T) {
 	}
 }
 
+func TestSimpleRecoveryPointSeedsDerivedReorderDelay(t *testing.T) {
+	sps := simpleDPBTestSPS(1)
+	sps.Log2MaxFrameNum = 4
+	sps.BitstreamRestrictionFlag = 0
+	sps.NumReorderFrames = 5
+	frame := simpleDPBTestFrame(sps, 3)
+	sh := simpleDPBTestPHeader(sps, 3, 1)
+	sh.NALType = NALSlice
+	sei := &H264SEIContext{}
+	sei.Reset()
+	sei.RecoveryPoint.RecoveryFrameCount = 0
+
+	var dpb simpleFrameDPB
+	dpb.reset()
+	dpb.applySimpleRecoveryPoint(frame, sh, 1, sei)
+	if dpb.hasBFrames != 5 {
+		t.Fatalf("hasBFrames after recovery = %d, want 5", dpb.hasBFrames)
+	}
+}
+
 func TestSimpleRecoveryPointTracksModuloFrameNum(t *testing.T) {
 	sps := simpleDPBTestSPS(1)
 	sps.Log2MaxFrameNum = 4

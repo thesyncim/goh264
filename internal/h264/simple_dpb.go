@@ -137,6 +137,9 @@ func (d *simpleFrameDPB) applySimpleRecoveryPoint(frame *DecodedFrame, sh *Slice
 		d.recoveryFrame = -1
 		frame.recovered |= simpleFrameRecoveredSEI
 	}
+	if d.frameRecovered == 0 && frame.recovered&simpleFrameRecoveredSEI != 0 && sh.SPS.NumReorderFrames > int32(d.hasBFrames) {
+		d.hasBFrames = int(sh.SPS.NumReorderFrames)
+	}
 	frame.recovered |= d.frameRecovered
 }
 

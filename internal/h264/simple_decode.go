@@ -90,6 +90,44 @@ type SimpleDecoder struct {
 	pps [maxPPSCount]*PPS
 	dpb simpleFrameDPB
 	sei H264SEIContext
+	st  simpleDecodeState
+}
+
+type simpleDecodeState struct {
+	frame                 *DecodedFrame
+	tables                *macroblockTables
+	motionScratch         *h264MotionCompScratch
+	motionScratchHigh     *h264MotionCompScratchHigh
+	loopFilterSlices      []h264LoopFilterSliceParams
+	loopFilterRefFrameIDs map[*DecodedFrame]int8
+	sliceNum              uint16
+	haveSlice             bool
+	frameComplete         bool
+	fieldPairPending      bool
+	pendingFieldStructure int32
+	pendingFieldFrameNum  uint32
+}
+
+func (s *simpleDecodeState) resetPicture() {
+	if s == nil {
+		return
+	}
+	s.frame = nil
+	s.tables = nil
+	s.motionScratch = nil
+	s.motionScratchHigh = nil
+	s.loopFilterSlices = nil
+	s.loopFilterRefFrameIDs = nil
+	s.sliceNum = 0
+	s.haveSlice = false
+	s.frameComplete = false
+	s.fieldPairPending = false
+	s.pendingFieldStructure = 0
+	s.pendingFieldFrameNum = 0
+}
+
+func (s *simpleDecodeState) hasPendingComplementaryField() bool {
+	return s != nil && s.haveSlice && !s.frameComplete && s.fieldPairPending
 }
 
 func (d *SimpleDecoder) StoreAVCDecoderConfiguration(cfg AVCDecoderConfigurationRecord) error {
@@ -107,6 +145,7 @@ func (d *SimpleDecoder) StoreParamSets(sps [maxSPSCount]*SPS, pps [maxPPSCount]*
 	d.pps = pps
 	d.dpb.reset()
 	d.sei.Reset()
+	d.st.resetPicture()
 	return nil
 }
 
@@ -131,7 +170,7 @@ func (d *SimpleDecoder) DecodeNALUnitsWithSideData(nals []NALUnit, packetSideDat
 		return nil, ErrInvalidData
 	}
 	d.sei.Reset()
-	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, packetSideData, false)
+	return decodeSimpleNALUnitsWithDecoderState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, &d.st, packetSideData, false)
 }
 
 func (d *SimpleDecoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*DecodedFrame, error) {
@@ -161,7 +200,7 @@ func (d *SimpleDecoder) DecodeAVCFramesWithConfig(data []byte, cfg AVCDecoderCon
 		return nil, err
 	}
 	d.sei.Reset()
-	return decodeSimpleNALUnitsWithState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, DecodedFrameSideData{}, true)
+	return decodeSimpleNALUnitsWithDecoderState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, &d.st, DecodedFrameSideData{}, true)
 }
 
 func DecodeAnnexBSimple(data []byte) (*DecodedFrame, error) {
@@ -217,25 +256,21 @@ func DecodeSimpleNALUnitsWithParamSets(nals []NALUnit, spsList [maxSPSCount]*SPS
 }
 
 func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS, dpb *simpleFrameDPB, sei *H264SEIContext, packetSideData DecodedFrameSideData, flushOutput bool) ([]*DecodedFrame, error) {
-	if spsList == nil || ppsList == nil || dpb == nil || sei == nil {
+	var st simpleDecodeState
+	return decodeSimpleNALUnitsWithDecoderState(nals, spsList, ppsList, dpb, sei, &st, packetSideData, flushOutput)
+}
+
+func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]*SPS, ppsList *[maxPPSCount]*PPS, dpb *simpleFrameDPB, sei *H264SEIContext, st *simpleDecodeState, packetSideData DecodedFrameSideData, flushOutput bool) ([]*DecodedFrame, error) {
+	if spsList == nil || ppsList == nil || dpb == nil || sei == nil || st == nil {
 		return nil, ErrInvalidData
+	}
+	if st.frameComplete {
+		st.resetPicture()
 	}
 	if flushOutput {
 		dpb.primeOutputReorderDelayFromNALs(nals, spsList, ppsList)
 	}
-	var frame *DecodedFrame
-	var tables *macroblockTables
-	var motionScratch *h264MotionCompScratch
-	var motionScratchHigh *h264MotionCompScratchHigh
 	var frames []*DecodedFrame
-	var loopFilterSlices []h264LoopFilterSliceParams
-	var loopFilterRefFrameIDs map[*DecodedFrame]int8
-	var sliceNum uint16
-	haveSlice := false
-	frameComplete := false
-	fieldPairPending := false
-	pendingFieldStructure := int32(0)
-	pendingFieldFrameNum := uint32(0)
 	decodedFrames := 0
 
 	for _, nal := range nals {
@@ -253,7 +288,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 			}
 			ppsList[pps.PPSID] = pps
 		case NALSEI:
-			if haveSlice {
+			if st.haveSlice {
 				continue
 			}
 			// FFmpeg keeps SEI parse failures non-fatal unless AV_EF_EXPLODE is set.
@@ -273,36 +308,25 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				return nil, fmt.Errorf("validate simple frame reference syntax: %w", err)
 			}
 			fieldPicture := sh.PictureStructure != PictureFrame
-			samePendingFieldFrame := fieldPairPending &&
+			samePendingFieldFrame := st.fieldPairPending &&
 				fieldPicture &&
-				sh.FrameNum == pendingFieldFrameNum &&
-				sh.PictureStructure != pendingFieldStructure
-			startingComplementaryField := haveSlice &&
-				!frameComplete &&
+				sh.FrameNum == st.pendingFieldFrameNum &&
+				sh.PictureStructure != st.pendingFieldStructure
+			startingComplementaryField := st.haveSlice &&
+				!st.frameComplete &&
 				sh.FirstMBAddr == 0 &&
 				samePendingFieldFrame
-			decodingComplementaryField := haveSlice && !frameComplete && samePendingFieldFrame
-			if frameComplete || haveSlice && sh.FirstMBAddr == 0 && !startingComplementaryField {
+			decodingComplementaryField := st.haveSlice && !st.frameComplete && samePendingFieldFrame
+			if st.frameComplete || st.haveSlice && sh.FirstMBAddr == 0 && !startingComplementaryField {
 				if sh.FirstMBAddr != 0 {
 					return nil, ErrInvalidData
 				}
-				frame = nil
-				tables = nil
-				motionScratch = nil
-				motionScratchHigh = nil
-				loopFilterSlices = nil
-				loopFilterRefFrameIDs = nil
-				sliceNum = 0
-				haveSlice = false
-				frameComplete = false
-				fieldPairPending = false
-				pendingFieldStructure = 0
-				pendingFieldFrameNum = 0
+				st.resetPicture()
 			}
-			if !haveSlice && sh.FirstMBAddr != 0 {
+			if !st.haveSlice && sh.FirstMBAddr != 0 {
 				return nil, ErrInvalidData
 			}
-			if frame == nil {
+			if st.frame == nil {
 				if err := dpb.handleFrameNumGaps(sh, false); err != nil {
 					return nil, err
 				}
@@ -313,116 +337,116 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 						sei.PictureTiming.TimecodeCount = 0
 					}
 				}
-				frame, tables, err = newSimpleDecodedFrame(sh.SPS)
+				st.frame, st.tables, err = newSimpleDecodedFrame(sh.SPS)
 				if err != nil {
 					return nil, err
 				}
-				frame.SideData = decodedFrameSideDataFromSEI(sei)
-				mergePacketSideDataIntoDecodedFrame(&frame.SideData, packetSideData)
-				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
+				st.frame.SideData = decodedFrameSideDataFromSEI(sei)
+				mergePacketSideDataIntoDecodedFrame(&st.frame.SideData, packetSideData)
+				if err := dpb.initFramePOC(st.frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
-				frame.fieldPicture = fieldPicture
-				frame.mbaff = sh.PictureStructure == PictureFrame && sh.SPS.MBAFF != 0
-				applySimpleFrameTimingProps(frame, sh.SPS, sei, dpb)
-				dpb.applySimpleRecoveryPoint(frame, sh, nal.RefIDC, sei)
+				st.frame.fieldPicture = fieldPicture
+				st.frame.mbaff = sh.PictureStructure == PictureFrame && sh.SPS.MBAFF != 0
+				applySimpleFrameTimingProps(st.frame, sh.SPS, sei, dpb)
+				dpb.applySimpleRecoveryPoint(st.frame, sh, nal.RefIDC, sei)
 				consumeFrameSideDataFromSEI(sei)
-				if frame.BitDepthLuma == 8 {
-					motionScratch = newH264MotionCompScratchForFrame(frame)
+				if st.frame.BitDepthLuma == 8 {
+					st.motionScratch = newH264MotionCompScratchForFrame(st.frame)
 				} else {
-					motionScratchHigh = newH264MotionCompScratchHighForFrame(frame)
+					st.motionScratchHigh = newH264MotionCompScratchHighForFrame(st.frame)
 				}
-				loopFilterRefFrameIDs = make(map[*DecodedFrame]int8)
-			} else if err := frame.matchesSPS(sh.SPS); err != nil {
+				st.loopFilterRefFrameIDs = make(map[*DecodedFrame]int8)
+			} else if err := st.frame.matchesSPS(sh.SPS); err != nil {
 				return nil, err
 			} else if startingComplementaryField {
-				if err := dpb.initFramePOC(frame, sh, nal.RefIDC); err != nil {
+				if err := dpb.initFramePOC(st.frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
-				applySimpleFrameTimingProps(frame, sh.SPS, sei, dpb)
+				applySimpleFrameTimingProps(st.frame, sh.SPS, sei, dpb)
 			}
 
-			sliceNum++
-			if sliceNum == ^uint16(0) {
+			st.sliceNum++
+			if st.sliceNum == ^uint16(0) {
 				return nil, ErrInvalidData
 			}
-			for len(loopFilterSlices) <= int(sliceNum) {
-				loopFilterSlices = append(loopFilterSlices, h264LoopFilterSliceParams{})
+			for len(st.loopFilterSlices) <= int(st.sliceNum) {
+				st.loopFilterSlices = append(st.loopFilterSlices, h264LoopFilterSliceParams{})
 			}
-			loopFilterSlices[sliceNum] = h264LoopFilterSliceParamsFromHeader(sh)
-			refctx, err := dpb.buildRefContext(sh, frame)
+			st.loopFilterSlices[st.sliceNum] = h264LoopFilterSliceParamsFromHeader(sh)
+			refctx, err := dpb.buildRefContext(sh, st.frame)
 			if err != nil {
 				return nil, fmt.Errorf("build simple ref context slice=%d type=%d frame_num=%d refs=%d/%d mods=%d/%d picture=%d: %w",
-					sliceNum, sh.SliceTypeNoS, sh.FrameNum, sh.RefCount[0], sh.RefCount[1],
+					st.sliceNum, sh.SliceTypeNoS, sh.FrameNum, sh.RefCount[0], sh.RefCount[1],
 					sh.NBRefModifications[0], sh.NBRefModifications[1], sh.PictureStructure, err)
 			}
-			loopFilterSlices[sliceNum].Ref2Frame, err = h264LoopFilterRef2Frame(refctx.Entries, loopFilterRefFrameIDs)
+			st.loopFilterSlices[st.sliceNum].Ref2Frame, err = h264LoopFilterRef2Frame(refctx.Entries, st.loopFilterRefFrameIDs)
 			if err != nil {
 				return nil, err
 			}
-			frame.saveRefEntries(refctx.Entries, sh.PictureStructure)
+			st.frame.saveRefEntries(refctx.Entries, sh.PictureStructure)
 			var result h264FrameSliceDecodeResult
 			completeFrameNow := false
-			if frame.BitDepthLuma == 8 {
-				pic := frame.picturePlanes()
-				result, err = tables.decodeFrameSliceData(&payload, &pic, sh, h264FrameSliceDecodeInput{
-					SliceNum:      sliceNum,
+			if st.frame.BitDepthLuma == 8 {
+				pic := st.frame.picturePlanes()
+				result, err = st.tables.decodeFrameSliceData(&payload, &pic, sh, h264FrameSliceDecodeInput{
+					SliceNum:      st.sliceNum,
 					Refs:          refctx.Refs,
-					Direct:        refctx.directMotionContext(frame, sh, sei),
+					Direct:        refctx.directMotionContext(st.frame, sh, sei),
 					PredWeight:    &sh.PredWeightTable,
-					MotionScratch: motionScratch,
+					MotionScratch: st.motionScratch,
 				})
 				completeFrameNow = result.EndOfFrame && (!fieldPicture || decodingComplementaryField)
 				if err == nil && result.EndOfFrame {
 					if fieldPicture {
-						err = tables.filterField(&pic, loopFilterSlices, sh.PictureStructure)
+						err = st.tables.filterField(&pic, st.loopFilterSlices, sh.PictureStructure)
 					} else if completeFrameNow {
-						err = tables.filterFrame(&pic, loopFilterSlices)
+						err = st.tables.filterFrame(&pic, st.loopFilterSlices)
 					}
 					if err != nil {
-						err = fmt.Errorf("filter 8-bit frame slice=%d type=%d: %w", sliceNum, sh.SliceTypeNoS, err)
+						err = fmt.Errorf("filter 8-bit frame slice=%d type=%d: %w", st.sliceNum, sh.SliceTypeNoS, err)
 					}
 				}
 			} else {
-				pic := frame.picturePlanesHigh()
-				result, err = tables.decodeFrameSliceDataHigh(&payload, &pic, sh, h264FrameSliceDecodeInputHigh{
-					SliceNum:      sliceNum,
+				pic := st.frame.picturePlanesHigh()
+				result, err = st.tables.decodeFrameSliceDataHigh(&payload, &pic, sh, h264FrameSliceDecodeInputHigh{
+					SliceNum:      st.sliceNum,
 					Refs:          refctx.RefsHigh,
-					Direct:        refctx.directMotionContext(frame, sh, sei),
+					Direct:        refctx.directMotionContext(st.frame, sh, sei),
 					PredWeight:    &sh.PredWeightTable,
-					MotionScratch: motionScratchHigh,
+					MotionScratch: st.motionScratchHigh,
 				})
 				completeFrameNow = result.EndOfFrame && (!fieldPicture || decodingComplementaryField)
 				if err == nil && completeFrameNow {
-					err = tables.filterFrameHigh(&pic, loopFilterSlices)
+					err = st.tables.filterFrameHigh(&pic, st.loopFilterSlices)
 					if err != nil {
-						err = fmt.Errorf("filter high-bit frame slice=%d type=%d: %w", sliceNum, sh.SliceTypeNoS, err)
+						err = fmt.Errorf("filter high-bit frame slice=%d type=%d: %w", st.sliceNum, sh.SliceTypeNoS, err)
 					}
 				}
 			}
 			if err != nil {
 				return nil, fmt.Errorf("decode slice=%d type=%d first_mb=%d frame_num=%d picture=%d refs=%d/%d: %w",
-					sliceNum, sh.SliceTypeNoS, sh.FirstMBAddr, sh.FrameNum, sh.PictureStructure,
+					st.sliceNum, sh.SliceTypeNoS, sh.FirstMBAddr, sh.FrameNum, sh.PictureStructure,
 					sh.RefCount[0], sh.RefCount[1], err)
 			}
 			if result.EndOfFrame && fieldPicture && !decodingComplementaryField {
-				fieldPairPending = true
-				pendingFieldStructure = sh.PictureStructure
-				pendingFieldFrameNum = sh.FrameNum
-				if err := dpb.markDecodedFrame(frame, sh, nal.RefIDC); err != nil {
+				st.fieldPairPending = true
+				st.pendingFieldStructure = sh.PictureStructure
+				st.pendingFieldFrameNum = sh.FrameNum
+				if err := dpb.markDecodedFrame(st.frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
 			}
 			if completeFrameNow {
-				frameComplete = true
-				fieldPairPending = false
-				pendingFieldStructure = 0
-				pendingFieldFrameNum = 0
+				st.frameComplete = true
+				st.fieldPairPending = false
+				st.pendingFieldStructure = 0
+				st.pendingFieldFrameNum = 0
 				decodedFrames++
-				if err := dpb.markDecodedFrame(frame, sh, nal.RefIDC); err != nil {
+				if err := dpb.markDecodedFrame(st.frame, sh, nal.RefIDC); err != nil {
 					return nil, err
 				}
-				if err := dpb.holdOutputFrame(frame, sh); err != nil {
+				if err := dpb.holdOutputFrame(st.frame, sh); err != nil {
 					return nil, err
 				}
 				out, err := dpb.drainOutputFrames(false)
@@ -431,7 +455,7 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				}
 				frames = append(frames, out...)
 			}
-			haveSlice = true
+			st.haveSlice = true
 		default:
 			continue
 		}
@@ -444,7 +468,10 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 		}
 		frames = append(frames, out...)
 	}
-	if decodedFrames == 0 || haveSlice && !frameComplete {
+	if decodedFrames == 0 || st.haveSlice && !st.frameComplete {
+		if !flushOutput && st.hasPendingComplementaryField() {
+			return frames, nil
+		}
 		return nil, ErrInvalidData
 	}
 	return frames, nil
