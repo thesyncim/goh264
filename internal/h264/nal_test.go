@@ -138,3 +138,24 @@ func TestAppendRBSPRejectsUnescapedStartCode(t *testing.T) {
 		t.Fatal("expected invalid data")
 	}
 }
+
+func TestSplitAnnexBAllowsTrailingZeroBytes(t *testing.T) {
+	data := []byte{
+		0x00, 0x00, 0x00, 0x01,
+		0x67, 0xaa, 0x80,
+		0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x01,
+		0x68, 0xbb, 0x80,
+	}
+
+	nals, err := SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nals) != 2 {
+		t.Fatalf("got %d NALs, want 2", len(nals))
+	}
+	if !bytes.Equal(nals[0].RBSP, []byte{0xaa, 0x80, 0x00, 0x00, 0x00}) {
+		t.Fatalf("rbsp = %x", nals[0].RBSP)
+	}
+}

@@ -364,7 +364,9 @@ func AppendRBSP(dst []byte, ebsp []byte) ([]byte, error) {
 			case 0x03:
 				zeros = 0
 				continue
-			case 0x00, 0x01, 0x02:
+			// FFmpeg h2645_parse.c keeps 00 00 00 trailing padding bytes
+			// and lets get_bit_length discard them later.
+			case 0x01, 0x02:
 				return nil, ErrInvalidData
 			}
 		}
