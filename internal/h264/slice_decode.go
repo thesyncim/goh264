@@ -481,7 +481,7 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 		return true
 	case 12:
 		return sh.SPS.ChromaFormatIDC == 1 &&
-			sh.DeblockingFilter == 0 &&
+			sh.DeblockingFilter <= 1 &&
 			(sh.SliceTypeNoS == PictureTypeI ||
 				(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)))
 	case 14:

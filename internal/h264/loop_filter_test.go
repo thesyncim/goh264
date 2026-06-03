@@ -709,55 +709,59 @@ func TestMacroblockTablesFilterFrameHighDeblocksBoundary(t *testing.T) {
 	const (
 		mbWidth  = 2
 		mbHeight = 1
-		bitDepth = 10
 	)
-	m, err := newMacroblockTables(mbWidth, mbHeight, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dst := &h264PicturePlanesHigh{
-		Y:               make([]uint16, 32*16),
-		Cb:              make([]uint16, 16*8),
-		Cr:              make([]uint16, 16*8),
-		LumaStride:      32,
-		ChromaStride:    16,
-		MBWidth:         mbWidth,
-		MBHeight:        mbHeight,
-		ChromaFormatIDC: 1,
-	}
-	fillHighLoopFilterStep(dst.Y, dst.LumaStride, 32, 16, 16, 400, 408)
-	fillHighLoopFilterStep(dst.Cb, dst.ChromaStride, 16, 8, 8, 300, 308)
-	fillHighLoopFilterStep(dst.Cr, dst.ChromaStride, 16, 8, 8, 200, 208)
-	for mbXY := 0; mbXY < mbWidth*mbHeight; mbXY++ {
-		m.MacroblockTyp[mbXY] = MBTypeIntra16x16
-		m.QScaleTable[mbXY] = 30
-		m.SliceTable[mbXY] = 0
-	}
-	pps := cavlcFlatQMulPPS()
-	pps.SPS = &SPS{
-		BitDepthLuma:     bitDepth,
-		BitDepthChroma:   bitDepth,
-		ChromaFormatIDC:  1,
-		FrameMBSOnlyFlag: 1,
-	}
-	params := []h264LoopFilterSliceParams{{
-		PPS:              pps,
-		ListCount:        1,
-		DeblockingFilter: 1,
-	}}
-	yBefore := [2]uint16{dst.Y[15], dst.Y[16]}
-	cbBefore := [2]uint16{dst.Cb[7], dst.Cb[8]}
-	crBefore := [2]uint16{dst.Cr[7], dst.Cr[8]}
 
-	if err := m.filterFrameHigh(dst, params); err != nil {
-		t.Fatal(err)
-	}
-	if dst.Y[15] == yBefore[0] || dst.Y[16] == yBefore[1] {
-		t.Fatalf("High10 frame luma boundary did not filter: %v -> [%d %d]", yBefore, dst.Y[15], dst.Y[16])
-	}
-	if dst.Cb[7] == cbBefore[0] || dst.Cb[8] == cbBefore[1] || dst.Cr[7] == crBefore[0] || dst.Cr[8] == crBefore[1] {
-		t.Fatalf("High10 frame chroma boundary did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
-			cbBefore, dst.Cb[7], dst.Cb[8], crBefore, dst.Cr[7], dst.Cr[8])
+	for _, bitDepth := range []int{10, 12} {
+		t.Run(bitDepthName(int32(bitDepth)), func(t *testing.T) {
+			m, err := newMacroblockTables(mbWidth, mbHeight, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dst := &h264PicturePlanesHigh{
+				Y:               make([]uint16, 32*16),
+				Cb:              make([]uint16, 16*8),
+				Cr:              make([]uint16, 16*8),
+				LumaStride:      32,
+				ChromaStride:    16,
+				MBWidth:         mbWidth,
+				MBHeight:        mbHeight,
+				ChromaFormatIDC: 1,
+			}
+			fillHighLoopFilterStep(dst.Y, dst.LumaStride, 32, 16, 16, 400, 408)
+			fillHighLoopFilterStep(dst.Cb, dst.ChromaStride, 16, 8, 8, 300, 308)
+			fillHighLoopFilterStep(dst.Cr, dst.ChromaStride, 16, 8, 8, 200, 208)
+			for mbXY := 0; mbXY < mbWidth*mbHeight; mbXY++ {
+				m.MacroblockTyp[mbXY] = MBTypeIntra16x16
+				m.QScaleTable[mbXY] = uint8(30 + 6*(bitDepth-8))
+				m.SliceTable[mbXY] = 0
+			}
+			pps := cavlcFlatQMulPPS()
+			pps.SPS = &SPS{
+				BitDepthLuma:     int32(bitDepth),
+				BitDepthChroma:   int32(bitDepth),
+				ChromaFormatIDC:  1,
+				FrameMBSOnlyFlag: 1,
+			}
+			params := []h264LoopFilterSliceParams{{
+				PPS:              pps,
+				ListCount:        1,
+				DeblockingFilter: 1,
+			}}
+			yBefore := [2]uint16{dst.Y[15], dst.Y[16]}
+			cbBefore := [2]uint16{dst.Cb[7], dst.Cb[8]}
+			crBefore := [2]uint16{dst.Cr[7], dst.Cr[8]}
+
+			if err := m.filterFrameHigh(dst, params); err != nil {
+				t.Fatal(err)
+			}
+			if dst.Y[15] == yBefore[0] || dst.Y[16] == yBefore[1] {
+				t.Fatalf("high frame luma boundary did not filter: %v -> [%d %d]", yBefore, dst.Y[15], dst.Y[16])
+			}
+			if dst.Cb[7] == cbBefore[0] || dst.Cb[8] == cbBefore[1] || dst.Cr[7] == crBefore[0] || dst.Cr[8] == crBefore[1] {
+				t.Fatalf("high frame chroma boundary did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
+					cbBefore, dst.Cb[7], dst.Cb[8], crBefore, dst.Cr[7], dst.Cr[8])
+			}
+		})
 	}
 }
 

@@ -149,16 +149,17 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsFrameMBAFFGeometry(t *testing.T
 
 func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T) {
 	tests := []struct {
-		name     string
-		bitDepth int32
-		chroma   int32
-		format   int
-		deblock  bool
-		slice    int32
+		name        string
+		bitDepth    int32
+		chroma      int32
+		format      int
+		deblock     bool
+		deblockMode int32
+		slice       int32
 	}{
 		{name: "8-bit", bitDepth: 8, chroma: 8, format: 1, slice: PictureTypeI},
 		{name: "9-bit", bitDepth: 9, chroma: 9, format: 1, slice: PictureTypeI},
-		{name: "12-bit-deblock", bitDepth: 12, chroma: 12, format: 1, deblock: true, slice: PictureTypeI},
+		{name: "12-bit-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 1, deblockMode: 2, slice: PictureTypeI},
 		{name: "14-bit-p", bitDepth: 14, chroma: 14, format: 1, slice: PictureTypeP},
 		{name: "14-bit-deblock", bitDepth: 14, chroma: 14, format: 1, deblock: true, slice: PictureTypeI},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeI},
@@ -169,6 +170,9 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixture(t, tt.bitDepth, tt.format, tt.deblock, tt.slice)
+			if tt.deblockMode != 0 {
+				sh.DeblockingFilter = tt.deblockMode
+			}
 			sh.SPS.BitDepthChroma = tt.chroma
 
 			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
@@ -187,18 +191,20 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14CABACUntilProved(t *test
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Deblocking(t *testing.T) {
-	for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
-		t.Run(pictureTypeName(sliceType), func(t *testing.T) {
-			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, true, sliceType)
-			if sliceType == PictureTypeP {
-				sh.RefCount = [2]uint32{1, 0}
-			}
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12Deblocking(t *testing.T) {
+	for _, bitDepth := range []int32{10, 12} {
+		for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+			t.Run(bitDepthName(bitDepth)+"/"+pictureTypeName(sliceType), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, true, sliceType)
+				if sliceType == PictureTypeP {
+					sh.RefCount = [2]uint32{1, 0}
+				}
 
-			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-				t.Fatalf("high deblock validation err = %v, want nil", err)
-			}
-		})
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high deblock validation err = %v, want nil", err)
+				}
+			})
+		}
 	}
 }
 
@@ -356,30 +362,37 @@ func TestDecodeFrameSliceDataHighRejectsBInputPredWeightBeforeEntropy(t *testing
 
 func TestValidateSimpleFrameSliceDecodeHighAllowsWeightedPMetadata(t *testing.T) {
 	for _, bitDepth := range []int32{10, 12} {
-		t.Run(bitDepthName(bitDepth), func(t *testing.T) {
-			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
-			sh.RefCount = [2]uint32{1, 0}
-			sh.PPS.WeightedPred = 1
-			sh.PredWeightTable = highWeightedPPredWeightTable()
-
-			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-				t.Fatalf("high weighted P validation err = %v, want nil", err)
+		for _, deblock := range []bool{false, true} {
+			name := bitDepthName(bitDepth) + "/no-deblock"
+			if deblock {
+				name = bitDepthName(bitDepth) + "/deblock"
 			}
-		})
+			t.Run(name, func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, deblock, PictureTypeP)
+				sh.RefCount = [2]uint32{1, 0}
+				sh.PPS.WeightedPred = 1
+				sh.PredWeightTable = highWeightedPPredWeightTable()
+
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high weighted P validation err = %v, want nil", err)
+				}
+			})
+		}
 	}
 }
 
 func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries(t *testing.T) {
 	tests := []struct {
-		name     string
-		bitDepth int32
-		chroma   int32
-		format   int
-		deblock  bool
-		slice    int32
+		name        string
+		bitDepth    int32
+		chroma      int32
+		format      int
+		deblock     bool
+		deblockMode int32
+		slice       int32
 	}{
 		{name: "9-bit", bitDepth: 9, chroma: 9, format: 1, slice: PictureTypeP},
-		{name: "12-bit-deblock", bitDepth: 12, chroma: 12, format: 1, deblock: true, slice: PictureTypeP},
+		{name: "12-bit-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 1, deblockMode: 2, slice: PictureTypeP},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeP},
 		{name: "422", bitDepth: 10, chroma: 10, format: 2, slice: PictureTypeP},
 		{name: "444", bitDepth: 10, chroma: 10, format: 3, slice: PictureTypeP},
@@ -388,6 +401,9 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixture(t, tt.bitDepth, tt.format, tt.deblock, tt.slice)
+			if tt.deblockMode != 0 {
+				sh.DeblockingFilter = tt.deblockMode
+			}
 			sh.SPS.BitDepthChroma = tt.chroma
 			sh.RefCount = [2]uint32{1, 0}
 			sh.PPS.WeightedPred = 1
