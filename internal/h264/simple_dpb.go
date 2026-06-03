@@ -196,6 +196,130 @@ func (d *simpleFrameDPB) initFramePOC(frame *DecodedFrame, sh *SliceHeader, nalR
 	return nil
 }
 
+// handleFrameNumGaps mirrors the frame-picture gap loop in FFmpeg n8.0.1
+// libavcodec/h264_slice.c before the current picture is allocated. Gap
+// pictures are reference-only DPB entries; they are never delayed for output.
+func (d *simpleFrameDPB) handleFrameNumGaps(sh *SliceHeader, firstField bool) error {
+	if d == nil || sh == nil || sh.SPS == nil {
+		return ErrInvalidData
+	}
+	if sh.NALType == NALIDRSlice || firstField || sh.PictureStructure != PictureFrame {
+		return nil
+	}
+	if d.poc.prevFrameNum < 0 {
+		return nil
+	}
+	if sh.SPS.Log2MaxFrameNum <= 0 || sh.SPS.Log2MaxFrameNum >= 31 {
+		return ErrInvalidData
+	}
+	maxFrameNum := int32(1) << uint32(sh.SPS.Log2MaxFrameNum)
+	frameNum := int32(sh.FrameNum)
+
+	if frameNum != d.poc.prevFrameNum {
+		unwrapPrevFrameNum := d.poc.prevFrameNum
+		if unwrapPrevFrameNum > frameNum {
+			unwrapPrevFrameNum -= maxFrameNum
+		}
+		if frameNum-unwrapPrevFrameNum > int32(sh.SPS.RefFrameCount) {
+			unwrapPrevFrameNum = frameNum - int32(sh.SPS.RefFrameCount) - 1
+			if unwrapPrevFrameNum < 0 {
+				unwrapPrevFrameNum += maxFrameNum
+			}
+			d.poc.prevFrameNum = unwrapPrevFrameNum
+		}
+	}
+
+	for frameNum != d.poc.prevFrameNum &&
+		frameNum != (d.poc.prevFrameNum+1)%maxFrameNum {
+		prev := (*DecodedFrame)(nil)
+		if len(d.short) != 0 {
+			prev = d.short[0]
+		}
+		d.poc.prevFrameNum = (d.poc.prevFrameNum + 1) % maxFrameNum
+		gapFrame, err := newSimpleFrameNumGapFrame(sh.SPS, uint32(d.poc.prevFrameNum), prev)
+		if err != nil {
+			return err
+		}
+		gapFrame.invalidGap = sh.SPS.GapsInFrameNumAllowedFlag == 0
+		if err := d.markFrameNumGapFrame(gapFrame, sh.SPS); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func newSimpleFrameNumGapFrame(sps *SPS, frameNum uint32, prev *DecodedFrame) (*DecodedFrame, error) {
+	frame, _, err := newSimpleDecodedFrame(sps)
+	if err != nil {
+		return nil, err
+	}
+	frame.frameNum = frameNum
+	if simpleCopyGapFramePixels(frame, prev) {
+		frame.poc = prev.poc + 2
+		frame.fieldPOC[0] = prev.fieldPOC[0] + 2
+		frame.fieldPOC[1] = prev.fieldPOC[1] + 2
+	} else {
+		simpleFillGrayGapFrame(frame)
+	}
+	return frame, nil
+}
+
+func simpleCopyGapFramePixels(dst *DecodedFrame, src *DecodedFrame) bool {
+	if dst == nil || src == nil ||
+		dst.MBWidth != src.MBWidth || dst.MBHeight != src.MBHeight ||
+		dst.Width != src.Width || dst.Height != src.Height ||
+		dst.ChromaFormatIDC != src.ChromaFormatIDC ||
+		dst.BitDepthLuma != src.BitDepthLuma ||
+		dst.BitDepthChroma != src.BitDepthChroma {
+		return false
+	}
+	if dst.BitDepthLuma > 8 {
+		if len(dst.Y16) != len(src.Y16) || len(dst.Cb16) != len(src.Cb16) || len(dst.Cr16) != len(src.Cr16) {
+			return false
+		}
+		copy(dst.Y16, src.Y16)
+		copy(dst.Cb16, src.Cb16)
+		copy(dst.Cr16, src.Cr16)
+		return true
+	}
+	if len(dst.Y) != len(src.Y) || len(dst.Cb) != len(src.Cb) || len(dst.Cr) != len(src.Cr) {
+		return false
+	}
+	copy(dst.Y, src.Y)
+	copy(dst.Cb, src.Cb)
+	copy(dst.Cr, src.Cr)
+	return true
+}
+
+func simpleFillGrayGapFrame(frame *DecodedFrame) {
+	if frame == nil {
+		return
+	}
+	if frame.BitDepthLuma > 8 {
+		y := uint16(1 << uint(frame.BitDepthLuma-1))
+		c := uint16(1 << uint(frame.BitDepthChroma-1))
+		for i := range frame.Y16 {
+			frame.Y16[i] = y
+		}
+		for i := range frame.Cb16 {
+			frame.Cb16[i] = c
+		}
+		for i := range frame.Cr16 {
+			frame.Cr16[i] = c
+		}
+		return
+	}
+	for i := range frame.Y {
+		frame.Y[i] = 128
+	}
+	for i := range frame.Cb {
+		frame.Cb[i] = 128
+	}
+	for i := range frame.Cr {
+		frame.Cr[i] = 128
+	}
+}
+
 // initPOC is a source-shaped port of FFmpeg n8.0.1 libavcodec/h264_parse.c
 // ff_h264_init_poc.
 func (p *simplePOCContext) initPOC(sps *SPS, pictureStructure int32, nalRefIDC uint8, out [2]int32) ([2]int32, int32, error) {
@@ -1044,8 +1168,42 @@ func (d *simpleFrameDPB) markDecodedFrame(frame *DecodedFrame, sh *SliceHeader, 
 		} else if len(d.short) != 0 {
 			d.removeShortAtIndex(len(d.short) - 1)
 		}
+		d.removeInvalidGapShortRefs(frame.frameNum, sh.SPS)
 		return ErrInvalidData
 	}
+	d.removeInvalidGapShortRefs(frame.frameNum, sh.SPS)
+	return nil
+}
+
+func (d *simpleFrameDPB) markFrameNumGapFrame(frame *DecodedFrame, sps *SPS) error {
+	if d == nil || frame == nil || sps == nil {
+		return ErrInvalidData
+	}
+	maxRefs := int(sps.RefFrameCount)
+	if maxRefs < 1 {
+		maxRefs = 1
+	}
+	if maxRefs > simpleMaxShortRefs {
+		return ErrUnsupported
+	}
+	if len(d.short) != 0 && d.refCount() >= maxRefs {
+		d.removeShortAtIndex(len(d.short) - 1)
+	}
+
+	d.removeShortByFrameNum(frame.frameNum)
+	d.short = append(d.short, nil)
+	copy(d.short[1:], d.short[:len(d.short)-1])
+	d.short[0] = frame
+	d.setFrameRefMask(frame, PictureFrame)
+
+	if d.refCount() > maxRefs {
+		if d.longCount() != 0 && len(d.short) == 0 {
+			d.removeFirstLong()
+		} else if len(d.short) != 0 {
+			d.removeShortAtIndex(len(d.short) - 1)
+		}
+	}
+	d.removeInvalidGapShortRefs(frame.frameNum, sps)
 	return nil
 }
 
@@ -1390,6 +1548,21 @@ func (d *simpleFrameDPB) removeShortAtIndex(index int) {
 	d.short[len(d.short)-1] = nil
 	d.short = d.short[:len(d.short)-1]
 	d.clearFrameRefMaskIfUnreferenced(frame)
+}
+
+func (d *simpleFrameDPB) removeInvalidGapShortRefs(curFrameNum uint32, sps *SPS) {
+	if d == nil || sps == nil {
+		return
+	}
+	for i := 0; i < len(d.short); {
+		frame := d.short[i]
+		if frame != nil && frame.invalidGap &&
+			avZeroExtendSimple(int32(curFrameNum)-int32(frame.frameNum), sps.Log2MaxFrameNum) > sps.RefFrameCount {
+			d.removeShortAtIndex(i)
+			continue
+		}
+		i++
+	}
 }
 
 func (d *simpleFrameDPB) removeLongByIndex(index int) {

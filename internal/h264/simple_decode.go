@@ -55,6 +55,7 @@ type DecodedFrame struct {
 	tables                         *macroblockTables
 	refEntries                     [2][]simpleRefEntry
 	fieldRefEntries                [2][2][]simpleRefEntry
+	invalidGap                     bool
 }
 
 type DecodedFrameSideData struct {
@@ -302,6 +303,9 @@ func decodeSimpleNALUnitsWithState(nals []NALUnit, spsList *[maxSPSCount]*SPS, p
 				return nil, ErrInvalidData
 			}
 			if frame == nil {
+				if err := dpb.handleFrameNumGaps(sh, false); err != nil {
+					return nil, err
+				}
 				if sei.PictureTiming.Present != 0 {
 					if err := sei.PictureTiming.Process(sh.SPS); err != nil {
 						// FFmpeg drops malformed picture-timing SEI without AV_EF_EXPLODE.

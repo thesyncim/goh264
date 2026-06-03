@@ -856,6 +856,80 @@ func TestSimpleFrameDPBSlidingWindowMarking(t *testing.T) {
 	}
 }
 
+func TestSimpleFrameDPBFrameNumGapsRefreshShortRefs(t *testing.T) {
+	sps := simpleDPBTestSPS(4)
+	sps.Log2MaxFrameNum = 8
+	dpb := simpleFrameDPB{
+		short: []*DecodedFrame{
+			simpleDPBTestFrame(sps, 217),
+			simpleDPBTestFrame(sps, 67),
+			simpleDPBTestFrame(sps, 49),
+			simpleDPBTestFrame(sps, 40),
+		},
+	}
+	dpb.poc.prevFrameNum = 217
+	sh := &SliceHeader{
+		NALType:          NALSlice,
+		SPS:              sps,
+		FrameNum:         222,
+		PictureStructure: PictureFrame,
+	}
+
+	if err := dpb.handleFrameNumGaps(sh, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := simpleDPBFrameNums(dpb.short), []uint32{221, 220, 219, 218}; !uint32SlicesEqual(got, want) {
+		t.Fatalf("gap refs = %v, want %v", got, want)
+	}
+	for _, frame := range dpb.short {
+		if frame == nil || !frame.invalidGap {
+			t.Fatalf("gap frame invalid marker = %v for refs %v", frame, simpleDPBFrameNums(dpb.short))
+		}
+	}
+
+	current := simpleDPBTestFrame(sps, 222)
+	if err := dpb.markDecodedFrame(current, sh, 2); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := simpleDPBFrameNums(dpb.short), []uint32{222, 221, 220, 219}; !uint32SlicesEqual(got, want) {
+		t.Fatalf("refs after current = %v, want %v", got, want)
+	}
+}
+
+func TestSimpleFrameDPBFrameNumGapsShortenAcrossWrap(t *testing.T) {
+	sps := simpleDPBTestSPS(3)
+	sps.Log2MaxFrameNum = 8
+	dpb := simpleFrameDPB{
+		short: []*DecodedFrame{
+			simpleDPBTestFrame(sps, 250),
+			simpleDPBTestFrame(sps, 249),
+			simpleDPBTestFrame(sps, 248),
+		},
+	}
+	dpb.poc.prevFrameNum = 250
+	sh := &SliceHeader{
+		NALType:          NALSlice,
+		SPS:              sps,
+		FrameNum:         0,
+		PictureStructure: PictureFrame,
+	}
+
+	if err := dpb.handleFrameNumGaps(sh, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := simpleDPBFrameNums(dpb.short), []uint32{255, 254, 253}; !uint32SlicesEqual(got, want) {
+		t.Fatalf("wrapped gap refs = %v, want %v", got, want)
+	}
+
+	current := simpleDPBTestFrame(sps, 0)
+	if err := dpb.markDecodedFrame(current, sh, 2); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := simpleDPBFrameNums(dpb.short), []uint32{0, 255, 254}; !uint32SlicesEqual(got, want) {
+		t.Fatalf("wrapped refs after current = %v, want %v", got, want)
+	}
+}
+
 func TestSimpleFrameDPBSlidingWindowCountsLongRefs(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	long := simpleDPBTestFrame(sps, 10)
@@ -1101,6 +1175,18 @@ func simpleDPBFrameNums(frames []*DecodedFrame) []uint32 {
 		}
 	}
 	return out
+}
+
+func uint32SlicesEqual(a []uint32, b []uint32) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func simpleDPBLongRefs(dpb simpleFrameDPB) map[int]uint32 {

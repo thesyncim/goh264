@@ -22,12 +22,12 @@ monochrome-to-yuv420p output, selected compact baseline/main conformance rows
 including AUD, SVA/Sony/MW/FT/JVC/Sand/Toshiba/VTC baseline/main, CABAC,
 no-deblock, reference, field, and slice-boundary rows,
 CABAC delayed-output reorder plus weighted/field compact rows, CAVLC
-field/QP/crop/weighted/no-deblock compact rows, and compact
-long-slice/multiple-reference rows,
+field/QP/crop/weighted/no-deblock compact rows, compact
+long-slice/multiple-reference rows, and frame-num-gap multiple-reference rows,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 168/168 green. Matrix mode is the safe-point gate. Red-queue
+Public vectors: 181/181 green. Matrix mode is the safe-point gate. Red-queue
 scripts intentionally exit non-zero only while rows in
 `testdata/h264/realvectors/failures.jsonl` remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or
