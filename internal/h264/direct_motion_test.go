@@ -885,11 +885,52 @@ func TestPredTemporalDirectFieldPictureUsesMBAFFColocatedFieldRefOffset(t *testi
 		t.Fatalf("field-picture MBAFF colocated direct failed: %v", err)
 	}
 	base := int(h264Scan8[12])
-	if cache.Ref[0][base] != 2 || cache.Ref[1][base] != 0 {
-		t.Fatalf("direct refs = %d/%d, want 2/0", cache.Ref[0][base], cache.Ref[1][base])
+	if cache.Ref[0][base] != 3 || cache.Ref[1][base] != 0 {
+		t.Fatalf("direct refs = %d/%d, want 3/0", cache.Ref[0][base], cache.Ref[1][base])
 	}
-	if cache.MV[0][base] != ([2]int16{7, 4}) || cache.MV[1][base] != ([2]int16{-4, -3}) {
+	if cache.MV[0][base] != ([2]int16{-11, -7}) || cache.MV[1][base] != ([2]int16{-22, -14}) {
 		t.Fatalf("direct mvs = %v/%v, want FFmpeg-scaled field refs", cache.MV[0][base], cache.MV[1][base])
+	}
+}
+
+func TestTemporalDirectMBAFFFieldPictureRefOffsetUsesFieldSideExactLongRef(t *testing.T) {
+	colliding := &DecodedFrame{poc: 18, fieldPOC: [2]int32{18, 19}, frameNum: 3}
+	matching := &DecodedFrame{poc: 54, fieldPOC: [2]int32{54, 55}, frameNum: 9}
+	wrongFlat := &DecodedFrame{poc: 66, fieldPOC: [2]int32{66, 67}, frameNum: 11}
+	col := &DecodedFrame{
+		mbaff: true,
+		refEntries: [2][]simpleRefEntry{
+			{
+				{frame: colliding, picID: 0, long: true, pictureStructure: PictureFrame, poc: colliding.poc},
+				{frame: wrongFlat, picID: 1, long: true, pictureStructure: PictureFrame, poc: wrongFlat.poc},
+			},
+		},
+		fieldRefEntries: [2][2][]simpleRefEntry{
+			{
+				{
+					{frame: colliding, picID: 0, long: true, pictureStructure: PictureFrame, poc: colliding.poc},
+					{frame: matching, picID: 1, long: true, pictureStructure: PictureFrame, poc: matching.poc},
+				},
+			},
+		},
+	}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: colliding, picID: 1, long: true, pictureStructure: PictureTopField, poc: colliding.fieldPOC[0]},
+				{frame: matching, picID: 3, long: true, pictureStructure: PictureTopField, poc: matching.fieldPOC[0]},
+				{frame: wrongFlat, picID: 1, long: true, pictureStructure: PictureTopField, poc: wrongFlat.fieldPOC[0]},
+			},
+			{{frame: col, pictureStructure: PictureTopField, poc: 80}},
+		},
+		PictureStructure: PictureTopField,
+	}
+	got, err := temporalDirectMapMBAFFFieldPictureRefOffset(ctx, 0, 2)
+	if err != nil {
+		t.Fatalf("MBAFF field-picture ref_offset map failed: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("MBAFF field-picture ref_offset mapped to %d, want exact long top-field ref 1", got)
 	}
 }
 

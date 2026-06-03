@@ -742,16 +742,18 @@ func temporalDirectMapMBAFFFieldPictureRefOffset(ctx h264DirectMotionContext, li
 	}
 	oldRef := ref >> 1
 	targetField := (ref & 1) ^ field
-	target, ok := temporalDirectColocatedRefEntry(ctx, list, oldRef, false)
+	target, ok := temporalDirectColocatedFieldPictureRefEntry(ctx, list, oldRef)
 	if !ok {
 		return 0, fmt.Errorf("temporal direct missing MBAFF colocated ref_offset entry list=%d ref=%d: %w", list, ref, ErrUnsupported)
 	}
-	target, ok = temporalDirectEntryAsField(target, temporalDirectPictureStructureForField(targetField))
-	if !ok {
-		return 0, fmt.Errorf("temporal direct invalid MBAFF colocated ref_offset field list=%d ref=%d: %w", list, ref, ErrUnsupported)
-	}
-	if target.frame != nil && !target.long {
-		target.picID = 2*target.frame.frameNum + uint32(targetField) + 1
+	if target.pictureStructure == PictureFrame {
+		target, ok = temporalDirectEntryAsField(target, temporalDirectPictureStructureForField(targetField))
+		if !ok {
+			return 0, fmt.Errorf("temporal direct invalid MBAFF colocated ref_offset field list=%d ref=%d: %w", list, ref, ErrUnsupported)
+		}
+		if target.frame != nil && !target.long {
+			target.picID = 2*target.frame.frameNum + uint32(targetField) + 1
+		}
 	}
 	for i, entry := range ctx.RefEntries[0] {
 		if temporalDirectSameExactFieldRef(entry, target) {
@@ -1175,7 +1177,7 @@ func temporalDirectSameExactFieldRef(a simpleRefEntry, b simpleRefEntry) bool {
 	if a.picID != b.picID || a.picID == 0 || a.pictureStructure != b.pictureStructure {
 		return false
 	}
-	if a.frame != nil && b.frame != nil && a.frame != b.frame && !a.long && a.frame.frameNum != b.frame.frameNum {
+	if !temporalDirectKnownFramesCanSharePicID(a, b) {
 		return false
 	}
 	return true
@@ -1185,6 +1187,9 @@ func temporalDirectSamePictureID(a simpleRefEntry, b simpleRefEntry) bool {
 	if a.long != b.long || a.picID != b.picID {
 		return false
 	}
+	if !temporalDirectKnownFramesCanSharePicID(a, b) {
+		return false
+	}
 	return a.frame != nil || b.frame != nil || a.long || a.picID != 0
 }
 
@@ -1192,10 +1197,20 @@ func temporalDirectSameFieldPictureID(a simpleRefEntry, b simpleRefEntry) bool {
 	if a.long != b.long || a.picID != b.picID {
 		return false
 	}
-	if a.frame != nil && b.frame != nil && a.frame != b.frame && !a.long && a.frame.frameNum != b.frame.frameNum {
+	if !temporalDirectKnownFramesCanSharePicID(a, b) {
 		return false
 	}
 	return a.frame != nil || b.frame != nil || a.long || a.picID != 0
+}
+
+func temporalDirectKnownFramesCanSharePicID(a simpleRefEntry, b simpleRefEntry) bool {
+	if a.frame == nil || b.frame == nil || a.frame == b.frame {
+		return true
+	}
+	if a.long || b.long {
+		return false
+	}
+	return a.frame.frameNum == b.frame.frameNum
 }
 
 func temporalDirectDistScaleFactor(ctx h264DirectMotionContext, ref0 int8) (int, error) {
