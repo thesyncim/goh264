@@ -516,6 +516,58 @@ func TestDirectColocatedLayoutFrameCurrentUsesColParityAndBottomHalf(t *testing.
 	}
 }
 
+func TestDirectColocatedLayoutFieldCurrentKeepsZeroColParity(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	col, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	col.MacroblockTyp[0] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	col.MacroblockTyp[col.MBStride] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colFrame := &DecodedFrame{mbaff: true, tables: col}
+
+	layout, err := m.directColocatedLayout(col, 0, MBTypeDirect2|MBTypeL0L1, h264DirectMotionContext{
+		RefEntries:       [2][]simpleRefEntry{nil, {{frame: colFrame, pictureStructure: PictureTopField}}},
+		PictureStructure: PictureTopField,
+	})
+	if err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	if layout.MBXY != 0 || layout.RefBase != 0 || layout.MVBase != int(col.MB2BXY[0]) || layout.B8Stride != 0 {
+		t.Fatalf("field-current layout = mbxy %d ref %d mv %d b8 %d, want top colocated half with zero col_parity",
+			layout.MBXY, layout.RefBase, layout.MVBase, layout.B8Stride)
+	}
+}
+
+func TestDirectColocatedLayoutFieldCurrentMBAFFParentKeepsZeroFieldoff(t *testing.T) {
+	m, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	col, err := newMacroblockTables(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	col.MacroblockTyp[0] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	col.MacroblockTyp[col.MBStride] = MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced
+	colFrame := &DecodedFrame{mbaff: true, tables: col}
+
+	layout, err := m.directColocatedLayout(col, 0, MBTypeDirect2|MBTypeL0L1|MBTypeInterlaced, h264DirectMotionContext{
+		RefEntries:       [2][]simpleRefEntry{nil, {{frame: colFrame, pictureStructure: PictureBottomField}}},
+		PictureStructure: PictureTopField,
+	})
+	if err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	if layout.MBXY != 0 || layout.RefBase != 0 || layout.MVBase != int(col.MB2BXY[0]) {
+		t.Fatalf("field-current MBAFF layout = mbxy %d ref %d mv %d, want no col_fieldoff for MBAFF parent",
+			layout.MBXY, layout.RefBase, layout.MVBase)
+	}
+}
+
 func TestPredTemporalDirectAllowsFieldCurrentOverFrameColocated(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {

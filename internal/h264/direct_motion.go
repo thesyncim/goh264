@@ -181,7 +181,10 @@ func (m *macroblockTables) directColocatedLayout(col *macroblockTables, mbXY int
 }
 
 func directColocatedParity(ctx h264DirectMotionContext) int {
-	if ctx.PictureStructure != PictureFrame || len(ctx.RefEntries[1]) == 0 || ctx.RefEntries[1][0].frame == nil {
+	if ctx.PictureStructure != PictureFrame {
+		return 0
+	}
+	if len(ctx.RefEntries[1]) == 0 || ctx.RefEntries[1][0].frame == nil {
 		return 1
 	}
 	frame := ctx.RefEntries[1][0].frame
@@ -198,6 +201,9 @@ func directColocatedParity(ctx h264DirectMotionContext) int {
 
 func directColocatedFieldOffset(ctx h264DirectMotionContext) int {
 	if len(ctx.RefEntries[1]) == 0 {
+		return 0
+	}
+	if ctx.RefEntries[1][0].frame != nil && ctx.RefEntries[1][0].frame.mbaff {
 		return 0
 	}
 	refPicture := ctx.RefEntries[1][0].pictureStructure
