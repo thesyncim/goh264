@@ -411,22 +411,40 @@ func (m *macroblockTables) decodeCAVLCFrameInterMacroblock(gb *bitReader, in cav
 	var mb cavlcInterMacroblockSyntax
 	mb.cavlcMacroblockSyntax = base
 	var err error
+	directPredicted := false
 	switch in.SliceTypeNoS {
 	case PictureTypeP:
 		mb, err = residual.decodeCAVLCInterPMacroblockAfterType(gb, in.PPS, in.SPS, mb, in.QScale, in.RefCount, in.DCT8x8Allowed)
 	case PictureTypeB:
-		mb, err = residual.decodeCAVLCInterBMacroblockAfterType(gb, in.PPS, in.SPS, mb, in.QScale, in.RefCount, in.DCT8x8Allowed)
+		directHook := func(mb *cavlcInterMacroblockSyntax) error {
+			if isDirect(mb.MBType) {
+				if err := m.predDirectMotionFrame(motion, in.MBXY, &mb.MBType, &mb.SubMBType, in.Direct); err != nil {
+					return err
+				}
+				directPredicted = true
+				return nil
+			}
+			if mb.PartitionCount == 4 && hasDirectSubMBType(&mb.SubMBType) {
+				if err := m.predDirectMotionFrame(motion, in.MBXY, &mb.MBType, &mb.SubMBType, in.Direct); err != nil {
+					return err
+				}
+				markDirectSubRefsUnavailable(motion)
+				directPredicted = true
+			}
+			return nil
+		}
+		mb, err = residual.decodeCAVLCInterBMacroblockAfterTypeWithDirectHook(gb, in.PPS, in.SPS, mb, in.QScale, in.RefCount, in.DCT8x8Allowed, directHook)
 	default:
 		return result, ErrInvalidData
 	}
 	if err != nil {
 		return result, err
 	}
-	if isDirect(mb.MBType) {
+	if !directPredicted && isDirect(mb.MBType) {
 		if err := m.predDirectMotionFrame(motion, in.MBXY, &mb.MBType, &mb.SubMBType, in.Direct); err != nil {
 			return result, err
 		}
-	} else if in.SliceTypeNoS == PictureTypeB && mb.PartitionCount == 4 && hasDirectSubMBType(&mb.SubMBType) {
+	} else if !directPredicted && in.SliceTypeNoS == PictureTypeB && mb.PartitionCount == 4 && hasDirectSubMBType(&mb.SubMBType) {
 		if err := m.predDirectMotionFrame(motion, in.MBXY, &mb.MBType, &mb.SubMBType, in.Direct); err != nil {
 			return result, err
 		}

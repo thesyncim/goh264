@@ -120,6 +120,27 @@ func TestDecodeCAVLCInterBDirectSyntaxSkipsRefsMVD(t *testing.T) {
 	}
 }
 
+func TestDecodeCAVLCInterBDirectSkips8x8DCTWhenDirectInferenceDisabled(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 0, Direct8x8InferenceFlag: 0}
+	var ctx cavlcResidualContext
+	gb := newBitReader(cavlcBitString("101010101111"))
+
+	mb, err := ctx.decodeCAVLCInterBMacroblock(&gb, pps, sps, 18, [2]uint32{1, 1}, true)
+	if err != nil {
+		t.Fatalf("decode direct B residual failed: %v", err)
+	}
+	if mb.MBType&MBType8x8DCT != 0 || mb.TransformSize8x8DCT {
+		t.Fatalf("direct B type %#x transform8x8=%t, want transform flag skipped", mb.MBType, mb.TransformSize8x8DCT)
+	}
+	if mb.CBP != 1 || mb.QScale != 18 {
+		t.Fatalf("cbp/qscale = %d/%d, want 1/18", mb.CBP, mb.QScale)
+	}
+	if gb.bitPos != 12 {
+		t.Fatalf("consumed %d bits, want 12", gb.bitPos)
+	}
+}
+
 func TestDecodeCAVLCInterB16x16BiMacroblockNoResidual(t *testing.T) {
 	pps := cavlcFlatQMulPPS()
 	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}

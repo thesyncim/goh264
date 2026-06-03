@@ -15,6 +15,8 @@ type cavlcInterMacroblockSyntax struct {
 	MVD               [2][16][2]int32
 }
 
+type cavlcInterBDirectHook func(*cavlcInterMacroblockSyntax) error
+
 func (c *cavlcResidualContext) decodeCAVLCInterPMacroblock(gb *bitReader, pps *PPS, sps *SPS, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
 	var mb cavlcInterMacroblockSyntax
 	base, err := decodeCAVLCMBType(gb, PictureTypeP, PictureTypeP)
@@ -168,6 +170,10 @@ func (c *cavlcResidualContext) decodeCAVLCInterBMacroblock(gb *bitReader, pps *P
 }
 
 func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterType(gb *bitReader, pps *PPS, sps *SPS, mb cavlcInterMacroblockSyntax, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
+	return c.decodeCAVLCInterBMacroblockAfterTypeWithDirectHook(gb, pps, sps, mb, qscale, refCount, dct8x8Allowed, nil)
+}
+
+func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterTypeWithDirectHook(gb *bitReader, pps *PPS, sps *SPS, mb cavlcInterMacroblockSyntax, qscale int, refCount [2]uint32, dct8x8Allowed bool, directHook cavlcInterBDirectHook) (cavlcInterMacroblockSyntax, error) {
 	if gb == nil || pps == nil || sps == nil {
 		return mb, ErrInvalidData
 	}
@@ -273,11 +279,20 @@ func (c *cavlcResidualContext) decodeCAVLCInterBMacroblockAfterType(gb *bitReade
 		return mb, ErrUnsupported
 	}
 
+	if directHook != nil && (isDirect(mb.MBType) || mb.PartitionCount == 4 && hasDirectSubMBType(&mb.SubMBType)) {
+		if err := directHook(&mb); err != nil {
+			return mb, err
+		}
+	}
+
 	cbp, err := decodeCAVLCCBP(gb, mb.MBType, sps.ChromaFormatIDC == 1 || sps.ChromaFormatIDC == 2, mb.CBP)
 	if err != nil {
 		return mb, err
 	}
 	mb.CBP = cbp
+	if isDirect(mb.MBType) {
+		dct8x8Allowed = dct8x8Allowed && sps.Direct8x8InferenceFlag != 0
+	}
 	if mb.PartitionCount == 4 {
 		dct8x8Allowed = subMBTypesAllowDCT8x8(dct8x8Allowed, &mb.SubMBType, sps.Direct8x8InferenceFlag != 0)
 	}
