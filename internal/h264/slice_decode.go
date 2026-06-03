@@ -484,14 +484,24 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 		}
 		return isHigh12ChromaFrameDeblockScope(sh)
 	case 14:
-		return sh.PPS != nil &&
-			sh.PPS.CABAC == 0 &&
-			sh.SPS.ChromaFormatIDC == 1 &&
-			sh.SliceTypeNoS == PictureTypeI &&
-			sh.DeblockingFilter == 0
+		return isHigh14Frame420Scope(sh)
 	default:
 		return false
 	}
+}
+
+func isHigh14Frame420Scope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil {
+		return false
+	}
+	return sh.PPS.CABAC == 0 &&
+		sh.SPS.ChromaFormatIDC == 1 &&
+		sh.DeblockingFilter == 0 &&
+		(sh.SliceTypeNoS == PictureTypeI ||
+			(sh.SliceTypeNoS == PictureTypeP &&
+				sh.PPS.WeightedPred == 0 &&
+				sh.PredWeightTable.UseWeight == 0 &&
+				sh.PredWeightTable.UseWeightChroma == 0))
 }
 
 func isHigh12Frame420Scope(sh *SliceHeader) bool {

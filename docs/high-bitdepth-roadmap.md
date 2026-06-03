@@ -20,7 +20,7 @@ I/P chroma no-deblock/mode-1 deblock plus unweighted 4:2:2/4:4:4 I/P chroma
 slice-boundary mode-2 deblock, plus
 CAVLC High14 IntraPCM and mixed no-residual Intra4x4/Intra16x16 plus
 Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
-combined luma/chroma residual.
+combined luma/chroma residual plus P-skip/P16x16.
 
 Next: more public 12/14-bit streams, then field/MBAFF.
 

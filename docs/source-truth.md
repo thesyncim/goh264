@@ -14,7 +14,8 @@ P16x16 residual handoff plus no-deblock/mode-1 I/P deblock including
 unweighted 4:2:2/4:4:4 I/P chroma deblock plus 4:2:0 I/P
 slice-boundary mode-2 deblock and unweighted 4:2:2/4:4:4 I/P chroma
 slice-boundary mode-2 deblock, High14 CAVLC IntraPCM, mixed no-residual
-intra, separate and combined Intra16x16 luma/chroma residual, public FATE vector harness,
+intra, separate and combined Intra16x16 luma/chroma residual plus
+P-skip/P16x16, public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
 Public vectors: 36/36 green. Matrix mode is the safe-point gate. Red-queue

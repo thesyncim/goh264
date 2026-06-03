@@ -109,8 +109,8 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CAVLCIntra420SliceScope(t
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12P420NoWeight(t *testing.T) {
-	for _, bitDepth := range []int32{10, 12} {
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10High12AndHigh14P420NoWeight(t *testing.T) {
+	for _, bitDepth := range []int32{10, 12, 14} {
 		t.Run(bitDepthName(bitDepth), func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
 			sh.RefCount = [2]uint32{1, 0}
@@ -160,8 +160,9 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 		{name: "8-bit", bitDepth: 8, chroma: 8, format: 1, slice: PictureTypeI},
 		{name: "9-bit", bitDepth: 9, chroma: 9, format: 1, slice: PictureTypeI},
 		{name: "12-bit-b-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 1, deblockMode: 2, slice: PictureTypeB},
-		{name: "14-bit-p", bitDepth: 14, chroma: 14, format: 1, slice: PictureTypeP},
+		{name: "14-bit-b", bitDepth: 14, chroma: 14, format: 1, slice: PictureTypeB},
 		{name: "14-bit-deblock", bitDepth: 14, chroma: 14, format: 1, deblock: true, slice: PictureTypeI},
+		{name: "14-bit-p-deblock", bitDepth: 14, chroma: 14, format: 1, deblock: true, slice: PictureTypeP},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeI},
 		{name: "monochrome", bitDepth: 10, chroma: 10, format: 0, slice: PictureTypeI},
 	}
@@ -177,6 +178,19 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 				t.Fatalf("high validation err = %v, want ErrUnsupported", err)
 			}
 		})
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14PWeightUntilProved(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, false, PictureTypeP)
+	sh.RefCount = [2]uint32{1, 0}
+	sh.PPS.WeightedPred = 1
+	sh.PredWeightTable.UseWeight = 1
+	sh.PredWeightTable.LumaLog2WeightDenom = 0
+	sh.PredWeightTable.LumaWeight[0][0] = [2]int32{1, 0}
+
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+		t.Fatalf("high14 weighted P validation err = %v, want ErrUnsupported", err)
 	}
 }
 
@@ -1324,7 +1338,7 @@ func TestDecodeCABACFrameSliceHighReconstructsPIntra4x4NoResidual(t *testing.T) 
 }
 
 func TestDecodeCAVLCFrameSliceHighReconstructsPSkip(t *testing.T) {
-	for _, bitDepth := range []int32{10, 12} {
+	for _, bitDepth := range []int32{10, 12, 14} {
 		t.Run(bitDepthName(bitDepth), func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
 			sh.QScale = 24
@@ -1358,7 +1372,7 @@ func TestDecodeCAVLCFrameSliceHighReconstructsPSkip(t *testing.T) {
 }
 
 func TestDecodeCAVLCFrameSliceHighReconstructsP16x16NoResidual(t *testing.T) {
-	for _, bitDepth := range []int32{10, 12} {
+	for _, bitDepth := range []int32{10, 12, 14} {
 		t.Run(bitDepthName(bitDepth), func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
 			sh.QScale = 24
