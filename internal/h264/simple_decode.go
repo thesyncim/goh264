@@ -288,7 +288,9 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 			}
 			ppsList[pps.PPSID] = pps
 		case NALSEI:
-			if st.haveSlice {
+			if st.frameComplete {
+				st.resetPicture()
+			} else if st.haveSlice {
 				continue
 			}
 			// FFmpeg keeps SEI parse failures non-fatal unless AV_EF_EXPLODE is set.
