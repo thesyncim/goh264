@@ -18,11 +18,12 @@ intra, separate and combined Intra16x16 luma/chroma residual plus
 P-skip/P16x16, High10 frame-MBAFF field-coded CAVLC IntraPCM
 entropy/reconstruct pairing plus public High10/High422 field-coded
 frame-MBAFF deblock rows, complete FFmpeg FRext FATE row coverage including
-monochrome-to-yuv420p output,
+monochrome-to-yuv420p output, selected compact baseline/main conformance rows
+including AUD, SVA/Sony/MW baseline, CABAC, no-deblock, and slice-boundary rows,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 78/78 green. Matrix mode is the safe-point gate. Red-queue
+Public vectors: 95/95 green. Matrix mode is the safe-point gate. Red-queue
 scripts intentionally exit non-zero only while rows in
 `testdata/h264/realvectors/failures.jsonl` remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or
