@@ -11,7 +11,7 @@ IntraPCM plus no-residual Intra4x4/Intra16x16 and Intra16x16 luma-AC,
 luma-DC+AC, and luma/chroma-DC plus chroma-AC/DC+AC and combined
 luma/chroma residual, plus CAVLC High14 IntraPCM and mixed no-residual
 Intra4x4/Intra16x16 plus Intra16x16 luma-DC/luma-AC/DC+AC and
-chroma-DC/chroma-AC/DC+AC residual.
+chroma-DC/chroma-AC/DC+AC and combined luma/chroma residual.
 
 Next: broader public 12/14-bit streams, then field/MBAFF.
 
