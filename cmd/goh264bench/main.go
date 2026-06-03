@@ -180,8 +180,10 @@ type benchCorpusEntry struct {
 	PixFmt       string             `json:"pix_fmt,omitempty"`
 	FrameCount   int                `json:"frame_count,omitempty"`
 	FrameSize    int                `json:"frame_size,omitempty"`
+	SourceMD5    string             `json:"source_md5,omitempty"`
 	BitstreamMD5 string             `json:"bitstream_md5,omitempty"`
 	RawVideoMD5  string             `json:"rawvideo_md5,omitempty"`
+	Extract      string             `json:"extract,omitempty"`
 	FrameMD5     []string           `json:"frame_md5,omitempty"`
 	Surfaces     []string           `json:"surfaces,omitempty"`
 	GuardTags    []string           `json:"guard_tags,omitempty"`
@@ -778,7 +780,7 @@ func readBenchFailureLedger(manifestPath string, mode string, manifestEntries []
 	}
 	failures := make(map[string]benchCorpusEntry, len(entries))
 	for _, failure := range entries {
-		if err := validateBenchCorpusEntry(failure); err != nil {
+		if err := validateBenchFailureLedgerEntry(failure); err != nil {
 			return nil, "", fmt.Errorf("%s: failure-ledger row: %w", failure.ID, err)
 		}
 		if err := validateBenchKnownFailure(failure); err != nil {
@@ -864,6 +866,8 @@ func benchCorpusEntrySearchFields(entry benchCorpusEntry) []string {
 		entry.Format,
 		entry.Expect,
 		entry.PixFmt,
+		entry.SourceMD5,
+		entry.Extract,
 		entry.Source,
 	}
 	fields = append(fields, entry.Surfaces...)
@@ -899,11 +903,8 @@ func readBenchCorpusManifest(path string) ([]benchCorpusEntry, error) {
 }
 
 func validateBenchCorpusEntry(entry benchCorpusEntry) error {
-	if entry.ID == "" || entry.Path == "" && entry.URL == "" {
-		return fmt.Errorf("manifest entry id and path or url must be set: %+v", entry)
-	}
-	if entry.Format != "annexb" {
-		return fmt.Errorf("%s: format = %q, want annexb", entry.ID, entry.Format)
+	if err := validateBenchCorpusCommon(entry); err != nil {
+		return err
 	}
 	if entry.Expect != "decode-ok" {
 		return fmt.Errorf("%s: benchmark manifest mode only runs decode-ok entries, got %q", entry.ID, entry.Expect)
@@ -920,6 +921,52 @@ func validateBenchCorpusEntry(entry benchCorpusEntry) error {
 	return nil
 }
 
+func validateBenchFailureLedgerEntry(entry benchCorpusEntry) error {
+	if err := validateBenchCorpusCommon(entry); err != nil {
+		return err
+	}
+	switch entry.Expect {
+	case "decode-ok":
+		if entry.BitstreamMD5 == "" || entry.RawVideoMD5 == "" || entry.PixFmt == "" {
+			return fmt.Errorf("%s: decode-ok entries need bitstream_md5, rawvideo_md5, and pix_fmt", entry.ID)
+		}
+		if entry.FrameCount <= 0 || entry.FrameSize <= 0 {
+			return fmt.Errorf("%s: frame_count/frame_size must be positive", entry.ID)
+		}
+		if len(entry.FrameMD5) != 0 && len(entry.FrameMD5) != entry.FrameCount {
+			return fmt.Errorf("%s: frame_md5 count = %d, want 0 or %d", entry.ID, len(entry.FrameMD5), entry.FrameCount)
+		}
+	case "metadata-ok":
+		if entry.BitstreamMD5 == "" {
+			return fmt.Errorf("%s: metadata-ok entries need bitstream_md5", entry.ID)
+		}
+		if entry.FrameCount <= 0 {
+			return fmt.Errorf("%s: frame_count must be positive", entry.ID)
+		}
+	default:
+		return fmt.Errorf("%s: failure-ledger row must stay an oracle row, got %q", entry.ID, entry.Expect)
+	}
+	return nil
+}
+
+func validateBenchCorpusCommon(entry benchCorpusEntry) error {
+	if entry.ID == "" || entry.Path == "" && entry.URL == "" {
+		return fmt.Errorf("manifest entry id and path or url must be set: %+v", entry)
+	}
+	if entry.Format != "annexb" {
+		return fmt.Errorf("%s: format = %q, want annexb", entry.ID, entry.Format)
+	}
+	switch entry.Extract {
+	case "", "h264-annexb":
+	default:
+		return fmt.Errorf("%s: extract = %q, want h264-annexb or empty", entry.ID, entry.Extract)
+	}
+	if entry.Extract != "" && entry.SourceMD5 == "" {
+		return fmt.Errorf("%s: extracted entries need source_md5", entry.ID)
+	}
+	return nil
+}
+
 func validateBenchKnownFailure(entry benchCorpusEntry) error {
 	if entry.KnownFailure == nil {
 		return fmt.Errorf("known-red rows must record known_failure")
@@ -928,7 +975,7 @@ func validateBenchKnownFailure(entry benchCorpusEntry) error {
 		return fmt.Errorf("known_failure needs class and detail_contains")
 	}
 	switch entry.KnownFailure.Class {
-	case "decode-error", "frame-count-mismatch", "pixel-format-mismatch", "raw-size-mismatch", "bitstream-md5-mismatch", "raw-md5-mismatch", "oracle-mismatch", "input-missing":
+	case "decode-error", "frame-count-mismatch", "pixel-format-mismatch", "raw-size-mismatch", "source-md5-mismatch", "bitstream-md5-mismatch", "raw-md5-mismatch", "oracle-mismatch", "input-missing":
 	default:
 		return fmt.Errorf("unknown known_failure class %q", entry.KnownFailure.Class)
 	}
@@ -936,6 +983,24 @@ func validateBenchKnownFailure(entry benchCorpusEntry) error {
 }
 
 func resolveBenchCorpusPath(baseDir string, entry benchCorpusEntry) (string, error) {
+	sourcePath, err := resolveBenchCorpusSourcePath(baseDir, entry)
+	if err != nil {
+		return "", err
+	}
+	if entry.Extract == "" {
+		return sourcePath, nil
+	}
+	sourceData, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return "", fmt.Errorf("%s: read source %s: %w", entry.ID, sourcePath, err)
+	}
+	if err := validateBenchSourceMD5(entry, sourceData); err != nil {
+		return "", err
+	}
+	return extractBenchCorpusAnnexB(entry, sourcePath)
+}
+
+func resolveBenchCorpusSourcePath(baseDir string, entry benchCorpusEntry) (string, error) {
 	if entry.Path != "" {
 		path := entry.Path
 		if !filepath.IsAbs(path) {
@@ -974,6 +1039,52 @@ func resolveBenchCorpusPath(baseDir string, entry benchCorpusEntry) (string, err
 		return "", err
 	}
 	return path, nil
+}
+
+func extractBenchCorpusAnnexB(entry benchCorpusEntry, sourcePath string) (string, error) {
+	if entry.Extract != "h264-annexb" {
+		return "", fmt.Errorf("%s: unsupported extract mode %q", entry.ID, entry.Extract)
+	}
+	path := sourcePath + ".h264-annexb"
+	if _, err := os.Stat(path); err == nil {
+		return path, nil
+	}
+	if os.Getenv("GOH264_CORPUS_FETCH") != "1" && os.Getenv("GOH264_CORPUS_EXTRACT") != "1" {
+		return "", fmt.Errorf("%s: missing extracted %s; set GOH264_CORPUS_FETCH=1 or GOH264_CORPUS_EXTRACT=1 to derive it with FFmpeg", entry.ID, path)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("%s: create extract cache dir: %w", entry.ID, err)
+	}
+	tmp := path + ".tmp"
+	os.Remove(tmp)
+	if err := runBenchAnnexBExtract(entry, sourcePath, tmp, true); err != nil {
+		if retryErr := runBenchAnnexBExtract(entry, sourcePath, tmp, false); retryErr != nil {
+			os.Remove(tmp)
+			return "", fmt.Errorf("%s: extract Annex B from %s: with h264_mp4toannexb: %v; without bitstream filter: %v", entry.ID, sourcePath, err, retryErr)
+		}
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return "", fmt.Errorf("%s: install extracted %s: %w", entry.ID, path, err)
+	}
+	return path, nil
+}
+
+func runBenchAnnexBExtract(entry benchCorpusEntry, sourcePath string, outputPath string, withBitstreamFilter bool) error {
+	bin := os.Getenv("GOH264_FFMPEG_BIN")
+	if bin == "" {
+		bin = "ffmpeg"
+	}
+	args := []string{"-nostdin", "-v", "error", "-y", "-i", sourcePath, "-map", "0:v:0", "-c:v", "copy"}
+	if withBitstreamFilter {
+		args = append(args, "-bsf:v", "h264_mp4toannexb")
+	}
+	args = append(args, "-f", "h264", outputPath)
+	cmd := exec.Command(bin, args...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func cleanRelativeBenchCorpusPath(id string, path string) (string, error) {
@@ -1021,6 +1132,17 @@ func validateBenchBitstreamMD5(entry benchCorpusEntry, data []byte) error {
 	sum := md5.Sum(data)
 	if got := hex.EncodeToString(sum[:]); got != entry.BitstreamMD5 {
 		return fmt.Errorf("%s: bitstream_md5 = %s, want %s", entry.ID, got, entry.BitstreamMD5)
+	}
+	return nil
+}
+
+func validateBenchSourceMD5(entry benchCorpusEntry, data []byte) error {
+	if entry.SourceMD5 == "" {
+		return nil
+	}
+	sum := md5.Sum(data)
+	if got := hex.EncodeToString(sum[:]); got != entry.SourceMD5 {
+		return fmt.Errorf("%s: source_md5 = %s, want %s", entry.ID, got, entry.SourceMD5)
 	}
 	return nil
 }
@@ -1234,6 +1356,8 @@ func benchOracleFailureClass(detail string) string {
 		return "pixel-format-mismatch"
 	case strings.Contains(detail, "bytes_per_iter") || strings.Contains(detail, "raw size") || strings.Contains(detail, "raw total"):
 		return "raw-size-mismatch"
+	case strings.Contains(detail, "source_md5"):
+		return "source-md5-mismatch"
 	case strings.Contains(detail, "bitstream_md5"):
 		return "bitstream-md5-mismatch"
 	case strings.Contains(detail, "raw_md5") || strings.Contains(detail, "rawvideo md5") || strings.Contains(detail, "md5 ="):

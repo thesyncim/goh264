@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -51,8 +52,10 @@ type h264CorpusEntry struct {
 	PixFmt        string                  `json:"pix_fmt,omitempty"`
 	FrameCount    int                     `json:"frame_count,omitempty"`
 	FrameSize     int                     `json:"frame_size,omitempty"`
+	SourceMD5     string                  `json:"source_md5,omitempty"`
 	BitstreamMD5  string                  `json:"bitstream_md5,omitempty"`
 	RawVideoMD5   string                  `json:"rawvideo_md5,omitempty"`
+	Extract       string                  `json:"extract,omitempty"`
 	FrameMD5      []string                `json:"frame_md5,omitempty"`
 	FrameGroups   []h264CorpusFrameGroup  `json:"frame_groups,omitempty"`
 	Surfaces      []string                `json:"surfaces,omitempty"`
@@ -154,8 +157,8 @@ func TestH264RealVectorFailureLedgerIntegrity(t *testing.T) {
 	failedIDs := make(map[string]struct{}, len(failures))
 	for _, failure := range failures {
 		validateH264CorpusEntry(t, failure)
-		if failure.Expect != "decode-ok" {
-			t.Fatalf("%s: failure ledger rows must stay decode-ok oracle rows, got %q", failure.ID, failure.Expect)
+		if failure.Expect != "decode-ok" && failure.Expect != "metadata-ok" {
+			t.Fatalf("%s: failure ledger rows must stay oracle rows, got %q", failure.ID, failure.Expect)
 		}
 		validateH264CorpusKnownFailure(t, failure)
 		if _, ok := failedIDs[failure.ID]; ok {
@@ -269,8 +272,8 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 		entry := entry
 		t.Run(entry.ID, func(t *testing.T) {
 			validateH264CorpusEntry(t, entry)
-			if entry.Expect != "decode-ok" {
-				t.Fatalf("%s: failure ledger rows must stay decode-ok oracle rows, got %q", entry.ID, entry.Expect)
+			if entry.Expect != "decode-ok" && entry.Expect != "metadata-ok" {
+				t.Fatalf("%s: failure ledger rows must stay oracle rows, got %q", entry.ID, entry.Expect)
 			}
 			validateH264CorpusKnownFailure(t, entry)
 			if !h264CorpusEntryHasSurface(entry, "annexb") {
@@ -282,7 +285,7 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 				t.Fatalf("read %s: %v", path, err)
 			}
 			assertCorpusBitstreamMD5(t, entry, data)
-			matches, detail := h264CorpusAnnexBMatchesOracle(t, entry, data)
+			matches, detail := h264CorpusAnnexBMatchesExpectedOracle(t, entry, data)
 			if matches {
 				t.Fatalf("%s: failure-ledger row now matches oracle; remove it from %s", entry.ID, defaultH264RealVectorFailureManifest)
 			}
@@ -356,7 +359,7 @@ func validateH264CorpusKnownFailure(t *testing.T, entry h264CorpusEntry) {
 		t.Fatalf("%s: known_failure needs class and detail_contains: %+v", entry.ID, entry.KnownFailure)
 	}
 	switch entry.KnownFailure.Class {
-	case "decode-error", "frame-count-mismatch", "pixel-format-mismatch", "raw-size-mismatch", "bitstream-md5-mismatch", "raw-md5-mismatch", "oracle-mismatch", "input-missing":
+	case "decode-error", "frame-count-mismatch", "pixel-format-mismatch", "raw-size-mismatch", "source-md5-mismatch", "bitstream-md5-mismatch", "raw-md5-mismatch", "oracle-mismatch", "input-missing":
 	default:
 		t.Fatalf("%s: unknown known_failure class %q", entry.ID, entry.KnownFailure.Class)
 	}
@@ -611,6 +614,8 @@ func h264CorpusEntrySearchFields(entry h264CorpusEntry) []string {
 		entry.Expect,
 		entry.ExpectedError,
 		entry.PixFmt,
+		entry.SourceMD5,
+		entry.Extract,
 		entry.Source,
 	}
 	fields = append(fields, entry.Surfaces...)
@@ -691,6 +696,7 @@ func TestH264CorpusOracleFailureClass(t *testing.T) {
 		{"frames = 2, want 3", "frame-count-mismatch"},
 		{"frame[0] pix_fmt = yuv420p, want yuv422p", "pixel-format-mismatch"},
 		{"frame[0] raw size = 10, want 20", "raw-size-mismatch"},
+		{"source_md5 = abc, want def", "source-md5-mismatch"},
 		{"bitstream_md5 = abc, want def", "bitstream-md5-mismatch"},
 		{"rawvideo md5 = abc, want def", "raw-md5-mismatch"},
 		{"unexpected oracle detail", "oracle-mismatch"},
@@ -715,6 +721,25 @@ func TestValidateH264CorpusEntryAllowsURLBackedDecodeOK(t *testing.T) {
 		RawVideoMD5:  "ffeeddccbbaa99887766554433221100",
 		Surfaces:     []string{"annexb"},
 		FeatureTags:  []string{"external"},
+		Source:       "test",
+	})
+}
+
+func TestValidateH264CorpusEntryAllowsExtractedAnnexB(t *testing.T) {
+	validateH264CorpusEntry(t, h264CorpusEntry{
+		ID:           "container",
+		URL:          "https://example.invalid/sample.mp4",
+		Format:       "annexb",
+		Expect:       "decode-ok",
+		PixFmt:       "yuv420p",
+		FrameCount:   2,
+		FrameSize:    16,
+		SourceMD5:    "11223344556677889900aabbccddeeff",
+		BitstreamMD5: "00112233445566778899aabbccddeeff",
+		RawVideoMD5:  "ffeeddccbbaa99887766554433221100",
+		Extract:      "h264-annexb",
+		Surfaces:     []string{"annexb"},
+		FeatureTags:  []string{"container", "extracted-annexb"},
 		Source:       "test",
 	})
 }
@@ -780,6 +805,14 @@ func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 	t.Helper()
 	if entry.ID == "" || entry.Path == "" && entry.URL == "" {
 		t.Fatalf("entry id and path or url must be set: %+v", entry)
+	}
+	switch entry.Extract {
+	case "", "h264-annexb":
+	default:
+		t.Fatalf("%s: extract = %q, want h264-annexb or empty", entry.ID, entry.Extract)
+	}
+	if entry.Extract != "" && entry.SourceMD5 == "" {
+		t.Fatalf("%s: extracted entries need source_md5", entry.ID)
 	}
 	if entry.Format != "annexb" {
 		t.Fatalf("%s: format = %q, want annexb", entry.ID, entry.Format)
@@ -850,6 +883,20 @@ func validateH264CorpusFrameGroups(t *testing.T, entry h264CorpusEntry) {
 
 func materializeH264CorpusEntry(t *testing.T, manifest string, entry h264CorpusEntry) string {
 	t.Helper()
+	sourcePath := materializeH264CorpusSource(t, manifest, entry)
+	if entry.Extract == "" {
+		return sourcePath
+	}
+	sourceData, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("%s: read source %s: %v", entry.ID, sourcePath, err)
+	}
+	assertCorpusSourceMD5(t, entry, sourceData)
+	return extractH264CorpusAnnexB(t, entry, sourcePath)
+}
+
+func materializeH264CorpusSource(t *testing.T, manifest string, entry h264CorpusEntry) string {
+	t.Helper()
 	baseDir := filepath.Dir(manifest)
 	if entry.Path != "" {
 		path := entry.Path
@@ -884,6 +931,53 @@ func materializeH264CorpusEntry(t *testing.T, manifest string, entry h264CorpusE
 	}
 	downloadH264CorpusEntry(t, entry, path)
 	return path
+}
+
+func extractH264CorpusAnnexB(t *testing.T, entry h264CorpusEntry, sourcePath string) string {
+	t.Helper()
+	if entry.Extract != "h264-annexb" {
+		t.Fatalf("%s: unsupported extract mode %q", entry.ID, entry.Extract)
+	}
+	path := sourcePath + ".h264-annexb"
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	if os.Getenv("GOH264_CORPUS_FETCH") != "1" && os.Getenv("GOH264_CORPUS_EXTRACT") != "1" {
+		t.Fatalf("%s: missing extracted %s; set GOH264_CORPUS_FETCH=1 or GOH264_CORPUS_EXTRACT=1 to derive it with FFmpeg", entry.ID, path)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("%s: create extract cache dir: %v", entry.ID, err)
+	}
+	tmp := path + ".tmp"
+	os.Remove(tmp)
+	if err := runH264CorpusAnnexBExtract(entry, sourcePath, tmp, true); err != nil {
+		if retryErr := runH264CorpusAnnexBExtract(entry, sourcePath, tmp, false); retryErr != nil {
+			os.Remove(tmp)
+			t.Fatalf("%s: extract Annex B from %s: with h264_mp4toannexb: %v; without bitstream filter: %v", entry.ID, sourcePath, err, retryErr)
+		}
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		t.Fatalf("%s: install extracted %s: %v", entry.ID, path, err)
+	}
+	return path
+}
+
+func runH264CorpusAnnexBExtract(entry h264CorpusEntry, sourcePath string, outputPath string, withBitstreamFilter bool) error {
+	bin := os.Getenv("GOH264_FFMPEG_BIN")
+	if bin == "" {
+		bin = "ffmpeg"
+	}
+	args := []string{"-nostdin", "-v", "error", "-y", "-i", sourcePath, "-map", "0:v:0", "-c:v", "copy"}
+	if withBitstreamFilter {
+		args = append(args, "-bsf:v", "h264_mp4toannexb")
+	}
+	args = append(args, "-f", "h264", outputPath)
+	cmd := exec.Command(bin, args...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func cleanRelativeH264CorpusPath(t *testing.T, id string, path string) string {
@@ -1056,6 +1150,17 @@ func assertCorpusBitstreamMD5(t *testing.T, entry h264CorpusEntry, data []byte) 
 	}
 }
 
+func assertCorpusSourceMD5(t *testing.T, entry h264CorpusEntry, data []byte) {
+	t.Helper()
+	if entry.SourceMD5 == "" {
+		return
+	}
+	sum := md5.Sum(data)
+	if got := hex.EncodeToString(sum[:]); got != entry.SourceMD5 {
+		failH264CorpusOracle(t, entry, fmt.Sprintf("source_md5 = %s, want %s", got, entry.SourceMD5))
+	}
+}
+
 func assertH264CorpusFrames(t *testing.T, entry h264CorpusEntry, frames []*Frame) {
 	t.Helper()
 	if len(frames) != entry.FrameCount {
@@ -1220,6 +1325,8 @@ func h264CorpusOracleFailureClass(detail string) string {
 		return "pixel-format-mismatch"
 	case strings.Contains(detail, "raw size") || strings.Contains(detail, "raw total"):
 		return "raw-size-mismatch"
+	case strings.Contains(detail, "source_md5"):
+		return "source-md5-mismatch"
 	case strings.Contains(detail, "bitstream_md5"):
 		return "bitstream-md5-mismatch"
 	case strings.Contains(detail, "rawvideo md5") || strings.Contains(detail, "md5 ="):

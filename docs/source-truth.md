@@ -32,17 +32,25 @@ packetized/configured surfaces proven for reference-list-mod overflow,
 missing-frame, timecode, and BBC2 recovery/PAFF,
 lossless High444 transform-bypass Annex B plus 4-byte AVC/configuration-record surfaces,
 public High9 4:2:0 SPS reinit metadata from 9-bit to 8-bit output,
+container-backed FATE H.264 vectors extracted to Annex B with both source and
+extracted bitstream MD5s, auxiliary API/MOV/MPEG-TS/MKV/CBS H.264 sample rows,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 194/194 green. Matrix mode is the safe-point gate. Red-queue
-scripts intentionally exit non-zero only while rows in
-`testdata/h264/realvectors/failures.jsonl` remain red.
+Public vectors: 224 selected, 213 green, 11 known-red. Matrix mode is the
+safe-point gate. Full strict and red-queue scripts intentionally exit non-zero
+while rows in `testdata/h264/realvectors/failures.jsonl` remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or
 `scripts/h264-red-vector.sh <filter>` to hand agents a failing public lane; the
 single-lane script exits at the first divergent raw byte for raw-MD5 rows.
 Use `scripts/h264-real-vector-red-each.sh` for per-known-red logs plus a TSV
 summary of first-divergence evidence.
+
+Pinned FFmpeg `n8.0.1` FATE audit: all 211 decoder-facing
+`tests/fate/h264.mak` sample references are represented. The wider
+H.264-ish FATE/CBS scan has 220 references; the two excluded rows are
+`h264-conformance/FM1_BT_B.h264` (CBS malformed no-frame stream; FFmpeg exits
+with decode error) and `mkv/h264_tta_undecodable.mkv` (no H.264 video stream).
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, FMO, broad
 slice-boundary high modes, public 12/14-bit high streams beyond the current
