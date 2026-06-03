@@ -582,6 +582,12 @@ int main(void)
     print_loop_intra_case_high("hchromambaffi10", h264_h_loop_filter_chroma_mbaff_intra_10_c, 10);
     print_loop_intra_case_high("hchroma422i10", h264_h_loop_filter_chroma422_intra_10_c, 10);
     print_loop_intra_case_high("hchroma422mbaffi10", h264_h_loop_filter_chroma422_mbaff_intra_10_c, 10);
+    print_loop_tc_case_high("vluma12", h264_v_loop_filter_luma_12_c, 12);
+    print_loop_tc_case_high("hluma12", h264_h_loop_filter_luma_12_c, 12);
+    print_loop_intra_case_high("vlumai12", h264_v_loop_filter_luma_intra_12_c, 12);
+    print_loop_intra_case_high("hlumai12", h264_h_loop_filter_luma_intra_12_c, 12);
+    print_loop_tc_case_high("hchroma42212", h264_h_loop_filter_chroma422_12_c, 12);
+    print_loop_intra_case_high("hchroma422i12", h264_h_loop_filter_chroma422_intra_12_c, 12);
     print_loop_tc_case_high("vluma14", h264_v_loop_filter_luma_14_c, 14);
     print_loop_tc_case_high("vchroma14", h264_v_loop_filter_chroma_14_c, 14);
     print_loop_tc_case_high("vluma9", h264_v_loop_filter_luma_9_c, 9);
@@ -739,6 +745,12 @@ func h264DSPOracleWant(t *testing.T) string {
 	printDSPLoopIntraHighOracleWant(t, &b, "hchromambaffi10", h264HLoopFilterChromaMBAFFIntraHigh, 10)
 	printDSPLoopIntraHighOracleWant(t, &b, "hchroma422i10", h264HLoopFilterChroma422IntraHigh, 10)
 	printDSPLoopIntraHighOracleWant(t, &b, "hchroma422mbaffi10", h264HLoopFilterChroma422MBAFFIntraHigh, 10)
+	printDSPLoopTCHighOracleWant(t, &b, "vluma12", h264VLoopFilterLumaHigh, 12)
+	printDSPLoopTCHighOracleWant(t, &b, "hluma12", h264HLoopFilterLumaHigh, 12)
+	printDSPLoopIntraHighOracleWant(t, &b, "vlumai12", h264VLoopFilterLumaIntraHigh, 12)
+	printDSPLoopIntraHighOracleWant(t, &b, "hlumai12", h264HLoopFilterLumaIntraHigh, 12)
+	printDSPLoopTCHighOracleWant(t, &b, "hchroma42212", h264HLoopFilterChroma422High, 12)
+	printDSPLoopIntraHighOracleWant(t, &b, "hchroma422i12", h264HLoopFilterChroma422IntraHigh, 12)
 	printDSPLoopTCHighOracleWant(t, &b, "vluma14", h264VLoopFilterLumaHigh, 14)
 	printDSPLoopTCHighOracleWant(t, &b, "vchroma14", h264VLoopFilterChromaHigh, 14)
 	printDSPLoopTCHighOracleWant(t, &b, "vluma9", h264VLoopFilterLumaHigh, 9)

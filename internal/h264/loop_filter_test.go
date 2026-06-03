@@ -643,65 +643,69 @@ func TestH264ApplyLoopFilterEdgeHigh422MutatesLumaChroma(t *testing.T) {
 	const (
 		lumaStride   = 32
 		chromaStride = 16
-		bitDepth     = 10
-		qp           = 42
 	)
-	dst := &h264PicturePlanesHigh{
-		Y:               make([]uint16, lumaStride*16),
-		Cb:              make([]uint16, chromaStride*16),
-		Cr:              make([]uint16, chromaStride*16),
-		LumaStride:      lumaStride,
-		ChromaStride:    chromaStride,
-		MBWidth:         1,
-		MBHeight:        1,
-		ChromaFormatIDC: 2,
-	}
-	fillHighLoopFilterStep(dst.Y, lumaStride, 16, 16, 8, 400, 408)
-	fillHighLoopFilterStep(dst.Cb, chromaStride, 16, 16, 4, 300, 308)
-	fillHighLoopFilterStep(dst.Cr, chromaStride, 16, 16, 4, 200, 208)
-	yBefore := [2]uint16{dst.Y[7], dst.Y[8]}
-	cbBefore := [2]uint16{dst.Cb[3], dst.Cb[4]}
-	crBefore := [2]uint16{dst.Cr[3], dst.Cr[4]}
+	for _, bitDepth := range []int{10, 12} {
+		t.Run(bitDepthName(int32(bitDepth)), func(t *testing.T) {
+			qp := 30 + 6*(bitDepth-8)
+			dst := &h264PicturePlanesHigh{
+				Y:               make([]uint16, lumaStride*16),
+				Cb:              make([]uint16, chromaStride*16),
+				Cr:              make([]uint16, chromaStride*16),
+				LumaStride:      lumaStride,
+				ChromaStride:    chromaStride,
+				MBWidth:         1,
+				MBHeight:        1,
+				ChromaFormatIDC: 2,
+			}
+			fillHighLoopFilterStep(dst.Y, lumaStride, 16, 16, 8, 400, 408)
+			fillHighLoopFilterStep(dst.Cb, chromaStride, 16, 16, 4, 300, 308)
+			fillHighLoopFilterStep(dst.Cr, chromaStride, 16, 16, 4, 200, 208)
+			yBefore := [2]uint16{dst.Y[7], dst.Y[8]}
+			cbBefore := [2]uint16{dst.Cb[3], dst.Cb[4]}
+			crBefore := [2]uint16{dst.Cr[3], dst.Cr[4]}
 
-	if err := h264ApplyLoopFilterEdgeHigh(dst, 0, 0, 0, 0, 2, [4]int16{3, 3, 3, 3}, qp, [2]int{qp, qp}, h264LoopFilterSliceParams{}, false, true, true, bitDepth); err != nil {
-		t.Fatal(err)
-	}
-	if dst.Y[7] == yBefore[0] || dst.Y[8] == yBefore[1] {
-		t.Fatalf("High10 4:2:2 luma edge did not filter: %v -> [%d %d]", yBefore, dst.Y[7], dst.Y[8])
-	}
-	if dst.Cb[3] == cbBefore[0] || dst.Cb[4] == cbBefore[1] || dst.Cr[3] == crBefore[0] || dst.Cr[4] == crBefore[1] {
-		t.Fatalf("High10 4:2:2 chroma edge did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
-			cbBefore, dst.Cb[3], dst.Cb[4], crBefore, dst.Cr[3], dst.Cr[4])
+			if err := h264ApplyLoopFilterEdgeHigh(dst, 0, 0, 0, 0, 2, [4]int16{3, 3, 3, 3}, qp, [2]int{qp, qp}, h264LoopFilterSliceParams{}, false, true, true, bitDepth); err != nil {
+				t.Fatal(err)
+			}
+			if dst.Y[7] == yBefore[0] || dst.Y[8] == yBefore[1] {
+				t.Fatalf("high 4:2:2 luma edge did not filter: %v -> [%d %d]", yBefore, dst.Y[7], dst.Y[8])
+			}
+			if dst.Cb[3] == cbBefore[0] || dst.Cb[4] == cbBefore[1] || dst.Cr[3] == crBefore[0] || dst.Cr[4] == crBefore[1] {
+				t.Fatalf("high 4:2:2 chroma edge did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
+					cbBefore, dst.Cb[3], dst.Cb[4], crBefore, dst.Cr[3], dst.Cr[4])
+			}
+		})
 	}
 }
 
 func TestH264ApplyLoopFilterEdgeHigh444UsesLumaKernelsForChroma(t *testing.T) {
-	const (
-		stride   = 32
-		bitDepth = 10
-		qp       = 42
-	)
-	dst := &h264PicturePlanesHigh{
-		Y:               make([]uint16, stride*16),
-		Cb:              make([]uint16, stride*16),
-		Cr:              make([]uint16, stride*16),
-		LumaStride:      stride,
-		ChromaStride:    stride,
-		MBWidth:         1,
-		MBHeight:        1,
-		ChromaFormatIDC: 3,
-	}
-	fillHighLoopFilterStep(dst.Cb, stride, 16, 16, 4, 600, 616)
-	fillHighLoopFilterStep(dst.Cr, stride, 16, 16, 4, 500, 516)
-	cbBefore := [2]uint16{dst.Cb[3], dst.Cb[4]}
-	crBefore := [2]uint16{dst.Cr[3], dst.Cr[4]}
+	const stride = 32
+	for _, bitDepth := range []int{10, 12} {
+		t.Run(bitDepthName(int32(bitDepth)), func(t *testing.T) {
+			qp := 30 + 6*(bitDepth-8)
+			dst := &h264PicturePlanesHigh{
+				Y:               make([]uint16, stride*16),
+				Cb:              make([]uint16, stride*16),
+				Cr:              make([]uint16, stride*16),
+				LumaStride:      stride,
+				ChromaStride:    stride,
+				MBWidth:         1,
+				MBHeight:        1,
+				ChromaFormatIDC: 3,
+			}
+			fillHighLoopFilterStep(dst.Cb, stride, 16, 16, 4, 600, 616)
+			fillHighLoopFilterStep(dst.Cr, stride, 16, 16, 4, 500, 516)
+			cbBefore := [2]uint16{dst.Cb[3], dst.Cb[4]}
+			crBefore := [2]uint16{dst.Cr[3], dst.Cr[4]}
 
-	if err := h264ApplyLoopFilterEdgeHigh(dst, 0, 0, 0, 0, 1, [4]int16{3, 3, 3, 3}, qp, [2]int{qp, qp}, h264LoopFilterSliceParams{}, false, false, true, bitDepth); err != nil {
-		t.Fatal(err)
-	}
-	if dst.Cb[3] == cbBefore[0] || dst.Cb[4] == cbBefore[1] || dst.Cr[3] == crBefore[0] || dst.Cr[4] == crBefore[1] {
-		t.Fatalf("High10 4:4:4 chroma luma-kernel edge did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
-			cbBefore, dst.Cb[3], dst.Cb[4], crBefore, dst.Cr[3], dst.Cr[4])
+			if err := h264ApplyLoopFilterEdgeHigh(dst, 0, 0, 0, 0, 1, [4]int16{3, 3, 3, 3}, qp, [2]int{qp, qp}, h264LoopFilterSliceParams{}, false, false, true, bitDepth); err != nil {
+				t.Fatal(err)
+			}
+			if dst.Cb[3] == cbBefore[0] || dst.Cb[4] == cbBefore[1] || dst.Cr[3] == crBefore[0] || dst.Cr[4] == crBefore[1] {
+				t.Fatalf("high 4:4:4 chroma luma-kernel edge did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
+					cbBefore, dst.Cb[3], dst.Cb[4], crBefore, dst.Cr[3], dst.Cr[4])
+			}
+		})
 	}
 }
 
@@ -1070,58 +1074,61 @@ func TestMacroblockTablesFilterFrameHighSliceBoundaryModeSkipsCrossSliceBoundary
 
 func TestMacroblockTablesFilterFrameHigh422DCTHorizontalChromaOnlyEdge(t *testing.T) {
 	const (
-		stride   = 16
-		bitDepth = 10
-		qp       = 42
+		stride = 16
 	)
-	m, err := newMacroblockTables(1, 1, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dst := &h264PicturePlanesHigh{
-		Y:               make([]uint16, stride*16),
-		Cb:              make([]uint16, stride*16),
-		Cr:              make([]uint16, stride*16),
-		LumaStride:      stride,
-		ChromaStride:    stride,
-		MBWidth:         1,
-		MBHeight:        1,
-		ChromaFormatIDC: 2,
-	}
-	fillHighLoopFilterHorizontalStep(dst.Y, stride, 16, 16, 4, 400, 408)
-	fillHighLoopFilterHorizontalStep(dst.Cb, stride, 16, 16, 4, 300, 308)
-	fillHighLoopFilterHorizontalStep(dst.Cr, stride, 16, 16, 4, 200, 208)
-	m.MacroblockTyp[0] = MBTypeIntra4x4 | MBType8x8DCT
-	m.CBPTable[0] = 0xf
-	m.QScaleTable[0] = qp
-	m.SliceTable[0] = 0
-	pps := cavlcFlatQMulPPS()
-	pps.SPS = &SPS{
-		BitDepthLuma:     bitDepth,
-		BitDepthChroma:   bitDepth,
-		ChromaFormatIDC:  2,
-		FrameMBSOnlyFlag: 1,
-	}
-	params := []h264LoopFilterSliceParams{{
-		PPS:              pps,
-		ListCount:        1,
-		DeblockingFilter: 1,
-	}}
-	yBefore := [2]uint16{dst.Y[3*stride], dst.Y[4*stride]}
-	cbBefore := [2]uint16{dst.Cb[3*stride], dst.Cb[4*stride]}
-	crBefore := [2]uint16{dst.Cr[3*stride], dst.Cr[4*stride]}
+	for _, bitDepth := range []int{10, 12} {
+		t.Run(bitDepthName(int32(bitDepth)), func(t *testing.T) {
+			qp := 30 + 6*(bitDepth-8)
+			m, err := newMacroblockTables(1, 1, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dst := &h264PicturePlanesHigh{
+				Y:               make([]uint16, stride*16),
+				Cb:              make([]uint16, stride*16),
+				Cr:              make([]uint16, stride*16),
+				LumaStride:      stride,
+				ChromaStride:    stride,
+				MBWidth:         1,
+				MBHeight:        1,
+				ChromaFormatIDC: 2,
+			}
+			fillHighLoopFilterHorizontalStep(dst.Y, stride, 16, 16, 4, 400, 408)
+			fillHighLoopFilterHorizontalStep(dst.Cb, stride, 16, 16, 4, 300, 308)
+			fillHighLoopFilterHorizontalStep(dst.Cr, stride, 16, 16, 4, 200, 208)
+			m.MacroblockTyp[0] = MBTypeIntra4x4 | MBType8x8DCT
+			m.CBPTable[0] = 0xf
+			m.QScaleTable[0] = uint8(qp)
+			m.SliceTable[0] = 0
+			pps := cavlcFlatQMulPPS()
+			pps.SPS = &SPS{
+				BitDepthLuma:     int32(bitDepth),
+				BitDepthChroma:   int32(bitDepth),
+				ChromaFormatIDC:  2,
+				FrameMBSOnlyFlag: 1,
+			}
+			params := []h264LoopFilterSliceParams{{
+				PPS:              pps,
+				ListCount:        1,
+				DeblockingFilter: 1,
+			}}
+			yBefore := [2]uint16{dst.Y[3*stride], dst.Y[4*stride]}
+			cbBefore := [2]uint16{dst.Cb[3*stride], dst.Cb[4*stride]}
+			crBefore := [2]uint16{dst.Cr[3*stride], dst.Cr[4*stride]}
 
-	if err := m.filterFrameHigh(dst, params); err != nil {
-		t.Fatal(err)
-	}
-	if dst.Y[3*stride] != yBefore[0] || dst.Y[4*stride] != yBefore[1] {
-		t.Fatalf("High10 4:2:2 8x8-DCT horizontal luma edge filtered: %v -> [%d %d]",
-			yBefore, dst.Y[3*stride], dst.Y[4*stride])
-	}
-	if dst.Cb[3*stride] == cbBefore[0] || dst.Cb[4*stride] == cbBefore[1] ||
-		dst.Cr[3*stride] == crBefore[0] || dst.Cr[4*stride] == crBefore[1] {
-		t.Fatalf("High10 4:2:2 8x8-DCT horizontal chroma-only edge did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
-			cbBefore, dst.Cb[3*stride], dst.Cb[4*stride], crBefore, dst.Cr[3*stride], dst.Cr[4*stride])
+			if err := m.filterFrameHigh(dst, params); err != nil {
+				t.Fatal(err)
+			}
+			if dst.Y[3*stride] != yBefore[0] || dst.Y[4*stride] != yBefore[1] {
+				t.Fatalf("high 4:2:2 8x8-DCT horizontal luma edge filtered: %v -> [%d %d]",
+					yBefore, dst.Y[3*stride], dst.Y[4*stride])
+			}
+			if dst.Cb[3*stride] == cbBefore[0] || dst.Cb[4*stride] == cbBefore[1] ||
+				dst.Cr[3*stride] == crBefore[0] || dst.Cr[4*stride] == crBefore[1] {
+				t.Fatalf("high 4:2:2 8x8-DCT horizontal chroma-only edge did not filter: cb %v -> [%d %d] cr %v -> [%d %d]",
+					cbBefore, dst.Cb[3*stride], dst.Cb[4*stride], crBefore, dst.Cr[3*stride], dst.Cr[4*stride])
+			}
+		})
 	}
 }
 
