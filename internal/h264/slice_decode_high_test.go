@@ -259,45 +259,92 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12ChromaDeblocking
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *testing.T) {
-	for _, bitDepth := range []int32{10, 12} {
-		for _, tt := range []struct {
-			name string
-			run  func(*SliceHeader)
-		}{
-			{
-				name: "b-slice-boundary-mode",
-				run: func(sh *SliceHeader) {
-					sh.SliceType = PictureTypeB
-					sh.SliceTypeNoS = PictureTypeB
-					sh.RefCount = [2]uint32{1, 1}
-					sh.DeblockingFilter = 2
-				},
-			},
-			{
-				name: "chroma-deblock-disabled",
-				run: func(sh *SliceHeader) {
-					sh.SPS.ChromaFormatIDC = 2
-					sh.DeblockingFilter = 0
-				},
-			},
-			{
-				name: "chroma-slice-boundary-mode",
-				run: func(sh *SliceHeader) {
-					sh.SPS.ChromaFormatIDC = 2
-					sh.DeblockingFilter = 2
-				},
-			},
-		} {
-			t.Run(bitDepthName(bitDepth)+"/"+tt.name, func(t *testing.T) {
-				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 2, false, PictureTypeI)
-				tt.run(sh)
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12Chroma422SliceBoundaryDeblocking(t *testing.T) {
+	for _, cabac := range []int32{0, 1} {
+		for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+			t.Run(fmt.Sprintf("cabac%d/%s", cabac, pictureTypeName(sliceType)), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, 2, 2, true, sliceType)
+				sh.PPS.CABAC = cabac
+				sh.DeblockingFilter = 2
+				if sliceType == PictureTypeP {
+					sh.RefCount = [2]uint32{1, 0}
+				}
 
-				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
-					t.Fatalf("high deblock validation err = %v, want ErrUnsupported", err)
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high12 4:2:2 slice-boundary deblock validation err = %v, want nil", err)
 				}
 			})
 		}
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		bitDepth int32
+		run      func(*SliceHeader)
+	}{
+		{
+			name:     "10-bit/b-slice-boundary-mode",
+			bitDepth: 10,
+			run: func(sh *SliceHeader) {
+				sh.SliceType = PictureTypeB
+				sh.SliceTypeNoS = PictureTypeB
+				sh.RefCount = [2]uint32{1, 1}
+				sh.DeblockingFilter = 2
+			},
+		},
+		{
+			name:     "12-bit/b-slice-boundary-mode",
+			bitDepth: 12,
+			run: func(sh *SliceHeader) {
+				sh.SliceType = PictureTypeB
+				sh.SliceTypeNoS = PictureTypeB
+				sh.RefCount = [2]uint32{1, 1}
+				sh.DeblockingFilter = 2
+			},
+		},
+		{
+			name:     "10-bit/chroma-deblock-disabled",
+			bitDepth: 10,
+			run: func(sh *SliceHeader) {
+				sh.SPS.ChromaFormatIDC = 2
+				sh.DeblockingFilter = 0
+			},
+		},
+		{
+			name:     "12-bit/chroma-deblock-disabled",
+			bitDepth: 12,
+			run: func(sh *SliceHeader) {
+				sh.SPS.ChromaFormatIDC = 2
+				sh.DeblockingFilter = 0
+			},
+		},
+		{
+			name:     "10-bit/chroma422-slice-boundary-mode",
+			bitDepth: 10,
+			run: func(sh *SliceHeader) {
+				sh.SPS.ChromaFormatIDC = 2
+				sh.DeblockingFilter = 2
+			},
+		},
+		{
+			name:     "12-bit/chroma444-slice-boundary-mode",
+			bitDepth: 12,
+			run: func(sh *SliceHeader) {
+				sh.SPS.ChromaFormatIDC = 3
+				sh.DeblockingFilter = 2
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, tt.bitDepth, 1, 2, false, PictureTypeI)
+			tt.run(sh)
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+				t.Fatalf("high deblock validation err = %v, want ErrUnsupported", err)
+			}
+		})
 	}
 }
 

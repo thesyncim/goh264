@@ -14,7 +14,8 @@ chroma-AC/DC+AC and combined luma/chroma residual plus no-deblock
 unweighted/weighted P-skip/P16x16/partitioned P and P16x16 residual
 handoff plus mode-1 I/P deblock, 4:2:0 I/P
 slice-boundary mode-2 deblock, including unweighted 4:2:2/4:4:4
-I/P chroma mode-1 deblock, plus
+I/P chroma mode-1 deblock plus unweighted 4:2:2 I/P chroma
+slice-boundary mode-2 deblock, plus
 CAVLC High14 IntraPCM and mixed no-residual Intra4x4/Intra16x16 plus
 Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
 combined luma/chroma residual.

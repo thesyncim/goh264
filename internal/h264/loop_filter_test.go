@@ -1075,31 +1075,34 @@ func TestMacroblockTablesFilterFrameHigh420SliceBoundaryModeSkipsCrossSliceBound
 	}
 }
 
-func TestMacroblockTablesFilterFrameHighSliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
-	const bitDepth = 10
-	dst := high422SliceBoundaryFrame()
-	m, params := high422SliceBoundaryTables(t, bitDepth, 2)
-	yBoundaryBefore := [2]uint16{dst.Y[15], dst.Y[16]}
-	yInternalBefore := [2]uint16{dst.Y[23], dst.Y[24]}
-	cbBoundaryBefore := [2]uint16{dst.Cb[7], dst.Cb[8]}
-	cbInternalBefore := [2]uint16{dst.Cb[11], dst.Cb[12]}
-	crBoundaryBefore := [2]uint16{dst.Cr[7], dst.Cr[8]}
-	crInternalBefore := [2]uint16{dst.Cr[11], dst.Cr[12]}
+func TestMacroblockTablesFilterFrameHigh422SliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
+	for _, bitDepth := range []int{10, 12} {
+		t.Run(bitDepthName(int32(bitDepth)), func(t *testing.T) {
+			dst := high422SliceBoundaryFrame()
+			m, params := high422SliceBoundaryTables(t, bitDepth, 2)
+			yBoundaryBefore := [2]uint16{dst.Y[15], dst.Y[16]}
+			yInternalBefore := [2]uint16{dst.Y[23], dst.Y[24]}
+			cbBoundaryBefore := [2]uint16{dst.Cb[7], dst.Cb[8]}
+			cbInternalBefore := [2]uint16{dst.Cb[11], dst.Cb[12]}
+			crBoundaryBefore := [2]uint16{dst.Cr[7], dst.Cr[8]}
+			crInternalBefore := [2]uint16{dst.Cr[11], dst.Cr[12]}
 
-	if err := m.filterFrameHigh(dst, params); err != nil {
-		t.Fatal(err)
-	}
-	if dst.Y[15] != yBoundaryBefore[0] || dst.Y[16] != yBoundaryBefore[1] ||
-		dst.Cb[7] != cbBoundaryBefore[0] || dst.Cb[8] != cbBoundaryBefore[1] ||
-		dst.Cr[7] != crBoundaryBefore[0] || dst.Cr[8] != crBoundaryBefore[1] {
-		t.Fatalf("High10 slice-boundary mode filtered cross-slice edge: y %v -> [%d %d] cb %v -> [%d %d] cr %v -> [%d %d]",
-			yBoundaryBefore, dst.Y[15], dst.Y[16], cbBoundaryBefore, dst.Cb[7], dst.Cb[8], crBoundaryBefore, dst.Cr[7], dst.Cr[8])
-	}
-	if dst.Y[23] == yInternalBefore[0] || dst.Y[24] == yInternalBefore[1] ||
-		dst.Cb[11] == cbInternalBefore[0] || dst.Cb[12] == cbInternalBefore[1] ||
-		dst.Cr[11] == crInternalBefore[0] || dst.Cr[12] == crInternalBefore[1] {
-		t.Fatalf("High10 slice-boundary mode did not filter same-slice internal edge: y %v -> [%d %d] cb %v -> [%d %d] cr %v -> [%d %d]",
-			yInternalBefore, dst.Y[23], dst.Y[24], cbInternalBefore, dst.Cb[11], dst.Cb[12], crInternalBefore, dst.Cr[11], dst.Cr[12])
+			if err := m.filterFrameHigh(dst, params); err != nil {
+				t.Fatal(err)
+			}
+			if dst.Y[15] != yBoundaryBefore[0] || dst.Y[16] != yBoundaryBefore[1] ||
+				dst.Cb[7] != cbBoundaryBefore[0] || dst.Cb[8] != cbBoundaryBefore[1] ||
+				dst.Cr[7] != crBoundaryBefore[0] || dst.Cr[8] != crBoundaryBefore[1] {
+				t.Fatalf("high 4:2:2 slice-boundary mode filtered cross-slice edge: y %v -> [%d %d] cb %v -> [%d %d] cr %v -> [%d %d]",
+					yBoundaryBefore, dst.Y[15], dst.Y[16], cbBoundaryBefore, dst.Cb[7], dst.Cb[8], crBoundaryBefore, dst.Cr[7], dst.Cr[8])
+			}
+			if dst.Y[23] == yInternalBefore[0] || dst.Y[24] == yInternalBefore[1] ||
+				dst.Cb[11] == cbInternalBefore[0] || dst.Cb[12] == cbInternalBefore[1] ||
+				dst.Cr[11] == crInternalBefore[0] || dst.Cr[12] == crInternalBefore[1] {
+				t.Fatalf("high 4:2:2 slice-boundary mode did not filter same-slice internal edge: y %v -> [%d %d] cb %v -> [%d %d] cr %v -> [%d %d]",
+					yInternalBefore, dst.Y[23], dst.Y[24], cbInternalBefore, dst.Cb[11], dst.Cb[12], crInternalBefore, dst.Cr[11], dst.Cr[12])
+			}
+		})
 	}
 }
 
