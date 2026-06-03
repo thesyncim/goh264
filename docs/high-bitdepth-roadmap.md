@@ -3,8 +3,9 @@
 High-bit-depth decode is fixture-gated, not generally admitted.
 
 Proved: selected High10 IDR/I/P/B plus public High10 intra, weighted/
-partitioned/direct-sub lanes, selected deblock lanes, slice-boundary IDR/P,
-and High12 IntraPCM plus no-residual Intra4x4.
+partitioned/direct-sub lanes, CAVLC direct-sub residual, CABAC B16x16 direct
+residual, selected deblock lanes, slice-boundary IDR/P, and High12 IntraPCM
+plus no-residual Intra4x4.
 
 Next: CABAC/implicit/deblock direct-sub residual, high B deblock residual,
 broader 12/14-bit public streams, then field/MBAFF.
