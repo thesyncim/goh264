@@ -685,6 +685,36 @@ func TestTemporalDirectFrameMBAFFBottomFieldColmapUsesRFieldXOR(t *testing.T) {
 	}
 }
 
+func TestTemporalDirectFrameMBAFFFieldColmapSkipsPicIDCollision(t *testing.T) {
+	colliding := &DecodedFrame{poc: 65548, fieldPOC: [2]int32{65548, 65548}, frameNum: 3}
+	wrong := &DecodedFrame{poc: 65544, fieldPOC: [2]int32{65544, 65545}, frameNum: 4}
+	matching := &DecodedFrame{poc: 65542, fieldPOC: [2]int32{65542, 65543}, frameNum: 1}
+	col := &DecodedFrame{
+		refEntries: [2][]simpleRefEntry{
+			{{frame: matching, picID: 3, pictureStructure: PictureFrame, poc: matching.poc}},
+		},
+	}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: colliding, picID: 3, pictureStructure: PictureFrame, poc: colliding.poc},
+				{frame: wrong, picID: wrong.frameNum, pictureStructure: PictureFrame, poc: wrong.poc},
+				{frame: matching, picID: matching.frameNum, pictureStructure: PictureFrame, poc: matching.poc},
+			},
+			{{frame: col, pictureStructure: PictureFrame, poc: col.poc}},
+		},
+		PictureStructure: PictureFrame,
+	}
+
+	got, err := temporalDirectMapColToList0Field(ctx, 0, 0, true, 0)
+	if err != nil {
+		t.Fatalf("frame-MBAFF field colmap collision failed: %v", err)
+	}
+	if got != 4 {
+		t.Fatalf("frame-MBAFF field colmap = %d, want expanded same-frame field ref 4", got)
+	}
+}
+
 func TestPredTemporalDirectFieldPictureUsesMBAFFColocatedFieldRefOffset(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {

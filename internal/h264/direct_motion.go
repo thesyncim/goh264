@@ -1166,7 +1166,13 @@ func temporalDirectSameExactFieldRef(a simpleRefEntry, b simpleRefEntry) bool {
 	if a.frame != nil && b.frame != nil && a.frame == b.frame && a.pictureStructure == b.pictureStructure {
 		return true
 	}
-	return a.picID == b.picID && a.picID != 0 && a.pictureStructure == b.pictureStructure
+	if a.picID != b.picID || a.picID == 0 || a.pictureStructure != b.pictureStructure {
+		return false
+	}
+	if a.frame != nil && b.frame != nil && a.frame != b.frame && !a.long && a.frame.frameNum != b.frame.frameNum {
+		return false
+	}
+	return true
 }
 
 func temporalDirectSamePictureID(a simpleRefEntry, b simpleRefEntry) bool {
