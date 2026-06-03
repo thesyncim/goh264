@@ -440,6 +440,57 @@ func TestDecodeFrameSliceHighReconstructsBDirectSubFromDirectRefs(t *testing.T) 
 	}
 }
 
+func TestDecodeCABACFrameSliceHighReconstructsBDirectSubResidualFromDirectRefs(t *testing.T) {
+	const bitDepth = 10
+	const decodedLumaDelta = 5
+	const decodedResidualDC = (decodedLumaDelta << 6) - 32
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeB)
+	sh.PPS.CABAC = 1
+	sh.QScale = 22
+	sh.RefCount = [2]uint32{1, 1}
+	sh.SPS.Direct8x8InferenceFlag = 1
+
+	refs, direct := highBSkipDirectRefsHigh(t, false)
+	direct.Direct8x8Inference = true
+	in := h264FrameSliceDecodeInputHigh{
+		SliceNum:      65,
+		Refs:          refs,
+		Direct:        direct,
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	}
+	src := &scriptedCABACSource{
+		bits: []int{
+			0,
+			1, 1, 1, 1, 1, 1,
+			0, 0, 0, 0,
+			1, 0, 0, 0,
+			0,
+			0,
+			1, 1, 1, 0, 0, 0, 0,
+		},
+		signs: []int32{int32((decodedResidualDC << 6) - 32)},
+		terms: []int{1},
+	}
+
+	got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, in)
+	if err != nil {
+		t.Fatalf("decode high B direct-sub residual failed: %v", err)
+	}
+	if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+		t.Fatalf("slice result = %+v, want one B direct-sub residual MB frame end", got)
+	}
+	wantMBType := MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
+	if m.MacroblockTyp[0] != wantMBType || m.CBPTable[0] != 0x1 || m.QScaleTable[0] != 22 || m.SliceTable[0] != 65 {
+		t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+
+	want := cloneH264HighResidualPicture(refs[0][0])
+	applyH264HighP16x16LumaResidualExpected(t, want, []h264HighResidualLumaBlock{{index: 0, dc: decodedLumaDelta}}, bitDepth)
+	assertH264RowsHigh(t, "cabac high b direct-sub decoded residual y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+	assertH264RowsHigh(t, "cabac high b direct-sub decoded residual cb", dst.Cb, 0, dst.ChromaStride, 8, 8, refs[0][0].Cb, refs[0][0].ChromaStride)
+	assertH264RowsHigh(t, "cabac high b direct-sub decoded residual cr", dst.Cr, 0, dst.ChromaStride, 8, 8, refs[0][0].Cr, refs[0][0].ChromaStride)
+}
+
 func TestDecodeFrameSliceHighReconstructsTopLevelBDirect8x8FromDirectRefs(t *testing.T) {
 	for _, tt := range []struct {
 		name               string
