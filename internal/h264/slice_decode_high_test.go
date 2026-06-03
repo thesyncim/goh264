@@ -159,7 +159,7 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 	}{
 		{name: "8-bit", bitDepth: 8, chroma: 8, format: 1, slice: PictureTypeI},
 		{name: "9-bit", bitDepth: 9, chroma: 9, format: 1, slice: PictureTypeI},
-		{name: "12-bit-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 1, deblockMode: 2, slice: PictureTypeI},
+		{name: "12-bit-b-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 1, deblockMode: 2, slice: PictureTypeB},
 		{name: "14-bit-p", bitDepth: 14, chroma: 14, format: 1, slice: PictureTypeP},
 		{name: "14-bit-deblock", bitDepth: 14, chroma: 14, format: 1, deblock: true, slice: PictureTypeI},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeI},
@@ -219,21 +219,23 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10BDeblockingAtSliceLevel(t
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10SliceBoundaryDeblocking(t *testing.T) {
-	for _, cabac := range []int32{0, 1} {
-		for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
-			t.Run(fmt.Sprintf("cabac%d/%s", cabac, pictureTypeName(sliceType)), func(t *testing.T) {
-				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 2, true, sliceType)
-				sh.PPS.CABAC = cabac
-				sh.DeblockingFilter = 2
-				if sliceType == PictureTypeP {
-					sh.RefCount = [2]uint32{1, 0}
-				}
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12SliceBoundaryDeblocking(t *testing.T) {
+	for _, bitDepth := range []int32{10, 12} {
+		for _, cabac := range []int32{0, 1} {
+			for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+				t.Run(fmt.Sprintf("%s/cabac%d/%s", bitDepthName(bitDepth), cabac, pictureTypeName(sliceType)), func(t *testing.T) {
+					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 2, true, sliceType)
+					sh.PPS.CABAC = cabac
+					sh.DeblockingFilter = 2
+					if sliceType == PictureTypeP {
+						sh.RefCount = [2]uint32{1, 0}
+					}
 
-				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-					t.Fatalf("high slice-boundary deblock validation err = %v, want nil", err)
-				}
-			})
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high slice-boundary deblock validation err = %v, want nil", err)
+					}
+				})
+			}
 		}
 	}
 }

@@ -1044,6 +1044,37 @@ func TestLoopFilterMBAFFTopHorizontalStrengthUsesFieldNeighborRows(t *testing.T)
 	}
 }
 
+func TestMacroblockTablesFilterFrameHigh420SliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
+	for _, bitDepth := range []int{10, 12} {
+		t.Run(bitDepthName(int32(bitDepth)), func(t *testing.T) {
+			dst := high420SliceBoundaryFrame()
+			m, params := high420SliceBoundaryTables(t, bitDepth, 2)
+			yBoundaryBefore := [2]uint16{dst.Y[15], dst.Y[16]}
+			yInternalBefore := [2]uint16{dst.Y[23], dst.Y[24]}
+			cbBoundaryBefore := [2]uint16{dst.Cb[7], dst.Cb[8]}
+			cbInternalBefore := [2]uint16{dst.Cb[11], dst.Cb[12]}
+			crBoundaryBefore := [2]uint16{dst.Cr[7], dst.Cr[8]}
+			crInternalBefore := [2]uint16{dst.Cr[11], dst.Cr[12]}
+
+			if err := m.filterFrameHigh(dst, params); err != nil {
+				t.Fatal(err)
+			}
+			if dst.Y[15] != yBoundaryBefore[0] || dst.Y[16] != yBoundaryBefore[1] ||
+				dst.Cb[7] != cbBoundaryBefore[0] || dst.Cb[8] != cbBoundaryBefore[1] ||
+				dst.Cr[7] != crBoundaryBefore[0] || dst.Cr[8] != crBoundaryBefore[1] {
+				t.Fatalf("high 4:2:0 slice-boundary mode filtered cross-slice edge: y %v -> [%d %d] cb %v -> [%d %d] cr %v -> [%d %d]",
+					yBoundaryBefore, dst.Y[15], dst.Y[16], cbBoundaryBefore, dst.Cb[7], dst.Cb[8], crBoundaryBefore, dst.Cr[7], dst.Cr[8])
+			}
+			if dst.Y[23] == yInternalBefore[0] || dst.Y[24] == yInternalBefore[1] ||
+				dst.Cb[11] == cbInternalBefore[0] || dst.Cb[12] == cbInternalBefore[1] ||
+				dst.Cr[11] == crInternalBefore[0] || dst.Cr[12] == crInternalBefore[1] {
+				t.Fatalf("high 4:2:0 slice-boundary mode did not filter same-slice internal edge: y %v -> [%d %d] cb %v -> [%d %d] cr %v -> [%d %d]",
+					yInternalBefore, dst.Y[23], dst.Y[24], cbInternalBefore, dst.Cb[11], dst.Cb[12], crInternalBefore, dst.Cr[11], dst.Cr[12])
+			}
+		})
+	}
+}
+
 func TestMacroblockTablesFilterFrameHighSliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
 	const bitDepth = 10
 	dst := high422SliceBoundaryFrame()
@@ -1168,6 +1199,55 @@ func fillLoopFilterHorizontalStep(pix []uint8, stride int, width int, height int
 		for x := 0; x < width; x++ {
 			pix[row+x] = bottom
 		}
+	}
+}
+
+func high420SliceBoundaryFrame() *h264PicturePlanesHigh {
+	const (
+		lumaStride   = 32
+		chromaStride = 16
+	)
+	dst := &h264PicturePlanesHigh{
+		Y:               make([]uint16, lumaStride*16),
+		Cb:              make([]uint16, chromaStride*8),
+		Cr:              make([]uint16, chromaStride*8),
+		LumaStride:      lumaStride,
+		ChromaStride:    chromaStride,
+		MBWidth:         2,
+		MBHeight:        1,
+		ChromaFormatIDC: 1,
+	}
+	fillHighLoopFilterStep(dst.Y, dst.LumaStride, 32, 16, 16, 400, 408)
+	fillHighLoopFilterStep(dst.Cb, dst.ChromaStride, 16, 8, 8, 300, 308)
+	fillHighLoopFilterStep(dst.Cr, dst.ChromaStride, 16, 8, 8, 200, 208)
+	setHighLoopFilterRightRegion(dst.Y, dst.LumaStride, 16, 24, 416)
+	setHighLoopFilterRightRegion(dst.Cb, dst.ChromaStride, 8, 12, 316)
+	setHighLoopFilterRightRegion(dst.Cr, dst.ChromaStride, 8, 12, 216)
+	return dst
+}
+
+func high420SliceBoundaryTables(t *testing.T, bitDepth int, deblockingFilter int) (*macroblockTables, []h264LoopFilterSliceParams) {
+	t.Helper()
+	m, err := newMacroblockTables(2, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for mbXY := 0; mbXY < 2; mbXY++ {
+		m.MacroblockTyp[mbXY] = MBTypeIntra16x16
+		m.CBPTable[mbXY] = 1
+		m.QScaleTable[mbXY] = uint8(30 + 6*(bitDepth-8))
+		m.SliceTable[mbXY] = uint16(mbXY)
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     int32(bitDepth),
+		BitDepthChroma:   int32(bitDepth),
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 1,
+	}
+	return m, []h264LoopFilterSliceParams{
+		{PPS: pps, ListCount: 1, DeblockingFilter: int32(deblockingFilter)},
+		{PPS: pps, ListCount: 1, DeblockingFilter: int32(deblockingFilter)},
 	}
 }
 

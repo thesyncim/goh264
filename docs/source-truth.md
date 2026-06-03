@@ -7,8 +7,9 @@ fixtures including High12 CAVLC IntraPCM, mixed no-residual intra, plus
 Intra16x16 luma, chroma, and combined luma/chroma residual, internal
 High12 no-deblock unweighted/weighted P-skip/P16x16/partitioned P and
 P16x16 residual handoff plus mode-1 I/P deblock including unweighted
-4:2:2/4:4:4 I/P chroma deblock, High14 CAVLC IntraPCM, mixed
-no-residual intra, separate and combined Intra16x16 luma/chroma residual, public FATE vector harness,
+4:2:2/4:4:4 I/P chroma deblock plus 4:2:0 I/unweighted-P
+slice-boundary mode-2 deblock, High14 CAVLC IntraPCM, mixed no-residual
+intra, separate and combined Intra16x16 luma/chroma residual, public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
 Public vectors: 36/36 green. Matrix mode is the safe-point gate. Red-queue
