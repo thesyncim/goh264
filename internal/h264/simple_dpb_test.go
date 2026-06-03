@@ -724,6 +724,76 @@ func TestSimpleFrameDPBPrimeReorderDelayKeepsContiguousPOCImmediate(t *testing.T
 	}
 }
 
+func TestSimpleFrameDPBPrimesReorderDelayAcrossTwoFuturePOCs(t *testing.T) {
+	sps := simpleDPBTestSPS(5)
+	sps.Log2MaxFrameNum = 4
+	sps.PocType = 0
+	sps.Log2MaxPocLSB = 4
+	var probe simpleFrameDPB
+	probe.reset()
+
+	headers := []*SliceHeader{
+		simpleDPBTestPOCHeader(sps, NALIDRSlice, PictureTypeI, 0, 0),
+		simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeP, 1, 3),
+		simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeP, 2, 6),
+		simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeB, 3, 1),
+		simpleDPBTestPOCHeader(sps, NALSlice, PictureTypeB, 3, 2),
+	}
+	for i, header := range headers {
+		nalRefIDC := uint8(1)
+		if header.SliceTypeNoS == PictureTypeB {
+			nalRefIDC = 0
+		}
+		if err := probe.primeOutputReorderDelayFromHeader(header, nalRefIDC); err != nil {
+			t.Fatalf("prime header %d: %v", i, err)
+		}
+	}
+	if probe.hasBFrames != 2 {
+		t.Fatalf("primed delay = %d, want 2", probe.hasBFrames)
+	}
+
+	var dpb simpleFrameDPB
+	dpb.reset()
+	dpb.hasBFrames = probe.hasBFrames
+	frames := []*DecodedFrame{
+		simpleDPBTestFrame(sps, 0),
+		simpleDPBTestFrame(sps, 1),
+		simpleDPBTestFrame(sps, 2),
+		simpleDPBTestFrame(sps, 3),
+		simpleDPBTestFrame(sps, 4),
+	}
+	for i, poc := range []int32{0, 3, 6, 1, 2} {
+		frames[i].poc = poc
+	}
+	frames[0].idrKeyFrame = true
+
+	var out []*DecodedFrame
+	for i, frame := range frames {
+		if err := dpb.holdOutputFrame(frame, headers[i]); err != nil {
+			t.Fatalf("hold frame %d: %v", i, err)
+		}
+		got, err := dpb.drainOutputFrames(false)
+		if err != nil {
+			t.Fatalf("drain frame %d: %v", i, err)
+		}
+		out = append(out, got...)
+	}
+	got, err := dpb.drainOutputFrames(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = append(out, got...)
+	want := []*DecodedFrame{frames[0], frames[3], frames[4], frames[1], frames[2]}
+	if len(out) != len(want) {
+		t.Fatalf("output len = %d, want %d", len(out), len(want))
+	}
+	for i := range want {
+		if out[i] != want[i] {
+			t.Fatalf("output[%d] = poc %d, want poc %d", i, out[i].poc, want[i].poc)
+		}
+	}
+}
+
 func TestSimpleFrameDPBMMCOResetPreservesDelayedOutputState(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	old := simpleDPBTestFrame(sps, 1)

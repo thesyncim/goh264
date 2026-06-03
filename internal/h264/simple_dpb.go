@@ -1109,9 +1109,6 @@ func (d *simpleFrameDPB) primeOutputReorderDelayFromNALs(nals []NALUnit, spsList
 			if probe.hasBFrames > d.hasBFrames {
 				d.hasBFrames = probe.hasBFrames
 			}
-			if d.hasBFrames > 0 {
-				return
-			}
 		}
 	}
 }

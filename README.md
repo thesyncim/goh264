@@ -4,7 +4,7 @@ Source-shaped Go port of FFmpeg `libavcodec` H.264 decoder code. Decoder only.
 
 Upstream: FFmpeg `n8.0.1` (`894da5ca7d742e4429ffb2af534fcda0103ef593`).
 
-Current public-vector gate: 114 selected FATE vectors, 114 green, 0 known-red.
+Current public-vector gate: 120 selected FATE vectors, 120 green, 0 known-red.
 Known failures are explicit in `testdata/h264/realvectors/failures.jsonl` when present.
 
 ```sh
