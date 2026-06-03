@@ -43,6 +43,50 @@ func TestFrameRawPixelFormatAndSize(t *testing.T) {
 			wantBytes:  18,
 			wantBPS:    1,
 		},
+		{
+			name: "full-range-yuv420p",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: 8,
+				VideoFullRangeFlag: 1,
+			},
+			wantFormat: "yuvj420p",
+			wantBytes:  6,
+			wantBPS:    1,
+		},
+		{
+			name: "full-range-yuv422p",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 2,
+				BitDepthLuma: 8, BitDepthChroma: 8,
+				VideoFullRangeFlag: 1,
+			},
+			wantFormat: "yuvj422p",
+			wantBytes:  8,
+			wantBPS:    1,
+		},
+		{
+			name: "full-range-yuv444p",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 3,
+				BitDepthLuma: 8, BitDepthChroma: 8,
+				VideoFullRangeFlag: 1,
+			},
+			wantFormat: "yuvj444p",
+			wantBytes:  12,
+			wantBPS:    1,
+		},
+		{
+			name: "full-range-yuv420p10le",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 10, BitDepthChroma: 10,
+				VideoFullRangeFlag: 1,
+			},
+			wantFormat: "yuv420p10le",
+			wantBytes:  12,
+			wantBPS:    2,
+		},
 	}
 
 	for _, tt := range tests {

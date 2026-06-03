@@ -37,7 +37,7 @@ extracted bitstream MD5s, auxiliary API/MOV/MPEG-TS/MKV/CBS H.264 sample rows,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 224 selected, 213 green, 11 known-red. Matrix mode is the
+Public vectors: 224 selected, 214 green, 10 known-red. Matrix mode is the
 safe-point gate. Full strict and red-queue scripts intentionally exit non-zero
 while rows in `testdata/h264/realvectors/failures.jsonl` remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or

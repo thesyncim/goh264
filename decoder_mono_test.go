@@ -183,8 +183,8 @@ func assertMonoFrameMD5Strings(t *testing.T, frames []*Frame, want []string) {
 		if frame.Width != 16 || frame.Height != 16 || frame.ChromaFormatIDC != 0 || frame.BitDepthLuma != 8 || frame.BitDepthChroma != 8 {
 			t.Fatalf("frame[%d] metadata = %dx%d chroma %d depth %d/%d", i, frame.Width, frame.Height, frame.ChromaFormatIDC, frame.BitDepthLuma, frame.BitDepthChroma)
 		}
-		if pixFmt, err := frame.RawPixelFormat(); err != nil || pixFmt != "yuv420p" {
-			t.Fatalf("frame[%d] RawPixelFormat = %q/%v, want yuv420p/nil", i, pixFmt, err)
+		if pixFmt, err := frame.RawPixelFormat(); err != nil || pixFmt != "yuvj420p" {
+			t.Fatalf("frame[%d] RawPixelFormat = %q/%v, want yuvj420p/nil", i, pixFmt, err)
 		}
 		raw, err := frame.AppendRawYUV(nil)
 		if err != nil {

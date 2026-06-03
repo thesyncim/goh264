@@ -1017,6 +1017,18 @@ func (f *Frame) RawPixelFormat() (string, error) {
 		return "", err
 	}
 	base := ""
+	if depth == 8 && f.VideoFullRangeFlag == 1 {
+		switch f.ChromaFormatIDC {
+		case 0, 1:
+			return "yuvj420p", nil
+		case 2:
+			return "yuvj422p", nil
+		case 3:
+			return "yuvj444p", nil
+		default:
+			return "", ErrInvalidData
+		}
+	}
 	switch f.ChromaFormatIDC {
 	case 0, 1:
 		base = "yuv420p"
@@ -1026,9 +1038,6 @@ func (f *Frame) RawPixelFormat() (string, error) {
 		base = "yuv444p"
 	default:
 		return "", ErrInvalidData
-	}
-	if depth == 8 {
-		return base, nil
 	}
 	return base + rawBitDepthSuffix(depth), nil
 }
