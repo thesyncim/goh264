@@ -3,7 +3,7 @@
 Scope: FFmpeg `n8.0.1` H.264 decoder path only.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
-fixtures including public High10 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
+fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
 no-deblock plus weighted 4:2:2/4:4:4 luma-only/chroma P frame deblock modes 0/1 and
 slice-boundary mode-2 deblock, High12 CAVLC IntraPCM, mixed no-residual
 intra, plus
@@ -18,7 +18,7 @@ intra, separate and combined Intra16x16 luma/chroma residual plus
 P-skip/P16x16, public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 37/37 green. Matrix mode is the safe-point gate. Red-queue
+Public vectors: 41/41 green. Matrix mode is the safe-point gate. Red-queue
 scripts intentionally exit non-zero only while rows in
 `testdata/h264/realvectors/failures.jsonl` remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or
