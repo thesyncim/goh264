@@ -7,9 +7,9 @@ partitioned/direct-sub lanes, CAVLC direct-sub residual, CABAC fixture
 direct-sub residual, CABAC B16x16 direct residual, CABAC direct-sub residual
 handoff/full slice plus implicit/deblock full slice, selected deblock lanes
 plus fixture-backed high-B residual filter, slice-boundary IDR/P, public
-High12 IntraPCM plus Intra16x16 luma, chroma, and combined luma/chroma
-residual, internal High12 no-residual Intra4x4/Intra16x16 and
-Intra16x16 luma-AC, luma-DC+AC, and luma/chroma-DC plus
+High12 IntraPCM plus mixed no-residual Intra4x4/Intra16x16 and
+Intra16x16 luma, chroma, and combined luma/chroma residual, internal
+High12 Intra16x16 luma-AC, luma-DC+AC, and luma/chroma-DC plus
 chroma-AC/DC+AC and combined luma/chroma residual, plus CAVLC High14
 IntraPCM and mixed no-residual
 Intra4x4/Intra16x16 plus Intra16x16 luma-DC/luma-AC/DC+AC and
