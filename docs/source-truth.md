@@ -4,8 +4,9 @@ Scope: FFmpeg `n8.0.1` H.264 decoder path only.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including High10 unweighted 4:2:2/4:4:4 I/P chroma
-no-deblock plus slice-boundary mode-2 deblock, High12 CAVLC IntraPCM,
-mixed no-residual intra, plus
+no-deblock plus weighted 4:2:2/4:4:4 chroma P no-deblock and
+slice-boundary mode-2 deblock, High12 CAVLC IntraPCM, mixed no-residual
+intra, plus
 Intra16x16 luma, chroma, and combined luma/chroma residual, internal
 High12 no-deblock unweighted/weighted P-skip/P16x16/partitioned P and
 P16x16 residual handoff plus no-deblock/mode-1 I/P deblock including

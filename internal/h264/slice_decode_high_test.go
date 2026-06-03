@@ -258,6 +258,56 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12ChromaFrameDeblo
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaWeightedPNoDeblock(t *testing.T) {
+	for _, chromaFormatIDC := range []int{2, 3} {
+		t.Run(chromaFormatName(chromaFormatIDC)+"/weighted-pps-i", func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, false, PictureTypeI)
+			sh.PPS.WeightedPred = 1
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high chroma weighted-P PPS I validation err = %v, want nil", err)
+			}
+		})
+
+		t.Run(chromaFormatName(chromaFormatIDC)+"/weighted-pps-unweighted-p", func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, false, PictureTypeP)
+			sh.RefCount = [2]uint32{1, 0}
+			sh.PPS.WeightedPred = 1
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high chroma weighted-P PPS unweighted P validation err = %v, want nil", err)
+			}
+		})
+
+		t.Run(chromaFormatName(chromaFormatIDC)+"/weighted-p", func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, false, PictureTypeP)
+			sh.RefCount = [2]uint32{1, 0}
+			sh.PPS.WeightedPred = 1
+			sh.PredWeightTable = highWeightedPPredWeightTable()
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high chroma weighted P validation err = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsHigh10ChromaLumaOnlyWeightedP(t *testing.T) {
+	for _, chromaFormatIDC := range []int{2, 3} {
+		t.Run(chromaFormatName(chromaFormatIDC), func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, false, PictureTypeP)
+			sh.RefCount = [2]uint32{1, 0}
+			sh.PPS.WeightedPred = 1
+			sh.PredWeightTable = highWeightedPPredWeightTable()
+			sh.PredWeightTable.UseWeightChroma = 0
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+				t.Fatalf("high chroma luma-only weighted P validation err = %v, want ErrUnsupported", err)
+			}
+		})
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighAllowsChromaSliceBoundaryDeblocking(t *testing.T) {
 	for _, bitDepth := range []int32{10, 12} {
 		for _, chromaFormatIDC := range []int{2, 3} {
@@ -417,8 +467,6 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 	}{
 		{name: "9-bit", bitDepth: 9, chroma: 9, format: 1, slice: PictureTypeP},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeP},
-		{name: "high10-422-weighted-chroma-deblock-disabled", bitDepth: 10, chroma: 10, format: 2, slice: PictureTypeP},
-		{name: "high10-444-weighted-chroma-deblock-disabled", bitDepth: 10, chroma: 10, format: 3, slice: PictureTypeP},
 		{name: "high10-422-weighted-chroma-deblock", bitDepth: 10, chroma: 10, format: 2, deblock: true, slice: PictureTypeP},
 		{name: "high10-444-weighted-chroma-deblock", bitDepth: 10, chroma: 10, format: 3, deblock: true, slice: PictureTypeP},
 		{name: "high10-422-weighted-chroma-slice-boundary-deblock", bitDepth: 10, chroma: 10, format: 2, deblockMode: 2, slice: PictureTypeP},
