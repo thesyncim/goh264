@@ -31,10 +31,11 @@ large-to-small SPS reinit metadata, with
 packetized/configured surfaces proven for reference-list-mod overflow,
 missing-frame, timecode, and BBC2 recovery/PAFF,
 lossless High444 transform-bypass Annex B plus 4-byte AVC/configuration-record surfaces,
+public High9 4:2:0 SPS reinit metadata from 9-bit to 8-bit output,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 193/193 green. Matrix mode is the safe-point gate. Red-queue
+Public vectors: 194/194 green. Matrix mode is the safe-point gate. Red-queue
 scripts intentionally exit non-zero only while rows in
 `testdata/h264/realvectors/failures.jsonl` remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or

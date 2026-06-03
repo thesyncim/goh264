@@ -212,7 +212,8 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 			return result, fmt.Errorf("cavlc high mb_xy=%d bit=%d: %w", cur.MBXY, gb.bitPos, err)
 		}
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.Inter.SubMBType, mb.CBP, mb.CBPTable); err != nil {
-			return result, fmt.Errorf("validate high cavlc mb_xy=%d: %w", cur.MBXY, err)
+			return result, fmt.Errorf("validate high cavlc mb_xy=%d type=%#x cbp=%#x table=%#x sub=%#x: %w",
+				cur.MBXY, mb.MBType, mb.CBP, mb.CBPTable, mb.Inter.SubMBType, err)
 		}
 		var refPlanes [2][32]h264PicturePlanesHigh
 		var refPtrs [2][32]*h264PicturePlanesHigh
@@ -239,7 +240,8 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 				return result, fmt.Errorf("cavlc high mb_xy=%d bit=%d: %w", bottom.MBXY, gb.bitPos, err)
 			}
 			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, bottomMB.MBType, &bottomMB.Inter.SubMBType, bottomMB.CBP, bottomMB.CBPTable); err != nil {
-				return result, fmt.Errorf("validate high cavlc mb_xy=%d: %w", bottom.MBXY, err)
+				return result, fmt.Errorf("validate high cavlc mb_xy=%d type=%#x cbp=%#x table=%#x sub=%#x: %w",
+					bottom.MBXY, bottomMB.MBType, bottomMB.CBP, bottomMB.CBPTable, bottomMB.Inter.SubMBType, err)
 			}
 			var bottomRefPlanes [2][32]h264PicturePlanesHigh
 			var bottomRefPtrs [2][32]*h264PicturePlanesHigh
@@ -380,7 +382,8 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 			return result, fmt.Errorf("cabac high mb_xy=%d: %w", cur.MBXY, err)
 		}
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.Inter.SubMBType, mb.CBP, mb.CBPTable); err != nil {
-			return result, fmt.Errorf("validate high cabac mb_xy=%d: %w", cur.MBXY, err)
+			return result, fmt.Errorf("validate high cabac mb_xy=%d type=%#x cbp=%#x table=%#x sub=%#x: %w",
+				cur.MBXY, mb.MBType, mb.CBP, mb.CBPTable, mb.Inter.SubMBType, err)
 		}
 		var refPlanes [2][32]h264PicturePlanesHigh
 		var refPtrs [2][32]*h264PicturePlanesHigh
@@ -407,7 +410,8 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 				return result, fmt.Errorf("cabac high mb_xy=%d: %w", bottom.MBXY, err)
 			}
 			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, bottomMB.MBType, &bottomMB.Inter.SubMBType, bottomMB.CBP, bottomMB.CBPTable); err != nil {
-				return result, fmt.Errorf("validate high cabac mb_xy=%d: %w", bottom.MBXY, err)
+				return result, fmt.Errorf("validate high cabac mb_xy=%d type=%#x cbp=%#x table=%#x sub=%#x: %w",
+					bottom.MBXY, bottomMB.MBType, bottomMB.CBP, bottomMB.CBPTable, bottomMB.Inter.SubMBType, err)
 			}
 			var bottomRefPlanes [2][32]h264PicturePlanesHigh
 			var bottomRefPtrs [2][32]*h264PicturePlanesHigh
@@ -537,7 +541,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 
 func isPublicHighFrameBitDepthCandidate(bitDepth int32) bool {
 	switch bitDepth {
-	case 8, 10, 12, 14:
+	case 8, 9, 10, 12, 14:
 		return true
 	default:
 		return false
@@ -554,6 +558,8 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 			sh.SPS.MBAFF != 0 &&
 			sh.PictureStructure == PictureFrame &&
 			sh.SPS.ChromaFormatIDC == 1
+	case 9:
+		return sh.SPS.ChromaFormatIDC == 1
 	case 10:
 		return true
 	case 12:
@@ -686,10 +692,16 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32,
 	}
 	if sh.DeblockingFilter == 1 {
 		if !isHighBImplicitWeighted(sh) {
-			if isHighB16x16ExplicitMacroblock(mbType) || isHighB16x16DirectMacroblock(mbType) {
+			if isHighB16x16ExplicitMacroblockForReconstruct(mbType, cbp) || isHighB16x16DirectMacroblockForReconstruct(mbType, cbp) {
 				return nil
 			}
 			if isHighB16x16DirectSkipMacroblock(mbType) && cbp == 0 && cbpTable == 0 {
+				return nil
+			}
+			if isHighBPartitionedDirectSkipMacroblock(mbType, subMBType) && cbp == 0 && cbpTable == 0 {
+				return nil
+			}
+			if isHighBPartitionedDirectMacroblock(mbType, subMBType, cbp) {
 				return nil
 			}
 			if isHighB16x8Or8x16ExplicitMacroblock(mbType) {
@@ -698,18 +710,27 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32,
 			if isHighB8x8ExplicitSubMacroblock(mbType, subMBType) {
 				return nil
 			}
-			if isHighB8x8DirectSubMacroblock(mbType, subMBType) {
+			if isHighB8x8MixedDirectExplicitSubMacroblock(mbType, subMBType) {
+				return nil
+			}
+			if isHighB8x8DirectSubMacroblock(mbType, subMBType, cbp) {
 				return nil
 			}
 		}
 		if isHighBImplicitWeighted(sh) {
-			if isHighB16x16ExplicitMacroblock(mbType) {
+			if isHighB16x16ExplicitMacroblockForReconstruct(mbType, cbp) {
 				return nil
 			}
-			if isHighB16x16DirectMacroblock(mbType) {
+			if isHighB16x16DirectMacroblockForReconstruct(mbType, cbp) {
 				return nil
 			}
 			if isHighB16x16DirectSkipMacroblock(mbType) && cbp == 0 && cbpTable == 0 {
+				return nil
+			}
+			if isHighBPartitionedDirectSkipMacroblock(mbType, subMBType) && cbp == 0 && cbpTable == 0 {
+				return nil
+			}
+			if isHighBPartitionedDirectMacroblock(mbType, subMBType, cbp) {
 				return nil
 			}
 			if isHighB16x8Or8x16ExplicitMacroblock(mbType) {
@@ -718,7 +739,10 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32,
 			if isHighB8x8ExplicitSubMacroblock(mbType, subMBType) {
 				return nil
 			}
-			if isHighB8x8DirectSubMacroblock(mbType, subMBType) {
+			if isHighB8x8MixedDirectExplicitSubMacroblock(mbType, subMBType) {
+				return nil
+			}
+			if isHighB8x8DirectSubMacroblock(mbType, subMBType, cbp) {
 				return nil
 			}
 		}
@@ -770,6 +794,9 @@ func validateHighFrameSliceBaseMacroblockForDecode(sliceTypeNoS int32, mbType ui
 	if sliceTypeNoS != PictureTypeB {
 		return nil
 	}
+	if isHighInterSliceIntraMacroblock(mbType) {
+		return nil
+	}
 	if isHighB16x16ExplicitMacroblock(mbType) {
 		return nil
 	}
@@ -792,7 +819,7 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 	}
 	switch sh.SliceTypeNoS {
 	case PictureTypeI:
-		if sh.SPS != nil && sh.SPS.BitDepthLuma != 10 {
+		if sh.SPS != nil && sh.SPS.BitDepthLuma != 9 && sh.SPS.BitDepthLuma != 10 {
 			if mbType == MBTypeIntraPCM {
 				return nil
 			}
@@ -858,7 +885,7 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 		return ErrUnsupported
 	}
 	if isIntra(mbType) {
-		if sh.SliceTypeNoS == PictureTypeP && isHighPIntraMacroblock(mbType) {
+		if (sh.SliceTypeNoS == PictureTypeP || sh.SliceTypeNoS == PictureTypeB) && isHighInterSliceIntraMacroblock(mbType) {
 			return nil
 		}
 		return ErrUnsupported
@@ -871,18 +898,27 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 			if isHighB16x16DirectSkipMacroblock(mbType) && cbp == 0 && cbpTable == 0 {
 				return nil
 			}
+			if isHighBPartitionedDirectSkipMacroblock(mbType, subMBType) && cbp == 0 && cbpTable == 0 {
+				return nil
+			}
 			return ErrUnsupported
 		}
-		if isHighB16x16ExplicitMacroblock(mbType) {
+		if isHighB16x16ExplicitMacroblockForReconstruct(mbType, cbp) {
 			return nil
 		}
-		if isHighB16x16DirectMacroblock(mbType) {
+		if isHighB16x16DirectMacroblockForReconstruct(mbType, cbp) {
 			return nil
 		}
-		if isHighB8x8DirectSubMacroblock(mbType, subMBType) {
+		if isHighBPartitionedDirectMacroblock(mbType, subMBType, cbp) {
+			return nil
+		}
+		if isHighB8x8DirectSubMacroblock(mbType, subMBType, cbp) {
 			return nil
 		}
 		if isHighBExplicitPartitionedMacroblock(mbType, subMBType) {
+			return nil
+		}
+		if isHighB8x8MixedDirectExplicitSubMacroblock(mbType, subMBType) {
 			return nil
 		}
 		return ErrUnsupported
@@ -893,30 +929,57 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 		}
 		return ErrUnsupported
 	}
-	if mbType == MBType16x16|MBTypeP0L0 {
+	if isHighP16x16Macroblock(mbType, cbp) {
 		return nil
 	}
-	if isHighPPartitionedMacroblock(sh, mbType, subMBType) {
+	if isHighPPartitionedMacroblock(sh, mbType, subMBType, cbp) {
 		return nil
 	}
 	return ErrUnsupported
 }
 
 func isHighPIntraMacroblock(mbType uint32) bool {
-	return mbType == MBTypeIntra4x4 || mbType == MBTypeIntra16x16
+	return isHighInterSliceIntraMacroblock(mbType)
 }
 
-func isHighPPartitionedMacroblock(sh *SliceHeader, mbType uint32, subMBType *[4]uint32) bool {
-	if sh == nil || sh.SliceTypeNoS != PictureTypeP || mbType&MBType8x8DCT != 0 {
+func isHighInterSliceIntraMacroblock(mbType uint32) bool {
+	switch mbType &^ MBTypeInterlaced {
+	case MBTypeIntra4x4,
+		MBTypeIntra4x4 | MBType8x8DCT,
+		MBTypeIntra16x16:
+		return true
+	default:
 		return false
 	}
-	switch mbType {
+}
+
+func isHighP16x16Macroblock(mbType uint32, cbp int) bool {
+	has8x8DCT := mbType&MBType8x8DCT != 0
+	if mbType&^MBType8x8DCT != MBType16x16|MBTypeP0L0 {
+		return false
+	}
+	return !has8x8DCT || cbp&15 != 0
+}
+
+func isHighPPartitionedMacroblock(sh *SliceHeader, mbType uint32, subMBType *[4]uint32, cbp int) bool {
+	if sh == nil || sh.SliceTypeNoS != PictureTypeP {
+		return false
+	}
+	has8x8DCT := mbType&MBType8x8DCT != 0
+	if has8x8DCT && cbp&15 == 0 {
+		return false
+	}
+	base := mbType &^ MBType8x8DCT
+	switch base {
 	case MBType16x8 | MBTypeP0L0 | MBTypeP1L0,
 		MBType8x16 | MBTypeP0L0 | MBTypeP1L0:
 		return true
 	case MBType8x8 | MBTypeP0L0 | MBTypeP1L0,
 		MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeRef0:
 		if subMBType == nil {
+			return false
+		}
+		if has8x8DCT && !subMBTypesAllowDCT8x8(true, subMBType, true) {
 			return false
 		}
 		for i := 0; i < 4; i++ {
@@ -957,6 +1020,17 @@ func isHighB8x8DirectSubCarrier(mbType uint32) bool {
 	return mbType == carrier
 }
 
+func isHighB8x8ExplicitSubCarrier(mbType uint32) bool {
+	switch mbType &^ MBType8x8DCT {
+	case MBType8x8 | MBTypeP0L0 | MBTypeP1L0,
+		MBType8x8 | MBTypeP0L1 | MBTypeP1L1,
+		MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1:
+		return true
+	default:
+		return false
+	}
+}
+
 func isHighBExplicitPartitionedBaseMacroblock(mbType uint32) bool {
 	return isHighB16x8Or8x16ExplicitMacroblock(mbType) || isHighB8x8DirectSubCarrier(mbType)
 }
@@ -971,12 +1045,21 @@ func isHighBImplicitWeighted(sh *SliceHeader) bool {
 
 func isHighB16x16ExplicitMacroblock(mbType uint32) bool {
 	switch mbType {
-	case MBType16x16 | MBTypeP0L1,
+	case MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L1,
 		MBType16x16 | MBTypeP0L0 | MBTypeP0L1:
 		return true
 	default:
 		return false
 	}
+}
+
+func isHighB16x16ExplicitMacroblockForReconstruct(mbType uint32, cbp int) bool {
+	has8x8DCT := mbType&MBType8x8DCT != 0
+	if !isHighB16x16ExplicitMacroblock(mbType &^ MBType8x8DCT) {
+		return false
+	}
+	return !has8x8DCT || cbp&15 != 0
 }
 
 func isHighB16x8Or8x16ExplicitMacroblock(mbType uint32) bool {
@@ -994,7 +1077,7 @@ func isHighB16x8Or8x16ExplicitMacroblock(mbType uint32) bool {
 }
 
 func isHighB8x8ExplicitSubMacroblock(mbType uint32, subMBType *[4]uint32) bool {
-	if subMBType == nil || !isHighB8x8DirectSubCarrier(mbType) {
+	if subMBType == nil || !isHighB8x8ExplicitSubCarrier(mbType) {
 		return false
 	}
 	for i := 0; i < 4; i++ {
@@ -1003,6 +1086,26 @@ func isHighB8x8ExplicitSubMacroblock(mbType uint32, subMBType *[4]uint32) bool {
 		}
 	}
 	return true
+}
+
+func isHighB8x8MixedDirectExplicitSubMacroblock(mbType uint32, subMBType *[4]uint32) bool {
+	if subMBType == nil || !isHighB8x8ExplicitSubCarrier(mbType) {
+		return false
+	}
+	hasDirect := false
+	hasExplicit := false
+	for i := 0; i < 4; i++ {
+		if isHighBResolvedDirectSubMBType(subMBType[i]) {
+			hasDirect = true
+			continue
+		}
+		if isHighBExplicitSubMBType(subMBType[i]) {
+			hasExplicit = true
+			continue
+		}
+		return false
+	}
+	return hasDirect && hasExplicit
 }
 
 func isHighBExplicitSubMBType(subType uint32) bool {
@@ -1025,8 +1128,13 @@ func isHighBExplicitSubMBType(subType uint32) bool {
 	}
 }
 
-func isHighB8x8DirectSubMacroblock(mbType uint32, subMBType *[4]uint32) bool {
-	if subMBType == nil || !(isHighB8x8DirectSubCarrier(mbType) || isHighB8x8TopLevelDirectMacroblock(mbType)) {
+func isHighB8x8DirectSubMacroblock(mbType uint32, subMBType *[4]uint32, cbp int) bool {
+	has8x8DCT := mbType&MBType8x8DCT != 0
+	if has8x8DCT && cbp&15 == 0 {
+		return false
+	}
+	base := mbType &^ MBType8x8DCT
+	if subMBType == nil || !(isHighB8x8DirectSubCarrier(base) || isHighB8x8TopLevelDirectMacroblock(base)) {
 		return false
 	}
 	for i := 0; i < 4; i++ {
@@ -1041,8 +1149,12 @@ func isHighBResolvedDirectSubMBType(subType uint32) bool {
 	switch subType {
 	case MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
 		MBType16x16 | MBTypeL0L1 | MBTypeDirect2,
+		MBType16x16 | MBTypeL0 | MBTypeDirect2,
+		MBType16x16 | MBTypeL1 | MBTypeDirect2,
 		MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2,
-		MBType8x8 | MBTypeL0L1 | MBTypeDirect2:
+		MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+		MBType8x8 | MBTypeL0 | MBTypeDirect2,
+		MBType8x8 | MBTypeL1 | MBTypeDirect2:
 		return true
 	default:
 		return false
@@ -1059,11 +1171,75 @@ func isHighB16x16DirectMacroblock(mbType uint32) bool {
 	return mbType == spatial || mbType == temporal
 }
 
+func isHighB16x16DirectMacroblockForReconstruct(mbType uint32, cbp int) bool {
+	has8x8DCT := mbType&MBType8x8DCT != 0
+	base := mbType &^ MBType8x8DCT
+	if !isHighB16x16DirectMacroblock(base) && !isHighB16x16ListOnlyDirectMacroblock(base) {
+		return false
+	}
+	return !has8x8DCT || cbp&15 != 0
+}
+
 func isHighB16x16DirectSkipMacroblock(mbType uint32) bool {
 	if mbType&MBTypeSkip == 0 {
 		return false
 	}
-	return isHighB16x16DirectMacroblock(mbType &^ MBTypeSkip)
+	base := mbType &^ MBTypeSkip
+	return isHighB16x16DirectMacroblock(base) || isHighB16x16ListOnlyDirectMacroblock(base)
+}
+
+func isHighB16x16ListOnlyDirectMacroblock(mbType uint32) bool {
+	switch mbType {
+	case MBType16x16 | MBTypeP0L0 | MBTypeDirect2,
+		MBType16x16 | MBTypeP0L1 | MBTypeDirect2,
+		MBType16x16 | MBTypeL0 | MBTypeDirect2,
+		MBType16x16 | MBTypeL1 | MBTypeDirect2:
+		return true
+	default:
+		return false
+	}
+}
+
+func isHighBPartitionedDirectSkipMacroblock(mbType uint32, subMBType *[4]uint32) bool {
+	if mbType&MBTypeSkip == 0 {
+		return false
+	}
+	base := mbType &^ MBTypeSkip
+	switch base {
+	case MBType16x8 | MBTypeL0L1 | MBTypeDirect2,
+		MBType8x16 | MBTypeL0L1 | MBTypeDirect2:
+		return true
+	case MBType8x8 | MBTypeL0L1 | MBTypeDirect2:
+		return isHighB8x8DirectSubMacroblock(base, subMBType, 0)
+	default:
+		return false
+	}
+}
+
+func isHighBPartitionedDirectMacroblock(mbType uint32, subMBType *[4]uint32, cbp int) bool {
+	if subMBType == nil {
+		return false
+	}
+	has8x8DCT := mbType&MBType8x8DCT != 0
+	if has8x8DCT && cbp&15 == 0 {
+		return false
+	}
+	switch mbType &^ MBType8x8DCT {
+	case MBType16x8 | MBTypeL0L1 | MBTypeDirect2,
+		MBType8x16 | MBTypeL0L1 | MBTypeDirect2,
+		MBType16x8 | MBTypeL0 | MBTypeDirect2,
+		MBType8x16 | MBTypeL0 | MBTypeDirect2,
+		MBType16x8 | MBTypeL1 | MBTypeDirect2,
+		MBType8x16 | MBTypeL1 | MBTypeDirect2:
+	default:
+		return false
+	}
+	for i := 0; i < 4; i++ {
+		if !isHighBResolvedDirectSubMBType(subMBType[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func h264SimpleFrameSliceDecodeSupportsBitDepth(bitDepth int32) bool {

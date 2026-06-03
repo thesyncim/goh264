@@ -487,7 +487,7 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkField
 	}
 	if rejectUnsupportedHighB {
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &subMBType, 0, 0); err != nil {
-			return result, err
+			return result, fmt.Errorf("validate_bskip type=%#x sub=%#x: %w", mbType, subMBType, err)
 		}
 	}
 	if err := m.writeBackBskipMacroblockWithMotion(mbXY, qscale, mbType, true, &subMBType, sliceNum, &work.Motion); err != nil {
@@ -608,7 +608,8 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	} else {
 		predCtx := m.frameMotionPredContext(in.MBXY, in.FrameMBAFF, cacheResult.Neighbors, base.MBType, listCount, in.SliceTypeNoS, true, in.DirectSpatialMVPred)
 		if err := m.decodeCABACInterMotionSyntax(src, &mb, motion, in.MBXY, in.SliceTypeNoS, listCount, in.RefCount, in.Direct, predCtx); err != nil {
-			return result, fmt.Errorf("inter_motion field=%t type=%#x refs=%d/%d: %w", in.FieldPicture, base.MBType, in.RefCount[0], in.RefCount[1], err)
+			return result, fmt.Errorf("inter_motion field=%t type=%#x parts=%d sub=%#x refs=%d/%d: %w",
+				in.FieldPicture, base.MBType, base.PartitionCount, mb.SubMBType, in.RefCount[0], in.RefCount[1], err)
 		}
 	}
 
@@ -641,7 +642,8 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 			SPS:              in.SPS,
 		}
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.SubMBType, mb.CBP, mb.CBPTable); err != nil {
-			return result, err
+			return result, fmt.Errorf("validate_inter type=%#x cbp=%#x table=%#x sub=%#x: %w",
+				mb.MBType, mb.CBP, mb.CBPTable, mb.SubMBType, err)
 		}
 	}
 	if err := m.writeBackCABACInterMacroblock(in.MBXY, &mb, residual, motion, listCount, in.SliceTypeNoS, in.SliceNum); err != nil {
@@ -717,7 +719,7 @@ func (m *macroblockTables) decodeCABACInterMotionSyntax(src cabacSyntaxSource, m
 				return ErrInvalidData
 			}
 			if err := m.predDirectMotionFrame(motion, mbXY, &mb.MBType, &mb.SubMBType, direct); err != nil {
-				return err
+				return fmt.Errorf("direct_sub type=%#x sub=%#x: %w", mb.MBType, mb.SubMBType, err)
 			}
 			markDirectSubRefsUnavailable(motion)
 			fillDirectCacheFromSubMBTypes(&motion.Direct, &mb.SubMBType)

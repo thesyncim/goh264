@@ -22,7 +22,8 @@ CAVLC High14 IntraPCM and mixed no-residual Intra4x4/Intra16x16 plus
 Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
 combined luma/chroma residual plus P-skip/P16x16, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, and public High10/
-High422 field-coded frame-MBAFF deblock rows.
+High422 field-coded frame-MBAFF deblock rows, plus public High9 4:2:0
+SPS reinit metadata from 9-bit to 8-bit output.
 
 Next: public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
 then broader high-bit-depth field/MBAFF motion and PIC-AFF/PAFF.

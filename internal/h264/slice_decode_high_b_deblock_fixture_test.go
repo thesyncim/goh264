@@ -359,7 +359,7 @@ func TestHigh10BSkipAndDirectSubDeblockFixtureMacroblockSyntax(t *testing.T) {
 					}
 					if tt.wantDirectSub {
 						if got.MBType&(MBTypeSkip|MBType16x8|MBType8x16|MBTypeIntra4x4|MBTypeIntra16x16|MBTypeIntraPCM) != 0 ||
-							!isHighB8x8DirectSubMacroblock(got.MBType, &got.Inter.SubMBType) {
+							!isHighB8x8DirectSubMacroblock(got.MBType, &got.Inter.SubMBType, got.CBP) {
 							t.Fatalf("B macroblock/sub types = %#x/%#x, want direct-sub B8x8/B_SUB_4x4", got.MBType, got.Inter.SubMBType)
 						}
 					} else if !isHighB16x16DirectSkipMacroblock(got.MBType) {

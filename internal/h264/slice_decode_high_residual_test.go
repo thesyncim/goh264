@@ -120,7 +120,7 @@ func TestHighBDirectSubCABACHandoffReconstructsExactLuma(t *testing.T) {
 	if err := m.predDirectMotionFrame(&work.Motion, 0, &mbType, &subMBType, direct); err != nil {
 		t.Fatalf("predict direct-sub motion failed: %v", err)
 	}
-	if !isHighB8x8DirectSubMacroblock(mbType, &subMBType) {
+	if !isHighB8x8DirectSubMacroblock(mbType, &subMBType, cbp) {
 		t.Fatalf("direct-sub shape = %#x/%#x, want resolved B8x8 direct-sub", mbType, subMBType)
 	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &subMBType, cbp, cbpTable); err != nil {
@@ -160,6 +160,237 @@ func TestHighBDirectSubCABACHandoffReconstructsExactLuma(t *testing.T) {
 	}
 }
 
+func TestHighP8x8DCTCABACHandoffReconstructsPublicHigh9Shape(t *testing.T) {
+	const bitDepth = 9
+	const cbp = 0x1f
+	const cbpTable = 0x9f
+
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
+	sh.PPS.CABAC = 1
+	sh.QScale = 22
+	sh.RefCount = [2]uint32{1, 0}
+
+	cur, err := newSliceMacroblockCursor(m, sh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := makeH264SliceDecodePictureHigh(1, 1, 1)
+	fillH264HighResidualPlane(ref.Y, 320)
+	fillH264HighResidualPlane(ref.Cb, 448)
+	fillH264HighResidualPlane(ref.Cr, 576)
+	in := h264FrameSliceDecodeInputHigh{
+		Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	}
+	mbType := MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT
+	subMBType := [4]uint32{
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+	}
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &subMBType, cbp, cbpTable); err != nil {
+		t.Fatalf("validate high9 P8x8 8x8-DCT residual err = %v, want nil", err)
+	}
+
+	var work frameMacroblockDecodeWork
+	for _, n := range []int{0, 4, 8, 12} {
+		work.Motion.Ref[0][h264Scan8[n]] = 0
+		work.Residual.NonZeroCountCache[h264Scan8[n]] = 1
+		work.Residual.MB[n*16] = 256
+	}
+	wantResidual := work.Residual
+	reconstruct := h264FrameMBReconstructInputHighFromCABAC(sh, cur, cabacFrameMacroblockResult{
+		MBType:   mbType,
+		CBP:      cbp,
+		CBPTable: cbpTable,
+		QScale:   int(sh.QScale),
+		ChromaQP: [2]uint8{uint8(sh.QScale), uint8(sh.QScale)},
+		Inter: cavlcInterMacroblockSyntax{
+			SubMBType: subMBType,
+		},
+		IsInter: true,
+	}, &work, in)
+	if reconstruct.MBType != mbType || reconstruct.SubMBType != subMBType || reconstruct.CBP != cbp || reconstruct.BitDepth != bitDepth {
+		t.Fatalf("handoff = type %#x sub %#x cbp %#x depth %d",
+			reconstruct.MBType, reconstruct.SubMBType, reconstruct.CBP, reconstruct.BitDepth)
+	}
+
+	if err := h264HLDecodeFrameMacroblockHigh(dst, reconstruct); err != nil {
+		t.Fatalf("reconstruct high9 P8x8 8x8-DCT residual failed: %v", err)
+	}
+
+	want := cloneH264HighResidualPicture(ref)
+	blockOffset, err := h264FrameBlockOffsets(want.LumaStride, want.ChromaStride, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h264IDCT8Add4PlaneHigh(want.Y, &blockOffset, wantResidual.MB[:], want.LumaStride, &wantResidual.NonZeroCountCache, 0, bitDepth); err != nil {
+		t.Fatalf("build expected high9 P8x8 8x8-DCT residual: %v", err)
+	}
+	assertH264RowsHigh(t, "cabac high9 p8x8 8x8-DCT residual y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+	assertH264RowsHigh(t, "cabac high9 p8x8 8x8-DCT residual cb", dst.Cb, 0, dst.ChromaStride, 8, 8, ref.Cb, ref.ChromaStride)
+	assertH264RowsHigh(t, "cabac high9 p8x8 8x8-DCT residual cr", dst.Cr, 0, dst.ChromaStride, 8, 8, ref.Cr, ref.ChromaStride)
+}
+
+func TestHighPIntra8x8DCTCABACHandoffReconstructsPublicHigh9Shape(t *testing.T) {
+	const bitDepth = 9
+	const cbp = 0x2e
+	const cbpTable = 0x6e
+
+	sps := &SPS{
+		BitDepthLuma:     bitDepth,
+		BitDepthChroma:   bitDepth,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 1,
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = sps
+	pps.CABAC = 1
+	sh := &SliceHeader{
+		SliceType:        PictureTypeP,
+		SliceTypeNoS:     PictureTypeP,
+		PictureStructure: PictureFrame,
+		PPS:              pps,
+		SPS:              sps,
+		QScale:           22,
+		RefCount:         [2]uint32{1, 0},
+	}
+	mbType := MBTypeIntra4x4 | MBType8x8DCT
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, nil, cbp, cbpTable); err != nil {
+		t.Fatalf("validate high9 P intra 8x8-DCT residual err = %v, want nil", err)
+	}
+
+	dst := makeH264ReconstructHighPicture(1, 41)
+	cur := sliceMacroblockCursor{MBX: 1, MBY: 1, PixelMBY: 1}
+	var work frameMacroblockDecodeWork
+	work.IntraCache = h264ReconstructIntra8x8PredCache()
+	for _, n := range []int{0, 4, 8, 12} {
+		work.Residual.NonZeroCountCache[h264Scan8[n]] = 1
+		work.Residual.MB[n*16] = int32(224 + n)
+	}
+	work.Residual.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+0]] = 1
+	work.Residual.MB[16*16] = 2
+	work.Residual.MB[16*16+16] = -1
+	work.Residual.MB[16*16+32] = 1
+	work.Residual.MB[16*16+48] = 2
+	work.Residual.NonZeroCountCache[h264Scan8[16]] = 1
+	work.Residual.MB[16*16+1] = 3
+	work.Residual.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+1]] = 1
+	work.Residual.MB[32*16] = -2
+	work.Residual.MB[32*16+16] = 1
+	work.Residual.MB[32*16+32] = -1
+	work.Residual.MB[32*16+48] = 2
+	work.Residual.NonZeroCountCache[h264Scan8[32]] = 1
+	work.Residual.MB[32*16+2] = -3
+
+	yOff := cur.MBY*16*dst.LumaStride + cur.MBX*16
+	beforeY := dst.Y[yOff]
+	cbOff := cur.MBY*8*dst.ChromaStride + cur.MBX*8
+	beforeCb := dst.Cb[cbOff]
+	reconstruct := h264FrameMBReconstructInputHighFromCABAC(sh, cur, cabacFrameMacroblockResult{
+		MBType:            mbType,
+		CBP:               cbp,
+		CBPTable:          cbpTable,
+		QScale:            int(sh.QScale),
+		ChromaQP:          [2]uint8{uint8(sh.QScale), uint8(sh.QScale)},
+		ChromaPred:        int32(intraPred8x8DC),
+		TopLeftAvailable:  0xffff,
+		TopRightAvailable: 0xffff,
+		IsIntra:           true,
+	}, &work, h264FrameSliceDecodeInputHigh{})
+	if reconstruct.MBType != mbType || reconstruct.CBP != cbp || reconstruct.BitDepth != bitDepth || reconstruct.Intra4x4PredCache == nil {
+		t.Fatalf("handoff = type %#x cbp %#x depth %d cache %v",
+			reconstruct.MBType, reconstruct.CBP, reconstruct.BitDepth, reconstruct.Intra4x4PredCache)
+	}
+
+	if err := h264HLDecodeFrameMacroblockHigh(dst, reconstruct); err != nil {
+		t.Fatalf("reconstruct high9 P intra 8x8-DCT residual failed: %v", err)
+	}
+	if dst.Y[yOff] == beforeY {
+		t.Fatalf("high9 P intra 8x8-DCT luma top-left was not reconstructed, still %d", beforeY)
+	}
+	if dst.Cb[cbOff] == beforeCb {
+		t.Fatalf("high9 P intra 8x8-DCT chroma top-left was not reconstructed, still %d", beforeCb)
+	}
+	if reconstruct.Residual.MB[0] != 0 || reconstruct.Residual.MB[4*16] != 0 || reconstruct.Residual.MB[16*16] != 0 {
+		t.Fatalf("high9 P intra 8x8-DCT residual blocks were not cleared: %d/%d/%d",
+			reconstruct.Residual.MB[0], reconstruct.Residual.MB[4*16], reconstruct.Residual.MB[16*16])
+	}
+}
+
+func TestHighBExplicitSub8x8DCTHandoffReconstructsExactLuma(t *testing.T) {
+	const bitDepth = 9
+	const cbp = 0x01
+	const cbpTable = 0x01
+
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeB)
+	sh.PPS.CABAC = 1
+	sh.QScale = 22
+	sh.RefCount = [2]uint32{1, 1}
+
+	cur, err := newSliceMacroblockCursor(m, sh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := highPartitionedBRefsHigh(t)
+	in := h264FrameSliceDecodeInputHigh{
+		Refs:          refs,
+		MotionScratch: makeH264MotionCompScratchHigh(dst),
+	}
+	mbType := MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT
+	subMBType := [4]uint32{
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+	}
+	if !isHighB8x8ExplicitSubMacroblock(mbType, &subMBType) {
+		t.Fatalf("explicit 8x8-DCT B shape = %#x/%#x, want accepted explicit B8x8 sub partitions", mbType, subMBType)
+	}
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &subMBType, cbp, cbpTable); err != nil {
+		t.Fatalf("validate explicit 8x8-DCT B residual err = %v, want nil", err)
+	}
+
+	var work frameMacroblockDecodeWork
+	for _, n := range []int{0, 4, 8, 12} {
+		work.Motion.Ref[0][h264Scan8[n]] = 0
+	}
+	work.Residual.NonZeroCountCache[h264Scan8[0]] = 1
+	work.Residual.MB[0] = 256
+	wantResidual := work.Residual
+	reconstruct := h264FrameMBReconstructInputHighFromCABAC(sh, cur, cabacFrameMacroblockResult{
+		MBType:   mbType,
+		CBP:      cbp,
+		CBPTable: cbpTable,
+		QScale:   int(sh.QScale),
+		ChromaQP: [2]uint8{uint8(sh.QScale), uint8(sh.QScale)},
+		Inter: cavlcInterMacroblockSyntax{
+			SubMBType: subMBType,
+		},
+		IsInter: true,
+	}, &work, in)
+	if reconstruct.MBType != mbType || reconstruct.SubMBType != subMBType || reconstruct.CBP != cbp || reconstruct.BitDepth != bitDepth {
+		t.Fatalf("handoff = type %#x sub %#x cbp %#x depth %d", reconstruct.MBType, reconstruct.SubMBType, reconstruct.CBP, reconstruct.BitDepth)
+	}
+
+	if err := h264HLDecodeFrameMacroblockHigh(dst, reconstruct); err != nil {
+		t.Fatalf("reconstruct high B explicit 8x8-DCT residual failed: %v", err)
+	}
+
+	want := cloneH264HighResidualPicture(refs[0][0])
+	blockOffset, err := h264FrameBlockOffsets(want.LumaStride, want.ChromaStride, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h264IDCT8Add4PlaneHigh(want.Y, &blockOffset, wantResidual.MB[:], want.LumaStride, &wantResidual.NonZeroCountCache, 0, bitDepth); err != nil {
+		t.Fatalf("build expected high B explicit 8x8-DCT residual: %v", err)
+	}
+	assertH264RowsHigh(t, "cabac high9 b explicit 8x8-DCT residual y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+	assertH264RowsHigh(t, "cabac high9 b explicit 8x8-DCT residual cb", dst.Cb, 0, dst.ChromaStride, 8, 8, refs[0][0].Cb, refs[0][0].ChromaStride)
+	assertH264RowsHigh(t, "cabac high9 b explicit 8x8-DCT residual cr", dst.Cr, 0, dst.ChromaStride, 8, 8, refs[0][0].Cr, refs[0][0].ChromaStride)
+}
+
 func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 	t.Run("b direct 16x16 macroblock", func(t *testing.T) {
 		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
@@ -176,6 +407,24 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 
 		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != nil {
 			t.Fatalf("temporal direct high B16x16 validate err = %v, want nil", err)
+		}
+	})
+
+	t.Run("b temporal direct 16x16 8x8 dct residual macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		mbType := MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBType8x8DCT
+
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0x05, 0x05); err != nil {
+			t.Fatalf("temporal direct high B16x16 8x8-DCT validate err = %v, want nil", err)
+		}
+	})
+
+	t.Run("b list1 direct 16x16 residual macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		mbType := MBType16x16 | MBTypeP0L1 | MBTypeDirect2
+
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0x0c, 0x0c); err != nil {
+			t.Fatalf("list1 direct high B16x16 validate err = %v, want nil", err)
 		}
 	})
 
@@ -206,6 +455,24 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 		}
 	})
 
+	t.Run("b16x16 l0 macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		mbType := MBType16x16 | MBTypeP0L0
+
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0, 0); err != nil {
+			t.Fatalf("B16x16 L0 high validate err = %v, want nil", err)
+		}
+	})
+
+	t.Run("b16x16 l1 8x8 dct residual macroblock", func(t *testing.T) {
+		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
+		mbType := MBType16x16 | MBTypeP0L1 | MBType8x8DCT
+
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 0x0b, 0x0b); err != nil {
+			t.Fatalf("B16x16 L1 8x8-DCT high validate err = %v, want nil", err)
+		}
+	})
+
 	t.Run("weighted partitioned p macroblock", func(t *testing.T) {
 		sh := &SliceHeader{
 			SliceTypeNoS: PictureTypeP,
@@ -230,8 +497,8 @@ func TestHighResidualLaneRejectsUnsupportedBoundaries(t *testing.T) {
 
 	t.Run("b intra macroblock", func(t *testing.T) {
 		sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
-		if err := validateHighFrameSliceMacroblockForReconstruct(sh, MBTypeIntra4x4, 0, 0); err != ErrUnsupported {
-			t.Fatalf("intra high B validate err = %v, want ErrUnsupported", err)
+		if err := validateHighFrameSliceMacroblockForReconstruct(sh, MBTypeIntra4x4, 0, 0); err != nil {
+			t.Fatalf("intra high B validate err = %v, want nil", err)
 		}
 	})
 }
@@ -243,7 +510,6 @@ func TestDecodeCAVLCFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.
 	}{
 		{name: "skip", bits: "010"},
 		{name: "direct without refs", bits: "111"},
-		{name: "l0 only", bits: "1010"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
@@ -266,7 +532,6 @@ func TestDecodeCABACFrameSliceHighRejectsUnsupportedBBeforeWriteback(t *testing.
 	}{
 		{name: "skip", bits: []int{1}},
 		{name: "direct", bits: []int{0, 0}},
-		{name: "l0 only", bits: []int{0, 1, 0, 0}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
@@ -739,7 +1004,7 @@ func TestDecodeFrameSliceHighReconstructsPartitionedBExplicit(t *testing.T) {
 	}
 }
 
-func TestDecodeFrameSliceHighRejectsPartitionedBSkipBeforeWriteback(t *testing.T) {
+func TestDecodeFrameSliceHighReconstructsPartitionedBSkip(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
 		cabac bool
@@ -764,16 +1029,19 @@ func TestDecodeFrameSliceHighRejectsPartitionedBSkipBeforeWriteback(t *testing.T
 			}
 
 			var err error
+			var got h264FrameSliceDecodeResult
 			if tt.cabac {
-				_, err = m.decodeCABACFrameSliceHigh(&scriptedCABACSource{bits: []int{1}}, dst, sh, in)
+				got, err = m.decodeCABACFrameSliceHigh(&scriptedCABACSource{bits: []int{1}, terms: []int{1}}, dst, sh, in)
 			} else {
 				gb := newBitReader(cavlcBitString("010"))
-				_, err = m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, in)
+				got, err = m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, in)
 			}
-			if !errors.Is(err, ErrUnsupported) {
-				t.Fatalf("partitioned B-skip decode err = %v, want ErrUnsupported", err)
+			if err != nil {
+				t.Fatalf("partitioned B-skip decode err = %v, want nil", err)
 			}
-			assertHighBRejectUntouched(t, m)
+			if got.Macroblocks != 1 || m.CBPTable[0] != 0 || m.QScaleTable[0] != uint8(sh.QScale) || m.SliceTable[0] != 63 {
+				t.Fatalf("partitioned B-skip result/tables = %+v cbp=%#x q=%d slice=%d", got, m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+			}
 		})
 	}
 }

@@ -21,6 +21,12 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsPartitionedP(t *tes
 		MBType8x16 | MBTypeP0L0,
 		MBType8x8 | MBTypeP0L0,
 	}
+	p8x8DCTSub := [4]uint32{
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0,
+	}
 
 	for _, tt := range []struct {
 		name     string
@@ -30,13 +36,17 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsPartitionedP(t *tes
 		cbp      int
 		cbpTable int
 	}{
+		{name: "p16x16 8x8 dct residual", sh: pSlice, mbType: MBType16x16 | MBTypeP0L0 | MBType8x8DCT, cbp: 1, cbpTable: 1},
 		{name: "p16x8 no residual", sh: pSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0},
 		{name: "p16x8 residual", sh: pSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1},
+		{name: "p16x8 8x8 dct residual", sh: pSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT, cbp: 1, cbpTable: 1},
 		{name: "p8x16 residual", sh: pSlice, mbType: MBType8x16 | MBTypeP0L0 | MBTypeP1L0, cbp: 2, cbpTable: 2},
 		{name: "p8x8 sub partitions", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0, sub: &p8x8Sub},
 		{name: "p8x8 ref0 residual", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeRef0, sub: &p8x8Sub, cbp: 4, cbpTable: 4},
+		{name: "p8x8 8x8 dct residual", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT, sub: &p8x8DCTSub, cbp: 0x1f, cbpTable: 0x9f},
 		{name: "cabac p16x8 residual", sh: cabacP, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1},
 		{name: "cabac p8x8 residual", sh: cabacP, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0, sub: &p8x8Sub, cbp: 4, cbpTable: 4},
+		{name: "cabac p8x8 8x8 dct residual", sh: cabacP, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT, sub: &p8x8DCTSub, cbp: 0x1f, cbpTable: 0x9f},
 		{name: "weighted p16x8 residual", sh: weightedP, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, cbp: 1, cbpTable: 1},
 		{name: "weighted p8x8 residual", sh: weightedP, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0, sub: &p8x8Sub, cbp: 4, cbpTable: 4},
 	} {
@@ -58,6 +68,8 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsUnsupportedPartiti
 	}
 	invalidSub := p8x8Sub
 	invalidSub[1] = MBType16x16 | MBTypeP0L1
+	smallSub := p8x8Sub
+	smallSub[1] = MBType16x8 | MBTypeP0L0
 
 	for _, tt := range []struct {
 		name     string
@@ -69,9 +81,10 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsUnsupportedPartiti
 	}{
 		{name: "p8x8 without sub types", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0},
 		{name: "p8x8 invalid sub type", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0, sub: &invalidSub},
-		{name: "p16x8 8x8 dct", sh: pSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT},
-		{name: "p8x8 8x8 dct", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT, sub: &p8x8Sub},
-		{name: "p16x16 8x8 dct", sh: pSlice, mbType: MBType16x16 | MBTypeP0L0 | MBType8x8DCT},
+		{name: "p16x8 8x8 dct without luma cbp", sh: pSlice, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT},
+		{name: "p8x8 8x8 dct without luma cbp", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT, sub: &p8x8Sub},
+		{name: "p8x8 8x8 dct sub partition too small", sh: pSlice, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBType8x8DCT, sub: &smallSub, cbp: 1, cbpTable: 1},
+		{name: "p16x16 8x8 dct without luma cbp", sh: pSlice, mbType: MBType16x16 | MBTypeP0L0 | MBType8x8DCT},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(tt.sh, tt.mbType, tt.sub, tt.cbp, tt.cbpTable); err != ErrUnsupported {

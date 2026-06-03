@@ -59,7 +59,7 @@ func TestHigh10DirectResidualFixtureMacroblockSyntax(t *testing.T) {
 					}
 					got := decodeHigh10BDeblockFixtureMacroblocksWithDirect8x8(t, sh, &payload, tt.cabac, 1, false, true)[0]
 					if tt.wantDirectSub {
-						if !isHighB8x8DirectSubMacroblock(got.MBType, &got.Inter.SubMBType) {
+						if !isHighB8x8DirectSubMacroblock(got.MBType, &got.Inter.SubMBType, got.CBP) {
 							t.Fatalf("B macroblock/sub types = %#x/%#x, want direct-sub B8x8", got.MBType, got.Inter.SubMBType)
 						}
 					} else if !isHighB16x16DirectMacroblock(got.MBType) {
