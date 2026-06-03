@@ -26,14 +26,15 @@ field/QP/crop/weighted/no-deblock compact rows, compact
 long-slice/multiple-reference rows, frame-num-gap multiple-reference rows, and
 MMCO-reset multiple-reference reorder rows,
 non-conformance Annex B FATE rows covering extreme plane prediction,
-reference-list-mod overflow recovery, and missing-frame recovery, with
+reference-list-mod overflow recovery, missing-frame recovery, and
+large-to-small SPS reinit metadata, with
 packetized/configured surfaces proven for reference-list-mod overflow,
 missing-frame, timecode, and BBC2 recovery/PAFF,
 lossless High444 transform-bypass Annex B plus 4-byte AVC/configuration-record surfaces,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 191/191 green. Matrix mode is the safe-point gate. Red-queue
+Public vectors: 193/193 green. Matrix mode is the safe-point gate. Red-queue
 scripts intentionally exit non-zero only while rows in
 `testdata/h264/realvectors/failures.jsonl` remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or

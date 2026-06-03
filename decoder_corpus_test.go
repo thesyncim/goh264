@@ -54,11 +54,21 @@ type h264CorpusEntry struct {
 	BitstreamMD5  string                  `json:"bitstream_md5,omitempty"`
 	RawVideoMD5   string                  `json:"rawvideo_md5,omitempty"`
 	FrameMD5      []string                `json:"frame_md5,omitempty"`
+	FrameGroups   []h264CorpusFrameGroup  `json:"frame_groups,omitempty"`
 	Surfaces      []string                `json:"surfaces,omitempty"`
 	GuardTags     []string                `json:"guard_tags,omitempty"`
 	FeatureTags   []string                `json:"feature_tags,omitempty"`
 	Source        string                  `json:"source,omitempty"`
 	KnownFailure  *h264CorpusKnownFailure `json:"known_failure,omitempty"`
+}
+
+type h264CorpusFrameGroup struct {
+	Start     int    `json:"start"`
+	Count     int    `json:"count"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	PixFmt    string `json:"pix_fmt"`
+	FrameSize int    `json:"frame_size"`
 }
 
 type h264CorpusKnownFailure struct {
@@ -304,8 +314,8 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 		entry := entry
 		t.Run(entry.ID, func(t *testing.T) {
 			validateH264CorpusEntry(t, entry)
-			if entry.Expect != "decode-ok" {
-				t.Fatalf("%s: real-vector matrix only supports decode-ok oracle rows, got %q", entry.ID, entry.Expect)
+			if entry.Expect != "decode-ok" && entry.Expect != "metadata-ok" {
+				t.Fatalf("%s: real-vector matrix only supports decode-ok and metadata-ok oracle rows, got %q", entry.ID, entry.Expect)
 			}
 			path := materializeH264CorpusEntry(t, defaultH264RealVectorManifest, entry)
 			data, err := os.ReadFile(path)
@@ -313,7 +323,7 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 				t.Fatalf("read %s: %v", path, err)
 			}
 			assertCorpusBitstreamMD5(t, entry, data)
-			matches, detail := h264CorpusAnnexBMatchesOracle(t, entry, data)
+			matches, detail := h264CorpusAnnexBMatchesExpectedOracle(t, entry, data)
 			if failure, ok := failureByID[entry.ID]; ok {
 				knownRed++
 				redRows = append(redRows, failure)
@@ -328,7 +338,7 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 			if !matches {
 				t.Fatalf("%s: unexpected public-vector failure: %s", entry.ID, h264CorpusFailureDetail(entry, detail))
 			}
-			t.Logf("green: matched rawvideo oracle")
+			t.Logf("green: %s", detail)
 		})
 	}
 	t.Logf("public-vector matrix selected=%d green=%d known-red=%d", len(manifest), green, knownRed)
@@ -454,7 +464,12 @@ func testH264CorpusEntries(t *testing.T, manifest string, entries []h264CorpusEn
 					if err != nil {
 						failH264CorpusOracle(t, entry, fmt.Sprintf("%s decode: %v", surface, err))
 					}
-					assertH264CorpusFrames(t, entry, frames)
+					switch entry.Expect {
+					case "decode-ok":
+						assertH264CorpusFrames(t, entry, frames)
+					case "metadata-ok":
+						assertH264CorpusFrameMetadata(t, entry, frames)
+					}
 				})
 			}
 		})
@@ -704,6 +719,24 @@ func TestValidateH264CorpusEntryAllowsURLBackedDecodeOK(t *testing.T) {
 	})
 }
 
+func TestValidateH264CorpusEntryAllowsMetadataOracle(t *testing.T) {
+	validateH264CorpusEntry(t, h264CorpusEntry{
+		ID:           "reinit",
+		URL:          "https://example.invalid/reinit.h264",
+		Format:       "annexb",
+		Expect:       "metadata-ok",
+		FrameCount:   4,
+		BitstreamMD5: "00112233445566778899aabbccddeeff",
+		FrameGroups: []h264CorpusFrameGroup{
+			{Start: 0, Count: 2, Width: 352, Height: 288, PixFmt: "yuv420p", FrameSize: 152064},
+			{Start: 2, Count: 2, Width: 240, Height: 196, PixFmt: "yuv420p", FrameSize: 70560},
+		},
+		Surfaces:    []string{"annexb"},
+		FeatureTags: []string{"reinit"},
+		Source:      "test",
+	})
+}
+
 func TestValidateH264CorpusEntryRequiresUnsupportedGuards(t *testing.T) {
 	validateH264CorpusEntry(t, h264CorpusEntry{
 		ID:            "future",
@@ -772,6 +805,14 @@ func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 		if len(entry.FrameMD5) != 0 && len(entry.FrameMD5) != entry.FrameCount {
 			t.Fatalf("%s: frame_md5 count = %d, want 0 or %d", entry.ID, len(entry.FrameMD5), entry.FrameCount)
 		}
+	case "metadata-ok":
+		if entry.BitstreamMD5 == "" {
+			t.Fatalf("%s: metadata-ok entries need bitstream_md5", entry.ID)
+		}
+		if entry.FrameCount <= 0 {
+			t.Fatalf("%s: frame_count must be positive", entry.ID)
+		}
+		validateH264CorpusFrameGroups(t, entry)
 	case "unsupported":
 		if len(entry.GuardTags) == 0 {
 			t.Fatalf("%s: unsupported entries must name guard_tags", entry.ID)
@@ -780,7 +821,30 @@ func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 			t.Fatalf("%s: expected_error = %q, want ErrUnsupported", entry.ID, entry.ExpectedError)
 		}
 	default:
-		t.Fatalf("%s: expect = %q, want decode-ok or unsupported", entry.ID, entry.Expect)
+		t.Fatalf("%s: expect = %q, want decode-ok, metadata-ok, or unsupported", entry.ID, entry.Expect)
+	}
+}
+
+func validateH264CorpusFrameGroups(t *testing.T, entry h264CorpusEntry) {
+	t.Helper()
+	if len(entry.FrameGroups) == 0 {
+		t.Fatalf("%s: metadata-ok entries need frame_groups", entry.ID)
+	}
+	wantStart := 0
+	for i, group := range entry.FrameGroups {
+		if group.Start != wantStart {
+			t.Fatalf("%s: frame_groups[%d].start = %d, want %d", entry.ID, i, group.Start, wantStart)
+		}
+		if group.Count <= 0 {
+			t.Fatalf("%s: frame_groups[%d].count = %d, want positive", entry.ID, i, group.Count)
+		}
+		if group.Width <= 0 || group.Height <= 0 || group.PixFmt == "" || group.FrameSize <= 0 {
+			t.Fatalf("%s: frame_groups[%d] needs positive width/height/frame_size and pix_fmt: %+v", entry.ID, i, group)
+		}
+		wantStart += group.Count
+	}
+	if wantStart != entry.FrameCount {
+		t.Fatalf("%s: frame_groups cover %d frames, want frame_count %d", entry.ID, wantStart, entry.FrameCount)
 	}
 }
 
@@ -1033,6 +1097,26 @@ func assertH264CorpusFrames(t *testing.T, entry h264CorpusEntry, frames []*Frame
 	}
 }
 
+func assertH264CorpusFrameMetadata(t *testing.T, entry h264CorpusEntry, frames []*Frame) {
+	t.Helper()
+	matches, detail := h264CorpusFramesMatchMetadata(entry, frames)
+	if !matches {
+		failH264CorpusOracle(t, entry, detail)
+	}
+}
+
+func h264CorpusAnnexBMatchesExpectedOracle(t *testing.T, entry h264CorpusEntry, data []byte) (bool, string) {
+	t.Helper()
+	switch entry.Expect {
+	case "decode-ok":
+		return h264CorpusAnnexBMatchesOracle(t, entry, data)
+	case "metadata-ok":
+		return h264CorpusAnnexBMatchesMetadata(t, entry, data)
+	default:
+		return false, fmt.Sprintf("expect = %q, want decode-ok or metadata-ok", entry.Expect)
+	}
+}
+
 func h264CorpusAnnexBMatchesOracle(t *testing.T, entry h264CorpusEntry, data []byte) (bool, string) {
 	t.Helper()
 	frames, err := NewDecoder().DecodeAnnexBFrames(data)
@@ -1077,6 +1161,48 @@ func h264CorpusAnnexBMatchesOracle(t *testing.T, entry h264CorpusEntry, data []b
 		return false, fmt.Sprintf("rawvideo md5 = %s, want %s", got, entry.RawVideoMD5)
 	}
 	return true, "matched rawvideo oracle"
+}
+
+func h264CorpusAnnexBMatchesMetadata(t *testing.T, entry h264CorpusEntry, data []byte) (bool, string) {
+	t.Helper()
+	frames, err := NewDecoder().DecodeAnnexBFrames(data)
+	if err != nil {
+		return false, fmt.Sprintf("decode error: %v", err)
+	}
+	return h264CorpusFramesMatchMetadata(entry, frames)
+}
+
+func h264CorpusFramesMatchMetadata(entry h264CorpusEntry, frames []*Frame) (bool, string) {
+	if len(frames) != entry.FrameCount {
+		return false, fmt.Sprintf("frames = %d, want %d", len(frames), entry.FrameCount)
+	}
+	for groupIndex, group := range entry.FrameGroups {
+		for offset := 0; offset < group.Count; offset++ {
+			frameIndex := group.Start + offset
+			if frameIndex < 0 || frameIndex >= len(frames) {
+				return false, fmt.Sprintf("frame_groups[%d] index %d outside %d frames", groupIndex, frameIndex, len(frames))
+			}
+			frame := frames[frameIndex]
+			if frame.Width != group.Width || frame.Height != group.Height {
+				return false, fmt.Sprintf("frame[%d] size = %dx%d, want %dx%d", frameIndex, frame.Width, frame.Height, group.Width, group.Height)
+			}
+			pixFmt, err := frame.RawPixelFormat()
+			if err != nil {
+				return false, fmt.Sprintf("frame[%d] pix_fmt: %v", frameIndex, err)
+			}
+			if pixFmt != group.PixFmt {
+				return false, fmt.Sprintf("frame[%d] pix_fmt = %s, want %s", frameIndex, pixFmt, group.PixFmt)
+			}
+			raw, err := frame.AppendRawYUVBytesLE(nil)
+			if err != nil {
+				return false, fmt.Sprintf("frame[%d] raw yuv: %v", frameIndex, err)
+			}
+			if len(raw) != group.FrameSize {
+				return false, fmt.Sprintf("frame[%d] raw size = %d, want %d", frameIndex, len(raw), group.FrameSize)
+			}
+		}
+	}
+	return true, fmt.Sprintf("matched frame metadata oracle (%d frames, %d groups)", len(frames), len(entry.FrameGroups))
 }
 
 func h264CorpusOracleFailureClass(detail string) string {
