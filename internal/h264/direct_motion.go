@@ -979,6 +979,14 @@ func temporalDirectColocatedFieldMapRefEntry(ctx h264DirectMotionContext, list i
 	if ref < 0 || fieldParity < 0 || fieldParity > 1 {
 		return simpleRefEntry{}, false
 	}
+	if colField {
+		if col, ok := temporalDirectColocatedFieldPictureParent(ctx); ok && col.fieldPicture && !col.mbaff {
+			if list >= 0 && list < len(col.fieldRefEntries[fieldParity]) && ref < len(col.fieldRefEntries[fieldParity][list]) {
+				return col.fieldRefEntries[fieldParity][list][ref], true
+			}
+			return simpleRefEntry{}, false
+		}
+	}
 	targetRef := ref
 	targetField := fieldParity
 	if colField {
@@ -990,6 +998,13 @@ func temporalDirectColocatedFieldMapRefEntry(ctx h264DirectMotionContext, list i
 		return simpleRefEntry{}, false
 	}
 	return temporalDirectEntryAsField(entry, temporalDirectPictureStructureForField(targetField))
+}
+
+func temporalDirectColocatedFieldPictureParent(ctx h264DirectMotionContext) (*DecodedFrame, bool) {
+	if len(ctx.RefEntries[1]) == 0 || ctx.RefEntries[1][0].frame == nil {
+		return nil, false
+	}
+	return ctx.RefEntries[1][0].frame, true
 }
 
 func temporalDirectList0FieldRefEntry(ctx h264DirectMotionContext, ref int, fieldParity int) (simpleRefEntry, bool) {

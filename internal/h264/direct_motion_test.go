@@ -685,6 +685,44 @@ func TestTemporalDirectFrameMBAFFBottomFieldColmapUsesRFieldXOR(t *testing.T) {
 	}
 }
 
+func TestTemporalDirectFrameMBAFFBottomFieldColmapKeepsFieldPictureRefSlot(t *testing.T) {
+	past := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 2}, frameNum: 7}
+	col := &DecodedFrame{
+		fieldPicture: true,
+		poc:          4,
+		fieldPOC:     [2]int32{4, 6},
+		fieldRefEntries: [2][2][]simpleRefEntry{
+			{
+				nil,
+				nil,
+			},
+			{
+				{
+					{frame: past, picID: 2*past.frameNum + 0, pictureStructure: PictureBottomField, poc: past.fieldPOC[1]},
+					{frame: past, picID: 2*past.frameNum + 0, pictureStructure: PictureBottomField, poc: past.fieldPOC[1]},
+					{frame: past, picID: 2*past.frameNum + 1, pictureStructure: PictureTopField, poc: past.fieldPOC[0]},
+				},
+				nil,
+			},
+		},
+	}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{{frame: past, picID: past.frameNum, pictureStructure: PictureFrame, poc: past.poc}},
+			{{frame: col, pictureStructure: PictureFrame, poc: col.poc}},
+		},
+		PictureStructure: PictureFrame,
+	}
+
+	got, err := temporalDirectMapColToList0Field(ctx, 0, 2, true, 1)
+	if err != nil {
+		t.Fatalf("bottom-field field-picture colmap failed: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("bottom-field field-picture raw ref mapped to %d, want top-field ref 1", got)
+	}
+}
+
 func TestPredTemporalDirectFrameMBAFFBottomFieldUsesXoredColFieldRef(t *testing.T) {
 	m, err := newMacroblockTables(1, 2, 1)
 	if err != nil {
