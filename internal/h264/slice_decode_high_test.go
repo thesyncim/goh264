@@ -355,13 +355,17 @@ func TestDecodeFrameSliceDataHighRejectsBInputPredWeightBeforeEntropy(t *testing
 }
 
 func TestValidateSimpleFrameSliceDecodeHighAllowsWeightedPMetadata(t *testing.T) {
-	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeP)
-	sh.RefCount = [2]uint32{1, 0}
-	sh.PPS.WeightedPred = 1
-	sh.PredWeightTable.UseWeight = 1
+	for _, bitDepth := range []int32{10, 12} {
+		t.Run(bitDepthName(bitDepth), func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
+			sh.RefCount = [2]uint32{1, 0}
+			sh.PPS.WeightedPred = 1
+			sh.PredWeightTable = highWeightedPPredWeightTable()
 
-	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-		t.Fatalf("high weighted P validation err = %v, want nil", err)
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high weighted P validation err = %v, want nil", err)
+			}
+		})
 	}
 }
 
@@ -375,7 +379,7 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 		slice    int32
 	}{
 		{name: "9-bit", bitDepth: 9, chroma: 9, format: 1, slice: PictureTypeP},
-		{name: "12-bit", bitDepth: 12, chroma: 12, format: 1, slice: PictureTypeP},
+		{name: "12-bit-deblock", bitDepth: 12, chroma: 12, format: 1, deblock: true, slice: PictureTypeP},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeP},
 		{name: "422", bitDepth: 10, chroma: 10, format: 2, slice: PictureTypeP},
 		{name: "444", bitDepth: 10, chroma: 10, format: 3, slice: PictureTypeP},
