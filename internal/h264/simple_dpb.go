@@ -1379,6 +1379,9 @@ func (d *simpleFrameDPB) drainOutputFrames(flush bool) ([]*DecodedFrame, error) 
 
 func (d *simpleFrameDPB) nextOutputFrameIndex() int {
 	outIdx := 0
+	if len(d.delayed) != 0 && d.delayed[0].mmcoReset {
+		return outIdx
+	}
 	for i := 1; i < len(d.delayed) && !d.delayed[i].idrKeyFrame && !d.delayed[i].mmcoReset; i++ {
 		if d.delayed[i].poc < d.delayed[outIdx].poc {
 			outIdx = i
@@ -1455,6 +1458,7 @@ func (d *simpleFrameDPB) applyMMCO(frame *DecodedFrame, sh *SliceHeader) (bool, 
 		case mmcoReset:
 			d.resetRefs()
 			d.poc.frameNum = 0
+			d.resetLastPOCs()
 			resetFrameNum = true
 		default:
 			return resetFrameNum, currentRefAssigned, ErrUnsupported

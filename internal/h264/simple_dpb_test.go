@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestApplySimpleFieldRefPlaneBuildsValidHalfHeightViews(t *testing.T) {
 	for _, tt := range []struct {
@@ -830,6 +833,63 @@ func TestSimpleFrameDPBMMCOResetPreservesDelayedOutputState(t *testing.T) {
 	}
 	if len(dpb.short) != 1 || dpb.short[0] != current {
 		t.Fatalf("short refs after reset = %v, want current only", simpleDPBFrameNums(dpb.short))
+	}
+}
+
+func TestSimpleFrameDPBMMCOResetClearsReorderHistory(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	current := simpleDPBTestFrame(sps, 3)
+	dpb := simpleFrameDPB{}
+	dpb.resetLastPOCs()
+	dpb.lastPOCs[0] = 10
+	dpb.lastPOCs[1] = 8
+	dpb.poc.frameNum = 3
+	sh := &SliceHeader{
+		NALType:            NALSlice,
+		SPS:                sps,
+		FrameNum:           3,
+		PictureStructure:   PictureFrame,
+		ExplicitRefMarking: 1,
+		NBMMCO:             1,
+		MMCO: [maxMMCOCount]MMCO{
+			{Opcode: mmcoReset},
+		},
+	}
+
+	if err := dpb.markDecodedFrame(current, sh, 2); err != nil {
+		t.Fatal(err)
+	}
+	if !current.mmcoReset {
+		t.Fatal("current frame was not marked as an MMCO reset")
+	}
+	for i, poc := range dpb.lastPOCs {
+		if poc != math.MinInt32 {
+			t.Fatalf("lastPOCs[%d] = %d, want reset history", i, poc)
+		}
+	}
+}
+
+func TestSimpleFrameDPBOutputsLeadingMMCOResetBeforeLowerPOC(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	reset := simpleDPBTestFrame(sps, 0)
+	reset.poc = 50
+	reset.mmcoReset = true
+	lower := simpleDPBTestFrame(sps, 1)
+	lower.poc = 37
+	dpb := simpleFrameDPB{
+		delayed:    []*DecodedFrame{reset, lower},
+		hasBFrames: 1,
+	}
+
+	out, err := dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != reset {
+		t.Fatalf("output = %v, want leading MMCO reset before lower POC", out)
+	}
+	if len(dpb.delayed) != 1 || dpb.delayed[0] != lower {
+		t.Fatalf("delayed after reset output = %v, want lower picture retained", dpb.delayed)
 	}
 }
 
