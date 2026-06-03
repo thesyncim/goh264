@@ -935,12 +935,12 @@ func temporalDirectMapColFieldPictureToList0(ctx h264DirectMotionContext, list i
 		return 0, nil
 	}
 	for i, entry := range ctx.RefEntries[0] {
-		if temporalDirectSameFieldPictureID(entry, target) {
+		if temporalDirectSameExactFieldRef(entry, target) {
 			return int8(i), nil
 		}
 	}
 	for i, entry := range ctx.RefEntries[0] {
-		if temporalDirectSameExactFieldRef(entry, target) {
+		if temporalDirectSameFieldPictureID(entry, target) {
 			return int8(i), nil
 		}
 	}
@@ -1155,7 +1155,7 @@ func temporalDirectVirtualFieldRefEntry(entries []simpleRefEntry, ref int) (simp
 }
 
 func temporalDirectSameFrameRef(a simpleRefEntry, b simpleRefEntry) bool {
-	if a.long != b.long || a.frame == nil || b.frame == nil || a.frame != b.frame {
+	if a.frame == nil || b.frame == nil || a.frame != b.frame {
 		return false
 	}
 	return a.pictureStructure == b.pictureStructure ||
@@ -1166,11 +1166,11 @@ func temporalDirectSameFrameRef(a simpleRefEntry, b simpleRefEntry) bool {
 }
 
 func temporalDirectSameExactFieldRef(a simpleRefEntry, b simpleRefEntry) bool {
-	if a.long != b.long {
-		return false
-	}
 	if a.frame != nil && b.frame != nil && a.frame == b.frame && a.pictureStructure == b.pictureStructure {
 		return true
+	}
+	if a.long != b.long {
+		return false
 	}
 	if a.picID != b.picID || a.picID == 0 || a.pictureStructure != b.pictureStructure {
 		return false

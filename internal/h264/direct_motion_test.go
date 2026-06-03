@@ -109,6 +109,62 @@ func TestPredTemporalDirectFieldPictureMapsExactColocatedFieldRef(t *testing.T) 
 	}
 }
 
+func TestTemporalDirectFieldPicturePrefersExactFieldOverPicIDCollision(t *testing.T) {
+	col := &DecodedFrame{poc: 6, fieldPOC: [2]int32{6, 7}, frameNum: 1}
+	past := &DecodedFrame{poc: 0, fieldPOC: [2]int32{0, 1}, frameNum: 0}
+	col.fieldRefEntries[1][0] = []simpleRefEntry{
+		{frame: col, picID: 2, pictureStructure: PictureTopField, poc: 6},
+	}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: col, picID: 3, pictureStructure: PictureTopField, poc: 6},
+				{frame: col, picID: 2, pictureStructure: PictureBottomField, poc: 7},
+				{frame: past, picID: 1, long: true, pictureStructure: PictureTopField, poc: 0},
+			},
+			{
+				{frame: col, picID: 2, pictureStructure: PictureBottomField, poc: 7},
+			},
+		},
+		PictureStructure: PictureTopField,
+	}
+	got, err := temporalDirectMapColFieldPictureToList0(ctx, 0, 0, true)
+	if err != nil {
+		t.Fatalf("map colocated field ref: %v", err)
+	}
+	if got != 0 {
+		t.Fatalf("mapped ref = %d, want exact top-field candidate 0", got)
+	}
+}
+
+func TestTemporalDirectFieldPictureMatchesExactFieldAcrossLongTransition(t *testing.T) {
+	col := &DecodedFrame{poc: 90, fieldPOC: [2]int32{90, 91}, frameNum: 15}
+	convertedLong := &DecodedFrame{poc: 84, fieldPOC: [2]int32{84, 85}, frameNum: 14}
+	older := &DecodedFrame{poc: 78, fieldPOC: [2]int32{78, 79}, frameNum: 13}
+	col.fieldRefEntries[0][0] = []simpleRefEntry{
+		{frame: convertedLong, picID: 29, pictureStructure: PictureTopField, poc: 84},
+	}
+	ctx := h264DirectMotionContext{
+		RefEntries: [2][]simpleRefEntry{
+			{
+				{frame: older, picID: 27, pictureStructure: PictureTopField, poc: 78},
+				{frame: convertedLong, picID: 1, long: true, pictureStructure: PictureTopField, poc: 84},
+			},
+			{
+				{frame: col, picID: 31, pictureStructure: PictureTopField, poc: 90},
+			},
+		},
+		PictureStructure: PictureTopField,
+	}
+	got, err := temporalDirectMapColFieldPictureToList0(ctx, 0, 0, true)
+	if err != nil {
+		t.Fatalf("map converted long field ref: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("mapped ref = %d, want same decoded top field candidate 1", got)
+	}
+}
+
 func TestPredTemporalDirectBottomFieldPictureMapsByColmapPictureID(t *testing.T) {
 	m, col, past := newTemporalDirectTestTables(t, MBType8x8|MBTypeP0L0|MBTypeP1L0|MBTypeInterlaced)
 	next := &DecodedFrame{poc: 4, fieldPOC: [2]int32{4, 6}, frameNum: 1}
