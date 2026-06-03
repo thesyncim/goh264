@@ -259,21 +259,23 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10AndHigh12ChromaDeblocking
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12Chroma422SliceBoundaryDeblocking(t *testing.T) {
-	for _, cabac := range []int32{0, 1} {
-		for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
-			t.Run(fmt.Sprintf("cabac%d/%s", cabac, pictureTypeName(sliceType)), func(t *testing.T) {
-				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, 2, 2, true, sliceType)
-				sh.PPS.CABAC = cabac
-				sh.DeblockingFilter = 2
-				if sliceType == PictureTypeP {
-					sh.RefCount = [2]uint32{1, 0}
-				}
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12ChromaSliceBoundaryDeblocking(t *testing.T) {
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, cabac := range []int32{0, 1} {
+			for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+				t.Run(fmt.Sprintf("%s/cabac%d/%s", chromaFormatName(chromaFormatIDC), cabac, pictureTypeName(sliceType)), func(t *testing.T) {
+					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, chromaFormatIDC, 2, true, sliceType)
+					sh.PPS.CABAC = cabac
+					sh.DeblockingFilter = 2
+					if sliceType == PictureTypeP {
+						sh.RefCount = [2]uint32{1, 0}
+					}
 
-				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-					t.Fatalf("high12 4:2:2 slice-boundary deblock validation err = %v, want nil", err)
-				}
-			})
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high12 %s slice-boundary deblock validation err = %v, want nil", chromaFormatName(chromaFormatIDC), err)
+					}
+				})
+			}
 		}
 	}
 }
@@ -329,8 +331,8 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *tes
 			},
 		},
 		{
-			name:     "12-bit/chroma444-slice-boundary-mode",
-			bitDepth: 12,
+			name:     "10-bit/chroma444-slice-boundary-mode",
+			bitDepth: 10,
 			run: func(sh *SliceHeader) {
 				sh.SPS.ChromaFormatIDC = 3
 				sh.DeblockingFilter = 2

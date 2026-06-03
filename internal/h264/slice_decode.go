@@ -426,7 +426,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 			return ErrUnsupported
 		}
 		if sh.DeblockingFilter != 1 {
-			if !isHigh12Chroma422SliceBoundaryDeblockScope(sh) {
+			if !isHigh12ChromaSliceBoundaryDeblockScope(sh) {
 				return ErrUnsupported
 			}
 		}
@@ -529,15 +529,15 @@ func isHigh12ChromaFrameDeblockScope(sh *SliceHeader) bool {
 	if sh.DeblockingFilter == 1 {
 		return true
 	}
-	return isHigh12Chroma422SliceBoundaryDeblockScope(sh)
+	return isHigh12ChromaSliceBoundaryDeblockScope(sh)
 }
 
-func isHigh12Chroma422SliceBoundaryDeblockScope(sh *SliceHeader) bool {
+func isHigh12ChromaSliceBoundaryDeblockScope(sh *SliceHeader) bool {
 	if sh == nil || sh.SPS == nil {
 		return false
 	}
 	return sh.SPS.BitDepthLuma == 12 &&
-		sh.SPS.ChromaFormatIDC == 2 &&
+		(sh.SPS.ChromaFormatIDC == 2 || sh.SPS.ChromaFormatIDC == 3) &&
 		sh.DeblockingFilter == 2 &&
 		(sh.SliceTypeNoS == PictureTypeI || sh.SliceTypeNoS == PictureTypeP)
 }
