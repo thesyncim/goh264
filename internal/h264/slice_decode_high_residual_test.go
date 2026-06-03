@@ -8,7 +8,6 @@ import (
 )
 
 func TestHighP16x16ResidualHandoffReconstructsExactLuma(t *testing.T) {
-	const bitDepth = 10
 	const cbp = 0x03
 	const cbpTable = cbp | (cbp << 12)
 	mbType := MBType16x16 | MBTypeP0L0
@@ -45,47 +44,50 @@ func TestHighP16x16ResidualHandoffReconstructsExactLuma(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
-			sh.QScale = 24
-			sh.RefCount = [2]uint32{1, 0}
-			ref := makeH264SliceDecodePictureHigh(1, 1, 1)
-			fillH264HighResidualPlane(ref.Y, 400)
-			fillH264HighResidualPlane(ref.Cb, 512)
-			fillH264HighResidualPlane(ref.Cr, 640)
+	for _, bitDepth := range []int32{10, 12} {
+		intDepth := int(bitDepth)
+		for _, tt := range tests {
+			t.Run(bitDepthName(bitDepth)+"/"+tt.name, func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
+				sh.QScale = 24
+				sh.RefCount = [2]uint32{1, 0}
+				ref := makeH264SliceDecodePictureHigh(1, 1, 1)
+				fillH264HighResidualPlane(ref.Y, 400)
+				fillH264HighResidualPlane(ref.Cb, 512)
+				fillH264HighResidualPlane(ref.Cr, 640)
 
-			cur, err := newSliceMacroblockCursor(m, sh)
-			if err != nil {
-				t.Fatal(err)
-			}
-			work, changed := h264HighP16x16LumaResidualWork()
-			in := h264FrameSliceDecodeInputHigh{
-				Refs:          [2][]*h264PicturePlanesHigh{{ref}},
-				MotionScratch: makeH264MotionCompScratchHigh(dst),
-			}
-			reconstruct := tt.run(sh, cur, work, in)
-			if reconstruct.MBType != mbType || reconstruct.CBP != cbp || reconstruct.BitDepth != bitDepth || reconstruct.PredWeight != nil || reconstruct.DeblockingFilter {
-				t.Fatalf("handoff = type %#x cbp %#x depth %d pwt %v deblock %v",
-					reconstruct.MBType, reconstruct.CBP, reconstruct.BitDepth, reconstruct.PredWeight, reconstruct.DeblockingFilter)
-			}
-
-			if err := h264HLDecodeFrameMacroblockHigh(dst, reconstruct); err != nil {
-				t.Fatalf("reconstruct high P16x16 residual failed: %v", err)
-			}
-
-			want := cloneH264HighResidualPicture(ref)
-			applyH264HighP16x16LumaResidualExpected(t, want, changed, bitDepth)
-			assertH264RowsHigh(t, tt.name+" high p16 residual y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
-			assertH264RowsHigh(t, tt.name+" high p16 residual cb", dst.Cb, 0, dst.ChromaStride, 8, 8, want.Cb, want.ChromaStride)
-			assertH264RowsHigh(t, tt.name+" high p16 residual cr", dst.Cr, 0, dst.ChromaStride, 8, 8, want.Cr, want.ChromaStride)
-
-			for _, block := range changed {
-				if got := reconstruct.Residual.MB[block.index*16]; got != 0 {
-					t.Fatalf("%s residual block %d was not cleared: %d", tt.name, block.index, got)
+				cur, err := newSliceMacroblockCursor(m, sh)
+				if err != nil {
+					t.Fatal(err)
 				}
-			}
-		})
+				work, changed := h264HighP16x16LumaResidualWork()
+				in := h264FrameSliceDecodeInputHigh{
+					Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+					MotionScratch: makeH264MotionCompScratchHigh(dst),
+				}
+				reconstruct := tt.run(sh, cur, work, in)
+				if reconstruct.MBType != mbType || reconstruct.CBP != cbp || reconstruct.BitDepth != intDepth || reconstruct.PredWeight != nil || reconstruct.DeblockingFilter {
+					t.Fatalf("handoff = type %#x cbp %#x depth %d pwt %v deblock %v",
+						reconstruct.MBType, reconstruct.CBP, reconstruct.BitDepth, reconstruct.PredWeight, reconstruct.DeblockingFilter)
+				}
+
+				if err := h264HLDecodeFrameMacroblockHigh(dst, reconstruct); err != nil {
+					t.Fatalf("reconstruct high P16x16 residual failed: %v", err)
+				}
+
+				want := cloneH264HighResidualPicture(ref)
+				applyH264HighP16x16LumaResidualExpected(t, want, changed, intDepth)
+				assertH264RowsHigh(t, tt.name+" high p16 residual y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+				assertH264RowsHigh(t, tt.name+" high p16 residual cb", dst.Cb, 0, dst.ChromaStride, 8, 8, want.Cb, want.ChromaStride)
+				assertH264RowsHigh(t, tt.name+" high p16 residual cr", dst.Cr, 0, dst.ChromaStride, 8, 8, want.Cr, want.ChromaStride)
+
+				for _, block := range changed {
+					if got := reconstruct.Residual.MB[block.index*16]; got != 0 {
+						t.Fatalf("%s residual block %d was not cleared: %d", tt.name, block.index, got)
+					}
+				}
+			})
+		}
 	}
 }
 

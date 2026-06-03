@@ -82,59 +82,60 @@ func TestValidateHighFrameSliceMacroblockForReconstructRejectsUnsupportedPartiti
 }
 
 func TestDecodeFrameSliceHighReconstructsPartitionedPNoResidual(t *testing.T) {
-	for _, tt := range []struct {
-		name      string
-		cavlcBits string
-		cabacBits []int
-		wantType  uint32
-	}{
-		{
-			name:      "p16x8",
-			cavlcBits: "101011111",
-			cabacBits: []int{0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			wantType:  MBType16x8 | MBTypeP0L0 | MBTypeP1L0,
-		},
-		{
-			name:      "p8x16",
-			cavlcBits: "101111111",
-			cabacBits: []int{0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			wantType:  MBType8x16 | MBTypeP0L0 | MBTypeP1L0,
-		},
-		{
-			name:      "p8x8",
-			cavlcBits: "1001001111111111111",
-			cabacBits: []int{0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			wantType:  MBType8x8 | MBTypeP0L0 | MBTypeP1L0,
-		},
-	} {
-		t.Run("cavlc-"+tt.name, func(t *testing.T) {
-			m, dst, sh, ref := highPartitionedPFrameSliceDecodeFixture(t, false)
-			gb := newBitReader(cavlcBitString(tt.cavlcBits))
+	for _, bitDepth := range []int32{10, 12} {
+		for _, tt := range []struct {
+			name      string
+			cavlcBits string
+			cabacBits []int
+			wantType  uint32
+		}{
+			{
+				name:      "p16x8",
+				cavlcBits: "101011111",
+				cabacBits: []int{0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+				wantType:  MBType16x8 | MBTypeP0L0 | MBTypeP1L0,
+			},
+			{
+				name:      "p8x16",
+				cavlcBits: "101111111",
+				cabacBits: []int{0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+				wantType:  MBType8x16 | MBTypeP0L0 | MBTypeP1L0,
+			},
+			{
+				name:      "p8x8",
+				cavlcBits: "1001001111111111111",
+				cabacBits: []int{0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+				wantType:  MBType8x8 | MBTypeP0L0 | MBTypeP1L0,
+			},
+		} {
+			t.Run(bitDepthName(bitDepth)+"/cavlc-"+tt.name, func(t *testing.T) {
+				m, dst, sh, ref := highPartitionedPFrameSliceDecodeFixture(t, bitDepth, false)
+				gb := newBitReader(cavlcBitString(tt.cavlcBits))
 
-			got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{
-				SliceNum:      71,
-				Refs:          [2][]*h264PicturePlanesHigh{{ref}},
-				MotionScratch: makeH264MotionCompScratchHigh(dst),
+				got, err := m.decodeCAVLCFrameSliceHigh(&gb, dst, sh, h264FrameSliceDecodeInputHigh{
+					SliceNum:      71,
+					Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+					MotionScratch: makeH264MotionCompScratchHigh(dst),
+				})
+				assertHighPartitionedPSliceResult(t, got, err, m, dst, ref, tt.wantType, 71)
 			})
-			assertHighPartitionedPSliceResult(t, got, err, m, dst, ref, tt.wantType, 71)
-		})
-		t.Run("cabac-"+tt.name, func(t *testing.T) {
-			m, dst, sh, ref := highPartitionedPFrameSliceDecodeFixture(t, true)
-			src := &scriptedCABACSource{bits: tt.cabacBits, terms: []int{1}}
+			t.Run(bitDepthName(bitDepth)+"/cabac-"+tt.name, func(t *testing.T) {
+				m, dst, sh, ref := highPartitionedPFrameSliceDecodeFixture(t, bitDepth, true)
+				src := &scriptedCABACSource{bits: tt.cabacBits, terms: []int{1}}
 
-			got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{
-				SliceNum:      73,
-				Refs:          [2][]*h264PicturePlanesHigh{{ref}},
-				MotionScratch: makeH264MotionCompScratchHigh(dst),
+				got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{
+					SliceNum:      73,
+					Refs:          [2][]*h264PicturePlanesHigh{{ref}},
+					MotionScratch: makeH264MotionCompScratchHigh(dst),
+				})
+				assertHighPartitionedPSliceResult(t, got, err, m, dst, ref, tt.wantType, 73)
 			})
-			assertHighPartitionedPSliceResult(t, got, err, m, dst, ref, tt.wantType, 73)
-		})
+		}
 	}
 }
 
-func highPartitionedPFrameSliceDecodeFixture(t *testing.T, cabac bool) (*macroblockTables, *h264PicturePlanesHigh, *SliceHeader, *h264PicturePlanesHigh) {
+func highPartitionedPFrameSliceDecodeFixture(t *testing.T, bitDepth int32, cabac bool) (*macroblockTables, *h264PicturePlanesHigh, *SliceHeader, *h264PicturePlanesHigh) {
 	t.Helper()
-	const bitDepth = 10
 	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeP)
 	sh.QScale = 24
 	sh.RefCount = [2]uint32{1, 0}
@@ -142,9 +143,9 @@ func highPartitionedPFrameSliceDecodeFixture(t *testing.T, cabac bool) (*macrobl
 		sh.PPS.CABAC = 1
 	}
 	ref := makeH264SliceDecodePictureHigh(1, 1, 1)
-	fillH264MotionCompPlaneHigh(ref.Y, 137, bitDepth)
-	fillH264MotionCompPlaneHigh(ref.Cb, 211, bitDepth)
-	fillH264MotionCompPlaneHigh(ref.Cr, 293, bitDepth)
+	fillH264MotionCompPlaneHigh(ref.Y, 137, int(bitDepth))
+	fillH264MotionCompPlaneHigh(ref.Cb, 211, int(bitDepth))
+	fillH264MotionCompPlaneHigh(ref.Cr, 293, int(bitDepth))
 	return m, dst, sh, ref
 }
 
