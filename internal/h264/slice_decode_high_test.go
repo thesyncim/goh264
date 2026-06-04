@@ -866,7 +866,7 @@ func TestValidateHighFrameSliceReconstructAllowsHigh12IntraResidualScope(t *test
 	}
 }
 
-func TestValidateHighFrameSliceReconstructAllowsHigh14CAVLCIntraNoResidual(t *testing.T) {
+func TestValidateHighFrameSliceReconstructAllowsHigh14IntraResidualScope(t *testing.T) {
 	_, _, sh := highFrameSliceDecodeFixture(t, 14, 1, false, PictureTypeI)
 
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntraPCM, nil, 0, 0); err != nil {
@@ -899,11 +899,11 @@ func TestValidateHighFrameSliceReconstructAllowsHigh14CAVLCIntraNoResidual(t *te
 		cbp      int
 		cbpTable int
 	}{
-		{name: "intra16x16-cabac-luma-dc", mbType: MBTypeIntra16x16, cbp: 0, cbpTable: 0x101},
-		{name: "intra16x16-cabac-luma-ac", mbType: MBTypeIntra16x16, cbp: 0x0f, cbpTable: 0x0f},
-		{name: "intra16x16-cabac-chroma-dc", mbType: MBTypeIntra16x16, cbp: 0x10, cbpTable: 0x50},
-		{name: "intra16x16-cabac-chroma-ac", mbType: MBTypeIntra16x16, cbp: 0x20, cbpTable: 0x60},
-		{name: "intra16x16-cabac-luma-chroma", mbType: MBTypeIntra16x16, cbp: 0x2f, cbpTable: 0x16f},
+		{name: "intra16x16-mixed-luma-dc", mbType: MBTypeIntra16x16, cbp: 0, cbpTable: 0x101},
+		{name: "intra16x16-unproved-chroma-dc", mbType: MBTypeIntra16x16, cbp: 0x10, cbpTable: 0x90},
+		{name: "intra16x16-unproved-mixed-chroma", mbType: MBTypeIntra16x16, cbp: 0x20, cbpTable: 0xa0},
+		{name: "intra16x16-unproved-luma-chroma", mbType: MBTypeIntra16x16, cbp: 0x2f, cbpTable: 0x1ef},
+		{name: "intra16x16-unproved-mixed-luma", mbType: MBTypeIntra16x16, cbp: 0x0f, cbpTable: 0x110f},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, tt.mbType, nil, tt.cbp, tt.cbpTable); err != ErrUnsupported {
@@ -913,21 +913,35 @@ func TestValidateHighFrameSliceReconstructAllowsHigh14CAVLCIntraNoResidual(t *te
 	}
 }
 
-func TestValidateHighFrameSliceReconstructAllowsHigh14CABACIntraNoResidual(t *testing.T) {
+func TestValidateHighFrameSliceReconstructAllowsHigh14CABACIntraResidual(t *testing.T) {
 	_, _, sh := highFrameSliceDecodeFixture(t, 14, 1, false, PictureTypeI)
 	sh.PPS.CABAC = 1
 
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntraPCM, nil, 0, 0); err != nil {
-		t.Fatalf("high14 CABAC IntraPCM reconstruct validation err = %v, want nil", err)
+	for _, tt := range []struct {
+		name     string
+		mbType   uint32
+		cbp      int
+		cbpTable int
+	}{
+		{name: "intra-pcm", mbType: MBTypeIntraPCM},
+		{name: "intra4x4-no-residual", mbType: MBTypeIntra4x4},
+		{name: "intra16x16-no-residual", mbType: MBTypeIntra16x16},
+		{name: "intra16x16-luma-dc", mbType: MBTypeIntra16x16, cbp: 0, cbpTable: 0x100},
+		{name: "intra16x16-chroma-dc", mbType: MBTypeIntra16x16, cbp: 0x10, cbpTable: 0x50},
+		{name: "intra16x16-chroma-ac", mbType: MBTypeIntra16x16, cbp: 0x20, cbpTable: 0x60},
+		{name: "intra16x16-luma-chroma", mbType: MBTypeIntra16x16, cbp: 0x2f, cbpTable: 0x16f},
+		{name: "intra16x16-luma-ac", mbType: MBTypeIntra16x16, cbp: 0x0f, cbpTable: 0x0f},
+		{name: "intra16x16-luma-dc-ac", mbType: MBTypeIntra16x16, cbp: 0x0f, cbpTable: 0x10f},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, tt.mbType, nil, tt.cbp, tt.cbpTable); err != nil {
+				t.Fatalf("high14 CABAC %s reconstruct validation err = %v, want nil", tt.name, err)
+			}
+		})
 	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra4x4, nil, 0, 0); err != nil {
-		t.Fatalf("high14 CABAC Intra4x4 no-residual reconstruct validation err = %v, want nil", err)
-	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0); err != nil {
-		t.Fatalf("high14 CABAC Intra16x16 no-residual reconstruct validation err = %v, want nil", err)
-	}
+
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0x101); err != ErrUnsupported {
-		t.Fatalf("high14 CABAC Intra16x16 luma-DC residual reconstruct validation err = %v, want ErrUnsupported", err)
+		t.Fatalf("high14 CABAC mixed residual reconstruct validation err = %v, want ErrUnsupported", err)
 	}
 }
 
@@ -1635,6 +1649,167 @@ func TestDecodeCABACFrameSliceHigh12ReconstructsIntra16x16LumaDCACResidual(t *te
 		t.Fatalf("pcm reads = %v, want none", src.pcmReadSizes)
 	}
 	wantIndexes(t, src, []int{3, 6, 7, 9, 10, 64, 60, 88, 105, 166, 228, 92, 120, 181, 238, 92, 92, 89, 91, 91, 89, 89, 90, 89, 90, 89, 89, 89, 89, 89})
+}
+
+func TestDecodeCABACFrameSliceHigh14ReconstructsIntra16x16Residuals(t *testing.T) {
+	const bitDepth = 14
+
+	for _, tt := range []struct {
+		name        string
+		bits        []int
+		signs       []int32
+		sliceNum    uint16
+		wantCBP     int
+		want        func(*testing.T, *PPS, int) *h264PicturePlanesHigh
+		wantIndexes []int
+	}{
+		{
+			name:     "luma-dc",
+			bits:     []int{1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0},
+			signs:    []int32{1},
+			sliceNum: 27,
+			wantCBP:  0x100,
+			want: func(t *testing.T, pps *PPS, qscale int) *h264PicturePlanesHigh {
+				return h264HighIntra16x16LumaDCResidualExpected(t, bitDepth, pps, qscale)
+			},
+			wantIndexes: []int{3, 6, 7, 9, 10, 64, 60, 88, 105, 166, 228},
+		},
+		{
+			name:     "chroma-dc",
+			bits:     []int{1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0},
+			signs:    []int32{1},
+			sliceNum: 31,
+			wantCBP:  0x50,
+			want: func(t *testing.T, pps *PPS, qscale int) *h264PicturePlanesHigh {
+				return h264HighIntra16x16ChromaDCResidualExpected(t, bitDepth, pps, qscale)
+			},
+			wantIndexes: []int{3, 6, 7, 8, 9, 10, 64, 60, 88, 100, 149, 210, 258, 100},
+		},
+		{
+			name: "chroma-ac",
+			bits: []int{
+				1, 0, 1, 1, 1, 0,
+				0,
+				0,
+				0,
+				0, 0,
+				1, 1, 1, 0,
+				0, 0, 0, 0, 0, 0, 0,
+			},
+			signs:    []int32{64},
+			sliceNum: 43,
+			wantCBP:  0x20,
+			want: func(t *testing.T, pps *PPS, qscale int) *h264PicturePlanesHigh {
+				return h264HighIntra16x16ChromaACResidualExpected(t, bitDepth, pps, qscale)
+			},
+			wantIndexes: []int{3, 6, 7, 8, 9, 10, 64, 60, 88, 100, 100, 104, 152, 213, 267, 104, 104, 101, 104, 103, 102, 101},
+		},
+		{
+			name: "chroma-dc-ac",
+			bits: []int{
+				1, 0, 1, 1, 1, 0,
+				0,
+				0,
+				0,
+				1, 1, 1, 0,
+				0,
+				1, 1, 1, 0,
+				0, 0, 0, 0, 0, 0, 0,
+			},
+			signs:    []int32{1, 64},
+			sliceNum: 47,
+			wantCBP:  0x60,
+			want: func(t *testing.T, pps *PPS, qscale int) *h264PicturePlanesHigh {
+				return h264HighIntra16x16ChromaDCACResidualExpected(t, bitDepth, pps, qscale)
+			},
+			wantIndexes: []int{3, 6, 7, 8, 9, 10, 64, 60, 88, 100, 149, 210, 258, 100, 104, 152, 213, 267, 104, 104, 101, 104, 103, 102, 101},
+		},
+		{
+			name: "luma-chroma",
+			bits: append(append([]int{
+				1, 1, 1, 1, 1, 0,
+				0,
+				0,
+				1, 1, 1, 0,
+				1, 1, 1, 0,
+			}, repeatCABACBits(15, 0)...), []int{
+				1, 1, 1, 0,
+				0,
+				1, 1, 1, 0,
+				0, 0, 0, 0, 0, 0, 0,
+			}...),
+			signs:    []int32{1, 64, 1, 64},
+			sliceNum: 51,
+			wantCBP:  0x16f,
+			want: func(t *testing.T, pps *PPS, qscale int) *h264PicturePlanesHigh {
+				return h264HighIntra16x16LumaChromaResidualExpected(t, bitDepth, pps, qscale)
+			},
+			wantIndexes: append([]int{3, 6, 7, 8, 9, 10, 64, 60, 88, 105, 166, 228, 92, 120, 181, 238, 92, 92, 89, 91, 91, 89, 89, 90, 89, 90, 89, 89, 89, 89, 89}, []int{100, 149, 210, 258, 100, 104, 152, 213, 267, 104, 104, 101, 104, 103, 102, 101}...),
+		},
+		{
+			name: "luma-ac",
+			bits: append([]int{
+				1, 1, 0, 1, 0,
+				0,
+				0,
+				0,
+				1, 1, 1, 0,
+			}, repeatCABACBits(15, 0)...),
+			signs:    []int32{64},
+			sliceNum: 35,
+			wantCBP:  0x0f,
+			want: func(t *testing.T, _ *PPS, _ int) *h264PicturePlanesHigh {
+				return h264HighIntra16x16LumaACResidualExpected(t, bitDepth)
+			},
+			wantIndexes: []int{3, 6, 7, 9, 10, 64, 60, 88, 92, 120, 181, 238, 92, 92, 89, 91, 91, 89, 89, 90, 89, 90, 89, 89, 89, 89, 89},
+		},
+		{
+			name: "luma-dc-ac",
+			bits: append([]int{
+				1, 1, 0, 1, 0,
+				0,
+				0,
+				1, 1, 1, 0,
+				1, 1, 1, 0,
+			}, repeatCABACBits(15, 0)...),
+			signs:    []int32{1, 64},
+			sliceNum: 39,
+			wantCBP:  0x10f,
+			want: func(t *testing.T, pps *PPS, qscale int) *h264PicturePlanesHigh {
+				return h264HighIntra16x16LumaDCACResidualExpected(t, bitDepth, pps, qscale)
+			},
+			wantIndexes: []int{3, 6, 7, 9, 10, 64, 60, 88, 105, 166, 228, 92, 120, 181, 238, 92, 92, 89, 91, 91, 89, 89, 90, 89, 90, 89, 89, 89, 89, 89},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, 1, 1, false, PictureTypeI)
+			sh.PPS.CABAC = 1
+			src := &scriptedCABACSource{
+				bits:  append([]int(nil), tt.bits...),
+				signs: append([]int32(nil), tt.signs...),
+				terms: []int{0, 1},
+			}
+
+			got, err := m.decodeCABACFrameSliceHigh(src, dst, sh, h264FrameSliceDecodeInputHigh{SliceNum: tt.sliceNum})
+			if err != nil {
+				t.Fatalf("decode high14 cabac intra16x16 %s residual slice failed: %v", tt.name, err)
+			}
+			if got.Macroblocks != 1 || got.LastMBXY != 0 || !got.EndOfSlice || !got.EndOfFrame {
+				t.Fatalf("slice result = %+v, want one-MB frame end", got)
+			}
+			want := tt.want(t, sh.PPS, int(sh.QScale))
+			assertH264RowsHigh(t, "cabac high14 intra16x16 "+tt.name+" y", dst.Y, 0, dst.LumaStride, 16, 16, want.Y, want.LumaStride)
+			assertH264RowsHigh(t, "cabac high14 intra16x16 "+tt.name+" cb", dst.Cb, 0, dst.ChromaStride, 8, 8, want.Cb, want.ChromaStride)
+			assertH264RowsHigh(t, "cabac high14 intra16x16 "+tt.name+" cr", dst.Cr, 0, dst.ChromaStride, 8, 8, want.Cr, want.ChromaStride)
+			if m.MacroblockTyp[0] != MBTypeIntra16x16 || m.CBPTable[0] != tt.wantCBP || m.QScaleTable[0] != 20 || m.SliceTable[0] != tt.sliceNum {
+				t.Fatalf("tables type/cbp/q/slice = %#x/%#x/%d/%d", m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+			}
+			if len(src.pcmReadSizes) != 0 {
+				t.Fatalf("pcm reads = %v, want none", src.pcmReadSizes)
+			}
+			wantIndexes(t, src, tt.wantIndexes)
+		})
+	}
 }
 
 func TestDecodeCAVLCFrameSliceHighReconstructsPIntra4x4NoResidual(t *testing.T) {

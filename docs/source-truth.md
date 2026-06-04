@@ -18,9 +18,9 @@ P16x16 residual handoff plus no-deblock/mode-1 I/P deblock including
 unweighted 4:2:2/4:4:4 I/P chroma deblock plus 4:2:0 I/P
 slice-boundary mode-2 deblock and unweighted 4:2:2/4:4:4 I/P chroma
 slice-boundary mode-2 deblock, High14 CAVLC/CABAC IntraPCM plus
-CAVLC/CABAC no-residual Intra4x4/Intra16x16 and public CAVLC
+CAVLC/CABAC no-residual Intra4x4/Intra16x16 and CAVLC/CABAC
 Intra16x16 luma-DC/luma-AC/luma-DC+AC/chroma-DC/chroma-AC/
-chroma-DC+AC/luma+chroma residual plus two-frame CAVLC P-skip/P16x16
+chroma-DC+AC/luma+chroma residual plus public two-frame CAVLC P-skip/P16x16
 no-residual and P16x16 luma-residual/luma+chroma residual plus
 P16x8/P8x16/P8x8 luma+chroma residual Annex B/AVC/configuration-record
 fixtures, mixed no-residual

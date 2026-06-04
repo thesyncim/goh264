@@ -934,20 +934,26 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 					cbp == 0 && cbpTable == 0 {
 					return nil
 				}
-				if sh.PPS != nil && sh.PPS.CABAC == 0 && mbType == MBTypeIntra16x16 {
+				if mbType == MBTypeIntra16x16 {
 					if cbp == 0 && cbpTable == 0x100 {
 						return nil
 					}
-					if cbp == 0x0f && cbpTable == 0xf00f {
-						return nil
-					}
-					if cbp == 0x10 && cbpTable == 0x10 {
+					if cbp == 0x10 && (cbpTable == 0x10 || cbpTable == 0x50) {
 						return nil
 					}
 					if cbp == 0x20 && cbpTable == 0x20 {
 						return nil
 					}
-					if cbp == 0x2f && cbpTable == 0xf02f {
+					if cbp == 0x20 && cbpTable == 0x60 {
+						return nil
+					}
+					if cbp == 0x2f && (cbpTable == 0x16f || cbpTable == 0xf02f) {
+						return nil
+					}
+					if cbp == 0x0f && (cbpTable == 0x0f || cbpTable == 0xf00f) {
+						return nil
+					}
+					if cbp == 0x0f && cbpTable == 0x10f {
 						return nil
 					}
 				}
