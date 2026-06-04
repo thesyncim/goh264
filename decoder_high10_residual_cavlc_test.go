@@ -282,8 +282,34 @@ func readHigh10ResidualCAVLCFirstPMacroblock(t *testing.T, nal h264.NALUnit, sps
 	if refCount0 > 1 {
 		t.Fatalf("refCount0 = %d, want 1 so ref_idx_l0 is absent", refCount0)
 	}
-	br.readSE(t)
-	br.readSE(t)
+	mvdPairs := 1
+	switch mbType {
+	case 0:
+		mvdPairs = 1
+	case 1, 2:
+		mvdPairs = 2
+	case 3, 4:
+		mvdPairs = 0
+		for i := 0; i < 4; i++ {
+			subMBType := br.readUE(t)
+			switch subMBType {
+			case 0:
+				mvdPairs += 1
+			case 1, 2:
+				mvdPairs += 2
+			case 3:
+				mvdPairs += 4
+			default:
+				t.Fatalf("P sub macroblock type[%d] = %d, want P8x8/P8x4/P4x8/P4x4 syntax", i, subMBType)
+			}
+		}
+	default:
+		t.Fatalf("P macroblock type = %d, want P16x16/P16x8/P8x16/P8x8 syntax", mbType)
+	}
+	for i := 0; i < mvdPairs; i++ {
+		br.readSE(t)
+		br.readSE(t)
+	}
 	cbpCode := br.readUE(t)
 	if cbpCode >= uint32(len(high10ResidualCAVLCInterCBP)) {
 		t.Fatalf("coded_block_pattern code = %d, want < %d", cbpCode, len(high10ResidualCAVLCInterCBP))

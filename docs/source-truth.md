@@ -5,15 +5,24 @@ Scope: FFmpeg `n8.0.1` H.264 decoder path only.
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
 no-deblock plus weighted 4:2:2/4:4:4 luma-only/chroma P frame deblock modes 0/1 and
-slice-boundary mode-2 deblock, High12 CAVLC IntraPCM, mixed no-residual
-intra, plus
+slice-boundary mode-2 deblock, High12 CAVLC IntraPCM, public CAVLC
+Intra16x16 no-residual and luma-DC/luma-AC/luma-DC+AC/chroma-DC/chroma-AC/
+chroma-DC+AC/luma+chroma residual plus two-frame CAVLC P-skip/P16x16
+no-residual and P16x16 luma-residual/luma+chroma residual plus
+P16x8/P8x16/P8x8 luma+chroma residual Annex B/AVC/configuration-record
+fixtures, mixed no-residual intra, plus
 Intra16x16 luma, chroma, and combined luma/chroma residual plus public
 P-skip/P16x16, internal High12 no-deblock weighted P-skip and
 weighted P16x16/partitioned P plus
 P16x16 residual handoff plus no-deblock/mode-1 I/P deblock including
 unweighted 4:2:2/4:4:4 I/P chroma deblock plus 4:2:0 I/P
 slice-boundary mode-2 deblock and unweighted 4:2:2/4:4:4 I/P chroma
-slice-boundary mode-2 deblock, High14 CAVLC IntraPCM, mixed no-residual
+slice-boundary mode-2 deblock, High14 CAVLC IntraPCM, public CAVLC
+Intra16x16 no-residual and luma-DC/luma-AC/luma-DC+AC/chroma-DC/chroma-AC/
+chroma-DC+AC/luma+chroma residual plus two-frame CAVLC P-skip/P16x16
+no-residual and P16x16 luma-residual/luma+chroma residual plus
+P16x8/P8x16/P8x8 luma+chroma residual Annex B/AVC/configuration-record
+fixtures, mixed no-residual
 intra, separate and combined Intra16x16 luma/chroma residual plus
 P-skip/P16x16, High10 frame-MBAFF field-coded CAVLC IntraPCM
 entropy/reconstruct pairing plus public High10/High422 field-coded
