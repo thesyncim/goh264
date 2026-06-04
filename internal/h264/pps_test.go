@@ -27,6 +27,28 @@ func TestDecodePPSRejectsFMOLikeFFmpeg(t *testing.T) {
 	}
 }
 
+func TestDecodePPSRejects11And13BitDepthLikeFFmpeg(t *testing.T) {
+	for _, bitDepth := range []int32{11, 13} {
+		bitDepth := bitDepth
+		t.Run(fmt.Sprintf("bit-depth-%d", bitDepth), func(t *testing.T) {
+			var spsList [maxSPSCount]*SPS
+			spsList[0] = &SPS{BitDepthLuma: bitDepth, BitDepthChroma: bitDepth}
+
+			_, err := DecodePPS(ppsIDOnlyRBSP(), &spsList)
+			if !errors.Is(err, ErrUnsupported) {
+				t.Fatalf("bit_depth_luma=%d: err = %v, want ErrUnsupported", bitDepth, err)
+			}
+		})
+	}
+}
+
+func ppsIDOnlyRBSP() []byte {
+	var b spsBitBuilder
+	b.writeUE(0) // pic_parameter_set_id
+	b.writeUE(0) // seq_parameter_set_id
+	return b.rbsp()
+}
+
 func ppsWithSliceGroupsRBSP(mapType uint32) []byte {
 	var b spsBitBuilder
 	b.writeUE(0)       // pic_parameter_set_id

@@ -65,6 +65,8 @@ func DecodePPS(rbsp []byte, spsList *[maxSPSCount]*SPS) (*PPS, error) {
 		return nil, ErrInvalidData
 	}
 	if pps.SPS.BitDepthLuma == 11 || pps.SPS.BitDepthLuma == 13 {
+		// FFmpeg n8.0.1 reports 11/13-bit luma depths as unimplemented
+		// and returns PATCHWELCOME while admitting PPS.
 		return nil, ErrUnsupported
 	}
 
