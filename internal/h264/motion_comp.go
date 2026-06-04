@@ -120,9 +120,10 @@ func h264MCPartFrame(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, cache
 	return h264MCPartFrameStd(dst, refs, cache, mbX, mbY, mbType, part, n, square, height, delta, xOffset, yOffset, qpelSize, chromaWidth, listCount, scratch)
 }
 
-func h264ImplicitWeightIndexes(mbType uint32, refn0 int, refn1 int) (int, int) {
+func h264ImplicitWeightIndexes(mbType uint32, refn0 int, refn1 int, mbY int) (int, int) {
 	if mbType&MBTypeInterlaced != 0 {
-		return h264ImplicitMBAFFWeightOffset + refn0, h264ImplicitMBAFFWeightOffset + refn1
+		parity := mbY & 1
+		return (h264ImplicitMBAFFWeightOffset + refn0) ^ parity, (h264ImplicitMBAFFWeightOffset + refn1) ^ parity
 	}
 	return refn0, refn1
 }
@@ -139,7 +140,7 @@ func h264MCPartUsesWeighted(pwt *PredWeightTable, cache *macroblockMotionCache, 
 	}
 	refn0 := cache.Ref[0][h264Scan8[n]]
 	refn1 := cache.Ref[1][h264Scan8[n]]
-	weightRef0, weightRef1 := h264ImplicitWeightIndexes(mbType, int(refn0), int(refn1))
+	weightRef0, weightRef1 := h264ImplicitWeightIndexes(mbType, int(refn0), int(refn1), mbY)
 	if refn0 < 0 || refn1 < 0 || weightRef0 >= len(pwt.ImplicitWeight) || weightRef1 >= len(pwt.ImplicitWeight[0]) {
 		return false
 	}
@@ -229,7 +230,7 @@ func h264MCPartFrameWeighted(dst *h264PicturePlanes, refs [2][]*h264PicturePlane
 			return ErrInvalidData
 		}
 		if pwt.UseWeight == 2 {
-			weightRef0, weightRef1 := h264ImplicitWeightIndexes(mbType, refn0, refn1)
+			weightRef0, weightRef1 := h264ImplicitWeightIndexes(mbType, refn0, refn1, weightMBY)
 			if weightRef0 >= len(pwt.ImplicitWeight) || weightRef1 >= len(pwt.ImplicitWeight[0]) {
 				return ErrInvalidData
 			}

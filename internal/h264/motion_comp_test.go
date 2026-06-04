@@ -157,6 +157,7 @@ func TestH264MCPartUsesWeightedKeepsMBAFFFieldWeightsOffset(t *testing.T) {
 	pwt.UseWeightChroma = 2
 	pwt.ImplicitWeight[0][0] = [2]int32{32, 32}
 	pwt.ImplicitWeight[16][16] = [2]int32{21, 32}
+	pwt.ImplicitWeight[17][17] = [2]int32{32, 21}
 
 	frameMBType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
 	if h264MCPartUsesWeighted(&pwt, &cache, frameMBType, 0, true, true, 0) {
@@ -165,7 +166,10 @@ func TestH264MCPartUsesWeightedKeepsMBAFFFieldWeightsOffset(t *testing.T) {
 
 	fieldMBType := frameMBType | MBTypeInterlaced
 	if !h264MCPartUsesWeighted(&pwt, &cache, fieldMBType, 0, true, true, 0) {
-		t.Fatalf("field-coded MBAFF implicit weight did not use offset")
+		t.Fatalf("top field-coded MBAFF implicit weight did not use offset")
+	}
+	if !h264MCPartUsesWeighted(&pwt, &cache, fieldMBType, 0, true, true, 1) {
+		t.Fatalf("bottom field-coded MBAFF implicit weight did not xor original macroblock parity")
 	}
 }
 

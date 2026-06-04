@@ -196,7 +196,7 @@ func h264MCPartFrameWeightedHigh(dst *h264PicturePlanesHigh, refs [2][]*h264Pict
 			return ErrInvalidData
 		}
 		if pwt.UseWeight == 2 {
-			weightRef0, weightRef1 := h264ImplicitWeightIndexes(mbType, refn0, refn1)
+			weightRef0, weightRef1 := h264ImplicitWeightIndexes(mbType, refn0, refn1, weightMBY)
 			if weightRef0 >= len(pwt.ImplicitWeight) || weightRef1 >= len(pwt.ImplicitWeight[0]) {
 				return ErrInvalidData
 			}

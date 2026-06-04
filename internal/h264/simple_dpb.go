@@ -1073,13 +1073,12 @@ func implicitMBAFFFieldRefPOC(list []simpleRefEntry, ref int, field int) (int, b
 	if ref < 0 || field < 0 || field > 1 {
 		return 0, false, ErrInvalidData
 	}
-	mapped := ref ^ field
-	frameIndex := mapped >> 1
+	frameIndex := ref >> 1
 	if frameIndex < 0 || frameIndex >= len(list) || list[frameIndex].frame == nil {
 		return 0, false, ErrInvalidData
 	}
 	pictureStructure := PictureTopField
-	if mapped&1 != 0 {
+	if ref&1 != 0 {
 		pictureStructure = PictureBottomField
 	}
 	poc, err := simpleFrameCurrentPOC(list[frameIndex].frame, pictureStructure)

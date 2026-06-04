@@ -537,7 +537,7 @@ func TestSimpleFrameDPBFrameMBAFFKeepsSymmetricImplicitBWeights(t *testing.T) {
 	}
 }
 
-func TestInitImplicitBWeightTableFrameMBAFFUsesXoredFieldRefs(t *testing.T) {
+func TestInitImplicitBWeightTableFrameMBAFFFillsExpandedFieldRefs(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	frame0 := simpleDPBTestFrame(sps, 0)
 	frame0.fieldPOC = [2]int32{0, 10}
@@ -558,8 +558,11 @@ func TestInitImplicitBWeightTableFrameMBAFFUsesXoredFieldRefs(t *testing.T) {
 	if got := pwt.ImplicitWeight[0][0]; got != [2]int32{7, 9} {
 		t.Fatalf("frame ref 0/0 weights = %v, want preserved", got)
 	}
-	if got := pwt.ImplicitWeight[16][16]; got != [2]int32{48, 39} {
-		t.Fatalf("MBAFF field ref 0/0 weights = %v, want top=48 bottom=39", got)
+	if got := pwt.ImplicitWeight[16][16]; got != [2]int32{48, -48} {
+		t.Fatalf("MBAFF top-field ref weights = %v, want top=48 bottom=-48", got)
+	}
+	if got := pwt.ImplicitWeight[17][17]; got != [2]int32{116, 39} {
+		t.Fatalf("MBAFF bottom-field ref weights = %v, want top=116 bottom=39", got)
 	}
 }
 
