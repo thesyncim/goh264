@@ -91,6 +91,8 @@ func DecodePPS(rbsp []byte, spsList *[maxSPSCount]*SPS) (*PPS, error) {
 			return nil, err
 		}
 		pps.MBSliceGroupMapType = mapType
+		// FFmpeg n8.0.1 compiles H.264 FMO out (h264dec.h FMO=0) and
+		// ff_h264_decode_picture_parameter_set returns PATCHWELCOME here.
 		return nil, ErrUnsupported
 	}
 

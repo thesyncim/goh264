@@ -49,10 +49,11 @@ direct motion paths, deblock modes, selected field/PAFF/MBAFF rows, reinit
 metadata rows, lossless High444 transform-bypass rows, configured AVC surfaces,
 container-extracted Annex B vectors, and SEI side-data surfaces.
 
-Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, FMO, broader
-high-bit-depth field/inter streams, broader damaged-slice error resilience,
-threading/SIMD and bulk allocation hardening, and exact libavcodec
-delayed-output behavior.
+Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
+field/inter streams, broader damaged-slice error resilience, threading/SIMD and
+bulk allocation hardening, and exact libavcodec delayed-output behavior.
+Intentionally unsupported at the pinned FFmpeg parity boundary: FMO, which
+FFmpeg n8.0.1 compiles out and rejects while parsing PPS slice groups.
 
 ## Quick Start
 

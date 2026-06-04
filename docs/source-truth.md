@@ -65,9 +65,15 @@ excluded rows are `h264-conformance/FM1_BT_B.h264` (CBS malformed no-frame
 stream; FFmpeg exits with decode error) and `mkv/h264_tta_undecodable.mkv` (no
 H.264 video stream).
 
-Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, FMO, broad
-slice-boundary high modes, public 12/14-bit high streams beyond the current
-FFmpeg FATE 8-bit/10-bit set, broader damaged-slice error
-resilience, threading/SIMD, and full libavcodec delayed-output behavior.
+Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad slice-boundary
+high modes, public 12/14-bit high streams beyond the current FFmpeg FATE
+8-bit/10-bit set, broader damaged-slice error resilience, threading/SIMD, and
+full libavcodec delayed-output behavior.
+
+Intentionally unsupported at the pinned FFmpeg parity boundary: FMO. FFmpeg
+n8.0.1 has `FMO` compiled out in `libavcodec/h264dec.h` and
+`ff_h264_decode_picture_parameter_set` returns PATCHWELCOME as soon as
+`num_slice_groups_minus1 > 0`; local PPS parsing mirrors that with
+`ErrUnsupported`.
 
 Canonical detail lives in manifests and tests, not Markdown.
