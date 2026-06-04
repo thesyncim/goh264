@@ -119,7 +119,7 @@ func DecodeAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfigurationRe
 		if err != nil {
 			return cfg, err
 		}
-		sps, err := decodeSPSFromNAL(nal)
+		sps, err := DecodeSPSFromNAL(nal)
 		if err != nil {
 			return cfg, err
 		}

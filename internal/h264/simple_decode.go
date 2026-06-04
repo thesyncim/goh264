@@ -277,15 +277,19 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 	for _, nal := range nals {
 		switch nal.Type {
 		case NALSPS:
-			sps, err := decodeSPSFromNAL(nal)
+			sps, err := DecodeSPSFromNAL(nal)
 			if err != nil {
-				return nil, err
+				// FFmpeg keeps malformed parameter-set NALs non-fatal unless
+				// AV_EF_EXPLODE is set; previously parsed sets stay active.
+				continue
 			}
 			spsList[sps.SPSID] = sps
 		case NALPPS:
 			pps, err := DecodePPS(nal.RBSP, spsList)
 			if err != nil {
-				return nil, err
+				// FFmpeg keeps malformed parameter-set NALs non-fatal unless
+				// AV_EF_EXPLODE is set; previously parsed sets stay active.
+				continue
 			}
 			ppsList[pps.PPSID] = pps
 		case NALSEI:

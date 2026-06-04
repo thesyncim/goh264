@@ -94,6 +94,10 @@ type H2645VUI struct {
 }
 
 func DecodeSPS(rbsp []byte) (*SPS, error) {
+	return decodeSPS(rbsp, false)
+}
+
+func decodeSPS(rbsp []byte, ignoreTruncation bool) (*SPS, error) {
 	gb, err := newRBSPBitReader(rbsp)
 	if err != nil {
 		return nil, err
@@ -319,7 +323,7 @@ func DecodeSPS(rbsp []byte) (*SPS, error) {
 	}
 	sps.VUIParametersPresentFlag = int32(vuiPresent)
 	if vuiPresent != 0 {
-		if err := decodeVUIParameters(&gb, sps); err != nil {
+		if err := decodeVUIParameters(&gb, sps, ignoreTruncation); err != nil {
 			return nil, err
 		}
 	}
@@ -334,7 +338,9 @@ func DecodeSPS(rbsp []byte) (*SPS, error) {
 	return sps, nil
 }
 
-func decodeSPSFromNAL(nal NALUnit) (*SPS, error) {
+// DecodeSPSFromNAL applies FFmpeg's malformed-SPS recovery retries around
+// strict RBSP parsing.
+func DecodeSPSFromNAL(nal NALUnit) (*SPS, error) {
 	if nal.Type != NALSPS {
 		return nil, ErrInvalidData
 	}
@@ -350,6 +356,9 @@ func decodeSPSFromNAL(nal NALUnit) (*SPS, error) {
 	// parse through this recovery path.
 	if rawSPS, rawErr := DecodeSPS(nal.Raw[1:]); rawErr == nil {
 		return rawSPS, nil
+	}
+	if truncatedSPS, truncErr := decodeSPS(nal.RBSP, true); truncErr == nil {
+		return truncatedSPS, nil
 	}
 	return nil, err
 }
@@ -525,11 +534,14 @@ func decodeCrop(gb *bitReader, sps *SPS) error {
 
 // decodeVUIParameters is a source-shaped port of FFmpeg n8.0.1
 // libavcodec/h264_ps.c decode_vui_parameters.
-func decodeVUIParameters(gb *bitReader, sps *SPS) error {
+func decodeVUIParameters(gb *bitReader, sps *SPS, ignoreTruncation bool) error {
 	if gb == nil || sps == nil {
 		return ErrInvalidData
 	}
 	if err := decodeCommonVUIParameters(gb, &sps.VUI); err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			return nil
+		}
 		return err
 	}
 
@@ -546,16 +558,27 @@ func decodeVUIParameters(gb *bitReader, sps *SPS) error {
 
 	timingInfoPresent, err := gb.readBit()
 	if err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			return nil
+		}
 		return err
 	}
 	sps.TimingInfoPresentFlag = int32(timingInfoPresent)
 	if timingInfoPresent != 0 {
 		numUnitsInTick, err := gb.readBits(32)
 		if err != nil {
+			if ignoreTruncation && gb.bitsLeft() <= 0 {
+				sps.TimingInfoPresentFlag = 0
+				return nil
+			}
 			return err
 		}
 		timeScale, err := gb.readBits(32)
 		if err != nil {
+			if ignoreTruncation && gb.bitsLeft() <= 0 {
+				sps.TimingInfoPresentFlag = 0
+				return nil
+			}
 			return err
 		}
 		if numUnitsInTick == 0 || timeScale == 0 {
@@ -566,6 +589,9 @@ func decodeVUIParameters(gb *bitReader, sps *SPS) error {
 		}
 		fixedFrameRateFlag, err := gb.readBit()
 		if err != nil {
+			if ignoreTruncation && gb.bitsLeft() <= 0 {
+				return nil
+			}
 			return err
 		}
 		sps.FixedFrameRateFlag = int32(fixedFrameRateFlag)
@@ -573,6 +599,9 @@ func decodeVUIParameters(gb *bitReader, sps *SPS) error {
 
 	nalHRDPresent, err := gb.readBit()
 	if err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			return nil
+		}
 		return err
 	}
 	sps.NALHRDParametersPresentFlag = int32(nalHRDPresent)
@@ -583,6 +612,9 @@ func decodeVUIParameters(gb *bitReader, sps *SPS) error {
 	}
 	vclHRDPresent, err := gb.readBit()
 	if err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			return nil
+		}
 		return err
 	}
 	sps.VCLHRDParametersPresentFlag = int32(vclHRDPresent)
@@ -593,11 +625,17 @@ func decodeVUIParameters(gb *bitReader, sps *SPS) error {
 	}
 	if nalHRDPresent != 0 || vclHRDPresent != 0 {
 		if err := gb.skipBits(1); err != nil {
+			if ignoreTruncation && gb.bitsLeft() <= 0 {
+				return nil
+			}
 			return err
 		}
 	}
 	picStructPresent, err := gb.readBit()
 	if err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			return nil
+		}
 		return err
 	}
 	sps.PicStructPresentFlag = int32(picStructPresent)
@@ -607,6 +645,9 @@ func decodeVUIParameters(gb *bitReader, sps *SPS) error {
 
 	bitstreamRestriction, err := gb.readBit()
 	if err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			return nil
+		}
 		return err
 	}
 	sps.BitstreamRestrictionFlag = int32(bitstreamRestriction)
@@ -614,30 +655,61 @@ func decodeVUIParameters(gb *bitReader, sps *SPS) error {
 		return nil
 	}
 	if err := gb.skipBits(1); err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			sps.NumReorderFrames = 0
+			sps.BitstreamRestrictionFlag = 0
+			return nil
+		}
 		return err
 	}
 	if _, err := gb.readUEGolomb31(); err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			sps.NumReorderFrames = 0
+			sps.BitstreamRestrictionFlag = 0
+			return nil
+		}
 		return err
 	}
 	if _, err := gb.readUEGolomb31(); err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			sps.NumReorderFrames = 0
+			sps.BitstreamRestrictionFlag = 0
+			return nil
+		}
 		return err
 	}
 	if _, err := gb.readUEGolomb31(); err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			sps.NumReorderFrames = 0
+			sps.BitstreamRestrictionFlag = 0
+			return nil
+		}
 		return err
 	}
 	if _, err := gb.readUEGolomb31(); err != nil {
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			sps.NumReorderFrames = 0
+			sps.BitstreamRestrictionFlag = 0
+			return nil
+		}
 		return err
 	}
 	numReorderFrames, err := gb.readUEGolomb31()
 	if err != nil {
 		sps.NumReorderFrames = 0
 		sps.BitstreamRestrictionFlag = 0
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			return nil
+		}
 		return err
 	}
 	maxDecFrameBuffering, err := gb.readUEGolomb31()
 	if err != nil {
 		sps.NumReorderFrames = 0
 		sps.BitstreamRestrictionFlag = 0
+		if ignoreTruncation && gb.bitsLeft() <= 0 {
+			return nil
+		}
 		return err
 	}
 	sps.NumReorderFrames = int32(numReorderFrames)

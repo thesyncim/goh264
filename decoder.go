@@ -578,7 +578,7 @@ func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 	for _, nal := range nals {
 		switch nal.Type {
 		case h264.NALSPS:
-			sps, err := h264.DecodeSPS(nal.RBSP)
+			sps, err := h264.DecodeSPSFromNAL(nal)
 			if err != nil {
 				return StreamInfo{}, err
 			}
@@ -657,7 +657,7 @@ func (d *Decoder) storeAnnexBParameterSets(nals []h264.NALUnit) error {
 	for _, nal := range nals {
 		switch nal.Type {
 		case h264.NALSPS:
-			sps, err := h264.DecodeSPS(nal.RBSP)
+			sps, err := h264.DecodeSPSFromNAL(nal)
 			if err != nil {
 				return err
 			}
