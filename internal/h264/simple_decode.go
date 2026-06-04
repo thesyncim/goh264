@@ -277,7 +277,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 	for _, nal := range nals {
 		switch nal.Type {
 		case NALSPS:
-			sps, err := DecodeSPS(nal.RBSP)
+			sps, err := decodeSPSFromNAL(nal)
 			if err != nil {
 				return nil, err
 			}

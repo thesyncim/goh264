@@ -334,6 +334,26 @@ func DecodeSPS(rbsp []byte) (*SPS, error) {
 	return sps, nil
 }
 
+func decodeSPSFromNAL(nal NALUnit) (*SPS, error) {
+	if nal.Type != NALSPS {
+		return nil, ErrInvalidData
+	}
+	sps, err := DecodeSPS(nal.RBSP)
+	if err == nil {
+		return sps, nil
+	}
+	if len(nal.Raw) <= 1 {
+		return nil, err
+	}
+	// FFmpeg n8.0.1 h264dec.c retries malformed SPS RBSPs with the complete
+	// raw NAL payload. Some MOV/MP4 extradata carries unescaped bytes that only
+	// parse through this recovery path.
+	if rawSPS, rawErr := DecodeSPS(nal.Raw[1:]); rawErr == nil {
+		return rawSPS, nil
+	}
+	return nil, err
+}
+
 func isHighProfile(profileIDC int32) bool {
 	switch profileIDC {
 	case 100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 144:

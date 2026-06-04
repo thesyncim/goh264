@@ -1242,7 +1242,7 @@ func (d *simpleFrameDPB) primeOutputReorderDelayFromNALs(nals []NALUnit, spsList
 	for _, nal := range nals {
 		switch nal.Type {
 		case NALSPS:
-			sps, err := DecodeSPS(nal.RBSP)
+			sps, err := decodeSPSFromNAL(nal)
 			if err != nil || sps.SPSID >= maxSPSCount {
 				return
 			}
