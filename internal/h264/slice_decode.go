@@ -602,10 +602,7 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 		sh.SPS.ChromaFormatIDC == 1 &&
 		sh.DeblockingFilter == 0 &&
 		(sh.SliceTypeNoS == PictureTypeI ||
-			(sh.SliceTypeNoS == PictureTypeP &&
-				sh.PPS.WeightedPred == 0 &&
-				sh.PredWeightTable.UseWeight == 0 &&
-				sh.PredWeightTable.UseWeightChroma == 0))
+			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)))
 }
 
 func isHigh12Frame420Scope(sh *SliceHeader) bool {

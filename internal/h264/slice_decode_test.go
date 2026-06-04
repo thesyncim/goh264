@@ -511,7 +511,7 @@ func TestDecodeCABACFrameSliceHighReconstructsP16x16NoResidualFromRef(t *testing
 }
 
 func TestDecodeCAVLCFrameSliceHighReconstructsWeightedPSkipFromRef(t *testing.T) {
-	for _, bitDepth := range []int32{10, 12} {
+	for _, bitDepth := range []int32{10, 12, 14} {
 		t.Run(bitDepthName(bitDepth), func(t *testing.T) {
 			m, dst, sh, ref := h264HighPFrameSliceDecodeFixture(t, bitDepth)
 			sh.PPS.WeightedPred = 1
@@ -587,7 +587,7 @@ func TestDecodeCABACFrameSliceHighReconstructsWeightedPSkipFromRef(t *testing.T)
 }
 
 func TestDecodeCAVLCFrameSliceHighReconstructsWeightedP16x16FromRef(t *testing.T) {
-	for _, bitDepth := range []int32{10, 12} {
+	for _, bitDepth := range []int32{10, 12, 14} {
 		t.Run(bitDepthName(bitDepth), func(t *testing.T) {
 			m, dst, sh, ref := h264HighPFrameSliceDecodeFixture(t, bitDepth)
 			sh.PPS.WeightedPred = 1
