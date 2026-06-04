@@ -99,7 +99,32 @@ func TestH264RealVectorStrictOracle(t *testing.T) {
 	if os.Getenv("GOH264_REAL_VECTOR_STRICT") != "1" {
 		t.Skip("set GOH264_REAL_VECTOR_STRICT=1 to run public H.264 vectors as strict decode-ok oracle rows")
 	}
-	testH264CorpusManifest(t, defaultH264RealVectorManifest)
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
+	failureByID := h264CorpusFailureLedgerByID(t, manifest, failures)
+	if filter := h264CorpusFilterTokens(); len(filter) != 0 {
+		manifest = filterH264CorpusEntries(manifest, filter)
+		if len(manifest) == 0 {
+			t.Fatalf("%s: no corpus entries matched GOH264_CORPUS_FILTER=%q", defaultH264RealVectorManifest, os.Getenv("GOH264_CORPUS_FILTER"))
+		}
+	}
+
+	var strictEntries []h264CorpusEntry
+	var knownRedIDs []string
+	for _, entry := range manifest {
+		if _, knownRed := failureByID[entry.ID]; knownRed {
+			knownRedIDs = append(knownRedIDs, entry.ID)
+			continue
+		}
+		strictEntries = append(strictEntries, entry)
+	}
+	if len(knownRedIDs) != 0 {
+		t.Logf("strict oracle excludes known-red ids covered by %s: %s", defaultH264RealVectorFailureManifest, strings.Join(knownRedIDs, ","))
+	}
+	if len(strictEntries) == 0 {
+		t.Skipf("strict oracle selected only known-red rows; run GOH264_REAL_VECTOR_FAILURES=1 or GOH264_REAL_VECTOR_MATRIX=1 to exercise them")
+	}
+	testH264CorpusEntries(t, defaultH264RealVectorManifest, strictEntries)
 }
 
 func TestH264RealVectorKnownRedStrict(t *testing.T) {
@@ -261,6 +286,54 @@ func TestH264RealVectorLaneCoverage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestH264RealVectorUpstreamFATECoverage(t *testing.T) {
+	if os.Getenv("GOH264_REAL_VECTOR_UPSTREAM_AUDIT") != "1" {
+		t.Skip("set GOH264_REAL_VECTOR_UPSTREAM_AUDIT=1 after scripts/fetch-upstream.sh to audit pinned FFmpeg FATE coverage")
+	}
+	upstream := os.Getenv("GOH264_UPSTREAM")
+	if upstream == "" {
+		upstream = filepath.Join(".upstream", "ffmpeg-n8.0.1")
+	}
+	fateDir := filepath.Join(upstream, "tests", "fate")
+	if _, err := os.Stat(filepath.Join(fateDir, "h264.mak")); err != nil {
+		t.Fatalf("pinned FFmpeg FATE files missing under %s: %v; run scripts/fetch-upstream.sh", fateDir, err)
+	}
+
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	manifestPaths := h264RealVectorManifestFATESamplePaths(manifest)
+	upstreamRefs := h264UpstreamFATEH264SampleRefs(t, fateDir)
+	excludedRefs := map[string]string{
+		"h264-conformance/FM1_BT_B.h264": "CBS malformed no-frame stream; FFmpeg exits with decode error",
+		"mkv/h264_tta_undecodable.mkv":   "container has no H.264 video stream",
+	}
+
+	var missing []string
+	var represented, excluded int
+	for ref, locations := range upstreamRefs {
+		if _, ok := manifestPaths[ref]; ok {
+			represented++
+			continue
+		}
+		if reason, ok := excludedRefs[ref]; ok {
+			excluded++
+			t.Logf("excluded upstream H.264-ish ref %s: %s", ref, reason)
+			continue
+		}
+		missing = append(missing, fmt.Sprintf("%s (%s)", ref, strings.Join(locations, ",")))
+	}
+	sort.Strings(missing)
+	if len(missing) != 0 {
+		t.Fatalf("real-vector manifest is missing pinned FFmpeg H.264 FATE sample refs:\n%s", strings.Join(missing, "\n"))
+	}
+	for ref := range excludedRefs {
+		if _, ok := upstreamRefs[ref]; !ok {
+			t.Fatalf("documented excluded upstream ref %s is no longer produced by the pinned FATE scan", ref)
+		}
+	}
+	t.Logf("upstream H.264 FATE sample refs=%d represented=%d excluded=%d manifest_entries=%d",
+		len(upstreamRefs), represented, excluded, len(manifest))
 }
 
 func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
@@ -630,6 +703,162 @@ func h264CorpusEntryIDs(entries []h264CorpusEntry) []string {
 		ids = append(ids, entry.ID)
 	}
 	return ids
+}
+
+func h264RealVectorManifestFATESamplePaths(entries []h264CorpusEntry) map[string]struct{} {
+	paths := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		if entry.Path != "" {
+			paths[h264CleanFATESamplePath(entry.Path)] = struct{}{}
+		}
+		if suffix := h264FATESuiteURLSuffix(entry.URL); suffix != "" {
+			paths[suffix] = struct{}{}
+		}
+	}
+	return paths
+}
+
+func h264CleanFATESamplePath(path string) string {
+	path = filepath.ToSlash(filepath.Clean(path))
+	return strings.TrimPrefix(path, "fate-suite/")
+}
+
+func h264FATESuiteURLSuffix(url string) string {
+	const prefix = "https://fate-suite.ffmpeg.org/"
+	if !strings.HasPrefix(url, prefix) {
+		return ""
+	}
+	return strings.TrimPrefix(url, prefix)
+}
+
+func h264UpstreamFATEH264SampleRefs(t *testing.T, fateDir string) map[string][]string {
+	t.Helper()
+	refs := make(map[string][]string)
+	makFiles, err := filepath.Glob(filepath.Join(fateDir, "*.mak"))
+	if err != nil {
+		t.Fatalf("glob FFmpeg FATE makefiles: %v", err)
+	}
+	for _, path := range makFiles {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		name := filepath.Base(path)
+		for lineNo, line := range strings.Split(string(data), "\n") {
+			for _, ref := range h264TargetSampleRefsFromLine(line) {
+				if strings.Contains(ref, "$(@:fate-h264-%=%)") {
+					for _, reinitRef := range h264UpstreamReinitSampleRefs() {
+						h264AddUpstreamFATERef(refs, reinitRef, fmt.Sprintf("%s:%d:reinit", name, lineNo+1))
+					}
+					continue
+				}
+				if !h264FATERefLooksH264ish(ref, line) {
+					continue
+				}
+				h264AddUpstreamFATERef(refs, ref, fmt.Sprintf("%s:%d", name, lineNo+1))
+			}
+		}
+	}
+
+	cbsPath := filepath.Join(fateDir, "cbs.mak")
+	for _, sample := range h264MakeVariableWords(t, cbsPath, "FATE_CBS_H264_CONFORMANCE_SAMPLES") {
+		h264AddUpstreamFATERef(refs, "h264-conformance/"+sample, "cbs.mak:FATE_CBS_H264_CONFORMANCE_SAMPLES")
+	}
+	for _, sample := range h264MakeVariableWords(t, cbsPath, "FATE_CBS_H264_SAMPLES") {
+		h264AddUpstreamFATERef(refs, "h264/"+sample, "cbs.mak:FATE_CBS_H264_SAMPLES")
+	}
+	h264AddUpstreamFATERef(refs, "h264/interlaced_crop.mp4", "cbs.mak:FATE_CBS_DISCARD_TEST")
+	return refs
+}
+
+func h264TargetSampleRefsFromLine(line string) []string {
+	const marker = "$(TARGET_SAMPLES)/"
+	var refs []string
+	for {
+		idx := strings.Index(line, marker)
+		if idx < 0 {
+			return refs
+		}
+		start := idx + len(marker)
+		end := start
+		for end < len(line) {
+			switch line[end] {
+			case ' ', '\t', '\r', '\n', '\\', '"', '\'':
+				goto found
+			}
+			end++
+		}
+	found:
+		ref := strings.TrimRight(line[start:end], ")")
+		if ref != "" {
+			refs = append(refs, ref)
+		}
+		line = line[end:]
+	}
+}
+
+func h264FATERefLooksH264ish(ref string, context string) bool {
+	haystack := strings.ToLower(ref + " " + context)
+	return strings.Contains(haystack, "h264")
+}
+
+func h264UpstreamReinitSampleRefs() []string {
+	return []string{
+		"h264/reinit-large_420_8-to-small_420_8.h264",
+		"h264/reinit-small_420_8-to-large_444_10.h264",
+		"h264/reinit-small_420_9-to-small_420_8.h264",
+		"h264/reinit-small_422_9-to-small_420_9.h264",
+	}
+}
+
+func h264AddUpstreamFATERef(refs map[string][]string, ref string, location string) {
+	ref = h264CleanFATESamplePath(ref)
+	for _, existing := range refs[ref] {
+		if existing == location {
+			return
+		}
+	}
+	refs[ref] = append(refs[ref], location)
+}
+
+func h264MakeVariableWords(t *testing.T, path string, name string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	lines := strings.Split(string(data), "\n")
+	prefix := name + " ="
+	for i, line := range lines {
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		var words []string
+		for ; i < len(lines); i++ {
+			text := strings.TrimSpace(lines[i])
+			if i == 0 || strings.HasPrefix(text, name+" =") {
+				parts := strings.SplitN(text, "=", 2)
+				text = ""
+				if len(parts) == 2 {
+					text = strings.TrimSpace(parts[1])
+				}
+			}
+			if text == "" && i != 0 {
+				break
+			}
+			continued := strings.HasSuffix(text, "\\")
+			text = strings.TrimSpace(strings.TrimSuffix(text, "\\"))
+			if text != "" {
+				words = append(words, strings.Fields(text)...)
+			}
+			if !continued {
+				break
+			}
+		}
+		return words
+	}
+	t.Fatalf("%s: missing make variable %s", path, name)
+	return nil
 }
 
 func h264CorpusFailureFilterSummary(entries []h264CorpusEntry) string {
