@@ -2,7 +2,7 @@
 
 | Upstream area | Local area | State | Proof |
 | --- | --- | --- | --- |
-| NAL/extradata/SPS/PPS/SEI | `nal.go`, `sps.go`, `pps.go`, `sei.go` | translated subset; FMO and 11/13-bit luma depths intentionally unsupported at the pinned FFmpeg PPS boundary | unit, corpus, PPS FMO and bit-depth unsupported parity guards |
+| NAL/extradata/SPS/PPS/SEI | `nal.go`, `sps.go`, `pps.go`, `sei.go` | translated subset; FMO, 11/13-bit luma depths, unsupported SPS chroma formats, separate color planes, and mixed chroma/luma bit depths intentionally unsupported at the pinned FFmpeg admission boundary | unit, corpus, PPS FMO/bit-depth and SPS chroma/bit-depth unsupported parity guards |
 | slice headers/ref lists/DPB | `slice.go`, `simple_dpb.go` | partial | unit, MD5 |
 | CAVLC/CABAC macroblocks | `cavlc*.go`, `cabac*.go` | partial | unit, MD5 |
 | prediction/MC/IDCT/deblock | `pred*.go`, `motion_comp*.go`, `idct.go`, `loop_filter.go` | partial; MBAFF direct field maps + field-ref deblock | unit, C oracle, MD5; MR8/MR9 direct-field colmap oracle |

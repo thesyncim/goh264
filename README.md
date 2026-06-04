@@ -54,7 +54,9 @@ field/inter streams, broader damaged-slice error resilience, threading/SIMD and
 bulk allocation hardening, and exact libavcodec delayed-output behavior.
 Intentionally unsupported at the pinned FFmpeg parity boundary: FMO, which
 FFmpeg n8.0.1 compiles out and rejects while parsing PPS slice groups, and
-11/13-bit luma depths, which FFmpeg rejects at PPS admission.
+11/13-bit luma depths, which FFmpeg rejects at PPS admission. SPS admission also
+mirrors FFmpeg's unsupported boundaries for `chroma_format_idc > 3`, separate
+color planes, and mixed chroma/luma bit depths.
 
 ## Quick Start
 

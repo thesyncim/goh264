@@ -70,11 +70,14 @@ high modes, public 12/14-bit high streams beyond the current FFmpeg FATE
 8-bit/10-bit set, broader damaged-slice error resilience, threading/SIMD, and
 full libavcodec delayed-output behavior.
 
-Intentionally unsupported at the pinned FFmpeg parity boundary: FMO and 11/13-bit
-luma depths. FFmpeg n8.0.1 has `FMO` compiled out in
+Intentionally unsupported at the pinned FFmpeg parity boundary: FMO, 11/13-bit
+luma depths, `chroma_format_idc > 3`, separate color planes, and mixed
+chroma/luma bit depths. FFmpeg n8.0.1 has `FMO` compiled out in
 `libavcodec/h264dec.h`, and `ff_h264_decode_picture_parameter_set` returns
-PATCHWELCOME as soon as `num_slice_groups_minus1 > 0` or
-`bit_depth_luma` is 11 or 13; local PPS parsing mirrors both with
-`ErrUnsupported`.
+PATCHWELCOME as soon as `num_slice_groups_minus1 > 0` or `bit_depth_luma` is
+11 or 13; local PPS parsing mirrors both with `ErrUnsupported`. FFmpeg
+`ff_h264_decode_seq_parameter_set` also fails SPS admission for unsupported
+chroma formats, separate color planes, and different chroma/luma bit depths;
+local SPS parsing mirrors those with `ErrUnsupported`.
 
 Canonical detail lives in manifests and tests, not Markdown.

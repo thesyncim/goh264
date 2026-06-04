@@ -152,6 +152,8 @@ func decodeSPS(rbsp []byte, ignoreTruncation bool) (*SPS, error) {
 			return nil, err
 		}
 		if chromaFormatIDC > 3 {
+			// FFmpeg n8.0.1 request-samples chroma_format_idc > 3 and
+			// fails SPS admission.
 			return nil, ErrUnsupported
 		}
 		sps.ChromaFormatIDC = chromaFormatIDC
@@ -162,6 +164,8 @@ func decodeSPS(rbsp []byte, ignoreTruncation bool) (*SPS, error) {
 			}
 			sps.ResidualColorTransformFlag = int32(flag)
 			if flag != 0 {
+				// FFmpeg n8.0.1 logs separate color planes as unsupported
+				// and fails SPS admission.
 				return nil, ErrUnsupported
 			}
 		}
@@ -177,6 +181,8 @@ func decodeSPS(rbsp []byte, ignoreTruncation bool) (*SPS, error) {
 		sps.BitDepthLuma = int32(bitDepthLuma) + 8
 		sps.BitDepthChroma = int32(bitDepthChroma) + 8
 		if sps.BitDepthChroma != sps.BitDepthLuma {
+			// FFmpeg n8.0.1 request-samples mixed chroma/luma bit depths
+			// and fails SPS admission.
 			return nil, ErrUnsupported
 		}
 		if sps.BitDepthLuma < 8 || sps.BitDepthLuma > 14 {
