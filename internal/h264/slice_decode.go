@@ -612,10 +612,7 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 		if sh.SliceTypeNoS == PictureTypeI {
 			return true
 		}
-		return sh.SliceTypeNoS == PictureTypeP &&
-			sh.PPS.WeightedPred == 0 &&
-			sh.PredWeightTable.UseWeight == 0 &&
-			sh.PredWeightTable.UseWeightChroma == 0
+		return sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)
 	default:
 		return false
 	}

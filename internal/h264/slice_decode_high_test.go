@@ -357,15 +357,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14UnprovedDeblockingVarian
 				},
 			},
 			{
-				name:      "weighted-P",
-				sliceType: PictureTypeP,
-				run: func(sh *SliceHeader) {
-					sh.RefCount = [2]uint32{1, 0}
-					sh.PPS.WeightedPred = 1
-					sh.PredWeightTable = highWeightedPPredWeightTable()
-				},
-			},
-			{
 				name:      "B",
 				sliceType: PictureTypeB,
 				run: func(sh *SliceHeader) {
@@ -424,13 +415,18 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh9Frame420And422(t *testing.
 }
 
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CAVLCWeightedP(t *testing.T) {
-	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, false, PictureTypeP)
-	sh.RefCount = [2]uint32{1, 0}
-	sh.PPS.WeightedPred = 1
-	sh.PredWeightTable = highWeightedPPredWeightTable()
+	for _, deblockMode := range []int32{0, 1, 2} {
+		t.Run(fmt.Sprintf("deblock-mode-%d", deblockMode), func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, deblockMode != 0, PictureTypeP)
+			sh.DeblockingFilter = deblockMode
+			sh.RefCount = [2]uint32{1, 0}
+			sh.PPS.WeightedPred = 1
+			sh.PredWeightTable = highWeightedPPredWeightTable()
 
-	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-		t.Fatalf("high14 weighted P validation err = %v, want nil", err)
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high14 weighted P validation err = %v, want nil", err)
+			}
+		})
 	}
 }
 
@@ -794,16 +790,19 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsWeightedPMetadata(t *testing.T)
 		}
 	}
 
-	t.Run("14-bit/deblock-mode-0", func(t *testing.T) {
-		m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 2, false, PictureTypeP)
-		sh.RefCount = [2]uint32{1, 0}
-		sh.PPS.WeightedPred = 1
-		sh.PredWeightTable = highWeightedPPredWeightTable()
+	for _, deblockMode := range []int32{0, 1, 2} {
+		t.Run(fmt.Sprintf("14-bit/deblock-mode-%d", deblockMode), func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 2, deblockMode != 0, PictureTypeP)
+			sh.DeblockingFilter = deblockMode
+			sh.RefCount = [2]uint32{1, 0}
+			sh.PPS.WeightedPred = 1
+			sh.PredWeightTable = highWeightedPPredWeightTable()
 
-		if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-			t.Fatalf("high weighted P validation err = %v, want nil", err)
-		}
-	})
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high weighted P validation err = %v, want nil", err)
+			}
+		})
+	}
 }
 
 func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries(t *testing.T) {
