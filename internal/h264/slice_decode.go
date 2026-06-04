@@ -598,8 +598,7 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 	if sh == nil || sh.SPS == nil || sh.PPS == nil {
 		return false
 	}
-	return sh.PPS.CABAC == 0 &&
-		sh.SPS.ChromaFormatIDC == 1 &&
+	return sh.SPS.ChromaFormatIDC == 1 &&
 		sh.DeblockingFilter == 0 &&
 		(sh.SliceTypeNoS == PictureTypeI ||
 			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)))
@@ -931,8 +930,7 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 				}
 			}
 			if sh.SPS.BitDepthLuma == 14 {
-				if sh.PPS != nil && sh.PPS.CABAC == 0 &&
-					(mbType == MBTypeIntra4x4 || mbType == MBTypeIntra16x16) &&
+				if (mbType == MBTypeIntra4x4 || mbType == MBTypeIntra16x16) &&
 					cbp == 0 && cbpTable == 0 {
 					return nil
 				}

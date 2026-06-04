@@ -17,14 +17,15 @@ weighted P16x16/partitioned P plus
 P16x16 residual handoff plus no-deblock/mode-1 I/P deblock including
 unweighted 4:2:2/4:4:4 I/P chroma deblock plus 4:2:0 I/P
 slice-boundary mode-2 deblock and unweighted 4:2:2/4:4:4 I/P chroma
-slice-boundary mode-2 deblock, High14 CAVLC IntraPCM, public CAVLC
-Intra16x16 no-residual and luma-DC/luma-AC/luma-DC+AC/chroma-DC/chroma-AC/
+slice-boundary mode-2 deblock, High14 CAVLC/CABAC IntraPCM plus
+CAVLC/CABAC no-residual Intra4x4/Intra16x16 and public CAVLC
+Intra16x16 luma-DC/luma-AC/luma-DC+AC/chroma-DC/chroma-AC/
 chroma-DC+AC/luma+chroma residual plus two-frame CAVLC P-skip/P16x16
 no-residual and P16x16 luma-residual/luma+chroma residual plus
 P16x8/P8x16/P8x8 luma+chroma residual Annex B/AVC/configuration-record
 fixtures, mixed no-residual
 intra, separate and combined Intra16x16 luma/chroma residual plus
-unweighted and CAVLC weighted P-skip/P16x16, High10 frame-MBAFF field-coded CAVLC IntraPCM
+CAVLC/CABAC unweighted and weighted P-skip/P16x16, High10 frame-MBAFF field-coded CAVLC IntraPCM
 entropy/reconstruct pairing plus public High10/High422 field-coded
 frame-MBAFF deblock rows, complete FFmpeg FRext FATE row coverage including
 monochrome-to-yuv420p output, selected compact baseline/main conformance rows
