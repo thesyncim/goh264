@@ -297,7 +297,7 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 		{name: "9-bit-422-slice-boundary-deblock", bitDepth: 9, chroma: 9, format: 2, deblockMode: 2, slice: PictureTypeI},
 		{name: "12-bit-b-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 1, deblockMode: 2, slice: PictureTypeB},
 		{name: "14-bit-b", bitDepth: 14, chroma: 14, format: 1, slice: PictureTypeB},
-		{name: "14-bit-slice-boundary-deblock", bitDepth: 14, chroma: 14, format: 1, deblockMode: 2, slice: PictureTypeI},
+		{name: "14-bit-b-slice-boundary-deblock", bitDepth: 14, chroma: 14, format: 1, deblockMode: 2, slice: PictureTypeB},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeI},
 		{name: "monochrome", bitDepth: 10, chroma: 10, format: 0, slice: PictureTypeI},
 	}
@@ -316,67 +316,73 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CAVLCMode1Deblocking(t *testing.T) {
-	for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
-		t.Run(pictureTypeName(sliceType), func(t *testing.T) {
-			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, true, sliceType)
-			if sliceType == PictureTypeP {
-				sh.RefCount = [2]uint32{1, 0}
-			}
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CAVLCDeblocking(t *testing.T) {
+	for _, deblockMode := range []int32{1, 2} {
+		for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
+			t.Run(fmt.Sprintf("mode%d/%s", deblockMode, pictureTypeName(sliceType)), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, deblockMode != 0, sliceType)
+				sh.DeblockingFilter = deblockMode
+				if sliceType == PictureTypeP {
+					sh.RefCount = [2]uint32{1, 0}
+				}
 
-			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-				t.Fatalf("high14 CAVLC mode-1 deblock validation err = %v, want nil", err)
-			}
-		})
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high14 CAVLC mode-%d deblock validation err = %v, want nil", deblockMode, err)
+				}
+			})
+		}
 	}
 }
 
 func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14UnprovedDeblockingVariants(t *testing.T) {
-	for _, tt := range []struct {
-		name      string
-		sliceType int32
-		run       func(*SliceHeader)
-	}{
-		{
-			name:      "cabac-I",
-			sliceType: PictureTypeI,
-			run: func(sh *SliceHeader) {
-				sh.PPS.CABAC = 1
+	for _, deblockMode := range []int32{1, 2} {
+		for _, tt := range []struct {
+			name      string
+			sliceType int32
+			run       func(*SliceHeader)
+		}{
+			{
+				name:      "cabac-I",
+				sliceType: PictureTypeI,
+				run: func(sh *SliceHeader) {
+					sh.PPS.CABAC = 1
+				},
 			},
-		},
-		{
-			name:      "cabac-P",
-			sliceType: PictureTypeP,
-			run: func(sh *SliceHeader) {
-				sh.RefCount = [2]uint32{1, 0}
-				sh.PPS.CABAC = 1
+			{
+				name:      "cabac-P",
+				sliceType: PictureTypeP,
+				run: func(sh *SliceHeader) {
+					sh.RefCount = [2]uint32{1, 0}
+					sh.PPS.CABAC = 1
+				},
 			},
-		},
-		{
-			name:      "weighted-P",
-			sliceType: PictureTypeP,
-			run: func(sh *SliceHeader) {
-				sh.RefCount = [2]uint32{1, 0}
-				sh.PPS.WeightedPred = 1
-				sh.PredWeightTable = highWeightedPPredWeightTable()
+			{
+				name:      "weighted-P",
+				sliceType: PictureTypeP,
+				run: func(sh *SliceHeader) {
+					sh.RefCount = [2]uint32{1, 0}
+					sh.PPS.WeightedPred = 1
+					sh.PredWeightTable = highWeightedPPredWeightTable()
+				},
 			},
-		},
-		{
-			name:      "B",
-			sliceType: PictureTypeB,
-			run: func(sh *SliceHeader) {
-				sh.RefCount = [2]uint32{1, 1}
+			{
+				name:      "B",
+				sliceType: PictureTypeB,
+				run: func(sh *SliceHeader) {
+					sh.RefCount = [2]uint32{1, 1}
+				},
 			},
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, true, tt.sliceType)
-			tt.run(sh)
+		} {
+			t.Run(fmt.Sprintf("mode%d/%s", deblockMode, tt.name), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, true, tt.sliceType)
+				sh.DeblockingFilter = deblockMode
+				tt.run(sh)
 
-			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
-				t.Fatalf("high14 unproved deblock validation err = %v, want ErrUnsupported", err)
-			}
-		})
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+					t.Fatalf("high14 unproved mode-%d deblock validation err = %v, want ErrUnsupported", deblockMode, err)
+				}
+			})
+		}
 	}
 }
 

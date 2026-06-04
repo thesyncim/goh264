@@ -605,7 +605,7 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 	case 0:
 		return sh.SliceTypeNoS == PictureTypeI ||
 			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh))
-	case 1:
+	case 1, 2:
 		if sh.PPS.CABAC != 0 {
 			return false
 		}

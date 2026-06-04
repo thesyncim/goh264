@@ -31,7 +31,7 @@ P16x16 luma-residual/luma+chroma residual plus P16x8/P8x16/P8x8
 luma+chroma residual public fixtures plus mixed no-residual Intra4x4/Intra16x16 plus
 Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
 combined luma/chroma residual plus CAVLC/CABAC unweighted and weighted
-P-skip/P16x16 plus CAVLC mode-1 I/P deblock, High10 frame-MBAFF
+P-skip/P16x16 plus CAVLC mode-1/mode-2 I/P deblock, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, and public High10/
 High422 field-coded frame-MBAFF deblock rows, plus public High9 4:2:0
 SPS reinit metadata from 9-bit to 8-bit output, public High444 10-bit SPS

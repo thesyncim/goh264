@@ -19,59 +19,62 @@ const (
 	high14CAVLCIntraMode1DeblockBitstreamMD5 = "34fc065ec782ea6eb9940dfa2e225223"
 	high14CAVLCIntraMode1DeblockFrameMD5     = "efff96b33bda86086ce433d1ca8ae196"
 	high14CAVLCIntraMode1DeblockRawVideoMD5  = "efff96b33bda86086ce433d1ca8ae196"
+	high14CAVLCIntraMode2DeblockBitstreamMD5 = "b5661b14e7d4a78b82607a4ba13957a7"
 
 	high14CAVLCP16x16LumaChromaMode1DeblockBitstreamMD5 = "1aad7fb20cd3db4229f45a8c34bdd22c"
 	high14CAVLCP16x16LumaChromaMode1DeblockPFrameMD5    = "23270c92d77361b18113194baa743c51"
 	high14CAVLCP16x16LumaChromaMode1DeblockRawVideoMD5  = "10a4514f7d5f399f641bf854204ec1c9"
+	high14CAVLCP16x16LumaChromaMode2DeblockBitstreamMD5 = "1a5547a07f7e53525adfe82e233b39bb"
 )
 
-type high14CAVLCMode1DeblockCase struct {
+type high14CAVLCDeblockCase struct {
 	name         string
 	data         []byte
 	sliceTypes   []int32
+	deblockMode  int32
 	bitstreamMD5 string
 	frameMD5     []string
 	rawVideoMD5  string
 }
 
-func TestHigh14CAVLCMode1DeblockFixtureSyntax(t *testing.T) {
-	for _, tt := range high14CAVLCMode1DeblockCases() {
+func TestHigh14CAVLCDeblockFixtureSyntax(t *testing.T) {
+	for _, tt := range high14CAVLCDeblockCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			assertHigh14CAVLCMode1DeblockFixtureSyntax(t, tt.data, tt.sliceTypes, tt.bitstreamMD5)
+			assertHigh14CAVLCDeblockFixtureSyntax(t, tt.data, tt.sliceTypes, tt.deblockMode, tt.bitstreamMD5)
 		})
 	}
 }
 
-func TestDecodeAnnexBHigh14CAVLCMode1DeblockFrames(t *testing.T) {
-	for _, tt := range high14CAVLCMode1DeblockCases() {
+func TestDecodeAnnexBHigh14CAVLCDeblockFrames(t *testing.T) {
+	for _, tt := range high14CAVLCDeblockCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			assertHigh14CAVLCMode1DeblockFixtureSyntax(t, tt.data, tt.sliceTypes, tt.bitstreamMD5)
+			assertHigh14CAVLCDeblockFixtureSyntax(t, tt.data, tt.sliceTypes, tt.deblockMode, tt.bitstreamMD5)
 
 			frames, err := NewDecoder().DecodeAnnexBFrames(tt.data)
 			if err != nil {
-				t.Fatalf("decode High14 CAVLC mode-1 deblock Annex B: %v", err)
+				t.Fatalf("decode High14 CAVLC mode-%d deblock Annex B: %v", tt.deblockMode, err)
 			}
-			assertHigh14CAVLCMode1DeblockFrames(t, frames, tt.frameMD5, tt.rawVideoMD5)
+			assertHigh14CAVLCDeblockFrames(t, frames, tt.frameMD5, tt.rawVideoMD5)
 		})
 	}
 }
 
-func TestDecodeAVCHigh14CAVLCMode1DeblockFrames(t *testing.T) {
-	for _, tt := range high14CAVLCMode1DeblockCases() {
+func TestDecodeAVCHigh14CAVLCDeblockFrames(t *testing.T) {
+	for _, tt := range high14CAVLCDeblockCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, tt.data, nalLengthSize), nalLengthSize)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
-				assertHigh14CAVLCMode1DeblockFrames(t, frames, tt.frameMD5, tt.rawVideoMD5)
+				assertHigh14CAVLCDeblockFrames(t, frames, tt.frameMD5, tt.rawVideoMD5)
 			}
 		})
 	}
 }
 
-func TestDecodeConfiguredAVCHigh14CAVLCMode1DeblockFrames(t *testing.T) {
-	for _, tt := range high14CAVLCMode1DeblockCases() {
+func TestDecodeConfiguredAVCHigh14CAVLCDeblockFrames(t *testing.T) {
+	for _, tt := range high14CAVLCDeblockCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			config, samples := annexBToAVCConfigAndSamples(t, tt.data, 4)
 			if len(samples) != len(tt.frameMD5) {
@@ -86,16 +89,16 @@ func TestDecodeConfiguredAVCHigh14CAVLCMode1DeblockFrames(t *testing.T) {
 			for i, sample := range samples {
 				frame, err := dec.DecodeConfiguredAVC(sample)
 				if err != nil {
-					t.Fatalf("sample[%d] decode High14 CAVLC mode-1 deblock: %v", i, err)
+					t.Fatalf("sample[%d] decode High14 CAVLC mode-%d deblock: %v", i, tt.deblockMode, err)
 				}
 				frames = append(frames, frame)
 			}
-			assertHigh14CAVLCMode1DeblockFrames(t, frames, tt.frameMD5, tt.rawVideoMD5)
+			assertHigh14CAVLCDeblockFrames(t, frames, tt.frameMD5, tt.rawVideoMD5)
 		})
 	}
 }
 
-func TestFFmpegRawVideoFrameMD5OracleHigh14CAVLCMode1Deblock(t *testing.T) {
+func TestFFmpegRawVideoFrameMD5OracleHigh14CAVLCDeblock(t *testing.T) {
 	if os.Getenv("GOH264_ORACLE") != "1" {
 		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
 	}
@@ -103,28 +106,51 @@ func TestFFmpegRawVideoFrameMD5OracleHigh14CAVLCMode1Deblock(t *testing.T) {
 		t.Skip("ffmpeg not available")
 	}
 
-	for _, tt := range high14CAVLCMode1DeblockCases() {
+	for _, tt := range high14CAVLCDeblockCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			assertFFmpegHigh14CAVLCMode1DeblockRawVideoOracle(t, tt.data, tt.frameMD5, tt.rawVideoMD5)
+			assertFFmpegHigh14CAVLCDeblockRawVideoOracle(t, tt.data, tt.frameMD5, tt.rawVideoMD5)
 		})
 	}
 }
 
-func high14CAVLCMode1DeblockCases() []high14CAVLCMode1DeblockCase {
-	return []high14CAVLCMode1DeblockCase{
+func high14CAVLCDeblockCases() []high14CAVLCDeblockCase {
+	return []high14CAVLCDeblockCase{
 		{
-			name:         "intra-luma-chroma",
-			data:         high14CAVLCIntraMode1DeblockFixture(),
+			name:         "mode1-intra-luma-chroma",
+			data:         high14CAVLCIntraDeblockFixture(0),
 			sliceTypes:   []int32{h264.PictureTypeI},
+			deblockMode:  1,
 			bitstreamMD5: high14CAVLCIntraMode1DeblockBitstreamMD5,
 			frameMD5:     []string{high14CAVLCIntraMode1DeblockFrameMD5},
 			rawVideoMD5:  high14CAVLCIntraMode1DeblockRawVideoMD5,
 		},
 		{
-			name:         "p16x16-luma-chroma",
-			data:         high14CAVLCP16x16LumaChromaMode1DeblockFixture(),
+			name:         "mode1-p16x16-luma-chroma",
+			data:         high14CAVLCP16x16LumaChromaDeblockFixture(0),
 			sliceTypes:   []int32{h264.PictureTypeI, h264.PictureTypeP},
+			deblockMode:  1,
 			bitstreamMD5: high14CAVLCP16x16LumaChromaMode1DeblockBitstreamMD5,
+			frameMD5: []string{
+				high14CAVLCIntraMode1DeblockFrameMD5,
+				high14CAVLCP16x16LumaChromaMode1DeblockPFrameMD5,
+			},
+			rawVideoMD5: high14CAVLCP16x16LumaChromaMode1DeblockRawVideoMD5,
+		},
+		{
+			name:         "mode2-intra-luma-chroma",
+			data:         high14CAVLCIntraDeblockFixture(2),
+			sliceTypes:   []int32{h264.PictureTypeI},
+			deblockMode:  2,
+			bitstreamMD5: high14CAVLCIntraMode2DeblockBitstreamMD5,
+			frameMD5:     []string{high14CAVLCIntraMode1DeblockFrameMD5},
+			rawVideoMD5:  high14CAVLCIntraMode1DeblockRawVideoMD5,
+		},
+		{
+			name:         "mode2-p16x16-luma-chroma",
+			data:         high14CAVLCP16x16LumaChromaDeblockFixture(2),
+			sliceTypes:   []int32{h264.PictureTypeI, h264.PictureTypeP},
+			deblockMode:  2,
+			bitstreamMD5: high14CAVLCP16x16LumaChromaMode2DeblockBitstreamMD5,
 			frameMD5: []string{
 				high14CAVLCIntraMode1DeblockFrameMD5,
 				high14CAVLCP16x16LumaChromaMode1DeblockPFrameMD5,
@@ -134,20 +160,20 @@ func high14CAVLCMode1DeblockCases() []high14CAVLCMode1DeblockCase {
 	}
 }
 
-func high14CAVLCIntraMode1DeblockFixture() []byte {
-	return buildHighIntraAnnexBFixture(14, highIntra16x16ResidualMode1DeblockSliceRBSP(highIntra16x16LumaChromaPayloadBits))
+func high14CAVLCIntraDeblockFixture(disableDeblockingFilterIDC uint32) []byte {
+	return buildHighIntraAnnexBFixture(14, highIntra16x16ResidualDeblockSliceRBSP(highIntra16x16LumaChromaPayloadBits, disableDeblockingFilterIDC))
 }
 
-func high14CAVLCP16x16LumaChromaMode1DeblockFixture() []byte {
+func high14CAVLCP16x16LumaChromaDeblockFixture(disableDeblockingFilterIDC uint32) []byte {
 	var data []byte
 	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSPS), highInterSPSRBSP(14)))
 	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALPPS), highIntraPCMPPSRBSP(14)))
-	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALIDRSlice), highIntra16x16ResidualMode1DeblockSliceRBSP(highIntra16x16LumaChromaPayloadBits)))
-	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSlice), highInterP16x16LumaChromaMode1DeblockSliceRBSP()))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALIDRSlice), highIntra16x16ResidualDeblockSliceRBSP(highIntra16x16LumaChromaPayloadBits, disableDeblockingFilterIDC)))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSlice), highInterP16x16LumaChromaDeblockSliceRBSP(disableDeblockingFilterIDC)))
 	return data
 }
 
-func highIntra16x16ResidualMode1DeblockSliceRBSP(payloadBits string) []byte {
+func highIntra16x16ResidualDeblockSliceRBSP(payloadBits string, disableDeblockingFilterIDC uint32) []byte {
 	var b decoderSEIBitBuilder
 	b.writeUE(0)
 	b.writeUE(2)
@@ -157,12 +183,12 @@ func highIntra16x16ResidualMode1DeblockSliceRBSP(payloadBits string) []byte {
 	b.writeBit(0)
 	b.writeBit(0)
 	b.writeSE(0)
-	writeHighCAVLCMode1DeblockSyntax(&b)
+	writeHighCAVLCDeblockSyntax(&b, disableDeblockingFilterIDC)
 	highIntra16x16WritePayloadBits(&b, payloadBits)
 	return b.rbsp()
 }
 
-func highInterP16x16LumaChromaMode1DeblockSliceRBSP() []byte {
+func highInterP16x16LumaChromaDeblockSliceRBSP(disableDeblockingFilterIDC uint32) []byte {
 	var b decoderSEIBitBuilder
 	b.writeUE(0)
 	b.writeUE(0)
@@ -172,18 +198,20 @@ func highInterP16x16LumaChromaMode1DeblockSliceRBSP() []byte {
 	b.writeBit(0)
 	b.writeBit(0)
 	b.writeSE(0)
-	writeHighCAVLCMode1DeblockSyntax(&b)
+	writeHighCAVLCDeblockSyntax(&b, disableDeblockingFilterIDC)
 	highIntra16x16WritePayloadBits(&b, highInterP16x16LumaChromaResidualPayloadBits)
 	return b.rbsp()
 }
 
-func writeHighCAVLCMode1DeblockSyntax(b *decoderSEIBitBuilder) {
-	b.writeUE(0)
-	b.writeSE(0)
-	b.writeSE(0)
+func writeHighCAVLCDeblockSyntax(b *decoderSEIBitBuilder, disableDeblockingFilterIDC uint32) {
+	b.writeUE(disableDeblockingFilterIDC)
+	if disableDeblockingFilterIDC != 1 {
+		b.writeSE(0)
+		b.writeSE(0)
+	}
 }
 
-func assertHigh14CAVLCMode1DeblockFixtureSyntax(t *testing.T, data []byte, wantSliceTypes []int32, wantBitstreamMD5 string) {
+func assertHigh14CAVLCDeblockFixtureSyntax(t *testing.T, data []byte, wantSliceTypes []int32, wantDeblockMode int32, wantBitstreamMD5 string) {
 	t.Helper()
 	sum := md5.Sum(data)
 	if got := hex.EncodeToString(sum[:]); got != wantBitstreamMD5 {
@@ -226,14 +254,14 @@ func assertHigh14CAVLCMode1DeblockFixtureSyntax(t *testing.T, data []byte, wantS
 			if err != nil {
 				t.Fatal(err)
 			}
-			if sh.PictureStructure != h264.PictureFrame || sh.DeblockingFilter != 1 ||
+			if sh.PictureStructure != h264.PictureFrame || sh.DeblockingFilter != wantDeblockMode ||
 				sh.SliceAlphaC0Offset != 0 || sh.SliceBetaOffset != 0 || sh.QScale != 26 {
-				t.Fatalf("slice picture/deblock/offsets/qp = %d/%d/%d/%d/%d, want frame/mode-1/0/0/26",
-					sh.PictureStructure, sh.DeblockingFilter, sh.SliceAlphaC0Offset, sh.SliceBetaOffset, sh.QScale)
+				t.Fatalf("slice picture/deblock/offsets/qp = %d/%d/%d/%d/%d, want frame/mode-%d/0/0/26",
+					sh.PictureStructure, sh.DeblockingFilter, sh.SliceAlphaC0Offset, sh.SliceBetaOffset, sh.QScale, wantDeblockMode)
 			}
 			gotSliceTypes = append(gotSliceTypes, sh.SliceTypeNoS)
 		default:
-			t.Fatalf("unexpected NAL type %d in High14 CAVLC mode-1 deblock fixture", nal.Type)
+			t.Fatalf("unexpected NAL type %d in High14 CAVLC deblock fixture", nal.Type)
 		}
 	}
 	if len(gotSliceTypes) != len(wantSliceTypes) {
@@ -246,7 +274,7 @@ func assertHigh14CAVLCMode1DeblockFixtureSyntax(t *testing.T, data []byte, wantS
 	}
 }
 
-func assertHigh14CAVLCMode1DeblockFrames(t *testing.T, frames []*Frame, wantFrameMD5 []string, wantRawVideoMD5 string) {
+func assertHigh14CAVLCDeblockFrames(t *testing.T, frames []*Frame, wantFrameMD5 []string, wantRawVideoMD5 string) {
 	t.Helper()
 	if len(frames) != len(wantFrameMD5) {
 		t.Fatalf("frames = %d, want %d", len(frames), len(wantFrameMD5))
@@ -283,9 +311,9 @@ func assertHigh14CAVLCMode1DeblockFrames(t *testing.T, frames []*Frame, wantFram
 	}
 }
 
-func assertFFmpegHigh14CAVLCMode1DeblockRawVideoOracle(t *testing.T, data []byte, wantFrameMD5 []string, wantRawVideoMD5 string) {
+func assertFFmpegHigh14CAVLCDeblockRawVideoOracle(t *testing.T, data []byte, wantFrameMD5 []string, wantRawVideoMD5 string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "high14_mode1_deblock.h264")
+	path := filepath.Join(t.TempDir(), "high14_cavlc_deblock.h264")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
