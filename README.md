@@ -181,8 +181,8 @@ Public vector gates:
 
 ```sh
 scripts/h264-real-vector-strict.sh
-GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run '^TestH264RealVectorFailureLedgerFreshness$' -count=1 -v
-GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test . -run '^TestH264RealVectorFailureMatrix$' -count=1 -v
+GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureLedgerFreshness$' -count=1 -v
+GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v
 scripts/h264-real-vector-upstream-audit.sh
 ```
 
@@ -204,8 +204,8 @@ Focused red-lane tools:
 scripts/h264-real-vector-red-queue.sh field
 scripts/h264-real-vector-red-each.sh
 scripts/h264-red-vector.sh direct
-GOH264_REAL_VECTOR_RAWDIFF=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test . -run '^TestH264RealVectorRawDiffDiagnostics$' -count=1 -v
-GOH264_REAL_VECTOR_FRAMEMD5=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test . -run '^TestH264RealVectorFrameMD5Diagnostics$' -count=1 -v
+GOH264_REAL_VECTOR_RAWDIFF=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorRawDiffDiagnostics$' -count=1 -v
+GOH264_REAL_VECTOR_FRAMEMD5=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFrameMD5Diagnostics$' -count=1 -v
 ```
 
 `GOH264_CORPUS_FILTER` accepts feature tags or id fragments such as `field`,
@@ -240,7 +240,7 @@ peer quality status.
 | --- | --- |
 | `decoder.go` | Public decoder API, frames, raw output helpers, side-data mapping |
 | `internal/h264/` | Source-shaped parser, syntax, prediction, transform, DPB, reconstruct, and loop-filter code |
-| `decoder_*_test.go` | Public and package-level fixture/oracle coverage |
+| `tests/decoder_*_test.go` | Public and package-level fixture/oracle coverage |
 | `testdata/h264/corpus/` | Small local corpus manifest |
 | `testdata/h264/realvectors/` | Public FFmpeg FATE manifest and known-red ledger |
 | `scripts/` | Upstream fetch, oracle probes, public-vector gates, diagnostics, benchmarks |
@@ -267,8 +267,8 @@ Good safe-point gates are usually:
 git diff --check
 go test ./...
 scripts/h264-real-vector-strict.sh
-GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test . -run '^TestH264RealVectorFailureLedgerFreshness$' -count=1 -v
-GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test . -run '^TestH264RealVectorFailureMatrix$' -count=1 -v
+GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureLedgerFreshness$' -count=1 -v
+GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v
 scripts/h264-real-vector-upstream-audit.sh
 ```
 

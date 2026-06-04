@@ -13,18 +13,18 @@ if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
     printf ' filter=%s' "$GOH264_CORPUS_FILTER"
 fi
 printf '\n'
-GOH264_REAL_VECTOR_FAILURES=1 go test . -run '^TestH264RealVectorFailureLedgerFreshness$' -count=1 -v
+GOH264_REAL_VECTOR_FAILURES=1 go test ./tests -run '^TestH264RealVectorFailureLedgerFreshness$' -count=1 -v
 
 printf '\nreal-vector matrix (safe-point gate)'
 if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
     printf ' filter=%s' "$GOH264_CORPUS_FILTER"
 fi
 printf '\n'
-GOH264_REAL_VECTOR_MATRIX=1 go test . -run '^TestH264RealVectorFailureMatrix$' -count=1 -v
+GOH264_REAL_VECTOR_MATRIX=1 go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v
 
 printf '\nreal-vector red queue (expected to fail until selected rows are fixed; script exits non-zero while red)'
 if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
     printf ' filter=%s' "$GOH264_CORPUS_FILTER"
 fi
 printf '\n'
-GOH264_REAL_VECTOR_RED_QUEUE=1 go test . -run '^TestH264RealVectorRedQueue$' -count=1 -v
+GOH264_REAL_VECTOR_RED_QUEUE=1 go test ./tests -run '^TestH264RealVectorRedQueue$' -count=1 -v

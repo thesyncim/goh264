@@ -2,7 +2,24 @@
 
 package goh264_test
 
-import goh264 "github.com/thesyncim/goh264"
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	goh264 "github.com/thesyncim/goh264"
+)
+
+func TestMain(m *testing.M) {
+	_, file, _, ok := runtime.Caller(0)
+	if ok {
+		if err := os.Chdir(filepath.Dir(filepath.Dir(file))); err != nil {
+			panic(err)
+		}
+	}
+	os.Exit(m.Run())
+}
 
 var (
 	ErrInvalidData = goh264.ErrInvalidData

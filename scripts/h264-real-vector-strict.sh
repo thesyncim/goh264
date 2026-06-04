@@ -14,4 +14,4 @@ if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
 fi
 printf '\n'
 
-GOH264_REAL_VECTOR_STRICT=1 go test . -run '^TestH264RealVectorStrictOracle$' -count=1 -v
+GOH264_REAL_VECTOR_STRICT=1 go test ./tests -run '^TestH264RealVectorStrictOracle$' -count=1 -v
