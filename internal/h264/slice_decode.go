@@ -607,7 +607,7 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh))
 	case 1, 2:
 		if sh.PPS.CABAC != 0 {
-			return false
+			return isHigh14CABACFrame420DeblockScope(sh)
 		}
 		if sh.SliceTypeNoS == PictureTypeI {
 			return true
@@ -616,6 +616,19 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 	default:
 		return false
 	}
+}
+
+func isHigh14CABACFrame420DeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.PPS == nil || sh.PPS.CABAC == 0 {
+		return false
+	}
+	if sh.SliceTypeNoS == PictureTypeI {
+		return true
+	}
+	if sh.SliceTypeNoS != PictureTypeP || sh.PPS.WeightedPred != 0 {
+		return false
+	}
+	return sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0
 }
 
 func isHigh12Frame420Scope(sh *SliceHeader) bool {
