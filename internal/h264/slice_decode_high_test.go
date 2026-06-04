@@ -217,7 +217,8 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 		slice       int32
 	}{
 		{name: "8-bit", bitDepth: 8, chroma: 8, format: 1, slice: PictureTypeI},
-		{name: "9-bit-422", bitDepth: 9, chroma: 9, format: 2, slice: PictureTypeI},
+		{name: "9-bit-422-slice-boundary-deblock", bitDepth: 9, chroma: 9, format: 2, deblockMode: 2, slice: PictureTypeI},
+		{name: "10-bit-422-b", bitDepth: 10, chroma: 10, format: 2, slice: PictureTypeB},
 		{name: "12-bit-b-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 1, deblockMode: 2, slice: PictureTypeB},
 		{name: "14-bit-b", bitDepth: 14, chroma: 14, format: 1, slice: PictureTypeB},
 		{name: "14-bit-deblock", bitDepth: 14, chroma: 14, format: 1, deblock: true, slice: PictureTypeI},
@@ -240,15 +241,34 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh9Frame420(t *testing.T) {
-	for _, sliceType := range []int32{PictureTypeI, PictureTypeP, PictureTypeB} {
-		t.Run(pictureTypeName(sliceType), func(t *testing.T) {
-			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 9, 1, 1, false, sliceType)
-			switch sliceType {
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh9Frame420And422(t *testing.T) {
+	for _, tt := range []struct {
+		name             string
+		chromaFormatIDC  int
+		sliceType        int32
+		implicitWeighted bool
+	}{
+		{name: "420/I", chromaFormatIDC: 1, sliceType: PictureTypeI},
+		{name: "420/P", chromaFormatIDC: 1, sliceType: PictureTypeP},
+		{name: "420/B", chromaFormatIDC: 1, sliceType: PictureTypeB},
+		{name: "422/I", chromaFormatIDC: 2, sliceType: PictureTypeI},
+		{name: "422/P", chromaFormatIDC: 2, sliceType: PictureTypeP},
+		{name: "422/B", chromaFormatIDC: 2, sliceType: PictureTypeB},
+		{name: "422/B-implicit-weight", chromaFormatIDC: 2, sliceType: PictureTypeB, implicitWeighted: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 9, tt.chromaFormatIDC, 2, true, tt.sliceType)
+			sh.DeblockingFilter = 1
+			switch tt.sliceType {
 			case PictureTypeP:
 				sh.RefCount = [2]uint32{1, 0}
 			case PictureTypeB:
 				sh.RefCount = [2]uint32{1, 1}
+			}
+			if tt.implicitWeighted {
+				sh.PPS.WeightedBipredIDC = 2
+				sh.PredWeightTable.UseWeight = 2
+				sh.PredWeightTable.UseWeightChroma = 2
 			}
 
 			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
