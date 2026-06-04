@@ -371,6 +371,7 @@ func TestWriteBackMotionFillsUnusedListAndDirectTable(t *testing.T) {
 	}
 	mbXY := 5
 	var cache macroblockMotionCache
+	m.DirectTable[4*mbXY+0] = 77
 	sub := [4]uint32{MBType16x8, MBTypeDirect2, MBType16x16, MBType8x8}
 	if err := m.writeBackMotion(mbXY, MBType8x8, PictureTypeB, true, &sub, &cache); err != nil {
 		t.Fatal(err)
@@ -378,7 +379,7 @@ func TestWriteBackMotionFillsUnusedListAndDirectTable(t *testing.T) {
 	if got := m.RefIndex[0][4*mbXY : 4*mbXY+4]; got[0] != h264ListNotUsed || got[1] != h264ListNotUsed || got[2] != h264ListNotUsed || got[3] != h264ListNotUsed {
 		t.Fatalf("unused list refs = %v", got)
 	}
-	if m.DirectTable[4*mbXY+0] != uint8(MBType16x8>>1) || m.DirectTable[4*mbXY+1] != uint8(MBTypeDirect2>>1) ||
+	if m.DirectTable[4*mbXY+0] != 77 || m.DirectTable[4*mbXY+1] != uint8(MBTypeDirect2>>1) ||
 		m.DirectTable[4*mbXY+2] != uint8(MBType16x16>>1) || m.DirectTable[4*mbXY+3] != uint8(MBType8x8>>1) {
 		t.Fatalf("direct table = %v", m.DirectTable[4*mbXY:4*mbXY+4])
 	}

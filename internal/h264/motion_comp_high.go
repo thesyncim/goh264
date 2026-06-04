@@ -66,34 +66,35 @@ func h264HLMotionFrameCoreHigh(dst *h264PicturePlanesHigh, refs [2][]*h264Pictur
 
 	for i := 0; i < 4; i++ {
 		subType := subMBType[i]
+		partType := subType | (mbType & MBTypeInterlaced)
 		n := 4 * i
 		xOffset := (i & 1) << 2
 		yOffset := (i & 2) << 1
 
 		if isSub8x8(subType) {
-			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, subType, 0, n, true, 8, 0, xOffset, yOffset, 8, 4, 8, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
+			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, partType, 0, n, true, 8, 0, xOffset, yOffset, 8, 4, 8, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
 				return err
 			}
 		} else if isSub8x4(subType) {
-			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, subType, 0, n, false, 4, 4, xOffset, yOffset, 4, 4, 8, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
+			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, partType, 0, n, false, 4, 4, xOffset, yOffset, 4, 4, 8, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
 				return err
 			}
-			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, subType, 0, n+2, false, 4, 4, xOffset, yOffset+2, 4, 4, 8, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
+			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, partType, 0, n+2, false, 4, 4, xOffset, yOffset+2, 4, 4, 8, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
 				return err
 			}
 		} else if isSub4x8(subType) {
 			delta := 4 * dst.LumaStride
-			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, subType, 0, n, false, 8, delta, xOffset, yOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
+			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, partType, 0, n, false, 8, delta, xOffset, yOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
 				return err
 			}
-			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, subType, 0, n+1, false, 8, delta, xOffset+2, yOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
+			if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, partType, 0, n+1, false, 8, delta, xOffset+2, yOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
 				return err
 			}
 		} else if isSub4x4(subType) {
 			for j := 0; j < 4; j++ {
 				subXOffset := xOffset + 2*(j&1)
 				subYOffset := yOffset + (j & 2)
-				if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, subType, 0, n+j, true, 4, 0, subXOffset, subYOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
+				if err := h264MCPartFrameHigh(dst, refs, cache, mbX, mbY, partType, 0, n+j, true, 4, 0, subXOffset, subYOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY, bitDepth); err != nil {
 					return err
 				}
 			}
