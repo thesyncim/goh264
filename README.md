@@ -12,10 +12,10 @@ edge cases recognizable, then proves behavior against FFmpeg oracle vectors.
   Annex B / length-prefixed AVC APIs, and AVC decoder configuration records.
 - **Raw frame output** - `Frame` exposes Y/Cb/Cr planes, crop, strides, VUI
   fields, high-bit-depth planes, and raw YUV helpers.
-- **Harness-first parity** - public FFmpeg FATE vectors are executable, including
-  known-failing rows kept in the red ledger instead of hidden.
-- **Active port, not v1** - broad progressive decode works, but a few
-  decoder-compliance lanes remain known-red.
+- **Harness-first parity** - public FFmpeg FATE vectors are executable, with a
+  red ledger kept for any future known-failing rows instead of hiding them.
+- **Active port, not v1** - the public decoder-compliance matrix is green, with
+  broader unselected codec lanes still guarded.
 
 ## Install
 
@@ -35,13 +35,13 @@ Current public-vector matrix:
 | Set | Count |
 | --- | ---: |
 | Selected public FFmpeg H.264 vectors | 224 |
-| Green oracle rows | 222 |
-| Known-red rows in `failures.jsonl` | 2 |
+| Green oracle rows | 224 |
+| Known-red rows in `failures.jsonl` | 0 |
 | Explicitly excluded upstream H.264-ish rows | 2 |
 
-The known-red rows are intentional executable coverage. They live in
-`testdata/h264/realvectors/failures.jsonl`, stay present in the main manifest,
-and are checked by the freshness/matrix gates until the decoder fixes land.
+No known-red public-vector rows currently remain. The executable ledger at
+`testdata/h264/realvectors/failures.jsonl` stays in place for future red rows
+and is checked by the freshness/matrix gates when populated.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, I/P/B slices, CAVLC and CABAC, weighted and
@@ -50,8 +50,9 @@ metadata rows, lossless High444 transform-bypass rows, configured AVC surfaces,
 container-extracted Annex B vectors, and SEI side-data surfaces.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, FMO, broader
-high-bit-depth field/inter streams, damaged-slice error resilience, threading/SIMD and
-bulk allocation hardening, and exact libavcodec delayed-output behavior.
+high-bit-depth field/inter streams, broader damaged-slice error resilience,
+threading/SIMD and bulk allocation hardening, and exact libavcodec
+delayed-output behavior.
 
 ## Quick Start
 
@@ -161,7 +162,7 @@ profile, HDR10+, and LCEVC side data.
 | Baseline/Main/High progressive rows | Broad public-vector coverage |
 | High10/High422/High444 | Selected public and generated coverage |
 | CAVLC and CABAC | Covered by unit, fixture, and public vectors |
-| I/P/B slices | Covered, with known-red edge lanes remaining |
+| I/P/B slices | Covered across the current public-vector matrix |
 | SEI and packet side data | Parsed for the public side-data surfaces |
 | Containers | Not a demuxer; container FATE rows are extracted to Annex B for decode |
 
@@ -188,12 +189,12 @@ scripts/h264-real-vector-upstream-audit.sh
 
 What those gates mean:
 
-- `h264-real-vector-strict.sh` runs the green public-vector set and logs the
-  known-red ids excluded from strict mode.
-- `FailureLedgerFreshness` runs only the known-red rows and requires each
-  failure class/detail to remain current.
-- `FailureMatrix` runs the full 224-row manifest, requiring 222 green rows to
-  match oracle output and 2 known-red rows to remain red until fixed.
+- `h264-real-vector-strict.sh` runs the green public-vector set and excludes
+  only rows currently listed in the failure ledger.
+- `FailureLedgerFreshness` runs only known-red rows when the ledger is populated
+  and requires each failure class/detail to remain current.
+- `FailureMatrix` runs the full 224-row manifest, currently requiring all 224
+  rows to match oracle output.
 - `h264-real-vector-upstream-audit.sh` fetches the pinned FFmpeg source and
   verifies that the public-vector manifest represents all decoder-facing
   upstream H.264 FATE sample references, except the documented non-decoder rows.

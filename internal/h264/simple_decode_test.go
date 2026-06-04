@@ -73,3 +73,36 @@ func TestApplySimpleFrameTimingPropsFromPictureTiming(t *testing.T) {
 		})
 	}
 }
+
+func TestCanDropTerminalDamagedFieldSlice(t *testing.T) {
+	nals := []NALUnit{
+		{Type: NALSPS},
+		{Type: NALSlice},
+		{Type: NALSEI},
+		{Type: NALAUD},
+	}
+	if !canDropTerminalDamagedFieldSlice(nals, 1, true, true, false) {
+		t.Fatal("terminal damaged first-field slice was not droppable")
+	}
+
+	for _, tt := range []struct {
+		name                       string
+		nals                       []NALUnit
+		index                      int
+		flushOutput                bool
+		fieldPicture               bool
+		decodingComplementaryField bool
+	}{
+		{name: "streaming", nals: nals, index: 1, fieldPicture: true},
+		{name: "frame-picture", nals: nals, index: 1, flushOutput: true},
+		{name: "complementary-field", nals: nals, index: 1, flushOutput: true, fieldPicture: true, decodingComplementaryField: true},
+		{name: "later-vcl", nals: []NALUnit{{Type: NALSlice}, {Type: NALSEI}, {Type: NALSlice}}, index: 0, flushOutput: true, fieldPicture: true},
+		{name: "bad-index", nals: nals, index: -1, flushOutput: true, fieldPicture: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if canDropTerminalDamagedFieldSlice(tt.nals, tt.index, tt.flushOutput, tt.fieldPicture, tt.decodingComplementaryField) {
+				t.Fatalf("canDropTerminalDamagedFieldSlice(%s) = true, want false", tt.name)
+			}
+		})
+	}
+}

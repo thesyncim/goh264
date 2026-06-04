@@ -32,16 +32,13 @@ Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
 combined luma/chroma residual plus P-skip/P16x16, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, and public High10/
 High422 field-coded frame-MBAFF deblock rows, plus public High9 4:2:0
-SPS reinit metadata from 9-bit to 8-bit output. Additional public
-High422/High444 FATE container/reinit rows are now in the known-red ledger
-where the current decoder does not yet match FFmpeg. The XAVC High422 row has
-advanced past broad admission guards and now stops at the damaged field-CABAC
-slice that FFmpeg conceals into oracle output.
+SPS reinit metadata from 9-bit to 8-bit output, public High444 10-bit SPS
+reinit metadata, and the XAVC High422 terminal damaged top-field row that
+FFmpeg conceals while draining already-complete delayed frames.
 
-Next: graduate known-red High422 damaged-slice error resilience and High444
-SPS-reinit rows, then
-public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
-broader high-bit-depth field/MBAFF motion, and PIC-AFF/PAFF.
+Next: public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
+broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
+damaged-slice error resilience beyond terminal first-field recovery.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and
 `testdata/h264/realvectors/manifest.jsonl`.

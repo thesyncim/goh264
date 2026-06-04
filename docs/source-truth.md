@@ -41,17 +41,18 @@ packetized/configured surfaces proven for reference-list-mod overflow,
 missing-frame, timecode, and BBC2 recovery/PAFF,
 lossless High444 transform-bypass Annex B plus 4-byte AVC/configuration-record surfaces,
 public High9 4:2:0 SPS reinit metadata from 9-bit to 8-bit output,
-container-backed FATE H.264 vectors extracted to Annex B with both source and
-extracted bitstream MD5s, auxiliary API/MOV/MPEG-TS/MKV/CBS H.264 sample rows,
+High444 10-bit SPS reinit metadata, XAVC High422 terminal damaged
+first-field recovery, container-backed FATE H.264 vectors extracted to Annex B
+with both source and extracted bitstream MD5s, auxiliary API/MOV/MPEG-TS/MKV/CBS H.264 sample rows,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 224 selected, 222 green, 2 known-red. Matrix mode is the
-safe-point gate. The strict script runs the green rows and excludes only rows in
-`testdata/h264/realvectors/failures.jsonl`; the failure-ledger freshness and
-matrix gates execute those known-red rows and require them to remain current.
-The red-queue script intentionally exits non-zero while selected known-red rows
-remain red.
+Public vectors: 224 selected, 224 green, 0 known-red. Matrix mode is the
+safe-point gate. The strict script excludes only rows in
+`testdata/h264/realvectors/failures.jsonl`, which is currently empty; the
+failure-ledger freshness and matrix gates execute known-red rows when present
+and require them to remain current. The red-queue script intentionally exits
+non-zero while selected known-red rows remain red.
 Use `scripts/h264-real-vector-red-queue.sh <filter>` or
 `scripts/h264-red-vector.sh <filter>` to hand agents a failing public lane; the
 single-lane script exits at the first divergent raw byte for raw-MD5 rows.
@@ -66,7 +67,7 @@ H.264 video stream).
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, FMO, broad
 slice-boundary high modes, public 12/14-bit high streams beyond the current
-FFmpeg FATE 8-bit/10-bit set, damaged-slice error
+FFmpeg FATE 8-bit/10-bit set, broader damaged-slice error
 resilience, threading/SIMD, and full libavcodec delayed-output behavior.
 
 Canonical detail lives in manifests and tests, not Markdown.

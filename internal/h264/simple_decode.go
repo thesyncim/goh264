@@ -274,7 +274,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 	decodedFrames := 0
 	currentIDRSegmentOutputIndex := -1
 
-	for _, nal := range nals {
+	for nalIndex, nal := range nals {
 		switch nal.Type {
 		case NALSPS:
 			sps, err := DecodeSPSFromNAL(nal)
@@ -437,6 +437,18 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				}
 			}
 			if err != nil {
+				if canDropTerminalDamagedFieldSlice(nals, nalIndex, flushOutput, fieldPicture, decodingComplementaryField) {
+					out, drainErr := dpb.drainOutputFrames(true)
+					if drainErr != nil {
+						return nil, drainErr
+					}
+					frames = append(frames, out...)
+					st.resetPicture()
+					if len(frames) == 0 {
+						return nil, ErrInvalidData
+					}
+					return frames, nil
+				}
 				return nil, fmt.Errorf("decode slice=%d type=%d first_mb=%d frame_num=%d picture=%d refs=%d/%d: %w",
 					st.sliceNum, sh.SliceTypeNoS, sh.FirstMBAddr, sh.FrameNum, sh.PictureStructure,
 					sh.RefCount[0], sh.RefCount[1], err)
@@ -501,6 +513,22 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 		return nil, ErrInvalidData
 	}
 	return frames, nil
+}
+
+func canDropTerminalDamagedFieldSlice(nals []NALUnit, nalIndex int, flushOutput bool, fieldPicture bool, decodingComplementaryField bool) bool {
+	// FFmpeg's default error-resilience path does not present a terminal first
+	// field without its complementary field. If the final VCL slice for that
+	// first field is damaged, drain already-complete delayed frames and drop the
+	// partial field rather than promoting it to a decoded picture.
+	if !flushOutput || !fieldPicture || decodingComplementaryField || nalIndex < 0 || nalIndex >= len(nals) {
+		return false
+	}
+	for i := nalIndex + 1; i < len(nals); i++ {
+		if nals[i].Type == NALSlice || nals[i].Type == NALIDRSlice {
+			return false
+		}
+	}
+	return true
 }
 
 func decodedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
