@@ -272,6 +272,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 	}
 	var frames []*DecodedFrame
 	decodedFrames := 0
+	currentIDRSegmentOutputIndex := -1
 
 	for _, nal := range nals {
 		switch nal.Type {
@@ -460,6 +461,11 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				if err != nil {
 					return nil, err
 				}
+				for i, frame := range out {
+					if frame != nil && frame.idrKeyFrame {
+						currentIDRSegmentOutputIndex = len(frames) + i
+					}
+				}
 				frames = append(frames, out...)
 			}
 			st.haveSlice = true
@@ -468,6 +474,18 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 		}
 	}
 
+	if st.haveSlice && !st.frameComplete {
+		if st.hasPendingComplementaryField() && (!flushOutput || decodedFrames != 0) {
+			// A terminal first field is not a completed picture. If a later
+			// IDR segment already emitted delayed frames, keep the earlier
+			// segment output and leave the partial terminal segment unpresented.
+			if flushOutput && currentIDRSegmentOutputIndex > 0 {
+				return frames[:currentIDRSegmentOutputIndex], nil
+			}
+			return frames, nil
+		}
+		return nil, ErrInvalidData
+	}
 	if flushOutput {
 		out, err := dpb.drainOutputFrames(true)
 		if err != nil {
@@ -475,10 +493,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 		}
 		frames = append(frames, out...)
 	}
-	if decodedFrames == 0 || st.haveSlice && !st.frameComplete {
-		if !flushOutput && st.hasPendingComplementaryField() {
-			return frames, nil
-		}
+	if decodedFrames == 0 {
 		return nil, ErrInvalidData
 	}
 	return frames, nil

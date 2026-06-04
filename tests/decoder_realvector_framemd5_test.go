@@ -190,7 +190,9 @@ func h264FFmpegRawVideoBytes(ffmpeg string, path string, pixFmt string) ([]byte,
 	if pixFmt == "" {
 		return nil, fmt.Errorf("missing pix_fmt")
 	}
-	cmd := exec.Command(ffmpeg, "-v", "error", "-f", "h264", "-i", path, "-an", "-sn", "-dn", "-pix_fmt", pixFmt, "-f", "rawvideo", "-")
+	// Keep rawvideo byte rows aligned with framemd5 decoder frames; otherwise
+	// FFmpeg may duplicate frames for timestamp sync before the rawvideo muxer.
+	cmd := exec.Command(ffmpeg, "-v", "error", "-vsync", "0", "-f", "h264", "-i", path, "-an", "-sn", "-dn", "-pix_fmt", pixFmt, "-f", "rawvideo", "-")
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
