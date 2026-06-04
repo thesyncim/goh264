@@ -1162,7 +1162,14 @@ func isHighBResolvedDirectSubMBType(subType uint32) bool {
 }
 
 func isHighB8x8TopLevelDirectMacroblock(mbType uint32) bool {
-	return mbType == MBType8x8|MBTypeL0L1|MBTypeDirect2
+	switch mbType {
+	case MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+		MBType8x8 | MBTypeL0 | MBTypeDirect2,
+		MBType8x8 | MBTypeL1 | MBTypeDirect2:
+		return true
+	default:
+		return false
+	}
 }
 
 func isHighB16x16DirectMacroblock(mbType uint32) bool {
@@ -1207,9 +1214,15 @@ func isHighBPartitionedDirectSkipMacroblock(mbType uint32, subMBType *[4]uint32)
 	base := mbType &^ MBTypeSkip
 	switch base {
 	case MBType16x8 | MBTypeL0L1 | MBTypeDirect2,
-		MBType8x16 | MBTypeL0L1 | MBTypeDirect2:
+		MBType8x16 | MBTypeL0L1 | MBTypeDirect2,
+		MBType16x8 | MBTypeL0 | MBTypeDirect2,
+		MBType8x16 | MBTypeL0 | MBTypeDirect2,
+		MBType16x8 | MBTypeL1 | MBTypeDirect2,
+		MBType8x16 | MBTypeL1 | MBTypeDirect2:
 		return true
-	case MBType8x8 | MBTypeL0L1 | MBTypeDirect2:
+	case MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
+		MBType8x8 | MBTypeL0 | MBTypeDirect2,
+		MBType8x8 | MBTypeL1 | MBTypeDirect2:
 		return isHighB8x8DirectSubMacroblock(base, subMBType, 0)
 	default:
 		return false

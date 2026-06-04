@@ -90,6 +90,12 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsBDirectSkip(t *test
 		{name: "temporal 16x16", typ: MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip},
 		{name: "temporal 16x8", typ: MBType16x8 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip, sub: &directSub},
 		{name: "temporal 8x16", typ: MBType8x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip, sub: &directSub},
+		{name: "temporal 16x8 list0 only", typ: MBType16x8 | MBTypeL0 | MBTypeDirect2 | MBTypeSkip, sub: &directSubL0},
+		{name: "temporal 8x16 list0 only", typ: MBType8x16 | MBTypeL0 | MBTypeDirect2 | MBTypeSkip, sub: &directSubL0},
+		{name: "temporal 16x8 list1 only", typ: MBType16x8 | MBTypeL1 | MBTypeDirect2 | MBTypeSkip, sub: &directSubL1},
+		{name: "temporal 8x16 list1 only", typ: MBType8x16 | MBTypeL1 | MBTypeDirect2 | MBTypeSkip, sub: &directSubL1},
+		{name: "temporal 8x8 list0 only", typ: MBType8x8 | MBTypeL0 | MBTypeDirect2 | MBTypeSkip, sub: &directSubL0},
+		{name: "temporal 8x8 list1 only", typ: MBType8x8 | MBTypeL1 | MBTypeDirect2 | MBTypeSkip, sub: &directSubL1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, tt.typ, tt.sub, 0, 0); err != nil {

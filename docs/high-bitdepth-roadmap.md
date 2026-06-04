@@ -32,11 +32,11 @@ Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
 combined luma/chroma residual plus P-skip/P16x16, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, and public High10/
 High422 field-coded frame-MBAFF deblock rows, plus public High9 4:2:0
-SPS reinit metadata from 9-bit to 8-bit output. Additional public High10/
+SPS reinit metadata from 9-bit to 8-bit output. Additional public
 High422/High444 FATE container and SPS-reinit rows are now in the known-red
 ledger where the current decoder does not yet match FFmpeg.
 
-Next: graduate known-red High10/High422/High444 container/reinit rows, then
+Next: graduate known-red High422/High444 container/reinit rows, then
 public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
 broader high-bit-depth field/MBAFF motion, and PIC-AFF/PAFF.
 
