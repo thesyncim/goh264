@@ -58,6 +58,38 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsPartitionedP(t *tes
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsFieldPShapes(t *testing.T) {
+	fieldP := &SliceHeader{
+		SliceTypeNoS:     PictureTypeP,
+		PictureStructure: PictureBottomField,
+		SPS: &SPS{
+			BitDepthLuma:     10,
+			BitDepthChroma:   10,
+			ChromaFormatIDC:  2,
+			FrameMBSOnlyFlag: 0,
+			MBAFF:            1,
+		},
+		PPS: &PPS{CABAC: 1},
+	}
+	for _, tt := range []struct {
+		name     string
+		mbType   uint32
+		cbp      int
+		cbpTable int
+	}{
+		{name: "pskip", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip | MBTypeInterlaced},
+		{name: "p16x16 residual", mbType: MBType16x16 | MBTypeP0L0 | MBTypeInterlaced, cbp: 1, cbpTable: 1},
+		{name: "p16x8 dct residual", mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced | MBType8x8DCT, cbp: 0x2f, cbpTable: 0xef},
+		{name: "p8x16 residual", mbType: MBType8x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced, cbp: 2, cbpTable: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(fieldP, tt.mbType, nil, tt.cbp, tt.cbpTable); err != nil {
+				t.Fatalf("validate high field P shape err = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructRejectsUnsupportedPartitionedP(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
 	p8x8Sub := [4]uint32{

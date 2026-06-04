@@ -57,6 +57,48 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsProvedBIntra(t *tes
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsFieldBShapes(t *testing.T) {
+	sh := &SliceHeader{
+		SliceTypeNoS:     PictureTypeB,
+		PictureStructure: PictureTopField,
+		SPS: &SPS{
+			BitDepthLuma:     10,
+			BitDepthChroma:   10,
+			ChromaFormatIDC:  2,
+			FrameMBSOnlyFlag: 0,
+			MBAFF:            1,
+		},
+		PPS: &PPS{WeightedBipredIDC: 2},
+	}
+	for _, tt := range []struct {
+		name     string
+		baseType uint32
+		mbType   uint32
+		cbp      int
+		cbpTable int
+	}{
+		{name: "b16x16 l1", mbType: MBType16x16 | MBTypeP0L1 | MBTypeInterlaced},
+		{name: "b16x16 bidirectional", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeInterlaced},
+		{name: "b16x16 temporal direct", baseType: MBTypeL0L1 | MBTypeDirect2 | MBTypeInterlaced, mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeInterlaced},
+		{name: "b16x16 direct skip", baseType: MBTypeL0L1 | MBTypeDirect2 | MBTypeInterlaced, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip | MBTypeInterlaced},
+		{name: "b16x8 l0 l1 residual", mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1 | MBTypeInterlaced, cbp: 1, cbpTable: 1},
+		{name: "b8x16 l1 l1", mbType: MBType8x16 | MBTypeP0L1 | MBTypeP1L1 | MBTypeInterlaced},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			baseType := tt.baseType
+			if baseType == 0 {
+				baseType = tt.mbType &^ MBTypeSkip
+			}
+			if err := validateHighFrameSliceBaseMacroblockForDecode(PictureTypeB, baseType); err != nil {
+				t.Fatalf("validate high field B base err = %v, want nil", err)
+			}
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, tt.mbType, nil, tt.cbp, tt.cbpTable); err != nil {
+				t.Fatalf("validate high field B reconstruct err = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsBDirectSkip(t *testing.T) {
 	sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
 	directSub := [4]uint32{

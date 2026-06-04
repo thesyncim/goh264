@@ -988,10 +988,10 @@ func (c *cavlcResidualContext) decodeCABACResidualPayload(src cabacSyntaxSource,
 		var err error
 		qscale, lastQScaleDiff, err = decodeCABACQScaleDiff(src, qscale, lastQScaleDiff, maxQP)
 		if err != nil {
-			return qscale, chromaQP, cbpTable, lastQScaleDiff, err
+			return qscale, chromaQP, cbpTable, lastQScaleDiff, fmt.Errorf("qscale diff: %w", err)
 		}
 		if qscale > qpMaxNum {
-			return qscale, chromaQP, cbpTable, lastQScaleDiff, ErrInvalidData
+			return qscale, chromaQP, cbpTable, lastQScaleDiff, fmt.Errorf("qscale=%d max=%d: %w", qscale, qpMaxNum, ErrInvalidData)
 		}
 		chromaQP[0] = pps.ChromaQPTable[0][qscale]
 		chromaQP[1] = pps.ChromaQPTable[1][qscale]
@@ -1001,24 +1001,24 @@ func (c *cavlcResidualContext) decodeCABACResidualPayload(src cabacSyntaxSource,
 		narrowDCT := sps.BitDepthLuma == 8
 		ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 0, qscale, cacheResult.LeftCBP, cacheResult.TopCBP, mbField, false, narrowDCT)
 		if err != nil {
-			return qscale, chromaQP, cbpTable, lastQScaleDiff, err
+			return qscale, chromaQP, cbpTable, lastQScaleDiff, fmt.Errorf("luma residual p=0: %w", err)
 		}
 		cbpTable |= ret
 		if sps.ChromaFormatIDC == 3 {
 			ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 1, int(chromaQP[0]), cacheResult.LeftCBP, cacheResult.TopCBP, mbField, true, narrowDCT)
 			if err != nil {
-				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
+				return qscale, chromaQP, cbpTable, lastQScaleDiff, fmt.Errorf("luma residual p=1: %w", err)
 			}
 			cbpTable |= ret
 			ret, err = c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 2, int(chromaQP[1]), cacheResult.LeftCBP, cacheResult.TopCBP, mbField, true, narrowDCT)
 			if err != nil {
-				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
+				return qscale, chromaQP, cbpTable, lastQScaleDiff, fmt.Errorf("luma residual p=2: %w", err)
 			}
 			cbpTable |= ret
 		} else {
 			ret, err := c.decodeCABACChromaResidualTyped(src, pps, scan, mbType, cbp, int32(sps.ChromaFormatIDC), chromaQP, cacheResult.LeftCBP, cacheResult.TopCBP, mbField, narrowDCT)
 			if err != nil {
-				return qscale, chromaQP, cbpTable, lastQScaleDiff, err
+				return qscale, chromaQP, cbpTable, lastQScaleDiff, fmt.Errorf("chroma residual: %w", err)
 			}
 			cbpTable |= ret
 		}

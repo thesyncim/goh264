@@ -143,7 +143,84 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsFrameMBAFFGeometry(t *testing.T
 
 	sh.PictureStructure = PictureTopField
 	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
-		t.Fatalf("field validation err = %v, want ErrUnsupported", err)
+		t.Fatalf("8-bit field validation err = %v, want ErrUnsupported", err)
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Chroma422FieldPictures(t *testing.T) {
+	for _, tt := range []struct {
+		name             string
+		pictureStructure int32
+		sliceType        int32
+		implicitWeighted bool
+	}{
+		{name: "top/I", pictureStructure: PictureTopField, sliceType: PictureTypeI},
+		{name: "bottom/I", pictureStructure: PictureBottomField, sliceType: PictureTypeI},
+		{name: "top/P", pictureStructure: PictureTopField, sliceType: PictureTypeP},
+		{name: "bottom/P", pictureStructure: PictureBottomField, sliceType: PictureTypeP},
+		{name: "top/B", pictureStructure: PictureTopField, sliceType: PictureTypeB},
+		{name: "bottom/B", pictureStructure: PictureBottomField, sliceType: PictureTypeB},
+		{name: "top/B-implicit-weight", pictureStructure: PictureTopField, sliceType: PictureTypeB, implicitWeighted: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 2, 2, true, tt.sliceType)
+			sh.SPS.FrameMBSOnlyFlag = 0
+			sh.SPS.MBAFF = 1
+			sh.PictureStructure = tt.pictureStructure
+			if tt.sliceType == PictureTypeP {
+				sh.RefCount = [2]uint32{1, 0}
+			} else if tt.sliceType == PictureTypeB {
+				sh.RefCount = [2]uint32{1, 1}
+			}
+			if tt.implicitWeighted {
+				sh.PPS.WeightedBipredIDC = 2
+				sh.PredWeightTable.UseWeight = 2
+				sh.PredWeightTable.UseWeightChroma = 2
+			}
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high10 422 field validation err = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedHigh10FieldPictures(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		chroma      int
+		sliceType   int32
+		deblockMode int32
+		run         func(*SliceHeader)
+	}{
+		{name: "420/I", chroma: 1, sliceType: PictureTypeI},
+		{name: "422/slice-boundary", chroma: 2, sliceType: PictureTypeI, deblockMode: 2},
+		{name: "422/explicit-weighted-B", chroma: 2, sliceType: PictureTypeB, run: func(sh *SliceHeader) {
+			sh.PPS.WeightedBipredIDC = 1
+			sh.PredWeightTable.UseWeight = 1
+			sh.PredWeightTable.UseWeightChroma = 1
+		}},
+		{name: "444/I", chroma: 3, sliceType: PictureTypeI},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, tt.chroma, 2, true, tt.sliceType)
+			sh.SPS.FrameMBSOnlyFlag = 0
+			sh.SPS.MBAFF = 1
+			sh.PictureStructure = PictureTopField
+			if tt.deblockMode != 0 {
+				sh.DeblockingFilter = tt.deblockMode
+			}
+			if tt.sliceType == PictureTypeB {
+				sh.RefCount = [2]uint32{1, 1}
+			}
+			if tt.run != nil {
+				tt.run(sh)
+			}
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+				t.Fatalf("high10 unproved field validation err = %v, want ErrUnsupported", err)
+			}
+		})
 	}
 }
 

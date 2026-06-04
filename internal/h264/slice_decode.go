@@ -477,7 +477,9 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	if sh == nil || sh.SPS == nil {
 		return ErrInvalidData
 	}
-	if sh.PictureStructure != PictureFrame {
+	if sh.PictureStructure != PictureFrame &&
+		sh.PictureStructure != PictureTopField &&
+		sh.PictureStructure != PictureBottomField {
 		return ErrUnsupported
 	}
 	if !isPublicHighFrameBitDepthCandidate(sh.SPS.BitDepthLuma) {
@@ -497,6 +499,9 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	if sh.DeblockingFilter < 0 || sh.DeblockingFilter > 2 {
 		return ErrInvalidData
 	}
+	if sh.PictureStructure != PictureFrame && !isHigh10Chroma422FieldPictureScope(sh) {
+		return ErrUnsupported
+	}
 	if !isPublicHighFrameBitDepthScope(sh) {
 		return ErrUnsupported
 	}
@@ -507,11 +512,13 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 		if sh.SliceTypeNoS != PictureTypeI && sh.SliceTypeNoS != PictureTypeP && sh.SliceTypeNoS != PictureTypeB {
 			return ErrUnsupported
 		}
-		if !isHighChromaFrameDeblockScope(sh) && !isHighChromaSliceBoundaryDeblockScope(sh) {
+		if !isHighChromaFrameDeblockScope(sh) && !isHighChromaSliceBoundaryDeblockScope(sh) && !isHigh10Chroma422FieldPictureScope(sh) {
 			return ErrUnsupported
 		}
 		if sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
-			if !isHigh10ChromaWeightedPFrameDeblockScope(sh) && !isHigh9ChromaImplicitWeightedBDeblockScope(sh) {
+			if !isHigh10ChromaWeightedPFrameDeblockScope(sh) &&
+				!isHigh9ChromaImplicitWeightedBDeblockScope(sh) &&
+				!isHigh10Chroma422FieldImplicitWeightedBDeblockScope(sh) {
 				return ErrUnsupported
 			}
 		}
@@ -639,6 +646,22 @@ func isHighChromaFrameDeblockScope(sh *SliceHeader) bool {
 	return sh.DeblockingFilter == 0 || sh.DeblockingFilter == 1
 }
 
+func isHigh10Chroma422FieldPictureScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil {
+		return false
+	}
+	if sh.PictureStructure != PictureTopField && sh.PictureStructure != PictureBottomField {
+		return false
+	}
+	if sh.SPS.FrameMBSOnlyFlag != 0 || sh.SPS.BitDepthLuma != 10 || sh.SPS.ChromaFormatIDC != 2 {
+		return false
+	}
+	if sh.SliceTypeNoS != PictureTypeI && sh.SliceTypeNoS != PictureTypeP && sh.SliceTypeNoS != PictureTypeB {
+		return false
+	}
+	return sh.DeblockingFilter == 0 || sh.DeblockingFilter == 1
+}
+
 func isHighChromaSliceBoundaryDeblockScope(sh *SliceHeader) bool {
 	if sh == nil || sh.SPS == nil {
 		return false
@@ -659,6 +682,19 @@ func isHigh10ChromaWeightedPFrameDeblockScope(sh *SliceHeader) bool {
 		(sh.DeblockingFilter == 0 || sh.DeblockingFilter == 1) &&
 		sh.PPS.WeightedPred != 0 &&
 		sh.PredWeightTable.UseWeight != 0
+}
+
+func isHigh10Chroma422FieldImplicitWeightedBDeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.PPS == nil {
+		return false
+	}
+	if sh.SliceTypeNoS != PictureTypeB || sh.PPS.WeightedBipredIDC != 2 {
+		return false
+	}
+	if sh.PredWeightTable.UseWeight != 2 || sh.PredWeightTable.UseWeightChroma != 2 {
+		return false
+	}
+	return isHigh10Chroma422FieldPictureScope(sh)
 }
 
 func isHigh9ChromaImplicitWeightedBDeblockScope(sh *SliceHeader) bool {
@@ -813,7 +849,7 @@ func validateHighFrameSliceBaseMacroblockForDecode(sliceTypeNoS int32, mbType ui
 	if isHighB16x16ExplicitMacroblock(mbType) {
 		return nil
 	}
-	if mbType == MBTypeDirect2|MBTypeL0L1 {
+	if mbType&^MBTypeInterlaced == MBTypeDirect2|MBTypeL0L1 {
 		return nil
 	}
 	if isHighBExplicitPartitionedBaseMacroblock(mbType) {
@@ -937,7 +973,7 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 		return ErrUnsupported
 	}
 	if isSkip(mbType) {
-		if mbType == MBType16x16|MBTypeP0L0|MBTypeP1L0|MBTypeSkip && cbp == 0 && cbpTable == 0 {
+		if mbType&^MBTypeInterlaced == MBType16x16|MBTypeP0L0|MBTypeP1L0|MBTypeSkip && cbp == 0 && cbpTable == 0 {
 			return nil
 		}
 		return ErrUnsupported
@@ -968,7 +1004,7 @@ func isHighInterSliceIntraMacroblock(mbType uint32) bool {
 
 func isHighP16x16Macroblock(mbType uint32, cbp int) bool {
 	has8x8DCT := mbType&MBType8x8DCT != 0
-	if mbType&^MBType8x8DCT != MBType16x16|MBTypeP0L0 {
+	if mbType&^(MBType8x8DCT|MBTypeInterlaced) != MBType16x16|MBTypeP0L0 {
 		return false
 	}
 	return !has8x8DCT || cbp&15 != 0
@@ -982,7 +1018,7 @@ func isHighPPartitionedMacroblock(sh *SliceHeader, mbType uint32, subMBType *[4]
 	if has8x8DCT && cbp&15 == 0 {
 		return false
 	}
-	base := mbType &^ MBType8x8DCT
+	base := mbType &^ (MBType8x8DCT | MBTypeInterlaced)
 	switch base {
 	case MBType16x8 | MBTypeP0L0 | MBTypeP1L0,
 		MBType8x16 | MBTypeP0L0 | MBTypeP1L0:
@@ -1030,11 +1066,11 @@ func isHighPSubMBType(subType uint32) bool {
 
 func isHighB8x8DirectSubCarrier(mbType uint32) bool {
 	const carrier = MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1
-	return mbType == carrier
+	return mbType&^MBTypeInterlaced == carrier
 }
 
 func isHighB8x8ExplicitSubCarrier(mbType uint32) bool {
-	switch mbType &^ MBType8x8DCT {
+	switch mbType &^ (MBType8x8DCT | MBTypeInterlaced) {
 	case MBType8x8 | MBTypeP0L0 | MBTypeP1L0,
 		MBType8x8 | MBTypeP0L1 | MBTypeP1L1,
 		MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1:
@@ -1057,7 +1093,7 @@ func isHighBImplicitWeighted(sh *SliceHeader) bool {
 }
 
 func isHighB16x16ExplicitMacroblock(mbType uint32) bool {
-	switch mbType {
+	switch mbType &^ MBTypeInterlaced {
 	case MBType16x16 | MBTypeP0L0,
 		MBType16x16 | MBTypeP0L1,
 		MBType16x16 | MBTypeP0L0 | MBTypeP0L1:
@@ -1146,7 +1182,7 @@ func isHighB8x8DirectSubMacroblock(mbType uint32, subMBType *[4]uint32, cbp int)
 	if has8x8DCT && cbp&15 == 0 {
 		return false
 	}
-	base := mbType &^ MBType8x8DCT
+	base := mbType &^ (MBType8x8DCT | MBTypeInterlaced)
 	if subMBType == nil || !(isHighB8x8DirectSubCarrier(base) || isHighB8x8TopLevelDirectMacroblock(base)) {
 		return false
 	}
@@ -1175,7 +1211,7 @@ func isHighBResolvedDirectSubMBType(subType uint32) bool {
 }
 
 func isHighB8x8TopLevelDirectMacroblock(mbType uint32) bool {
-	switch mbType {
+	switch mbType &^ MBTypeInterlaced {
 	case MBType8x8 | MBTypeL0L1 | MBTypeDirect2,
 		MBType8x8 | MBTypeL0 | MBTypeDirect2,
 		MBType8x8 | MBTypeL1 | MBTypeDirect2:
@@ -1188,6 +1224,7 @@ func isHighB8x8TopLevelDirectMacroblock(mbType uint32) bool {
 func isHighB16x16DirectMacroblock(mbType uint32) bool {
 	const spatial = MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2
 	const temporal = MBType16x16 | MBTypeL0L1 | MBTypeDirect2
+	mbType &^= MBTypeInterlaced
 	return mbType == spatial || mbType == temporal
 }
 
@@ -1209,7 +1246,7 @@ func isHighB16x16DirectSkipMacroblock(mbType uint32) bool {
 }
 
 func isHighB16x16ListOnlyDirectMacroblock(mbType uint32) bool {
-	switch mbType {
+	switch mbType &^ MBTypeInterlaced {
 	case MBType16x16 | MBTypeP0L0 | MBTypeDirect2,
 		MBType16x16 | MBTypeP0L1 | MBTypeDirect2,
 		MBType16x16 | MBTypeL0 | MBTypeDirect2,
@@ -1224,7 +1261,7 @@ func isHighBPartitionedDirectSkipMacroblock(mbType uint32, subMBType *[4]uint32)
 	if mbType&MBTypeSkip == 0 {
 		return false
 	}
-	base := mbType &^ MBTypeSkip
+	base := mbType &^ (MBTypeSkip | MBTypeInterlaced)
 	switch base {
 	case MBType16x8 | MBTypeL0L1 | MBTypeDirect2,
 		MBType8x16 | MBTypeL0L1 | MBTypeDirect2,
@@ -1250,7 +1287,7 @@ func isHighBPartitionedDirectMacroblock(mbType uint32, subMBType *[4]uint32, cbp
 	if has8x8DCT && cbp&15 == 0 {
 		return false
 	}
-	switch mbType &^ MBType8x8DCT {
+	switch mbType &^ (MBType8x8DCT | MBTypeInterlaced) {
 	case MBType16x8 | MBTypeL0L1 | MBTypeDirect2,
 		MBType8x16 | MBTypeL0L1 | MBTypeDirect2,
 		MBType16x8 | MBTypeL0 | MBTypeDirect2,

@@ -46,7 +46,7 @@ extracted bitstream MD5s, auxiliary API/MOV/MPEG-TS/MKV/CBS H.264 sample rows,
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 224 selected, 216 green, 8 known-red. Matrix mode is the
+Public vectors: 224 selected, 222 green, 2 known-red. Matrix mode is the
 safe-point gate. The strict script runs the green rows and excludes only rows in
 `testdata/h264/realvectors/failures.jsonl`; the failure-ledger freshness and
 matrix gates execute those known-red rows and require them to remain current.
@@ -66,7 +66,7 @@ H.264 video stream).
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, FMO, broad
 slice-boundary high modes, public 12/14-bit high streams beyond the current
-FFmpeg FATE 8-bit/10-bit set, full error
+FFmpeg FATE 8-bit/10-bit set, damaged-slice error
 resilience, threading/SIMD, and full libavcodec delayed-output behavior.
 
 Canonical detail lives in manifests and tests, not Markdown.

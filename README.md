@@ -35,8 +35,8 @@ Current public-vector matrix:
 | Set | Count |
 | --- | ---: |
 | Selected public FFmpeg H.264 vectors | 224 |
-| Green oracle rows | 216 |
-| Known-red rows in `failures.jsonl` | 8 |
+| Green oracle rows | 222 |
+| Known-red rows in `failures.jsonl` | 2 |
 | Explicitly excluded upstream H.264-ish rows | 2 |
 
 The known-red rows are intentional executable coverage. They live in
@@ -50,7 +50,7 @@ metadata rows, lossless High444 transform-bypass rows, configured AVC surfaces,
 container-extracted Annex B vectors, and SEI side-data surfaces.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, FMO, broader
-high-bit-depth field/inter streams, full error resilience, threading/SIMD and
+high-bit-depth field/inter streams, damaged-slice error resilience, threading/SIMD and
 bulk allocation hardening, and exact libavcodec delayed-output behavior.
 
 ## Quick Start
@@ -192,8 +192,8 @@ What those gates mean:
   known-red ids excluded from strict mode.
 - `FailureLedgerFreshness` runs only the known-red rows and requires each
   failure class/detail to remain current.
-- `FailureMatrix` runs the full 224-row manifest, requiring 216 green rows to
-  match oracle output and 8 known-red rows to remain red until fixed.
+- `FailureMatrix` runs the full 224-row manifest, requiring 222 green rows to
+  match oracle output and 2 known-red rows to remain red until fixed.
 - `h264-real-vector-upstream-audit.sh` fetches the pinned FFmpeg source and
   verifies that the public-vector manifest represents all decoder-facing
   upstream H.264 FATE sample references, except the documented non-decoder rows.
