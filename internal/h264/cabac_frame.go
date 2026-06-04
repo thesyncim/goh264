@@ -26,6 +26,8 @@ type cabacFrameMacroblockInput struct {
 	Direct                 h264DirectMotionContext
 	PPS                    *PPS
 	SPS                    *SPS
+	X264Build              int32
+	X264BuildSet           bool
 	RejectUnsupportedHighB bool
 }
 
@@ -57,6 +59,11 @@ type cabacFrameSliceState struct {
 	MBFieldDecodingFlag int32
 }
 
+type h264X264BuildInfo struct {
+	Build int32
+	Set   bool
+}
+
 func (m *macroblockTables) decodeCABACFrameSliceMacroblock(src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16) (cabacFrameMacroblockResult, error) {
 	var work frameMacroblockDecodeWork
 	return m.decodeCABACFrameSliceMacroblockWithWork(src, sh, state, mbXY, sliceNum, &work)
@@ -71,6 +78,10 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWork(src cab
 }
 
 func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
+	return m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264(src, sh, state, mbXY, sliceNum, direct, work, h264X264BuildInfo{}, rejectUnsupportedHighB)
+}
+
+func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264(src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, x264 h264X264BuildInfo, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	if m == nil || src == nil || sh == nil || sh.PPS == nil || sh.SPS == nil || state == nil || work == nil {
 		return result, ErrInvalidData
@@ -161,6 +172,8 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuard(sr
 		Direct:                 direct,
 		PPS:                    sh.PPS,
 		SPS:                    sh.SPS,
+		X264Build:              x264.Build,
+		X264BuildSet:           x264.Set,
 		RejectUnsupportedHighB: rejectUnsupportedHighB,
 	}, work)
 	if err != nil {
@@ -569,6 +582,7 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 		return result, ErrInvalidData
 	}
 
+	adjustCABACChroma444DCT8x8NonZeroCache(residual, in.SPS.ChromaFormatIDC, mb.MBType, cacheResult.Neighbors, in.X264Build, in.X264BuildSet)
 	qscale, chromaQP, cbpTable, lastDiff, err := residual.decodeCABACResidualPayload(src, in.PPS, in.SPS, mb.MBType, mb.CBP, in.QScale, in.LastQScaleDiff, cacheResult.Residual)
 	if err != nil {
 		return result, fmt.Errorf("intra_residual field=%t type=%#x cbp=%#x: %w", in.FieldPicture, mb.MBType, mb.CBP, err)
@@ -627,6 +641,7 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 		}
 	}
 
+	adjustCABACChroma444DCT8x8NonZeroCache(residual, in.SPS.ChromaFormatIDC, mb.MBType, cacheResult.Neighbors, in.X264Build, in.X264BuildSet)
 	qscale, chromaQP, cbpTable, lastDiff, err := residual.decodeCABACResidualPayload(src, in.PPS, in.SPS, mb.MBType, mb.CBP, in.QScale, in.LastQScaleDiff, cacheResult.Residual)
 	if err != nil {
 		return result, fmt.Errorf("inter_residual field=%t type=%#x cbp=%#x: %w", in.FieldPicture, mb.MBType, mb.CBP, err)
@@ -1046,4 +1061,45 @@ func fillIntraPredModeRectangle(cache *[h264IntraPredModeCacheSize]int8, start i
 
 func cabacNeighborTransformSize(n macroblockDecodeNeighbors) int {
 	return boolToInt(is8x8DCT(n.TopType)) + boolToInt(is8x8DCT(n.LeftType[h264LeftTop]))
+}
+
+func adjustCABACChroma444DCT8x8NonZeroCache(c *cavlcResidualContext, chromaFormatIDC uint32, mbType uint32, n macroblockDecodeNeighbors, x264Build int32, x264BuildSet bool) {
+	if c == nil || chromaFormatIDC != 3 || !is8x8DCT(mbType) {
+		return
+	}
+	oldX264Build := h264X264BuildUsesUnfiltered8x8LAdd(x264Build, x264BuildSet)
+	for i := 0; i < 2; i++ {
+		leftType := n.LeftType[i]
+		if leftType == 0 || is8x8DCT(leftType) {
+			continue
+		}
+		value := uint8(0)
+		if oldX264Build {
+			if isIntra(mbType) {
+				value = 64
+			}
+		} else if leftType&MBTypeIntraPCM != 0 {
+			value = 64
+		}
+		c.NonZeroCountCache[3+8*1+2*8*i] = value
+		c.NonZeroCountCache[3+8*2+2*8*i] = value
+		c.NonZeroCountCache[3+8*6+2*8*i] = value
+		c.NonZeroCountCache[3+8*7+2*8*i] = value
+		c.NonZeroCountCache[3+8*11+2*8*i] = value
+		c.NonZeroCountCache[3+8*12+2*8*i] = value
+	}
+	if n.TopType == 0 || is8x8DCT(n.TopType) {
+		return
+	}
+	value := uint8(0)
+	if oldX264Build {
+		if isIntra(mbType) {
+			value = 64
+		}
+	} else if n.TopType&MBTypeIntraPCM != 0 {
+		value = 64
+	}
+	fillCAVLCNonZero(&c.NonZeroCountCache, 4+8*0, 4, 1, 8, value)
+	fillCAVLCNonZero(&c.NonZeroCountCache, 4+8*5, 4, 1, 8, value)
+	fillCAVLCNonZero(&c.NonZeroCountCache, 4+8*10, 4, 1, 8, value)
 }

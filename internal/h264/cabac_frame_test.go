@@ -8,6 +8,115 @@ import (
 	"testing"
 )
 
+func TestAdjustCABACChroma444DCT8x8NonZeroCacheMatchesFFmpegBranches(t *testing.T) {
+	leftSlots := func(i int) []int {
+		return []int{
+			3 + 8*1 + 2*8*i,
+			3 + 8*2 + 2*8*i,
+			3 + 8*6 + 2*8*i,
+			3 + 8*7 + 2*8*i,
+			3 + 8*11 + 2*8*i,
+			3 + 8*12 + 2*8*i,
+		}
+	}
+	topSlots := []int{
+		4 + 8*0, 5 + 8*0, 6 + 8*0, 7 + 8*0,
+		4 + 8*5, 5 + 8*5, 6 + 8*5, 7 + 8*5,
+		4 + 8*10, 5 + 8*10, 6 + 8*10, 7 + 8*10,
+	}
+	assertSlots := func(t *testing.T, ctx *cavlcResidualContext, slots []int, want uint8) {
+		t.Helper()
+		for _, slot := range slots {
+			if got := ctx.NonZeroCountCache[slot]; got != want {
+				t.Fatalf("nnz cache[%d] = %d, want %d", slot, got, want)
+			}
+		}
+	}
+
+	for _, tt := range []struct {
+		name      string
+		mbType    uint32
+		chroma    uint32
+		topType   uint32
+		leftType  [2]uint32
+		x264Build int32
+		x264Set   bool
+		wantTop   uint8
+		wantLeft  [2]uint8
+		wantNoop  bool
+	}{
+		{
+			name:      "pre151 uses current intra state",
+			mbType:    MBTypeIntra4x4 | MBType8x8DCT,
+			chroma:    3,
+			topType:   MBTypeIntra4x4,
+			leftType:  [2]uint32{MBTypeIntra4x4, MBTypeIntra4x4},
+			x264Build: 150,
+			x264Set:   true,
+			wantTop:   64,
+			wantLeft:  [2]uint8{64, 64},
+		},
+		{
+			name:      "modern uses neighbor pcm state",
+			mbType:    MBTypeIntra4x4 | MBType8x8DCT,
+			chroma:    3,
+			topType:   MBTypeIntra4x4,
+			leftType:  [2]uint32{MBTypeIntra4x4, MBTypeIntraPCM},
+			x264Build: 151,
+			x264Set:   true,
+			wantTop:   0,
+			wantLeft:  [2]uint8{0, 64},
+		},
+		{
+			name:     "unknown build follows unsigned FFmpeg compare",
+			mbType:   MBTypeIntra4x4 | MBType8x8DCT,
+			chroma:   3,
+			topType:  MBTypeIntra4x4,
+			leftType: [2]uint32{MBTypeIntra4x4, MBTypeIntra4x4},
+			wantTop:  0,
+			wantLeft: [2]uint8{0, 0},
+		},
+		{
+			name:     "non444 no-op",
+			mbType:   MBTypeIntra4x4 | MBType8x8DCT,
+			chroma:   1,
+			topType:  MBTypeIntra4x4,
+			leftType: [2]uint32{MBTypeIntra4x4, MBTypeIntra4x4},
+			wantNoop: true,
+		},
+		{
+			name:     "non8x8dct no-op",
+			mbType:   MBTypeIntra4x4,
+			chroma:   3,
+			topType:  MBTypeIntra4x4,
+			leftType: [2]uint32{MBTypeIntra4x4, MBTypeIntra4x4},
+			wantNoop: true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var ctx cavlcResidualContext
+			for i := range ctx.NonZeroCountCache {
+				ctx.NonZeroCountCache[i] = 9
+			}
+			adjustCABACChroma444DCT8x8NonZeroCache(&ctx, tt.chroma, tt.mbType, macroblockDecodeNeighbors{
+				TopType:  tt.topType,
+				LeftType: tt.leftType,
+			}, tt.x264Build, tt.x264Set)
+			if tt.wantNoop {
+				for i, got := range ctx.NonZeroCountCache {
+					if got != 9 {
+						t.Fatalf("nnz cache[%d] = %d, want unchanged 9", i, got)
+					}
+				}
+				return
+			}
+			assertSlots(t, &ctx, topSlots, tt.wantTop)
+			assertSlots(t, &ctx, leftSlots(0), tt.wantLeft[0])
+			assertSlots(t, &ctx, leftSlots(1), tt.wantLeft[1])
+		})
+	}
+}
+
 func TestDecodeCABACFrameIntra4x4MacroblockWritesState(t *testing.T) {
 	m, err := newMacroblockTables(2, 2, 1)
 	if err != nil {

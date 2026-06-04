@@ -294,7 +294,10 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 	state := cabacFrameSliceState{QScale: int(sh.QScale)}
 	for {
 		var work frameMacroblockDecodeWork
-		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work)
+		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, h264X264BuildInfo{
+			Build: in.X264Build,
+			Set:   in.X264BuildSet,
+		}, false)
 		if err != nil {
 			return result, fmt.Errorf("cabac mb_xy=%d: %w", cur.MBXY, err)
 		}
@@ -318,7 +321,10 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 				return result, err
 			}
 			var bottomWork frameMacroblockDecodeWork
-			bottomMB, err := m.decodeCABACFrameSliceMacroblockWithDirectWork(src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork)
+			bottomMB, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264(src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork, h264X264BuildInfo{
+				Build: in.X264Build,
+				Set:   in.X264BuildSet,
+			}, false)
 			if err != nil {
 				return result, fmt.Errorf("cabac mb_xy=%d: %w", bottom.MBXY, err)
 			}
@@ -377,7 +383,10 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 	state := cabacFrameSliceState{QScale: int(sh.QScale)}
 	for {
 		var work frameMacroblockDecodeWork
-		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuard(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, sh.SliceTypeNoS == PictureTypeB)
+		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, h264X264BuildInfo{
+			Build: in.X264Build,
+			Set:   in.X264BuildSet,
+		}, sh.SliceTypeNoS == PictureTypeB)
 		if err != nil {
 			return result, fmt.Errorf("cabac high mb_xy=%d: %w", cur.MBXY, err)
 		}
@@ -405,7 +414,10 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 				return result, err
 			}
 			var bottomWork frameMacroblockDecodeWork
-			bottomMB, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuard(src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork, sh.SliceTypeNoS == PictureTypeB)
+			bottomMB, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264(src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork, h264X264BuildInfo{
+				Build: in.X264Build,
+				Set:   in.X264BuildSet,
+			}, sh.SliceTypeNoS == PictureTypeB)
 			if err != nil {
 				return result, fmt.Errorf("cabac high mb_xy=%d: %w", bottom.MBXY, err)
 			}
