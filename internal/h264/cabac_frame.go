@@ -1014,7 +1014,7 @@ func (c *cavlcResidualContext) decodeCABACResidualPayload(src cabacSyntaxSource,
 		mbField := mbType&MBTypeInterlaced != 0
 		scan, scan8x8 := h264CABACScansForQScale(sps, qscale, mbField)
 		narrowDCT := sps.BitDepthLuma == 8
-		ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 0, qscale, cacheResult.LeftCBP, cacheResult.TopCBP, mbField, false, narrowDCT)
+		ret, err := c.decodeCABACLumaResidualTyped(src, pps, scan, scan8x8, mbType, cbp, 0, qscale, cacheResult.LeftCBP, cacheResult.TopCBP, mbField, sps.ChromaFormatIDC == 3, narrowDCT)
 		if err != nil {
 			return qscale, chromaQP, cbpTable, lastQScaleDiff, fmt.Errorf("luma residual p=0: %w", err)
 		}

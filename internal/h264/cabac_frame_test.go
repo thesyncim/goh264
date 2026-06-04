@@ -473,6 +473,36 @@ func TestDecodeCABACResidualPayloadSelectsDCTElemWidth(t *testing.T) {
 	}
 }
 
+func TestDecodeCABACResidualPayloadHigh444Luma8x8ReadsCBF(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 10, BitDepthChroma: 10, ChromaFormatIDC: 3}
+	pps.SPS = sps
+	var ctx cavlcResidualContext
+	for _, n := range []int{0, 1, 4, 5, 16, 17, 20, 21, 32, 33, 36, 37} {
+		ctx.NonZeroCountCache[h264Scan8[n]] = 7
+	}
+	src := &scriptedCABACSource{bits: []int{
+		0, // qscale diff absent
+		0, // p=0 8x8 luma cat-5 CBF, required for High444
+		0, // p=1 8x8 chroma-as-luma CBF
+		0, // p=2 8x8 chroma-as-luma CBF
+	}}
+
+	qscale, _, cbpTable, lastDiff, err := ctx.decodeCABACResidualPayload(src, pps, sps, MBTypeIntra4x4|MBType8x8DCT, 1, 20, 0, residualDecodeCacheResult{})
+	if err != nil {
+		t.Fatalf("decode high444 cabac residual payload failed: %v", err)
+	}
+	if qscale != 20 || cbpTable != 1 || lastDiff != 0 {
+		t.Fatalf("qscale/cbpTable/lastDiff = %d/%#x/%d, want 20/1/0", qscale, cbpTable, lastDiff)
+	}
+	for _, n := range []int{0, 1, 4, 5, 16, 17, 20, 21, 32, 33, 36, 37} {
+		if ctx.NonZeroCountCache[h264Scan8[n]] != 0 {
+			t.Fatalf("nnz block%d = %d, want 0", n, ctx.NonZeroCountCache[h264Scan8[n]])
+		}
+	}
+	wantIndexes(t, src, []int{60, 1012, 1016, 1020})
+}
+
 func TestDecodeCABACFrameP16x16MacroblockAppliesNeighborMotion(t *testing.T) {
 	m, err := newMacroblockTables(3, 2, 1)
 	if err != nil {
