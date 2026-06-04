@@ -598,10 +598,27 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 	if sh == nil || sh.SPS == nil || sh.PPS == nil {
 		return false
 	}
-	return sh.SPS.ChromaFormatIDC == 1 &&
-		sh.DeblockingFilter == 0 &&
-		(sh.SliceTypeNoS == PictureTypeI ||
-			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)))
+	if sh.SPS.ChromaFormatIDC != 1 {
+		return false
+	}
+	switch sh.DeblockingFilter {
+	case 0:
+		return sh.SliceTypeNoS == PictureTypeI ||
+			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh))
+	case 1:
+		if sh.PPS.CABAC != 0 {
+			return false
+		}
+		if sh.SliceTypeNoS == PictureTypeI {
+			return true
+		}
+		return sh.SliceTypeNoS == PictureTypeP &&
+			sh.PPS.WeightedPred == 0 &&
+			sh.PredWeightTable.UseWeight == 0 &&
+			sh.PredWeightTable.UseWeightChroma == 0
+	default:
+		return false
+	}
 }
 
 func isHigh12Frame420Scope(sh *SliceHeader) bool {
