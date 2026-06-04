@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-package goh264
+package goh264_test
 
 import (
 	"bytes"
@@ -231,24 +231,6 @@ func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	if info.SARDen != 1 || info.VideoFullRangeFlag != -1 || info.ColorMatrix != 2 {
 		t.Fatalf("vui defaults = sar %d:%d range %d matrix %d", info.SARNum, info.SARDen, info.VideoFullRangeFlag, info.ColorMatrix)
 	}
-	if dec.pps[0] == nil {
-		t.Fatal("PPS 0 was not retained")
-	}
-	if dec.pps[0].CABAC != 0 || dec.pps[0].SliceGroupCount != 1 || dec.pps[0].RefCount != [2]uint32{1, 1} {
-		t.Fatalf("pps = %+v", dec.pps[0])
-	}
-	if dec.pps[0].ChromaQPTable[0][30] != 29 || dec.pps[0].Dequant4Buffer[0][0][0] != 640 {
-		t.Fatalf("pps tables not initialized: chromaQP=%d dequant=%d", dec.pps[0].ChromaQPTable[0][30], dec.pps[0].Dequant4Buffer[0][0][0])
-	}
-	if len(dec.slices) != 1 {
-		t.Fatalf("slices = %d", len(dec.slices))
-	}
-	if dec.slices[0].SliceType != 1 || dec.slices[0].PPSID != 0 || dec.slices[0].PictureStructure != 3 {
-		t.Fatalf("slice = %+v", dec.slices[0])
-	}
-	if dec.slices[0].ChromaQP != [2]uint8{dec.pps[0].ChromaQPTable[0][dec.slices[0].QScale], dec.pps[0].ChromaQPTable[1][dec.slices[0].QScale]} {
-		t.Fatalf("slice chroma qp = %+v", dec.slices[0].ChromaQP)
-	}
 }
 
 func TestParseHeadersAnnexBExposesVUIMetadata(t *testing.T) {
@@ -284,32 +266,6 @@ func TestParseHeadersAnnexBWeightedP(t *testing.T) {
 	if info.Profile != "Main" || info.ProfileIDC != 77 {
 		t.Fatalf("profile = %q/%d, want Main/77", info.Profile, info.ProfileIDC)
 	}
-	if dec.pps[0] == nil || dec.pps[0].WeightedPred != 1 {
-		t.Fatalf("weighted_pred = %+v", dec.pps[0])
-	}
-	if len(dec.slices) != 4 {
-		t.Fatalf("slices = %d, want 4", len(dec.slices))
-	}
-
-	pwt := dec.slices[2].PredWeightTable
-	if pwt.UseWeight != 1 || pwt.LumaLog2WeightDenom != 5 || pwt.ChromaLog2WeightDenom != 5 {
-		t.Fatalf("slice[2] weight header = use %d denom %d/%d", pwt.UseWeight, pwt.LumaLog2WeightDenom, pwt.ChromaLog2WeightDenom)
-	}
-	if pwt.LumaWeight[0][0] != [2]int32{63, -13} ||
-		pwt.ChromaWeight[0][0][0] != [2]int32{61, -118} ||
-		pwt.ChromaWeight[0][0][1] != [2]int32{64, -128} {
-		t.Fatalf("slice[2] weights = luma %+v chroma %+v", pwt.LumaWeight[0][0], pwt.ChromaWeight[0][0])
-	}
-
-	pwt = dec.slices[3].PredWeightTable
-	if pwt.UseWeight != 1 || pwt.LumaLog2WeightDenom != 6 || pwt.ChromaLog2WeightDenom != 1 {
-		t.Fatalf("slice[3] weight header = use %d denom %d/%d", pwt.UseWeight, pwt.LumaLog2WeightDenom, pwt.ChromaLog2WeightDenom)
-	}
-	if pwt.LumaWeight[0][0] != [2]int32{95, -7} ||
-		pwt.ChromaWeight[0][0][0] != [2]int32{2, 0} ||
-		pwt.ChromaWeight[0][0][1] != [2]int32{3, -64} {
-		t.Fatalf("slice[3] weights = luma %+v chroma %+v", pwt.LumaWeight[0][0], pwt.ChromaWeight[0][0])
-	}
 }
 
 func TestParseHeadersAnnexBCABAC(t *testing.T) {
@@ -325,25 +281,15 @@ func TestParseHeadersAnnexBCABAC(t *testing.T) {
 	if info.Width != 16 || info.Height != 16 || info.ChromaFormatIDC != 1 {
 		t.Fatalf("stream = %dx%d chroma %d", info.Width, info.Height, info.ChromaFormatIDC)
 	}
-	if dec.pps[0] == nil || dec.pps[0].CABAC != 1 || dec.pps[0].DeblockingFilterParametersPresent != 1 {
-		t.Fatalf("pps = %+v", dec.pps[0])
-	}
-	if len(dec.slices) != 4 {
-		t.Fatalf("slices = %d, want 4", len(dec.slices))
-	}
-	if dec.slices[0].SliceTypeNoS != h264.PictureTypeI || dec.slices[1].SliceTypeNoS != h264.PictureTypeP {
-		t.Fatalf("slice types = %d/%d", dec.slices[0].SliceTypeNoS, dec.slices[1].SliceTypeNoS)
-	}
 }
 
 func TestParseHeadersAnnexBHigh422(t *testing.T) {
 	for _, tt := range []struct {
-		name  string
-		hex   string
-		cabac int32
+		name string
+		hex  string
 	}{
-		{name: "cavlc", hex: testsrc16CAVLC422AnnexBHex, cabac: 0},
-		{name: "cabac", hex: testsrc16CABAC422AnnexBHex, cabac: 1},
+		{name: "cavlc", hex: testsrc16CAVLC422AnnexBHex},
+		{name: "cabac", hex: testsrc16CABAC422AnnexBHex},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			data := decodeHexFixture(t, tt.hex)
@@ -357,12 +303,6 @@ func TestParseHeadersAnnexBHigh422(t *testing.T) {
 			}
 			if info.Width != 16 || info.Height != 16 || info.ChromaFormatIDC != 2 || info.BitDepthLuma != 8 || info.BitDepthChroma != 8 {
 				t.Fatalf("stream info = %+v", info)
-			}
-			if dec.pps[0] == nil || dec.pps[0].CABAC != tt.cabac {
-				t.Fatalf("pps = %+v, want cabac %d", dec.pps[0], tt.cabac)
-			}
-			if len(dec.slices) != 4 {
-				t.Fatalf("slices = %d, want 4", len(dec.slices))
 			}
 		})
 	}
@@ -382,9 +322,6 @@ func TestParseHeadersAVCBlack16(t *testing.T) {
 	}
 	if info != annexInfo {
 		t.Fatalf("info = %+v, want %+v", info, annexInfo)
-	}
-	if dec.pps[0] == nil || len(dec.slices) != 1 {
-		t.Fatalf("retained parser state: pps=%v slices=%d", dec.pps[0] != nil, len(dec.slices))
 	}
 }
 
@@ -493,9 +430,6 @@ func TestDecodePacketFramesNewExtradataAVC(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
-	if dec.avcNALLengthSize != 4 {
-		t.Fatalf("nal length size = %d, want 4", dec.avcNALLengthSize)
-	}
 }
 
 func TestDecodePacketFramesRepeatedNewExtradataDoesNotResetDPB(t *testing.T) {
@@ -531,9 +465,6 @@ func TestDecodePacketFramesNewExtradataAnnexB(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
-	if dec.avcNALLengthSize != 0 {
-		t.Fatalf("nal length size = %d, want Annex B", dec.avcNALLengthSize)
-	}
 }
 
 func TestDecodePacketFramesPacketSideDataMapsToFrame(t *testing.T) {
@@ -731,30 +662,82 @@ func TestPacketGlobalSideDataRejectsNonExactRationals(t *testing.T) {
 	)
 	binary.LittleEndian.PutUint32(mastering[4:8], 7)
 
-	side := packetFrameSideDataFromPacket([]PacketSideData{
-		{Type: PacketSideDataAmbientViewingEnvironment, Data: ambient},
-		{Type: PacketSideDataMasteringDisplayMetadata, Data: mastering},
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{
+			{Type: PacketSideDataAmbientViewingEnvironment, Data: ambient},
+			{Type: PacketSideDataMasteringDisplayMetadata, Data: mastering},
+		},
 	})
-	if side.AmbientViewing.Present != 0 {
-		t.Fatalf("ambient side data with non-exact rational was accepted: %+v", side.AmbientViewing)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if side.MasteringMetadata.Present != 0 {
-		t.Fatalf("mastering side data with non-exact rational was accepted: %+v", side.MasteringMetadata)
+	if frame.SideData.AmbientViewing != nil {
+		t.Fatalf("ambient side data with non-exact rational was accepted: %+v", frame.SideData.AmbientViewing)
+	}
+	if frame.SideData.MasteringDisplay != nil {
+		t.Fatalf("mastering side data with non-exact rational was accepted: %+v", frame.SideData.MasteringDisplay)
 	}
 }
 
 func TestPacketReferenceDisplaysRejectsInvalidNativeLayout(t *testing.T) {
-	side := packetFrameSideDataFromPacket([]PacketSideData{{
-		Type: PacketSideData3DReferenceDisplays,
-		Data: []byte{
-			12, 1, 9, 1,
-			0, 0, 0, 0,
-			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-			12, 0, 0, 0, 0, 0, 0, 0,
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{{
+			Type: PacketSideData3DReferenceDisplays,
+			Data: []byte{
+				12, 1, 9, 1,
+				0, 0, 0, 0,
+				0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+				12, 0, 0, 0, 0, 0, 0, 0,
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame.SideData.ReferenceDisplays != nil {
+		t.Fatalf("reference displays with invalid native offset accepted: %+v", frame.SideData.ReferenceDisplays)
+	}
+}
+
+func TestDecodeFrameS12MTimecodePackingMatchesFFmpegBranches(t *testing.T) {
+	for _, tt := range []struct {
+		name                      string
+		numUnitsInTick, timeScale uint32
+		drop                      bool
+		frame                     uint32
+		want                      uint32
+	}{
+		{
+			name:           "ntsc-drop-under-30fps",
+			numUnitsInTick: 1001,
+			timeScale:      60000,
+			drop:           true,
+			frame:          12,
+			want:           0x52345607,
 		},
-	}})
-	if side.ReferenceDisplays.Present != 0 {
-		t.Fatalf("reference displays with invalid native offset accepted: %+v", side.ReferenceDisplays)
+		{
+			name:           "50fps-odd-frame-uses-field-mark-bit",
+			numUnitsInTick: 1,
+			timeScale:      100,
+			frame:          13,
+			want:           0x06345687,
+		},
+		{
+			name:           "60fps-odd-frame-uses-frame-mark-bit",
+			numUnitsInTick: 1,
+			timeScale:      120,
+			frame:          13,
+			want:           0x06b45607,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := decodePictureTimingS12M(t, tt.numUnitsInTick, tt.timeScale, tt.drop, tt.frame)
+			if got != tt.want {
+				t.Fatalf("smpte = %#08x, want %#08x", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -1129,41 +1112,22 @@ func TestDecodeFrameS12MTimecodeFromPictureTimingSEI(t *testing.T) {
 	}
 }
 
-func TestS12MTimecodePackingMatchesFFmpegBranches(t *testing.T) {
-	for _, tt := range []struct {
-		name             string
-		rateNum, rateDen int64
-		drop             bool
-		frame            int32
-		want             uint32
-	}{
-		{
-			name:    "ntsc-drop-under-30fps",
-			rateNum: 30000, rateDen: 1001,
-			drop:  true,
-			frame: 12,
-			want:  0x52345607,
-		},
-		{
-			name:    "50fps-odd-frame-uses-field-mark-bit",
-			rateNum: 50, rateDen: 1,
-			frame: 13,
-			want:  0x06345687,
-		},
-		{
-			name:    "60fps-odd-frame-uses-frame-mark-bit",
-			rateNum: 60, rateDen: 1,
-			frame: 13,
-			want:  0x06b45607,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			got := avTimecodeGetSMPTE(tt.rateNum, tt.rateDen, tt.drop, 7, 56, 34, tt.frame)
-			if got != tt.want {
-				t.Fatalf("smpte = %#08x, want %#08x", got, tt.want)
-			}
-		})
+func decodePictureTimingS12M(t *testing.T, numUnitsInTick uint32, timeScale uint32, drop bool, frameNum uint32) uint32 {
+	t.Helper()
+
+	base := replaceAnnexBSPS(t, decodeHexFixture(t, black16AnnexBHex), decoderSPSNALWithPicStructVUITiming(numUnitsInTick, timeScale))
+	data := prependAnnexBNAL(base, decoderTestSEINAL(decoderSEITestMessage{
+		typ:     decoderSEITypePicTiming,
+		payload: decoderSEIPictureTimingTimecodePayloadWithFrame(drop, frameNum),
+	}))
+	frame, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if len(frame.SideData.S12MTimecodes) != 1 {
+		t.Fatalf("s12m timecodes = %08x, want one value", frame.SideData.S12MTimecodes)
+	}
+	return frame.SideData.S12MTimecodes[0]
 }
 
 func TestS12MTimecodePackingMatchesNativeFFmpegOracle(t *testing.T) {
@@ -1192,9 +1156,9 @@ func TestS12MTimecodePackingMatchesNativeFFmpegOracle(t *testing.T) {
 	}
 	got := strings.TrimSpace(string(out))
 	want := strings.Join([]string{
-		fmt.Sprintf("%08x", avTimecodeGetSMPTE(30000, 1001, true, 7, 56, 34, 12)),
-		fmt.Sprintf("%08x", avTimecodeGetSMPTE(50, 1, false, 7, 56, 34, 13)),
-		fmt.Sprintf("%08x", avTimecodeGetSMPTE(60, 1, false, 7, 56, 34, 13)),
+		fmt.Sprintf("%08x", decodePictureTimingS12M(t, 1001, 60000, true, 12)),
+		fmt.Sprintf("%08x", decodePictureTimingS12M(t, 1, 100, false, 13)),
+		fmt.Sprintf("%08x", decodePictureTimingS12M(t, 1, 120, false, 13)),
 	}, "\n")
 	if got != want {
 		t.Fatalf("oracle mismatch\nC:\n%s\nGo:\n%s", got, want)
@@ -1768,9 +1732,6 @@ func TestParseAVCDecoderConfigurationRecordCABAC(t *testing.T) {
 	if cfg.StreamInfo.Profile != "Main" || cfg.StreamInfo.ProfileIDC != 77 || cfg.StreamInfo.LevelIDC != 10 {
 		t.Fatalf("stream info = %+v", cfg.StreamInfo)
 	}
-	if dec.sps[0] == nil || dec.pps[0] == nil || dec.pps[0].CABAC != 1 {
-		t.Fatalf("configured state: sps=%v pps=%+v", dec.sps[0] != nil, dec.pps[0])
-	}
 	frames, err := dec.DecodeConfiguredAVCFrames(packet)
 	if err != nil {
 		t.Fatal(err)
@@ -2019,9 +1980,6 @@ func TestFFprobeOracleBlack16(t *testing.T) {
 	}
 	if stream.Profile != info.Profile || stream.Width != info.Width || stream.Height != info.Height || stream.Level != int(info.LevelIDC) {
 		t.Fatalf("oracle %+v, go %+v", stream, info)
-	}
-	if dec.sps[0] == nil {
-		t.Fatal("SPS 0 was not retained")
 	}
 	if stream.SAR != ratioColonString(info.SARNum, info.SARDen) {
 		t.Fatalf("oracle SAR %s, go %d:%d", stream.SAR, info.SARNum, info.SARDen)
@@ -2529,6 +2487,11 @@ const (
 
 func decoderSPSNALWithRichVUI(t *testing.T) []byte {
 	t.Helper()
+	return decoderSPSNALWithRichVUITiming(t, 1001, 60000)
+}
+
+func decoderSPSNALWithRichVUITiming(t *testing.T, numUnitsInTick uint32, timeScale uint32) []byte {
+	t.Helper()
 	var b decoderSEIBitBuilder
 	b.writeBits(66, 8)   // profile_idc
 	b.writeBits(0xc0, 8) // constraint flags plus reserved bits
@@ -2562,8 +2525,8 @@ func decoderSPSNALWithRichVUI(t *testing.T) []byte {
 	b.writeUE(2)
 	b.writeUE(3)
 	b.writeBit(1) // timing_info_present_flag
-	b.writeBits(1001, 32)
-	b.writeBits(60000, 32)
+	b.writeBits(numUnitsInTick, 32)
+	b.writeBits(timeScale, 32)
 	b.writeBit(1)
 	b.writeBit(0) // nal_hrd_parameters_present_flag
 	b.writeBit(0) // vcl_hrd_parameters_present_flag
@@ -2583,11 +2546,41 @@ func decoderSPSNALWithRichVUI(t *testing.T) []byte {
 }
 
 func decoderSPSNALWithPicStructVUI() []byte {
-	return []byte{
-		0x67, 0x42, 0xc0, 0x0a, 0xdd, 0xec, 0x04, 0x40,
-		0x00, 0x00, 0xfa, 0x40, 0x00, 0x3a, 0x98, 0x27,
-		0xc4, 0x89, 0xe0,
-	}
+	return decoderSPSNALWithPicStructVUITiming(1001, 60000)
+}
+
+func decoderSPSNALWithPicStructVUITiming(numUnitsInTick uint32, timeScale uint32) []byte {
+	var b decoderSEIBitBuilder
+	b.writeBits(66, 8)   // profile_idc
+	b.writeBits(0xc0, 8) // constraint flags plus reserved bits
+	b.writeBits(10, 8)   // level_idc
+	b.writeUE(0)         // seq_parameter_set_id
+	b.writeUE(0)         // log2_max_frame_num_minus4
+	b.writeUE(2)         // pic_order_cnt_type
+	b.writeUE(0)         // max_num_ref_frames
+	b.writeBit(0)        // gaps_in_frame_num_value_allowed_flag
+	b.writeUE(0)         // pic_width_in_mbs_minus1
+	b.writeUE(0)         // pic_height_in_map_units_minus1
+	b.writeBit(1)        // frame_mbs_only_flag
+	b.writeBit(1)        // direct_8x8_inference_flag
+	b.writeBit(0)        // frame_cropping_flag
+	b.writeBit(1)        // vui_parameters_present_flag
+	b.writeBit(0)        // aspect_ratio_info_present_flag
+	b.writeBit(0)        // overscan_info_present_flag
+	b.writeBit(0)        // video_signal_type_present_flag
+	b.writeBit(0)        // chroma_loc_info_present_flag
+	b.writeBit(1)        // timing_info_present_flag
+	b.writeBits(numUnitsInTick, 32)
+	b.writeBits(timeScale, 32)
+	b.writeBit(1) // fixed_frame_rate_flag
+	b.writeBit(0) // nal_hrd_parameters_present_flag
+	b.writeBit(0) // vcl_hrd_parameters_present_flag
+	b.writeBit(1) // pic_struct_present_flag
+	b.writeBit(0) // bitstream_restriction_flag
+
+	rbsp := b.rbsp()
+	raw := []byte{0x67}
+	return append(raw, escapeRBSPForNALPayload(rbsp)...)
 }
 
 type decoderSEITestMessage struct {
@@ -2628,6 +2621,10 @@ func decoderSEIPictureTimingPayload(picStruct uint32) []byte {
 }
 
 func decoderSEIPictureTimingTimecodePayload() []byte {
+	return decoderSEIPictureTimingTimecodePayloadWithFrame(true, 0)
+}
+
+func decoderSEIPictureTimingTimecodePayloadWithFrame(drop bool, frame uint32) []byte {
 	var b decoderSEIBitBuilder
 	b.writeBits(decoderSEIPicStructFrame, 4)
 	b.writeBit(1)
@@ -2636,8 +2633,12 @@ func decoderSEIPictureTimingTimecodePayload() []byte {
 	b.writeBits(3, 5)
 	b.writeBit(1)
 	b.writeBit(0)
-	b.writeBit(1)
-	b.writeBits(0, 8)
+	if drop {
+		b.writeBit(1)
+	} else {
+		b.writeBit(0)
+	}
+	b.writeBits(frame, 8)
 	b.writeBits(34, 6)
 	b.writeBits(56, 6)
 	b.writeBits(7, 5)

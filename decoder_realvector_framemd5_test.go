@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-package goh264
+package goh264_test
 
 import (
 	"bytes"
@@ -289,7 +289,7 @@ func h264RawByteLocation(frame h264RawFrameBytes, offset int) string {
 		sample := offset / bytesPerSample
 		return fmt.Sprintf("plane=Y x=%d y=%d sample_byte=%d", sample%frame.Width, sample/frame.Width, offset%bytesPerSample)
 	}
-	chromaWidth, chromaHeight, err := frameChromaSize(frame.Width, frame.Height, frame.ChromaFormatIDC)
+	chromaWidth, chromaHeight, err := h264DiagnosticChromaSize(frame.Width, frame.Height, frame.ChromaFormatIDC)
 	if err != nil || chromaWidth <= 0 || chromaHeight <= 0 {
 		return "plane=?"
 	}
@@ -305,4 +305,17 @@ func h264RawByteLocation(frame h264RawFrameBytes, offset int) string {
 		return fmt.Sprintf("plane=Cr x=%d y=%d sample_byte=%d", sample%chromaWidth, sample/chromaWidth, chromaOffset%bytesPerSample)
 	}
 	return "plane=?"
+}
+
+func h264DiagnosticChromaSize(width int, height int, chromaFormatIDC uint32) (int, int, error) {
+	switch chromaFormatIDC {
+	case 0, 1:
+		return (width + 1) / 2, (height + 1) / 2, nil
+	case 2:
+		return (width + 1) / 2, height, nil
+	case 3:
+		return width, height, nil
+	default:
+		return 0, 0, fmt.Errorf("invalid chroma format %d", chromaFormatIDC)
+	}
 }

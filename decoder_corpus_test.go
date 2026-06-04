@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-package goh264
+package goh264_test
 
 import (
 	"bufio"
