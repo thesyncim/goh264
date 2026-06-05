@@ -35,6 +35,37 @@ func TestSampleStats(t *testing.T) {
 	}
 }
 
+func TestBenchProfilesWriteCPUAndHeapProfiles(t *testing.T) {
+	dir := t.TempDir()
+	cpuPath := filepath.Join(dir, "cpu.pprof")
+	heapPath := filepath.Join(dir, "heap.pprof")
+	profiles, err := startBenchProfiles(cpuPath, heapPath)
+	if err != nil {
+		if strings.Contains(err.Error(), "already in use") {
+			t.Skipf("CPU profiler already in use: %v", err)
+		}
+		t.Fatal(err)
+	}
+	for i := 0; i < 100000; i++ {
+		_ = i * i
+	}
+	if err := profiles.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := profiles.Close(); err != nil {
+		t.Fatalf("second profile close err = %v, want idempotent close", err)
+	}
+	for _, path := range []string{cpuPath, heapPath} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat profile %s: %v", path, err)
+		}
+		if info.Size() == 0 {
+			t.Fatalf("profile %s is empty", path)
+		}
+	}
+}
+
 func TestSampleFromTotalsReportsAllocationRates(t *testing.T) {
 	sample := sampleFromTotals(4, 2, 10, 2*time.Millisecond, 128, 8, "abc")
 	if sample.TotalFrames != 8 || sample.TotalBytes != 40 {

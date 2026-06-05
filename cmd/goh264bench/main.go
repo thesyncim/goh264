@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/debug"
+	"runtime/pprof"
 	"sort"
 	"strings"
 	"time"
@@ -229,6 +230,8 @@ func main() {
 	strictPixFmt := flag.Bool("strict-pix-fmt", false, "reject a user-supplied -ffmpeg-pix-fmt that differs from Go raw pixel format")
 	maxGoAllocBytesPerIter := flag.Float64("max-go-alloc-bytes-per-iter", 0, "fail if a timed Go result exceeds this alloc_bytes_per_iter budget; 0 disables")
 	maxGoAllocsPerIter := flag.Float64("max-go-allocs-per-iter", 0, "fail if a timed Go result exceeds this allocs_per_iter budget; 0 disables")
+	cpuProfile := flag.String("cpuprofile", "", "write Go CPU profile for the benchmark run")
+	memProfile := flag.String("memprofile", "", "write Go heap profile after the benchmark run")
 	jsonOut := flag.Bool("json", false, "print JSON")
 	flag.Parse()
 
@@ -262,8 +265,13 @@ func main() {
 		maxGoAllocBytesPerIter: *maxGoAllocBytesPerIter,
 		maxGoAllocsPerIter:     *maxGoAllocsPerIter,
 	}
+	profiles, err := startBenchProfiles(*cpuProfile, *memProfile)
+	if err != nil {
+		die("profile", err)
+	}
 	report, err := buildBenchReport(*input, *manifest, *maxEntries, opts)
 	if err != nil {
+		closeBenchProfilesBeforeExit(profiles)
 		die("benchmark", err)
 	}
 
@@ -271,7 +279,11 @@ func main() {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(report); err != nil {
+			closeBenchProfilesBeforeExit(profiles)
 			die("json", err)
+		}
+		if err := profiles.Close(); err != nil {
+			die("profile", err)
 		}
 		return
 	}
@@ -388,6 +400,67 @@ func main() {
 			printBenchFrameDiagnostic(frame)
 		}
 		fmt.Println()
+	}
+	if err := profiles.Close(); err != nil {
+		die("profile", err)
+	}
+}
+
+type benchProfiles struct {
+	cpuFile *os.File
+	memPath string
+	closed  bool
+}
+
+func startBenchProfiles(cpuPath string, memPath string) (*benchProfiles, error) {
+	profiles := &benchProfiles{memPath: memPath}
+	if cpuPath == "" {
+		return profiles, nil
+	}
+	f, err := os.Create(cpuPath)
+	if err != nil {
+		return nil, fmt.Errorf("create CPU profile: %w", err)
+	}
+	if err := pprof.StartCPUProfile(f); err != nil {
+		closeErr := f.Close()
+		return nil, errors.Join(fmt.Errorf("start CPU profile: %w", err), closeErr)
+	}
+	profiles.cpuFile = f
+	return profiles, nil
+}
+
+func (p *benchProfiles) Close() error {
+	if p == nil || p.closed {
+		return nil
+	}
+	p.closed = true
+	var errs []error
+	if p.cpuFile != nil {
+		pprof.StopCPUProfile()
+		if err := p.cpuFile.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close CPU profile: %w", err))
+		}
+	}
+	if p.memPath != "" {
+		runtime.GC()
+		f, err := os.Create(p.memPath)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("create heap profile: %w", err))
+		} else {
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				errs = append(errs, fmt.Errorf("write heap profile: %w", err))
+			}
+			if err := f.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("close heap profile: %w", err))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func closeBenchProfilesBeforeExit(profiles *benchProfiles) {
+	if err := profiles.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "profile: %v\n", err)
 	}
 }
 

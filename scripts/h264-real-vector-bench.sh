@@ -28,6 +28,14 @@ if [[ -n "${GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER:-}" ]]; then
     alloc_args+=(-max-go-allocs-per-iter "${GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER}")
 fi
 
+profile_args=()
+if [[ -n "${GOH264_BENCH_CPU_PROFILE:-}" ]]; then
+    profile_args+=(-cpuprofile "${GOH264_BENCH_CPU_PROFILE}")
+fi
+if [[ -n "${GOH264_BENCH_MEM_PROFILE:-}" ]]; then
+    profile_args+=(-memprofile "${GOH264_BENCH_MEM_PROFILE}")
+fi
+
 ffmpeg_args=()
 if [[ "${GOH264_BENCH_FFMPEG:-0}" == "1" ]]; then
     ffmpeg_args=(
@@ -58,6 +66,14 @@ if [[ "${#alloc_args[@]}" -ne 0 ]]; then
         printf ' max_go_allocs_per_iter=%s' "$GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER" >&2
     fi
 fi
+if [[ "${#profile_args[@]}" -ne 0 ]]; then
+    if [[ -n "${GOH264_BENCH_CPU_PROFILE:-}" ]]; then
+        printf ' cpuprofile=%s' "$GOH264_BENCH_CPU_PROFILE" >&2
+    fi
+    if [[ -n "${GOH264_BENCH_MEM_PROFILE:-}" ]]; then
+        printf ' memprofile=%s' "$GOH264_BENCH_MEM_PROFILE" >&2
+    fi
+fi
 if [[ "${#ffmpeg_args[@]}" -ne 0 ]]; then
     printf ' ffmpeg=1' >&2
     if [[ "${GOH264_BENCH_FAIR_CPU_LANES:-0}" == "1" ]]; then
@@ -82,6 +98,9 @@ cmd=(go run ./cmd/goh264bench \
     -json)
 if [[ "${#alloc_args[@]}" -ne 0 ]]; then
     cmd+=("${alloc_args[@]}")
+fi
+if [[ "${#profile_args[@]}" -ne 0 ]]; then
+    cmd+=("${profile_args[@]}")
 fi
 if [[ "${#ffmpeg_args[@]}" -ne 0 ]]; then
     cmd+=("${ffmpeg_args[@]}")

@@ -282,13 +282,17 @@ Use `-max-go-alloc-bytes-per-iter` and `-max-go-allocs-per-iter` to turn those
 Go allocation rates into failing benchmark budgets. The real-vector benchmark
 script exposes the same gate through `GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER`
 and `GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER`.
+Use `-cpuprofile` and `-memprofile` to write Go CPU and heap profiles around
+the oracle-checked benchmark run; `GOH264_BENCH_CPU_PROFILE` and
+`GOH264_BENCH_MEM_PROFILE` forward those paths through the real-vector
+benchmark script.
 
 Performance status is intentionally conservative: the benchmark harness exists
 and rejects quality drift before timing, and public raw-output helpers have
 caller-buffer zero-allocation guards. A checked-in public-vector allocation
-canary now exists, while benchstat/profile evidence, a larger performance
-corpus, and an in-process libavcodec baseline are still pending. Treat the
-decoder as pre-production for throughput-sensitive use until
+canary and profile-output hooks now exist, while checked-in benchstat/profile
+artifacts, a larger performance corpus, and an in-process libavcodec baseline
+are still pending. Treat the decoder as pre-production for throughput-sensitive use until
 [docs/production-readiness.md](docs/production-readiness.md) has those release
 artifacts.
 

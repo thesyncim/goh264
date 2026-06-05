@@ -45,6 +45,9 @@ comparison lane, oracle `quality_status`, Go allocation totals plus
 per-iteration/per-frame allocation rates, and FFmpeg-vs-Go
 `peer_quality_status`. Diagnostic mode includes expected decode-error rows as
 oracle rows and requires the observed decoder error to contain `expected_error`.
+`-cpuprofile` and `-memprofile` write CPU and heap profiles around the
+oracle-checked benchmark run; `scripts/h264-real-vector-bench.sh` forwards
+`GOH264_BENCH_CPU_PROFILE` and `GOH264_BENCH_MEM_PROFILE` to those flags.
 Use `-fair-cpu-lanes` for both `pure-c-vs-pure-go` and
 `native-c+asm-vs-go+asm`; extracted container rows require FFmpeg on `PATH`
 when the cache does not already contain the `.h264-annexb` derived stream.
@@ -65,5 +68,5 @@ real-vector benchmark script forwards
 `scripts/h264-real-vector-release-alloc.sh` is the checked-in release canary:
 it runs the CANL4 public vector with defaults of 64,000,000 Go allocation
 bytes/iteration and 10,000 Go allocations/iteration. Pending:
-benchstat/profile output, larger performance corpus, and in-process libavcodec
-baseline.
+checked-in benchstat/profile artifacts, larger performance corpus, and
+in-process libavcodec baseline.
