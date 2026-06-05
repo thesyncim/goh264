@@ -3,9 +3,11 @@
 Decoder scope: FFmpeg `n8.0.1` H.264 decoder path only.
 
 Expanded product scope: realtime/WebRTC H.264 encoder support is now planned in
-`docs/encoder-webrtc-roadmap.md`. No encoder parity or production claim exists
-yet; encoder work must land behind its own controls, oracles, and release
-evidence while the decoder production bar stays green.
+`docs/encoder-webrtc-roadmap.md`. The public encoder control contract now lives
+in `encoder.go` and is tested from the external `tests` package, but no encoder
+bitstream parity or production claim exists yet; encoder work must land behind
+its own controls, oracles, and release evidence while the decoder production
+bar stays green.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
@@ -86,6 +88,11 @@ stateful valid-damaged-valid packet recovery guards across configured AVC,
 AVC configuration-record, packet `NEW_EXTRADATA`, and auto Annex B surfaces,
 malformed AVC/Annex B `NEW_EXTRADATA` recovery guards,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
+
+Realtime/WebRTC encoder proof currently covers control admission only: default
+8-bit I420 constrained-baseline RTP config, invalid-control rejection, bitrate,
+framerate, RTP payload-size, PLI/FIR/force-IDR, partial reconfiguration, and
+frame-shape validation before encode returns `ErrUnsupported`.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder

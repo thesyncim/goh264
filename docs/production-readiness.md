@@ -1,8 +1,10 @@
 # Production Readiness
 
 The decoder is the current implemented path. Realtime/WebRTC encoder support is
-now in scope, but encoder production gates live in
-`docs/encoder-webrtc-roadmap.md` until implementation and oracle evidence land.
+now in scope, with a tested public control contract in `encoder.go`. Encoder
+bitstream generation is still intentionally unsupported; encoder production
+gates live in `docs/encoder-webrtc-roadmap.md` until implementation and oracle
+evidence land.
 
 Harness-first status:
 
@@ -19,6 +21,7 @@ scripts/h264-real-vector-release-alloc.sh # checked-in Go allocation canary budg
 scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder canary
 scripts/h264-performance-evidence.sh  # local benchstat, JSON, CPU, and heap profile bundle
 scripts/h264-decoder-release-evidence.sh # full decoder release-evidence runner
+go test ./tests -run TestEncoder # realtime/WebRTC encoder control contract
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_RED_QUEUE=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorRedQueue
@@ -103,3 +106,11 @@ packet from matching the raw-MD5 oracle. Packet `NEW_EXTRADATA` recovery also
 guards malformed AVC and Annex B extradata: the bad side-data packet returns an
 error and the next packet still decodes against the last good configuration and
 reference state.
+
+Encoder readiness evidence currently covers controls only:
+`tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
+rejects invalid or not-yet-admitted realtime controls, validates runtime
+bitrate, framerate, payload-size, PLI/FIR, force-IDR, and partial
+reconfiguration paths, and verifies frame-shape validation before
+`Encode`/`EncodeInto` return `ErrUnsupported`. No encoder bitstream, RTP
+packetizer, or FFmpeg/goh264 round-trip oracle has landed yet.

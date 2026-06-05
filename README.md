@@ -5,13 +5,15 @@ Pure-Go H.264 codec, decoder-first and source-shaped from FFmpeg `libavcodec`.
 `goh264` currently implements an active Go port of the FFmpeg `n8.0.1` H.264
 decoder path, pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`. Encoder
 support is now in scope for realtime/WebRTC use, tracked in
-[docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md), but no
-encoder API is production-ready yet. The goal is not a loose rewrite: internal
-codec paths keep upstream state machines, syntax handling, math, and edge cases
-recognizable, then prove behavior against oracle vectors.
+[docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md). The encoder
+API currently exposes a tested realtime/WebRTC control contract; bitstream
+generation still returns `ErrUnsupported` until the writer, IDR path, and
+oracles land. The goal is not a loose rewrite: internal codec paths keep
+upstream state machines, syntax handling, math, and edge cases recognizable,
+then prove behavior against oracle vectors.
 
 - **Pure Go decoder path** - no cgo and no Go module dependencies.
-- **Realtime/WebRTC encoder scope** - planned encoder support targets explicit
+- **Realtime/WebRTC encoder scope** - tested encoder controls cover explicit
   bitrate, latency, keyframe, packetization, profile/level, and runtime
   reconfiguration controls.
 - **Annex B and AVC input surfaces** - automatic packet splitting, explicit
@@ -62,6 +64,12 @@ and is checked by the freshness/matrix gates when populated.
 `TestH264DecoderTDDContractClassifiesEveryImportedPublicVector` is the always-on
 contract that keeps the inventory, manifest, exclusions, and failure ledger in
 lockstep.
+
+Encoder status: `DefaultEncoderConfig`, `NewEncoder`, `Encode`/`EncodeInto`,
+PLI/FIR/force-IDR, bitrate/framerate/payload reconfiguration, and the WebRTC
+control fields are public and covered by `tests/encoder_webrtc_controls_test.go`.
+Valid 8-bit I420 constrained-baseline realtime configs are admitted as control
+state; actual H.264 bitstream generation is still intentionally unsupported.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
@@ -201,6 +209,26 @@ timing fields, keyframe/interlace flags, raw planes, and parsed SEI/packet side
 data such as A53 captions, S12M timecode, stereo 3D, spherical video, mastering
 display metadata, content light metadata, display orientation, film grain, ICC
 profile, HDR10+, and LCEVC side data.
+
+The encoder API is a WebRTC/realtime control contract while implementation is
+still landing:
+
+```go
+cfg := goh264.DefaultEncoderConfig(640, 480)
+cfg.TargetBitrate = 800_000
+cfg.MaxBitrate = 1_000_000
+
+enc, err := goh264.NewEncoder(cfg)
+if err != nil {
+	// Invalid controls return ErrInvalidData; unsupported future tools return ErrUnsupported.
+}
+enc.HandlePLI() // queues the next frame as an IDR request
+err = enc.SetRTPMaxPayloadSize(1200)
+```
+
+`Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
+then return `ErrUnsupported` until the bitstream writer and IDR encoder slices
+are implemented and oracle-proved.
 
 ## Supported Inputs
 
@@ -374,7 +402,7 @@ No tag should be treated as production until a release-evidence pass proves:
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until
   [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md) has matching
-  implementation, controls, and oracle evidence.
+  bitstream implementation, controls, and oracle evidence.
 - The source-truth and translation-ledger docs match the committed tests.
 
 The release-evidence runner writes logs under

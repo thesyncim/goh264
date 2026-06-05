@@ -44,11 +44,19 @@ defaults:
 - Runtime reconfiguration: bitrate, frame rate, resolution reset, keyframe
   request, packetization limits, and latency/quality preset changes.
 
+Current safe point: the public control contract is present in `encoder.go` and
+covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
+constrained-baseline realtime/WebRTC configs can be constructed, invalid
+controls are rejected, and runtime bitrate, framerate, payload-size, PLI/FIR,
+force-IDR, and partial reconfiguration controls are tested. `Encode` and
+`EncodeInto` validate frame shape but still return `ErrUnsupported` for
+bitstream generation.
+
 ## Implementation Order
 
-1. Add the public encoder configuration and control contract with tests that
-   reject invalid WebRTC configurations.
-2. Add bitstream writer primitives for NAL/RBSP, Exp-Golomb, SPS, PPS, SEI,
+1. Done: add the public encoder configuration and control contract with tests
+   that reject invalid WebRTC configurations.
+2. Next: add bitstream writer primitives for NAL/RBSP, Exp-Golomb, SPS, PPS, SEI,
    slice headers, and AVC configuration records.
 3. Add an intra-only IDR path for I420 input and prove that local decode and
    FFmpeg decode produce matching raw frames.
