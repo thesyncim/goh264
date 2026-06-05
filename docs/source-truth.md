@@ -16,8 +16,8 @@ Intra16x16 luma, chroma, and combined luma/chroma residual plus public
 P-skip/P16x16, internal High12 no-deblock weighted P-skip and
 weighted P16x16/partitioned P plus
 P16x16 residual handoff plus no-deblock/mode-1 I/P deblock including
-public CAVLC 4:2:2/4:4:4 luma-only and luma+chroma weighted-P
-no-deblock/mode-1/mode-2 deblock,
+public CAVLC 4:2:2/4:4:4 unweighted I/P no-deblock/mode-1/mode-2
+deblock and luma-only and luma+chroma weighted-P no-deblock/mode-1/mode-2 deblock,
 CAVLC/CABAC unweighted B no-deblock/mode-1/mode-2 deblock including
 B-skip/direct-sub no-deblock and mode-1/mode-2 deblock plus partitioned
 B16x8/B8x16/B8x8 no-deblock and mode-1/mode-2 deblock,
