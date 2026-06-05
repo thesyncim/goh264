@@ -43,10 +43,11 @@ plus 4:2:0 explicit weighted B no-deblock/mode-1/mode-2 deblock including
 direct-sub and partitioned B16x8/B8x16/B8x8 shapes
 plus mode-1/mode-2 I/P and weighted-P deblock, High10 frame-MBAFF field-coded CAVLC IntraPCM
 entropy/reconstruct pairing plus public High10/High422 field-coded
-frame-MBAFF deblock rows plus internal High10 4:2:2 top/bottom field
+frame-MBAFF deblock rows plus public derived High10 4:2:2/4:4:4 luma-only
+and luma+chroma weighted-P slice-boundary mode-2 rows plus internal High10 4:2:2 top/bottom field
 explicit weighted B and 4:4:4 top/bottom field explicit/implicit weighted B
 luma/chroma deblock modes 0/1 plus internal High10 4:2:2/4:4:4 top/bottom field
-luma-only and luma+chroma weighted P deblock modes 0/1, complete FFmpeg FRext FATE row coverage including
+luma-only, luma+chroma, and source-normalized chroma-only weighted P deblock modes 0/1, complete FFmpeg FRext FATE row coverage including
 monochrome-to-yuv420p output, selected compact baseline/main conformance rows
 including AUD, SVA/Sony/MW/FT/JVC/Sand/Toshiba/VTC baseline/main, CABAC,
 no-deblock, reference, field, and slice-boundary rows,
@@ -86,7 +87,7 @@ stream; FFmpeg exits with decode error) and `mkv/h264_tta_undecodable.mkv` (no
 H.264 video stream).
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad slice-boundary
-high modes including broader weighted-P slice-boundary deblock modes, public 12/14-bit
+high modes including broader High12/field weighted-P slice-boundary deblock modes, public 12/14-bit
 high streams beyond the current FFmpeg FATE 8-bit/10-bit set, broader
 damaged-slice error resilience, threading/SIMD, and full libavcodec
 delayed-output behavior.

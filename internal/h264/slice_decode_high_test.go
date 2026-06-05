@@ -933,6 +933,41 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaWeightedPFrameDeblo
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaWeightedPSliceBoundaryDeblock(t *testing.T) {
+	weights := []struct {
+		name  string
+		table func(chromaFormatIDC int) PredWeightTable
+	}{
+		{name: "luma-only", table: func(int) PredWeightTable {
+			pwt := highWeightedPPredWeightTable()
+			pwt.UseWeightChroma = 0
+			return pwt
+		}},
+		{name: "luma-chroma", table: func(int) PredWeightTable {
+			return highWeightedPPredWeightTable()
+		}},
+		{name: "source-chroma-only", table: highSourceChromaOnlyWeightedPPredWeightTable},
+	}
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, cabac := range []int32{0, 1} {
+			for _, weight := range weights {
+				t.Run(fmt.Sprintf("%s/cabac%d/%s", chromaFormatName(chromaFormatIDC), cabac, weight.name), func(t *testing.T) {
+					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, true, PictureTypeP)
+					sh.DeblockingFilter = 2
+					sh.RefCount = [2]uint32{1, 0}
+					sh.PPS.CABAC = cabac
+					sh.PPS.WeightedPred = 1
+					sh.PredWeightTable = weight.table(chromaFormatIDC)
+
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high10 chroma weighted P slice-boundary validation err = %v, want nil", err)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestPredWeightTableCollapsesChromaOnlyPWeightToUseWeight(t *testing.T) {
 	gb := bitReaderFromBits(t, "011 010 0 1 00110 011 00100 010")
 	sh := &SliceHeader{
@@ -1152,8 +1187,6 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 	}{
 		{name: "9-bit-422", bitDepth: 9, chroma: 9, format: 2, slice: PictureTypeP},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeP},
-		{name: "high10-422-weighted-chroma-slice-boundary-deblock", bitDepth: 10, chroma: 10, format: 2, deblockMode: 2, slice: PictureTypeP},
-		{name: "high10-444-weighted-chroma-slice-boundary-deblock", bitDepth: 10, chroma: 10, format: 3, deblockMode: 2, slice: PictureTypeP},
 		{name: "high12-422-weighted-chroma-deblock-disabled", bitDepth: 12, chroma: 12, format: 2, slice: PictureTypeP},
 		{name: "high12-444-weighted-chroma-deblock-disabled", bitDepth: 12, chroma: 12, format: 3, slice: PictureTypeP},
 		{name: "high12-422-weighted-chroma-deblock", bitDepth: 12, chroma: 12, format: 2, deblock: true, slice: PictureTypeP},

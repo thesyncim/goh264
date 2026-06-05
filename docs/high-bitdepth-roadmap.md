@@ -60,7 +60,7 @@ reinit metadata, and the XAVC High422 terminal damaged top-field row that
 FFmpeg conceals while draining already-complete delayed frames.
 
 Next: public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
-broader weighted-P slice-boundary modes, broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
+broader High12/field weighted-P slice-boundary modes, broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
 damaged-slice error resilience beyond terminal first-field recovery.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and
