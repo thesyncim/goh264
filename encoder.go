@@ -257,6 +257,8 @@ type EncoderReconfigure struct {
 	RTPMaxPayloadSize int
 	MaxFrameSize      int
 	MaxEncodeTimeUS   int
+	SliceCount        int
+	SliceMaxBytes     int
 	Preset            EncoderPreset
 	ForceIDR          bool
 	SPSPPSBeforeIDR   *bool
@@ -431,57 +433,49 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		)
 	}
 
+	sliceRanges := encoderSliceRanges(view.width, view.height, e.cfg.SliceCount)
 	if idr {
-		slice, err := h264.BuildEncoderI420IntraPCMIDRSlice(h264.EncoderI420IntraPCMIDRConfig{
-			Width:                      view.width,
-			Height:                     view.height,
-			StrideY:                    view.strideY,
-			StrideCb:                   view.strideCb,
-			StrideCr:                   view.strideCr,
-			Y:                          view.y,
-			Cb:                         view.cb,
-			Cr:                         view.cr,
-			FrameNum:                   e.frameNum & 0xff,
-			IDRPicID:                   e.idrPicID & 0xffff,
-			InitialQP:                  e.cfg.InitialQP,
-			DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
-			NALLengthSize:              4,
-		})
-		if err != nil {
-			return EncodedFrame{}, err
+		for _, r := range sliceRanges {
+			slice, err := h264.BuildEncoderI420IntraPCMIDRSlice(h264.EncoderI420IntraPCMIDRConfig{
+				Width:                      view.width,
+				Height:                     view.height,
+				StrideY:                    view.strideY,
+				StrideCb:                   view.strideCb,
+				StrideCr:                   view.strideCr,
+				Y:                          view.y,
+				Cb:                         view.cb,
+				Cr:                         view.cr,
+				FrameNum:                   e.frameNum & 0xff,
+				IDRPicID:                   e.idrPicID & 0xffff,
+				InitialQP:                  e.cfg.InitialQP,
+				DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+				FirstMBAddr:                uint32(r.firstMB),
+				MacroblockCount:            uint32(r.macroblockCount),
+				NALLengthSize:              4,
+			})
+			if err != nil {
+				return EncodedFrame{}, err
+			}
+			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALIDRSlice), raw: slice.NAL, keyFrame: true})
 		}
-		nals = append(nals, encoderRawNAL{typ: uint8(h264.NALIDRSlice), raw: slice.NAL, keyFrame: true})
 	} else if e.referenceMatches(view) {
-		slice, err := h264.BuildEncoderI420PSkipSlice(h264.EncoderI420PSkipConfig{
-			Width:                      view.width,
-			Height:                     view.height,
-			FrameNum:                   e.frameNum & 0xff,
-			InitialQP:                  e.cfg.InitialQP,
-			DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
-			NALLengthSize:              4,
-		})
-		if err != nil {
-			return EncodedFrame{}, err
+		for _, r := range sliceRanges {
+			slice, err := h264.BuildEncoderI420PSkipSlice(h264.EncoderI420PSkipConfig{
+				Width:                      view.width,
+				Height:                     view.height,
+				FrameNum:                   e.frameNum & 0xff,
+				InitialQP:                  e.cfg.InitialQP,
+				DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+				FirstMBAddr:                uint32(r.firstMB),
+				MacroblockCount:            uint32(r.macroblockCount),
+				NALLengthSize:              4,
+			})
+			if err != nil {
+				return EncodedFrame{}, err
+			}
+			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: slice.NAL})
 		}
-		nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: slice.NAL})
 	} else {
-		slice, err := h264.BuildEncoderI420IntraPCMPSlice(h264.EncoderI420IntraPCMPConfig{
-			Width:                      view.width,
-			Height:                     view.height,
-			StrideY:                    view.strideY,
-			StrideCb:                   view.strideCb,
-			StrideCr:                   view.strideCr,
-			Y:                          view.y,
-			Cb:                         view.cb,
-			Cr:                         view.cr,
-			FrameNum:                   e.frameNum & 0xff,
-			InitialQP:                  e.cfg.InitialQP,
-			DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
-			NALLengthSize:              4,
-		})
-		if err != nil {
-			return EncodedFrame{}, err
-		}
 		if e.cfg.RecoveryPointSEI {
 			sei, err := e.RecoveryPointSEI(0)
 			if err != nil {
@@ -489,7 +483,28 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			}
 			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSEI), raw: sei.NAL})
 		}
-		nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: slice.NAL})
+		for _, r := range sliceRanges {
+			slice, err := h264.BuildEncoderI420IntraPCMPSlice(h264.EncoderI420IntraPCMPConfig{
+				Width:                      view.width,
+				Height:                     view.height,
+				StrideY:                    view.strideY,
+				StrideCb:                   view.strideCb,
+				StrideCr:                   view.strideCr,
+				Y:                          view.y,
+				Cb:                         view.cb,
+				Cr:                         view.cr,
+				FrameNum:                   e.frameNum & 0xff,
+				InitialQP:                  e.cfg.InitialQP,
+				DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+				FirstMBAddr:                uint32(r.firstMB),
+				MacroblockCount:            uint32(r.macroblockCount),
+				NALLengthSize:              4,
+			})
+			if err != nil {
+				return EncodedFrame{}, err
+			}
+			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: slice.NAL})
+		}
 	}
 
 	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
@@ -639,6 +654,12 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if update.MaxEncodeTimeUS != 0 {
 		cfg.MaxEncodeTimeUS = update.MaxEncodeTimeUS
 	}
+	if update.SliceCount != 0 {
+		cfg.SliceCount = update.SliceCount
+	}
+	if update.SliceMaxBytes != 0 {
+		cfg.SliceMaxBytes = update.SliceMaxBytes
+	}
 	if update.Preset != 0 {
 		cfg.Preset = update.Preset
 	}
@@ -689,6 +710,11 @@ type encoderReferenceFrame struct {
 	y      []byte
 	cb     []byte
 	cr     []byte
+}
+
+type encoderSliceRange struct {
+	firstMB         int
+	macroblockCount int
 }
 
 func (e *Encoder) validateFrame(frame EncoderFrame) error {
@@ -829,6 +855,33 @@ func resizeEncoderReferencePlane(buf []byte, size int) []byte {
 		return make([]byte, size)
 	}
 	return buf[:size]
+}
+
+func encoderSliceRanges(width int, height int, sliceCount int) []encoderSliceRange {
+	total := encoderMacroblockCount(width, height)
+	if sliceCount <= 0 {
+		sliceCount = 1
+	}
+	if sliceCount > total {
+		sliceCount = total
+	}
+	ranges := make([]encoderSliceRange, 0, sliceCount)
+	base := total / sliceCount
+	extra := total % sliceCount
+	first := 0
+	for i := 0; i < sliceCount; i++ {
+		count := base
+		if i < extra {
+			count++
+		}
+		ranges = append(ranges, encoderSliceRange{firstMB: first, macroblockCount: count})
+		first += count
+	}
+	return ranges
+}
+
+func encoderMacroblockCount(width int, height int) int {
+	return ((width + 15) >> 4) * ((height + 15) >> 4)
 }
 
 func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []encoderRawNAL) ([]byte, []EncoderNALUnit, error) {
@@ -1246,6 +1299,9 @@ func normalizeEncoderConfig(cfg EncoderConfig) (EncoderConfig, error) {
 	}
 	if cfg.SliceCount == 0 {
 		cfg.SliceCount = 1
+	}
+	if cfg.SliceCount > encoderMacroblockCount(cfg.Width, cfg.Height) {
+		return cfg, encoderInvalid("slice count cannot exceed coded macroblock count")
 	}
 	if cfg.Workers == 0 {
 		cfg.Workers = 1

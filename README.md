@@ -10,10 +10,10 @@ API currently exposes a tested realtime/WebRTC control contract and valid
 SPS/PPS parameter-set plus recovery-point SEI generation. The first admitted
 bitstream paths cover 8-bit I420 Constrained Baseline IDR IntraPCM, P-skip for
 identical references, and changed-frame P IntraPCM recovery pictures with
-Annex B, AVC, RTP packetization-mode 0 single-NAL output, and RTP
-packetization-mode 1 output, proved by local decode, FFmpeg rawvideo decode,
-recovery-point side data, RTP mode-0 reassembly, RTP FU-A reassembly, and
-STAP-A parameter-set aggregation tests.
+Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
+single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
+FFmpeg rawvideo decode, recovery-point side data, RTP mode-0 reassembly, RTP
+FU-A reassembly, and STAP-A parameter-set aggregation tests.
 The goal is not a loose rewrite: internal codec paths keep upstream state
 machines, syntax handling, math, and edge cases recognizable, then prove
 behavior against oracle vectors.
@@ -22,9 +22,9 @@ behavior against oracle vectors.
 - **Realtime/WebRTC encoder scope** - tested encoder controls cover explicit
   bitrate, latency, keyframe, packetization, profile/level, runtime
   reconfiguration controls, out-of-band SPS/PPS/avcC headers, and crop-aware
-  SPS/encoded visible output plus recovery-point SEI packaging, with first IDR
-  IntraPCM, P-skip, and P
-  IntraPCM Annex B/AVC/RTP output paths.
+  SPS/encoded visible output plus recovery-point SEI packaging and
+  `SliceCount`-backed multi-slice output, with first IDR IntraPCM, P-skip, and
+  P IntraPCM Annex B/AVC/RTP output paths.
 - **Annex B and AVC input surfaces** - automatic packet splitting, explicit
   Annex B / length-prefixed AVC APIs, and AVC decoder configuration records.
 - **Raw frame output** - `Frame` exposes Y/Cb/Cr planes, crop, strides, VUI
@@ -76,21 +76,22 @@ lockstep.
 
 Encoder status: `DefaultEncoderConfig`, `NewEncoder`, `ParameterSets`,
 `RecoveryPointSEI`, `Encode`/`EncodeInto`, PLI/FIR/force-IDR,
-bitrate/framerate/payload reconfiguration, SPS/PPS cadence modes, and the
-WebRTC control fields are public and covered by
+bitrate/framerate/payload/slice reconfiguration, SPS/PPS cadence modes, and
+the WebRTC control fields are public and covered by
 `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420 constrained-baseline
 realtime configs are admitted as control state; SPS/PPS parameter sets, Annex B
 sequence headers, avcC records, crop metadata,
 in-band/out-of-band/every-IDR cadence, and recovery-point SEI Annex B/AVC NAL
 surfaces are generated and parser-proved.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
-Annex B, AVC, RTP packetization-mode 0 single-NAL packets, and RTP
-packetization-mode 1, including FU-A fragmentation and STAP-A parameter-set
-aggregation, payload-type/SSRC/sequence metadata, full RTP packet headers,
-marker-bit boundaries, oversize mode-0 rejection, and optional RTP packet
-callbacks with packet index/count, frame timing, payload form, NAL type/count,
-FU-A start/end, and parameter-set metadata. RTP timestamps honor explicit frame
-PTS and advance zero-PTS frames from frame duration or `RTPTimestampIncrement`.
+Annex B, AVC, configured `SliceCount` multi-slice VCL output, RTP
+packetization-mode 0 single-NAL packets, and RTP packetization-mode 1,
+including FU-A fragmentation and STAP-A parameter-set aggregation,
+payload-type/SSRC/sequence metadata, full RTP packet headers, marker-bit
+boundaries, oversize mode-0 rejection, and optional RTP packet callbacks with
+packet index/count, frame timing, payload form, NAL type/count, FU-A start/end,
+and parameter-set metadata. RTP timestamps honor explicit frame PTS and advance
+zero-PTS frames from frame duration or `RTPTimestampIncrement`.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
 when deblocking is disabled; changed frames can use a guarded CAVLC P IntraPCM
 slice in the same admitted path with recovery-point SEI emission when enabled,
@@ -262,6 +263,7 @@ still landing:
 cfg := goh264.DefaultEncoderConfig(640, 480)
 cfg.TargetBitrate = 800_000
 cfg.MaxBitrate = 1_000_000
+cfg.SliceCount = 2
 
 enc, err := goh264.NewEncoder(cfg)
 if err != nil {
@@ -279,13 +281,13 @@ out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P IntraPCM
 
 `Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
 then emit the admitted IDR IntraPCM, identical-reference P-skip, or
-changed-frame P IntraPCM frame path. Changed-frame P IntraPCM recovery pictures
-carry recovery-point SEI when enabled. RTP output includes payloads plus
-complete RTP packet bytes, packetization-mode 0 single-NAL output,
-packetization-mode 1 FU-A/STAP-A output, optional per-packet callback metadata,
-and automatic timestamp progression when frames omit explicit PTS. SPS/PPS
-cadence modes now separate in-band keyframe headers, out-of-band headers, and
-every-IDR emission.
+changed-frame P IntraPCM frame path, optionally split into configured
+multi-slice VCL NALs. Changed-frame P IntraPCM recovery pictures carry
+recovery-point SEI when enabled. RTP output includes payloads plus complete RTP
+packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1
+FU-A/STAP-A output, optional per-packet callback metadata, and automatic
+timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
+separate in-band keyframe headers, out-of-band headers, and every-IDR emission.
 Motion-search inter prediction, quantized residual coding, and rate-control
 decisions are still future encoder slices.
 

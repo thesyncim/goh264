@@ -73,6 +73,53 @@ func TestBuildEncoderI420IntraPCMIDRSliceWritesParseableHeader(t *testing.T) {
 	}
 }
 
+func TestBuildEncoderI420IntraPCMIDRSliceWritesMacroblockRange(t *testing.T) {
+	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              48,
+		Height:             16,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          23,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := encoderSliceTestI420(48, 16)
+	slice, err := BuildEncoderI420IntraPCMIDRSlice(EncoderI420IntraPCMIDRConfig{
+		Width:                      48,
+		Height:                     16,
+		StrideY:                    48,
+		StrideCb:                   24,
+		StrideCr:                   24,
+		Y:                          frame.y,
+		Cb:                         frame.cb,
+		Cr:                         frame.cr,
+		FrameNum:                   5,
+		IDRPicID:                   4,
+		InitialQP:                  23,
+		DisableDeblockingFilterIDC: 1,
+		FirstMBAddr:                1,
+		MacroblockCount:            2,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sh, payload := parseEncoderSliceTestHeader(t, sets.AnnexB, slice.AnnexB)
+	if sh.FirstMBAddr != 1 || sh.SliceTypeNoS != PictureTypeI || sh.FrameNum != 5 ||
+		sh.IDRPicID != 4 || sh.QScale != 23 {
+		t.Fatalf("slice header = %+v", sh)
+	}
+	if payload.bitsLeft() <= 2*384*8 {
+		t.Fatalf("payload bits left = %d, want ranged IntraPCM macroblock payload plus trailing bits", payload.bitsLeft())
+	}
+}
+
 func TestBuildEncoderI420PSkipSliceWritesParseableHeader(t *testing.T) {
 	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
 		ProfileIDC:         66,
@@ -135,6 +182,49 @@ func TestBuildEncoderI420PSkipSliceWritesParseableHeader(t *testing.T) {
 	}
 	if run != 4 || payload.bitsLeft() != 0 {
 		t.Fatalf("P-skip payload run=%d bitsLeft=%d, want run 4 and no payload bits", run, payload.bitsLeft())
+	}
+}
+
+func TestBuildEncoderI420PSkipSliceWritesMacroblockRange(t *testing.T) {
+	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              48,
+		Height:             16,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          23,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slice, err := BuildEncoderI420PSkipSlice(EncoderI420PSkipConfig{
+		Width:                      48,
+		Height:                     16,
+		FrameNum:                   6,
+		InitialQP:                  23,
+		DisableDeblockingFilterIDC: 1,
+		FirstMBAddr:                1,
+		MacroblockCount:            2,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sh, payload := parseEncoderSliceTestHeader(t, sets.AnnexB, slice.AnnexB)
+	if sh.FirstMBAddr != 1 || sh.SliceTypeNoS != PictureTypeP || sh.FrameNum != 6 ||
+		sh.RefCount[0] != 1 || sh.QScale != 23 {
+		t.Fatalf("slice header = %+v", sh)
+	}
+	run, err := payload.readUEGolombLong()
+	if err != nil {
+		t.Fatalf("read generated P-skip payload: %v", err)
+	}
+	if run != 2 || payload.bitsLeft() != 0 {
+		t.Fatalf("P-skip payload run=%d bitsLeft=%d, want run 2 and no payload bits", run, payload.bitsLeft())
 	}
 }
 
@@ -217,6 +307,63 @@ func TestBuildEncoderI420IntraPCMPSliceWritesParseableHeader(t *testing.T) {
 	}
 }
 
+func TestBuildEncoderI420IntraPCMPSliceWritesMacroblockRange(t *testing.T) {
+	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              48,
+		Height:             16,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          23,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := encoderSliceTestI420(48, 16)
+	slice, err := BuildEncoderI420IntraPCMPSlice(EncoderI420IntraPCMPConfig{
+		Width:                      48,
+		Height:                     16,
+		StrideY:                    48,
+		StrideCb:                   24,
+		StrideCr:                   24,
+		Y:                          frame.y,
+		Cb:                         frame.cb,
+		Cr:                         frame.cr,
+		FrameNum:                   6,
+		InitialQP:                  23,
+		DisableDeblockingFilterIDC: 1,
+		FirstMBAddr:                1,
+		MacroblockCount:            2,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sh, payload := parseEncoderSliceTestHeader(t, sets.AnnexB, slice.AnnexB)
+	if sh.FirstMBAddr != 1 || sh.SliceTypeNoS != PictureTypeP || sh.FrameNum != 6 ||
+		sh.RefCount[0] != 1 || sh.QScale != 23 {
+		t.Fatalf("slice header = %+v", sh)
+	}
+	skipRun, err := payload.readUEGolombLong()
+	if err != nil {
+		t.Fatalf("read generated P IntraPCM skip run: %v", err)
+	}
+	mbType, err := payload.readUEGolombLong()
+	if err != nil {
+		t.Fatalf("read generated P IntraPCM mb_type: %v", err)
+	}
+	if skipRun != 0 || mbType != 30 {
+		t.Fatalf("first ranged P IntraPCM macroblock skipRun=%d mbType=%d, want 0/30", skipRun, mbType)
+	}
+	if payload.bitsLeft() <= 2*384*8 {
+		t.Fatalf("payload bits left = %d, want ranged IntraPCM macroblock payload plus trailing bits", payload.bitsLeft())
+	}
+}
+
 func TestBuildEncoderI420PSkipSliceRejectsInvalidConfig(t *testing.T) {
 	cfg := EncoderI420PSkipConfig{
 		Width:                      16,
@@ -234,6 +381,8 @@ func TestBuildEncoderI420PSkipSliceRejectsInvalidConfig(t *testing.T) {
 		{name: "bad frame num", mutate: func(c *EncoderI420PSkipConfig) { c.FrameNum = 256 }},
 		{name: "bad deblock idc", mutate: func(c *EncoderI420PSkipConfig) { c.DisableDeblockingFilterIDC = 3 }},
 		{name: "bad qp", mutate: func(c *EncoderI420PSkipConfig) { c.InitialQP = 52 }},
+		{name: "bad first mb", mutate: func(c *EncoderI420PSkipConfig) { c.FirstMBAddr = 1 }},
+		{name: "bad macroblock count", mutate: func(c *EncoderI420PSkipConfig) { c.MacroblockCount = 2 }},
 		{name: "bad nal length", mutate: func(c *EncoderI420PSkipConfig) { c.NALLengthSize = 5 }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -269,6 +418,8 @@ func TestBuildEncoderI420IntraPCMPSliceRejectsInvalidConfig(t *testing.T) {
 		{name: "bad frame num", mutate: func(c *EncoderI420IntraPCMPConfig) { c.FrameNum = 256 }},
 		{name: "bad deblock idc", mutate: func(c *EncoderI420IntraPCMPConfig) { c.DisableDeblockingFilterIDC = 3 }},
 		{name: "bad qp", mutate: func(c *EncoderI420IntraPCMPConfig) { c.InitialQP = 52 }},
+		{name: "bad first mb", mutate: func(c *EncoderI420IntraPCMPConfig) { c.FirstMBAddr = 1 }},
+		{name: "bad macroblock count", mutate: func(c *EncoderI420IntraPCMPConfig) { c.MacroblockCount = 2 }},
 		{name: "bad nal length", mutate: func(c *EncoderI420IntraPCMPConfig) { c.NALLengthSize = 5 }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -305,6 +456,8 @@ func TestBuildEncoderI420IntraPCMIDRSliceRejectsInvalidConfig(t *testing.T) {
 		{name: "bad idr pic id", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.IDRPicID = 65536 }},
 		{name: "bad deblock idc", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.DisableDeblockingFilterIDC = 3 }},
 		{name: "bad qp", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.InitialQP = 52 }},
+		{name: "bad first mb", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.FirstMBAddr = 1 }},
+		{name: "bad macroblock count", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.MacroblockCount = 2 }},
 		{name: "bad nal length", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.NALLengthSize = 5 }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -315,6 +468,34 @@ func TestBuildEncoderI420IntraPCMIDRSliceRejectsInvalidConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func parseEncoderSliceTestHeader(t *testing.T, annexBHeaders []byte, annexBSlice []byte) (*SliceHeader, bitReader) {
+	t.Helper()
+	nals, err := SplitAnnexB(append(append([]byte(nil), annexBHeaders...), annexBSlice...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nals) != 3 || (nals[2].Type != NALIDRSlice && nals[2].Type != NALSlice) {
+		t.Fatalf("NALs = %+v, want SPS/PPS/VCL", nals)
+	}
+	sps, err := DecodeSPS(nals[0].RBSP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spsList [maxSPSCount]*SPS
+	spsList[sps.SPSID] = sps
+	pps, err := DecodePPS(nals[1].RBSP, &spsList)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ppsList [maxPPSCount]*PPS
+	ppsList[pps.PPSID] = pps
+	sh, payload, err := parseSliceHeaderWithPayload(nals[2], &ppsList)
+	if err != nil {
+		t.Fatalf("parse generated slice header: %v", err)
+	}
+	return sh, payload
 }
 
 type encoderSliceTestFrame struct {

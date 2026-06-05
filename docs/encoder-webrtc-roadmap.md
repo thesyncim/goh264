@@ -49,8 +49,9 @@ Current safe point: the public control contract is present in `encoder.go` and
 covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
 constrained-baseline realtime/WebRTC configs can be constructed, invalid
 controls are rejected, including I420 crop offsets that H.264 cannot represent,
-and runtime bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR,
-force-IDR, and partial reconfiguration controls are tested. `ParameterSets`
+and runtime bitrate, framerate, payload-size, slice-count/byte-target,
+SPS/PPS cadence, PLI/FIR, force-IDR, and partial reconfiguration controls are
+tested. `ParameterSets`
 generates SPS/PPS NALs, crop metadata, Annex B sequence headers, and avcC
 records accepted by the decoder parsers. IDR header cadence is explicit for
 in-band keyframes, out-of-band headers, and every-IDR emission.
@@ -60,14 +61,16 @@ and checking the public decoder recovery side data. `Encode` and `EncodeInto`
 now validate frame shape and emit the first admitted frame bitstream paths:
 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B, AVC,
 RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
-output, plus guarded CAVLC P-skip slices for identical frames and guarded CAVLC
-P IntraPCM slices for changed frames after a reference when deblocking is
-disabled. Changed-frame P IntraPCM recovery pictures carry recovery-point SEI
-when enabled, across Annex B, configured AVC, and RTP packetization-mode 1
-reassembly. Tests prove local raw-frame decode, FFmpeg rawvideo decode,
-recovery-point side data, RTP packetization-mode 0 single-NAL reassembly and
-oversize rejection, RTP FU-A reassembly, STAP-A parameter-set aggregation,
-payload-type, SSRC, and sequence-number packet metadata. RTP packets also carry
+output, plus configured `SliceCount` multi-slice VCL output, guarded CAVLC
+P-skip slices for identical frames, and guarded CAVLC P IntraPCM slices for
+changed frames after a reference when deblocking is disabled. Changed-frame
+P IntraPCM recovery pictures carry recovery-point SEI when enabled, across
+Annex B, configured AVC, and RTP packetization-mode 1 reassembly. Tests prove
+local raw-frame decode, FFmpeg rawvideo decode, recovery-point side data,
+multi-slice `first_mb_in_slice` ordering, RTP packetization-mode 0 single-NAL
+reassembly and oversize rejection, RTP FU-A reassembly, STAP-A parameter-set
+aggregation, payload-type, SSRC, and sequence-number packet metadata. RTP
+packets also carry
 complete 12-byte RTP headers plus payload
 bytes, and `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
@@ -91,9 +94,11 @@ FFmpeg CBS-shaped recovery-point SEI writer, including extended SEI header
 encoding and Annex B/AVC parser round trips. `internal/h264/encoder_slice.go`
 adds the first Baseline IDR slice writer using CAVLC I_PCM macroblocks, with
 edge padding and deblock-control syntax kept explicit, plus a parse-proved
-Baseline P-skip writer that emits a single `mb_skip_run` covering the picture
+Baseline P-skip writer that emits `mb_skip_run` for the selected slice range
 and a parse-proved Baseline P IntraPCM writer that emits `mb_skip_run=0` plus
-P-slice `mb_type=30` macroblocks.
+P-slice `mb_type=30` macroblocks. The current IDR, P-skip, and P IntraPCM
+writers accept explicit raster-scan macroblock ranges so public `SliceCount`
+can emit multiple VCL NALs in one access unit.
 
 ## Implementation Order
 
@@ -108,8 +113,9 @@ P-slice `mb_type=30` macroblocks.
 4. In progress: add P-frame prediction, reference management, CAVLC residual
    coding, deblock policy, and rate-control feedback in small oracle-backed
    slices. Done for identical-reference P-skip and changed-frame P IntraPCM
-   with deblock disabled plus recovery-point SEI emission on changed-frame
-   P IntraPCM recovery pictures; forced keyframes still emit IDR.
+   with deblock disabled, configured multi-slice ranges, and recovery-point
+   SEI emission on changed-frame P IntraPCM recovery pictures; forced
+   keyframes still emit IDR.
 5. In progress: add RTP packetization and WebRTC control handling with
    packet-level tests. Done for packetization-mode 0 single-NAL output with
    oversize rejection, packetization-mode 1 single NAL/FU-A output, and
@@ -117,7 +123,9 @@ P-slice `mb_type=30` macroblocks.
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
    bytes, callback-style packet metadata, and automatic timestamp progression
    for frames without explicit PTS, plus explicit SPS/PPS in-band,
-   out-of-band, and every-IDR cadence semantics.
+   out-of-band, and every-IDR cadence semantics. Configured `SliceCount`
+   output now feeds RTP mode 1 as separate VCL NAL packets when each slice fits
+   the payload limit.
 6. Add realtime allocation budgets, encode timing benchmarks, and control-loop
    stress tests.
 

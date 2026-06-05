@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	goh264 "github.com/thesyncim/goh264"
+	"github.com/thesyncim/goh264/internal/h264"
 )
 
 func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
@@ -78,6 +79,8 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 		{name: "negative crop", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = -2 }, want: goh264.ErrInvalidData},
 		{name: "odd I420 crop", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = 1 }, want: goh264.ErrInvalidData},
 		{name: "crop consumes width", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = c.Width / 2; c.Crop.Right = c.Width / 2 }, want: goh264.ErrInvalidData},
+		{name: "slice count beyond macroblocks", mutate: func(c *goh264.EncoderConfig) { c.Width = 16; c.Height = 16; c.SliceCount = 2 }, want: goh264.ErrInvalidData},
+		{name: "negative slice byte target", mutate: func(c *goh264.EncoderConfig) { c.SliceMaxBytes = -1 }, want: goh264.ErrInvalidData},
 		{name: "deterministic multi worker", mutate: func(c *goh264.EncoderConfig) { c.Workers = 2 }, want: goh264.ErrInvalidData},
 		{name: "idr interval beyond gop", mutate: func(c *goh264.EncoderConfig) { c.IDRInterval = c.GOPSize + 1 }, want: goh264.ErrInvalidData},
 		{name: "intra refresh not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.IntraRefresh = true }, want: goh264.ErrUnsupported},
@@ -158,6 +161,8 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		RTPMaxPayloadSize: 900,
 		MaxFrameSize:      80_000,
 		MaxEncodeTimeUS:   5_000,
+		SliceCount:        2,
+		SliceMaxBytes:     700,
 		Preset:            goh264.EncoderPresetBalanced,
 		ForceIDR:          true,
 		SPSPPSBeforeIDR:   &noParameterSetsBeforeIDR,
@@ -172,6 +177,8 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		got.RTPMaxPayloadSize != 900 ||
 		got.MaxFrameSize != 80_000 ||
 		got.MaxEncodeTimeUS != 5_000 ||
+		got.SliceCount != 2 ||
+		got.SliceMaxBytes != 700 ||
 		got.Preset != goh264.EncoderPresetBalanced ||
 		got.SPSPPSBeforeIDR ||
 		got.RecoveryPointSEI {
@@ -732,6 +739,143 @@ func TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP(t *testing.T)
 			}
 		})
 	}
+}
+
+func TestEncoderSliceCountSplitsIDRPSkipAndPIntraPCMAccessUnits(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(48, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	cfg.SliceCount = 3
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(48, 16)
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets: %v", err)
+	}
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first multi-slice IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5, 5, 5})
+	assertEncoderVCLFirstMBs(t, first.Data, []uint8{5, 5, 5}, []uint32{0, 1, 2})
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first multi-slice IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+
+	secondFrame := firstFrame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode multi-slice P-skip: %v", err)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1, 1, 1})
+	assertEncoderVCLFirstMBs(t, append(append([]byte(nil), headers.AnnexB...), second.Data...), []uint8{1, 1, 1}, []uint32{0, 1, 2})
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode multi-slice P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+
+	thirdFrame := patternedI420EncoderFrame(48, 16)
+	thirdFrame.Y[0] ^= 0x42
+	thirdFrame.PTS = secondFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode multi-slice changed P IntraPCM: %v", err)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{6, 1, 1, 1})
+	assertEncoderVCLFirstMBs(t, append(append([]byte(nil), headers.AnnexB...), third.Data...), []uint8{1, 1, 1}, []uint32{0, 1, 2})
+	decodedThird, err := dec.DecodeFrames(third.Data)
+	if err != nil {
+		t.Fatalf("Decode multi-slice changed P IntraPCM: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedThird, appendI420FrameBytes(nil, thirdFrame))
+	if !decodedThird[0].KeyFrame ||
+		decodedThird[0].SideData.RecoveryPoint == nil ||
+		decodedThird[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("multi-slice changed P recovery side data key=%v recovery=%+v",
+			decodedThird[0].KeyFrame, decodedThird[0].SideData.RecoveryPoint)
+	}
+
+	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	stream = append(stream, third.Data...)
+	want := appendI420FrameBytes(nil, firstFrame)
+	want = appendI420FrameBytes(want, secondFrame)
+	want = appendI420FrameBytes(want, thirdFrame)
+	assertFFmpegRawVideoOracle(t, stream, want)
+}
+
+func TestEncoderSliceCountFeedsRTPMode1SingleNALPackets(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(32, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 512
+	cfg.SliceCount = 2
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	enc.SetRTPPacketCallback(func(_ goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackMetadata = append(callbackMetadata, meta)
+	})
+
+	frame := patternedI420EncoderFrame(32, 16)
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode multi-slice RTP IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5, 5})
+	assertEncoderVCLFirstMBs(t, out.Data, []uint8{5, 5}, []uint32{0, 1})
+	if len(out.RTPPackets) != len(out.NALUnits) {
+		t.Fatalf("RTP packets = %d, want one packet per NAL %d", len(out.RTPPackets), len(out.NALUnits))
+	}
+	if len(callbackMetadata) != len(out.RTPPackets) {
+		t.Fatalf("callback metadata = %d, want packet count %d", len(callbackMetadata), len(out.RTPPackets))
+	}
+
+	var vclPackets int
+	for i, pkt := range out.RTPPackets {
+		if len(pkt.Payload) > cfg.RTPMaxPayloadSize {
+			t.Fatalf("packet[%d] payload size = %d, max %d", i, len(pkt.Payload), cfg.RTPMaxPayloadSize)
+		}
+		if pkt.Marker != (i == len(out.RTPPackets)-1) {
+			t.Fatalf("packet[%d] marker = %v, want only final marker", i, pkt.Marker)
+		}
+		meta := callbackMetadata[i]
+		if meta.PacketIndex != i || meta.PacketCount != len(out.RTPPackets) {
+			t.Fatalf("callback meta[%d] index/count = %d/%d, want %d/%d",
+				i, meta.PacketIndex, meta.PacketCount, i, len(out.RTPPackets))
+		}
+		if meta.NALUnitType == 5 {
+			vclPackets++
+			if meta.PayloadFormat != goh264.EncoderRTPPayloadSingleNAL ||
+				meta.NALUnitCount != 1 ||
+				!meta.StartOfNAL || !meta.EndOfNAL ||
+				!meta.IDR || !meta.KeyFrame {
+				t.Fatalf("VCL callback meta[%d] = %+v, want complete IDR single-NAL packet", i, meta)
+			}
+		}
+	}
+	if vclPackets != 2 {
+		t.Fatalf("IDR VCL RTP packets = %d, want 2", vclPackets)
+	}
+
+	annexB := annexBFromEncoderRTPPackets(t, out.RTPPackets)
+	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames reassembled multi-slice RTP: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
 }
 
 func TestEncoderEncodeRecoveryPointSEICanBeDisabled(t *testing.T) {
@@ -1367,6 +1511,45 @@ func assertEncoderNALTypes(t *testing.T, nals []goh264.EncoderNALUnit, want []ui
 		if nals[i].Type != typ {
 			t.Fatalf("NAL[%d] type = %d, want %d (%+v)", i, nals[i].Type, typ, nals)
 		}
+	}
+}
+
+func assertEncoderVCLFirstMBs(t *testing.T, annexB []byte, wantTypes []uint8, wantFirstMBs []uint32) {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(annexB)
+	if err != nil {
+		t.Fatalf("SplitAnnexB: %v", err)
+	}
+	var spsList [32]*h264.SPS
+	var ppsList [256]*h264.PPS
+	var gotTypes []uint8
+	var gotFirstMBs []uint32
+	for _, nal := range nals {
+		switch nal.Type {
+		case h264.NALSPS:
+			sps, err := h264.DecodeSPS(nal.RBSP)
+			if err != nil {
+				t.Fatalf("DecodeSPS: %v", err)
+			}
+			spsList[sps.SPSID] = sps
+		case h264.NALPPS:
+			pps, err := h264.DecodePPS(nal.RBSP, &spsList)
+			if err != nil {
+				t.Fatalf("DecodePPS: %v", err)
+			}
+			ppsList[pps.PPSID] = pps
+		case h264.NALIDRSlice, h264.NALSlice:
+			sh, err := h264.ParseSliceHeader(nal, &ppsList)
+			if err != nil {
+				t.Fatalf("ParseSliceHeader nal=%d: %v", nal.Type, err)
+			}
+			gotTypes = append(gotTypes, uint8(nal.Type))
+			gotFirstMBs = append(gotFirstMBs, sh.FirstMBAddr)
+		}
+	}
+	if !reflect.DeepEqual(gotTypes, wantTypes) || !reflect.DeepEqual(gotFirstMBs, wantFirstMBs) {
+		t.Fatalf("VCL types/first MBs = %v/%v, want %v/%v",
+			gotTypes, gotFirstMBs, wantTypes, wantFirstMBs)
 	}
 }
 

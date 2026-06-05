@@ -22,6 +22,8 @@ type EncoderI420IntraPCMIDRConfig struct {
 	IDRPicID                   uint32
 	InitialQP                  int
 	DisableDeblockingFilterIDC uint32
+	FirstMBAddr                uint32
+	MacroblockCount            uint32
 	NALLengthSize              int
 }
 
@@ -38,6 +40,8 @@ type EncoderI420IntraPCMPConfig struct {
 	FrameNum                   uint32
 	InitialQP                  int
 	DisableDeblockingFilterIDC uint32
+	FirstMBAddr                uint32
+	MacroblockCount            uint32
 	NALLengthSize              int
 }
 
@@ -48,6 +52,8 @@ type EncoderI420PSkipConfig struct {
 	FrameNum                   uint32
 	InitialQP                  int
 	DisableDeblockingFilterIDC uint32
+	FirstMBAddr                uint32
+	MacroblockCount            uint32
 	NALLengthSize              int
 }
 
@@ -167,7 +173,8 @@ func EncodeI420IntraPCMIDRSliceRBSP(cfg EncoderI420IntraPCMIDRConfig) ([]byte, e
 	}
 
 	mbWidth := (cfg.Width + 15) >> 4
-	mbHeight := (cfg.Height + 15) >> 4
+	firstMB, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	lastMB := firstMB + macroblockCount
 	samples := encoderI420IntraPCMSamples{
 		Width:    cfg.Width,
 		Height:   cfg.Height,
@@ -178,15 +185,15 @@ func EncodeI420IntraPCMIDRSliceRBSP(cfg EncoderI420IntraPCMIDRConfig) ([]byte, e
 		Cb:       cfg.Cb,
 		Cr:       cfg.Cr,
 	}
-	for mbY := 0; mbY < mbHeight; mbY++ {
-		for mbX := 0; mbX < mbWidth; mbX++ {
-			if err := bw.WriteUEGolomb(25); err != nil { // I_PCM
-				return nil, err
-			}
-			bw.WriteZeroAlign()
-			if err := writeEncoderI420IntraPCMMacroblock(&bw, samples, mbX, mbY); err != nil {
-				return nil, err
-			}
+	for mbAddr := firstMB; mbAddr < lastMB; mbAddr++ {
+		mbX := mbAddr % mbWidth
+		mbY := mbAddr / mbWidth
+		if err := bw.WriteUEGolomb(25); err != nil { // I_PCM
+			return nil, err
+		}
+		bw.WriteZeroAlign()
+		if err := writeEncoderI420IntraPCMMacroblock(&bw, samples, mbX, mbY); err != nil {
+			return nil, err
 		}
 	}
 
@@ -206,12 +213,15 @@ func EncodeI420IntraPCMPSliceRBSP(cfg EncoderI420IntraPCMPConfig) ([]byte, error
 		FrameNum:                   cfg.FrameNum,
 		InitialQP:                  cfg.InitialQP,
 		DisableDeblockingFilterIDC: cfg.DisableDeblockingFilterIDC,
+		FirstMBAddr:                cfg.FirstMBAddr,
+		MacroblockCount:            cfg.MacroblockCount,
 	}); err != nil {
 		return nil, err
 	}
 
 	mbWidth := (cfg.Width + 15) >> 4
-	mbHeight := (cfg.Height + 15) >> 4
+	firstMB, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	lastMB := firstMB + macroblockCount
 	samples := encoderI420IntraPCMSamples{
 		Width:    cfg.Width,
 		Height:   cfg.Height,
@@ -222,18 +232,18 @@ func EncodeI420IntraPCMPSliceRBSP(cfg EncoderI420IntraPCMPConfig) ([]byte, error
 		Cb:       cfg.Cb,
 		Cr:       cfg.Cr,
 	}
-	for mbY := 0; mbY < mbHeight; mbY++ {
-		for mbX := 0; mbX < mbWidth; mbX++ {
-			if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
-				return nil, err
-			}
-			if err := bw.WriteUEGolomb(30); err != nil { // P-slice I_PCM = 5 P types + 25 I_PCM index
-				return nil, err
-			}
-			bw.WriteZeroAlign()
-			if err := writeEncoderI420IntraPCMMacroblock(&bw, samples, mbX, mbY); err != nil {
-				return nil, err
-			}
+	for mbAddr := firstMB; mbAddr < lastMB; mbAddr++ {
+		mbX := mbAddr % mbWidth
+		mbY := mbAddr / mbWidth
+		if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
+			return nil, err
+		}
+		if err := bw.WriteUEGolomb(30); err != nil { // P-slice I_PCM = 5 P types + 25 I_PCM index
+			return nil, err
+		}
+		bw.WriteZeroAlign()
+		if err := writeEncoderI420IntraPCMMacroblock(&bw, samples, mbX, mbY); err != nil {
+			return nil, err
 		}
 	}
 
@@ -251,9 +261,8 @@ func EncodeI420PSkipSliceRBSP(cfg EncoderI420PSkipConfig) ([]byte, error) {
 		return nil, err
 	}
 
-	mbWidth := (cfg.Width + 15) >> 4
-	mbHeight := (cfg.Height + 15) >> 4
-	if err := bw.WriteUEGolomb(uint32(mbWidth * mbHeight)); err != nil {
+	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	if err := bw.WriteUEGolomb(uint32(macroblockCount)); err != nil {
 		return nil, err
 	}
 	bw.WriteRBSPTrailingBits()
@@ -261,7 +270,7 @@ func EncodeI420PSkipSliceRBSP(cfg EncoderI420PSkipConfig) ([]byte, error) {
 }
 
 func writeEncoderI420IDRSliceHeader(bw *BitWriter, cfg EncoderI420IntraPCMIDRConfig) error {
-	if err := bw.WriteUEGolomb(0); err != nil { // first_mb_in_slice
+	if err := bw.WriteUEGolomb(cfg.FirstMBAddr); err != nil { // first_mb_in_slice
 		return err
 	}
 	if err := bw.WriteUEGolomb(2); err != nil { // slice_type I
@@ -296,7 +305,7 @@ func writeEncoderI420IDRSliceHeader(bw *BitWriter, cfg EncoderI420IntraPCMIDRCon
 }
 
 func writeEncoderI420PSliceHeader(bw *BitWriter, cfg EncoderI420PSkipConfig) error {
-	if err := bw.WriteUEGolomb(0); err != nil { // first_mb_in_slice
+	if err := bw.WriteUEGolomb(cfg.FirstMBAddr); err != nil { // first_mb_in_slice
 		return err
 	}
 	if err := bw.WriteUEGolomb(0); err != nil { // slice_type P
@@ -395,6 +404,9 @@ func validateEncoderI420IntraPCMIDRConfig(cfg EncoderI420IntraPCMIDRConfig) erro
 		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
 		return ErrInvalidData
 	}
+	if err := validateEncoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -416,6 +428,9 @@ func validateEncoderI420IntraPCMPConfig(cfg EncoderI420IntraPCMPConfig) error {
 		cfg.DisableDeblockingFilterIDC > 2 ||
 		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
 		return ErrInvalidData
+	}
+	if err := validateEncoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount); err != nil {
+		return err
 	}
 	return nil
 }
@@ -447,7 +462,42 @@ func validateEncoderI420PSkipConfig(cfg EncoderI420PSkipConfig) error {
 		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
 		return ErrInvalidData
 	}
+	if err := validateEncoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateEncoderI420SliceRange(width int, height int, firstMBAddr uint32, macroblockCount uint32) error {
+	total := encoderI420MacroblockCount(width, height)
+	if total <= 0 {
+		return ErrInvalidData
+	}
+	if uint64(firstMBAddr) >= uint64(total) {
+		return ErrInvalidData
+	}
+	count := macroblockCount
+	if count == 0 {
+		count = uint32(total) - firstMBAddr
+	}
+	if count == 0 || uint64(firstMBAddr)+uint64(count) > uint64(total) {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+func encoderI420SliceRange(width int, height int, firstMBAddr uint32, macroblockCount uint32) (int, int) {
+	total := encoderI420MacroblockCount(width, height)
+	first := int(firstMBAddr)
+	count := int(macroblockCount)
+	if count == 0 {
+		count = total - first
+	}
+	return first, count
+}
+
+func encoderI420MacroblockCount(width int, height int) int {
+	return ((width + 15) >> 4) * ((height + 15) >> 4)
 }
 
 func clampEncoderCoord(v int, limit int) int {
