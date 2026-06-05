@@ -78,3 +78,7 @@ for one-shot Annex B decode and stateful Annex B access-unit streaming with
 real-vector benchmark report, CPU and heap profiles, and run metadata. Pending:
 checked-in reviewed profile artifacts, larger performance corpus, and
 in-process libavcodec baseline.
+
+Public API delayed-output coverage includes AVC configured samples and Annex B
+access-unit streaming through `DecodeFrames`, with end-of-stream flush via an
+empty packet and an empty second flush.

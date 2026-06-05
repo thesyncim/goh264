@@ -161,7 +161,8 @@ Single-frame helpers (`Decode`, `DecodeAnnexB`, `DecodeAVC`,
 `DecodeConfiguredAVC`) return `ErrUnsupported` when a packet produces zero or
 multiple frames. For stream processing, prefer `DecodeFrames` or
 `DecodePacketFrames`; they retain decoder reference state across packets and
-flush delayed output when called with empty data.
+flush delayed output when called with empty data. Annex B access-unit streams
+use the same retained reference and delayed B-frame output path.
 
 Parse headers without decoding full frames:
 

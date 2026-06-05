@@ -331,6 +331,42 @@ func TestDecodeAutoConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 	}
 }
 
+func TestDecodeFramesAnnexBTestsrcBFramesAcrossAccessUnitsFlush(t *testing.T) {
+	for _, tt := range bFrameFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := tt.decode(t)
+			_, accessUnits := annexBParameterSetsAndAccessUnits(t, data)
+			if len(accessUnits) != len(tt.want) {
+				t.Fatalf("access units = %d, want %d", len(accessUnits), len(tt.want))
+			}
+
+			dec := NewDecoder()
+			var frames []*Frame
+			for i, accessUnit := range accessUnits {
+				out, err := dec.DecodeFrames(accessUnit)
+				if err != nil {
+					t.Fatalf("access unit[%d]: %v", i, err)
+				}
+				frames = append(frames, out...)
+			}
+			out, err := dec.DecodeFrames(nil)
+			if err != nil {
+				t.Fatalf("flush: %v", err)
+			}
+			frames = append(frames, out...)
+			assertFrameMD5Strings(t, frames, tt.want)
+
+			out, err = dec.DecodeFrames(nil)
+			if err != nil {
+				t.Fatalf("second flush: %v", err)
+			}
+			if len(out) != 0 {
+				t.Fatalf("second flush frames = %d, want 0", len(out))
+			}
+		})
+	}
+}
+
 func TestDecodeConfiguredAVCTestsrcBFramesFlushRetainedReferenceSample(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
