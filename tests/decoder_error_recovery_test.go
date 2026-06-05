@@ -38,6 +38,61 @@ func TestDecodeConfiguredAVCFramesRecoversAfterDamagedSlicePacket(t *testing.T) 
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeAVCWithConfigurationRecordRecoversAfterDamagedSlicePacket(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	frames, err := dec.DecodeAVCFramesWithConfigurationRecord(config, samples[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	damaged := truncateFirstVCLAVCPayload(t, samples[1], 4)
+	if out, err := dec.DecodeAVCFramesWithConfigurationRecord(config, damaged); err == nil {
+		t.Fatalf("damaged packet decoded frames=%d, want error", len(out))
+	}
+
+	frames, err = dec.DecodeAVCFramesWithConfigurationRecord(config, samples[1])
+	if err != nil {
+		t.Fatalf("decode after damaged packet: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodePacketFramesAVCRecoversAfterDamagedSlicePacket(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data:     samples[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	damaged := truncateFirstVCLAVCPayload(t, samples[1], 4)
+	if out, err := dec.DecodePacketFrames(Packet{Data: damaged}); err == nil {
+		t.Fatalf("damaged packet decoded frames=%d, want error", len(out))
+	}
+
+	frames, err = dec.DecodePacketFrames(Packet{Data: samples[1]})
+	if err != nil {
+		t.Fatalf("decode after damaged packet: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeFramesAnnexBRecoversAfterDamagedSlicePacket(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)

@@ -514,14 +514,21 @@ func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []b
 	if err != nil {
 		return nil, err
 	}
-	d.storeAVCDecoderConfiguration(cfg)
+	d.updateAVCDecoderConfiguration(cfg)
 	return d.decodeAVCFramesWithConfig(data, cfg)
 }
 
 func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConfigurationRecord) ([]*Frame, error) {
-	frames, err := d.simple.DecodeAVCFramesWithConfig(data, cfg)
+	frames, err := d.simple.DecodeAVCFrames(data, cfg.NALLengthSize)
 	if err != nil {
 		return nil, err
+	}
+	flushed, err := d.simple.FlushDelayedFrames()
+	if err != nil {
+		return nil, err
+	}
+	if len(flushed) != 0 {
+		frames = append(frames, flushed...)
 	}
 	return framesFromH264(frames), nil
 }

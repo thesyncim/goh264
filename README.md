@@ -80,9 +80,10 @@ vectors, and SEI side-data surfaces.
 Public malformed-input safety coverage includes deterministic corrupt packet
 rows plus a bounded no-panic fuzz target over Annex B, AVC, configured AVC,
 auto-detect, and packet side-data decode surfaces.
-Stateful damaged-packet recovery guards prove configured AVC and auto-detected
-Annex B valid-damaged-valid sequences return an error for the damaged packet
-without poisoning the next valid decode.
+Stateful damaged-packet recovery guards prove configured AVC, AVC with a
+configuration record, packet `NEW_EXTRADATA`, and auto-detected Annex B
+valid-damaged-valid sequences return an error for the damaged packet without
+poisoning the next valid decode.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
 field/inter streams beyond the public High12/High14 frame-MBAFF IntraPCM/P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, luma+chroma-residual, and P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows plus internal High10/High12/High14 field weighted-B/weighted-P guard matrices,
@@ -160,6 +161,7 @@ frames, err := dec.DecodeFrames(data)                  // auto Annex B / AVC / c
 frames, err := dec.DecodeAnnexBFrames(annexB)          // Annex B bytestream
 frames, err := dec.DecodeAVCFrames(packet, lengthSize) // length-prefixed NAL units
 frames, err := dec.DecodeConfiguredAVCFrames(packet)   // after parsing avcC
+frames, err := dec.DecodeAVCFramesWithConfigurationRecord(avcc, packet)
 frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
 ```
 
@@ -169,6 +171,9 @@ multiple frames. For stream processing, prefer `DecodeFrames` or
 `DecodePacketFrames`; they retain decoder reference state across packets and
 flush delayed output when called with empty data. Annex B access-unit streams
 use the same retained reference and delayed B-frame output path.
+`DecodeAVCFramesWithConfigurationRecord` updates the decoder's AVC
+configuration without resetting retained references, then drains delayed output
+for the supplied AVC packet.
 
 Parse headers without decoding full frames:
 

@@ -96,6 +96,7 @@ surfaces. `scripts/h264-decoder-fuzz-smoke.sh` runs that target for a short
 smoke window and is part of the release-evidence gate.
 
 Damaged-packet recovery evidence includes valid-damaged-valid stateful decode
-guards for configured AVC samples and auto-detected Annex B access units. A
+guards for configured AVC samples, AVC samples decoded with a configuration
+record, packet `NEW_EXTRADATA`, and auto-detected Annex B access units. A
 truncated VCL packet must return an error without preventing the next valid
 packet from matching the raw-MD5 oracle.
