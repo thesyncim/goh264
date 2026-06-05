@@ -468,23 +468,26 @@ func TestEncoderReconfigureDeblockModeControlsPFrameAdmission(t *testing.T) {
 	thirdFrame.PTS = secondFrame.PTS + int64(cfg.RTPTimestampIncrement)
 	third, err := enc.Encode(thirdFrame)
 	if err != nil {
-		t.Fatalf("Encode deblock-enabled guard IDR: %v", err)
+		t.Fatalf("Encode deblock-enabled P-skip: %v", err)
 	}
-	if !third.IDR {
-		t.Fatalf("deblock-enabled frame idr=%v, want guarded IDR until P deblock lands", third.IDR)
+	if third.IDR {
+		t.Fatalf("deblock-enabled frame idr=%v, want admitted P-skip", third.IDR)
 	}
-	assertEncoderNALTypes(t, third.NALUnits, []uint8{7, 8, 5})
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{1})
 
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
-		DeblockMode: goh264.EncoderDeblockDisabled,
+		DeblockMode: goh264.EncoderDeblockSliceBoundary,
 	}); err != nil {
-		t.Fatalf("Reconfigure deblock disabled: %v", err)
+		t.Fatalf("Reconfigure slice-boundary deblock: %v", err)
 	}
 	fourthFrame := frame
 	fourthFrame.PTS = thirdFrame.PTS + int64(cfg.RTPTimestampIncrement)
 	fourth, err := enc.Encode(fourthFrame)
 	if err != nil {
-		t.Fatalf("Encode deblock-disabled P-skip: %v", err)
+		t.Fatalf("Encode slice-boundary P-skip: %v", err)
+	}
+	if fourth.IDR {
+		t.Fatalf("slice-boundary frame idr=%v, want admitted P-skip", fourth.IDR)
 	}
 	assertEncoderNALTypes(t, fourth.NALUnits, []uint8{1})
 }
@@ -1014,6 +1017,106 @@ func TestEncoderEncodeChangedSecondFrameUsesPIntraPCM(t *testing.T) {
 		t.Fatalf("changed P recovery side data key=%v recovery=%+v, want immediate recovery point",
 			decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
 	}
+
+	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	wantStream := appendI420FrameBytes(nil, firstFrame)
+	wantStream = appendI420FrameBytes(wantStream, secondFrame)
+	assertFFmpegRawVideoOracle(t, stream, wantStream)
+}
+
+func TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithDefaultDeblock(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	if got := enc.Config().DeblockMode; got != goh264.EncoderDeblockEnabled {
+		t.Fatalf("default deblock mode = %v, want enabled", got)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y[0] ^= 0x6a
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode changed deblock-enabled P IntraPCM: %v", err)
+	}
+	if second.KeyFrame || second.IDR {
+		t.Fatalf("changed deblock-enabled frame key=%v idr=%v, want non-IDR P IntraPCM", second.KeyFrame, second.IDR)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode changed deblock-enabled P IntraPCM: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+	if !decodedSecond[0].KeyFrame ||
+		decodedSecond[0].SideData.RecoveryPoint == nil ||
+		decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("changed deblock-enabled P recovery side data key=%v recovery=%+v, want immediate recovery point",
+			decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+	}
+
+	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	wantStream := appendI420FrameBytes(nil, firstFrame)
+	wantStream = appendI420FrameBytes(wantStream, secondFrame)
+	assertFFmpegRawVideoOracle(t, stream, wantStream)
+}
+
+func TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithSliceBoundaryDeblock(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockSliceBoundary
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y[0] ^= 0x23
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode changed slice-boundary P IntraPCM: %v", err)
+	}
+	if second.KeyFrame || second.IDR {
+		t.Fatalf("changed slice-boundary frame key=%v idr=%v, want non-IDR P IntraPCM", second.KeyFrame, second.IDR)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+
+	dec := goh264.NewDecoder()
+	if _, err := dec.DecodeFrames(first.Data); err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode changed slice-boundary P IntraPCM: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
 
 	stream := append(append([]byte(nil), first.Data...), second.Data...)
 	wantStream := appendI420FrameBytes(nil, firstFrame)

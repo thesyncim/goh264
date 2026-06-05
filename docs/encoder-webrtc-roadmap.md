@@ -74,9 +74,10 @@ now validate frame shape and emit the first admitted frame bitstream paths:
 RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
 output, plus configured `SliceCount` multi-slice VCL output, guarded CAVLC
 P-skip slices for identical frames, and guarded CAVLC P IntraPCM slices for
-changed frames after a reference when deblocking is disabled. Changed-frame
-P IntraPCM recovery pictures carry recovery-point SEI when enabled, across
-Annex B, configured AVC, and RTP packetization-mode 1 reassembly. Tests prove
+changed frames after a reference across disabled, enabled, and slice-boundary
+deblock controls. Changed-frame P IntraPCM recovery pictures carry
+recovery-point SEI when enabled, across Annex B, configured AVC, and RTP
+packetization-mode 1 reassembly. Tests prove
 local raw-frame decode, FFmpeg rawvideo decode, recovery-point side data,
 multi-slice `first_mb_in_slice` ordering, RTP packetization-mode 0 single-NAL
 reassembly and oversize rejection, RTP FU-A reassembly, STAP-A parameter-set
@@ -124,9 +125,9 @@ can emit multiple VCL NALs in one access unit.
 4. In progress: add P-frame prediction, reference management, CAVLC residual
    coding, deblock policy, and rate-control feedback in small oracle-backed
    slices. Done for identical-reference P-skip and changed-frame P IntraPCM
-   with deblock disabled, configured multi-slice ranges, and recovery-point
-   SEI emission on changed-frame P IntraPCM recovery pictures; forced
-   keyframes still emit IDR.
+   across disabled, enabled, and slice-boundary deblock controls, configured
+   multi-slice ranges, and recovery-point SEI emission on changed-frame
+   P IntraPCM recovery pictures; forced keyframes still emit IDR.
 5. In progress: add RTP packetization and WebRTC control handling with
    packet-level tests. Done for packetization-mode 0 single-NAL output with
    oversize rejection, packetization-mode 1 single NAL/FU-A output, and

@@ -864,9 +864,6 @@ func (e *Encoder) shouldEncodeIDR(view encoderFrameView, frame EncoderFrame) boo
 	if e.cfg.IDRInterval > 0 && e.framesSinceIDR >= e.cfg.IDRInterval {
 		return true
 	}
-	if e.cfg.DeblockMode != EncoderDeblockDisabled {
-		return true
-	}
 	return false
 }
 

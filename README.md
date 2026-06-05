@@ -110,8 +110,9 @@ initial/min/max QP, frame-drop mode, GOP/IDR cadence, and deblock mode without
 mutating state on invalid updates. QP updates queue an IDR/PPS refresh so the
 emitted parameter sets match the active slice QP.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
-when deblocking is disabled; changed frames can use a guarded CAVLC P IntraPCM
-slice in the same admitted path with recovery-point SEI emission when enabled,
+across disabled, enabled, and slice-boundary deblock controls; changed frames
+can use a guarded CAVLC P IntraPCM slice in the same admitted deblock scope
+with recovery-point SEI emission when enabled,
 while forced keyframe requests still emit IDR; cropped I420 input emits SPS
 crop metadata and local/FFmpeg decode sees the cropped visible frame. Internal
 writer primitives cover raw bit/Exp-Golomb
