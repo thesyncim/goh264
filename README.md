@@ -107,7 +107,8 @@ Stateful damaged-packet recovery guards prove configured AVC, AVC with a
 configuration record, packet `NEW_EXTRADATA`, and auto-detected Annex B
 valid-damaged-valid sequences return an error for the damaged packet without
 poisoning the next valid decode, and valid frames decoded before a later
-damaged slice in the same packet are returned alongside that error. Packet
+damaged slice in the same packet are returned alongside that error, including
+the sole valid frame on single-frame decode helpers. Packet
 `NEW_EXTRADATA` recovery also proves malformed AVC and Annex B extradata errors
 do not wipe the last good decoder configuration or reference state. Malformed
 in-band SPS/PPS NALs are skipped without replacing the last good parameter sets
@@ -193,9 +194,11 @@ frames, err := dec.DecodeAVCFramesWithConfigurationRecord(avcc, packet)
 frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
 ```
 
-Single-frame helpers (`Decode`, `DecodeAnnexB`, `DecodeAVC`,
-`DecodeConfiguredAVC`) return `ErrUnsupported` when a packet produces zero or
-multiple frames. For stream processing, prefer `DecodeFrames` or
+Single-frame helpers (`Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`,
+`DecodeConfiguredAVC`, and `DecodeAVCWithConfigurationRecord`) return
+`ErrUnsupported` when a packet produces zero or multiple frames. If a damaged
+packet produces exactly one valid frame before a later decode error, the helper
+returns that frame with the error. For stream processing, prefer `DecodeFrames` or
 `DecodePacketFrames`; they retain decoder reference state across packets and
 flush delayed output when called with empty data. Annex B access-unit streams
 use the same retained reference and delayed B-frame output path.

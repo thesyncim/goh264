@@ -357,6 +357,112 @@ func TestDecodeAnnexBFramesReturnsPriorFramesBeforeDamagedSlice(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeConfiguredAVCReturnsPriorFrameBeforeDamagedSlice(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+
+	packet := append([]byte(nil), samples[0]...)
+	packet = append(packet, truncateFirstVCLAVCPayload(t, samples[1], 4)...)
+	frame, err := dec.DecodeConfiguredAVC(packet)
+	assertSingleFrameWithDamagedSliceError(t, "configured AVC", frame, err)
+}
+
+func TestDecodeAVCWithConfigurationRecordReturnsPriorFrameBeforeDamagedSlice(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	packet := append([]byte(nil), samples[0]...)
+	packet = append(packet, truncateFirstVCLAVCPayload(t, samples[1], 4)...)
+	frame, err := NewDecoder().DecodeAVCWithConfigurationRecord(config, packet)
+	assertSingleFrameWithDamagedSliceError(t, "configuration-record AVC", frame, err)
+}
+
+func TestDecodePacketAVCReturnsPriorFrameBeforeDamagedSlice(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	packet := append([]byte(nil), samples[0]...)
+	packet = append(packet, truncateFirstVCLAVCPayload(t, samples[1], 4)...)
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data:     packet,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+	})
+	assertSingleFrameWithDamagedSliceError(t, "packet AVC", frame, err)
+}
+
+func TestDecodeAVCReturnsPriorFrameBeforeDamagedSlice(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	extradata, _ := annexBParameterSetsAndPacket(t, data)
+	_, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	packet := annexBToAVC(t, extradata, 4)
+	packet = append(packet, samples[0]...)
+	packet = append(packet, truncateFirstVCLAVCPayload(t, samples[1], 4)...)
+	frame, err := NewDecoder().DecodeAVC(packet, 4)
+	assertSingleFrameWithDamagedSliceError(t, "one-shot AVC", frame, err)
+}
+
+func TestDecodeReturnsPriorFrameBeforeDamagedSlice(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if frames, err := dec.DecodeFrames(config); err != nil || len(frames) != 0 {
+		t.Fatalf("config frames=%d err=%v", len(frames), err)
+	}
+
+	packet := avcSampleToAnnexB(t, samples[0], 4)
+	packet = append(packet, truncateFirstVCLAnnexBPayload(t, avcSampleToAnnexB(t, samples[1], 4))...)
+	frame, err := dec.Decode(packet)
+	assertSingleFrameWithDamagedSliceError(t, "auto-detected Annex B", frame, err)
+}
+
+func TestDecodeAnnexBReturnsPriorFrameBeforeDamagedSlice(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	extradata, _ := annexBParameterSetsAndPacket(t, data)
+	_, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	packet := append([]byte(nil), extradata...)
+	packet = append(packet, avcSampleToAnnexB(t, samples[0], 4)...)
+	packet = append(packet, truncateFirstVCLAnnexBPayload(t, avcSampleToAnnexB(t, samples[1], 4))...)
+	frame, err := NewDecoder().DecodeAnnexB(packet)
+	assertSingleFrameWithDamagedSliceError(t, "one-shot Annex B", frame, err)
+}
+
+func assertSingleFrameWithDamagedSliceError(t *testing.T, surface string, frame *Frame, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s valid+damaged packet returned nil error", surface)
+	}
+	if frame == nil {
+		t.Fatalf("%s valid+damaged packet returned nil frame with error %v", surface, err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func truncateFirstVCLAVCPayload(t *testing.T, sample []byte, nalLengthSize int) []byte {
 	t.Helper()
 	nals, err := h264.SplitAVCC(sample, nalLengthSize)

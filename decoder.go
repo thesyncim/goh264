@@ -342,13 +342,7 @@ func NewDecoder() *Decoder {
 
 func (d *Decoder) Decode(data []byte) (*Frame, error) {
 	frames, err := d.DecodeFrames(data)
-	if err != nil {
-		return nil, err
-	}
-	if len(frames) != 1 {
-		return nil, ErrUnsupported
-	}
-	return frames[0], nil
+	return singleFrameFromFrames(frames, err)
 }
 
 func (d *Decoder) DecodeFrames(data []byte) ([]*Frame, error) {
@@ -383,13 +377,7 @@ func (d *Decoder) decodeFrames(data []byte, packetSideData h264.DecodedFrameSide
 
 func (d *Decoder) DecodePacket(pkt Packet) (*Frame, error) {
 	frames, err := d.DecodePacketFrames(pkt)
-	if err != nil {
-		return nil, err
-	}
-	if len(frames) != 1 {
-		return nil, ErrUnsupported
-	}
-	return frames[0], nil
+	return singleFrameFromFrames(frames, err)
 }
 
 func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
@@ -412,13 +400,7 @@ func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
 
 func (d *Decoder) DecodeAnnexB(data []byte) (*Frame, error) {
 	frames, err := d.DecodeAnnexBFrames(data)
-	if err != nil {
-		return nil, err
-	}
-	if len(frames) != 1 {
-		return nil, ErrUnsupported
-	}
-	return frames[0], nil
+	return singleFrameFromFrames(frames, err)
 }
 
 func (d *Decoder) DecodeAnnexBFrames(data []byte) ([]*Frame, error) {
@@ -438,13 +420,7 @@ func (d *Decoder) DecodeAnnexBFrames(data []byte) ([]*Frame, error) {
 
 func (d *Decoder) DecodeAVC(data []byte, nalLengthSize int) (*Frame, error) {
 	frames, err := d.DecodeAVCFrames(data, nalLengthSize)
-	if err != nil {
-		return nil, err
-	}
-	if len(frames) != 1 {
-		return nil, ErrUnsupported
-	}
-	return frames[0], nil
+	return singleFrameFromFrames(frames, err)
 }
 
 func (d *Decoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*Frame, error) {
@@ -464,13 +440,7 @@ func (d *Decoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*Frame, err
 
 func (d *Decoder) DecodeConfiguredAVC(data []byte) (*Frame, error) {
 	frames, err := d.DecodeConfiguredAVCFrames(data)
-	if err != nil {
-		return nil, err
-	}
-	if len(frames) != 1 {
-		return nil, ErrUnsupported
-	}
-	return frames[0], nil
+	return singleFrameFromFrames(frames, err)
 }
 
 func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
@@ -497,13 +467,7 @@ func (d *Decoder) FlushDelayedFrames() ([]*Frame, error) {
 
 func (d *Decoder) DecodeAVCWithConfigurationRecord(config []byte, data []byte) (*Frame, error) {
 	frames, err := d.DecodeAVCFramesWithConfigurationRecord(config, data)
-	if err != nil {
-		return nil, err
-	}
-	if len(frames) != 1 {
-		return nil, ErrUnsupported
-	}
-	return frames[0], nil
+	return singleFrameFromFrames(frames, err)
 }
 
 func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []byte) ([]*Frame, error) {
@@ -538,6 +502,16 @@ func framesFromH264WithError(frames []*h264.DecodedFrame, err error) ([]*Frame, 
 		return framesFromH264(frames), err
 	}
 	return nil, err
+}
+
+func singleFrameFromFrames(frames []*Frame, err error) (*Frame, error) {
+	if len(frames) == 1 {
+		return frames[0], err
+	}
+	if err != nil {
+		return nil, err
+	}
+	return nil, ErrUnsupported
 }
 
 func framesFromH264(frames []*h264.DecodedFrame) []*Frame {
