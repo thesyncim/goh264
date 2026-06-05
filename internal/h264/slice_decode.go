@@ -896,16 +896,24 @@ func isHigh10ChromaWeightedPSliceBoundaryDeblockScope(sh *SliceHeader) bool {
 }
 
 func isHigh10ChromaFieldWeightedPDeblockScope(sh *SliceHeader) bool {
-	if sh == nil || sh.SPS == nil {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil {
 		return false
 	}
 	if sh.PictureStructure != PictureTopField && sh.PictureStructure != PictureBottomField {
 		return false
 	}
-	if sh.SPS.FrameMBSOnlyFlag != 0 {
+	if sh.SPS.FrameMBSOnlyFlag != 0 ||
+		sh.SPS.BitDepthLuma != 10 ||
+		(sh.SPS.ChromaFormatIDC != 2 && sh.SPS.ChromaFormatIDC != 3) ||
+		sh.SliceTypeNoS != PictureTypeP ||
+		sh.PPS.WeightedPred == 0 {
 		return false
 	}
-	return isHigh10ChromaWeightedPDeblockScope(sh)
+	if sh.DeblockingFilter != 0 && sh.DeblockingFilter != 1 && sh.DeblockingFilter != 2 {
+		return false
+	}
+	return sh.PredWeightTable.UseWeight == 1 &&
+		(sh.PredWeightTable.UseWeightChroma == 0 || sh.PredWeightTable.UseWeightChroma == 1)
 }
 
 func isHigh1214ChromaFieldWeightedPDeblockScope(sh *SliceHeader) bool {

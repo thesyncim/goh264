@@ -50,14 +50,14 @@ unweighted I/P plus CAVLC/CABAC luma-only/luma+chroma weighted-P no-deblock, fra
 and slice-boundary rows, High10 4:2:2/4:4:4
 CAVLC/CABAC implicit and explicit weighted B frame and slice-boundary deblock plus weighted-P frame and slice-boundary rows, I/P/B slices, CAVLC and
 CABAC, weighted and direct motion paths, deblock modes, selected field/PAFF/MBAFF rows
-including High10 4:2:2/4:4:4 weighted-B, luma-weighted-P, and source-normalized chroma-only weighted-P top/bottom field guards,
+including High10 4:2:2/4:4:4 weighted-B and weighted-P top/bottom field guards for deblock modes 0/1/2,
 internal High12/High14 4:2:2/4:4:4 luma-weighted, luma+chroma-weighted, and source-normalized chroma-only weighted-P top/bottom field guards for deblock modes 0/1/2,
 reinit metadata rows, lossless High444
 transform-bypass rows, configured AVC surfaces, container-extracted Annex B
 vectors, and SEI side-data surfaces.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
-field/inter streams beyond the internal High12/High14 field weighted-P guard matrix,
+field/inter streams beyond the internal High10/High12/High14 field weighted-P guard matrices,
 broader damaged-slice error resilience, threading/SIMD and
 bulk allocation hardening, and exact libavcodec delayed-output behavior.
 Intentionally unsupported at the pinned FFmpeg parity boundary: FMO, which

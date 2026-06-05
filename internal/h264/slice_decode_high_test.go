@@ -319,7 +319,7 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaFieldWeightedP(t *t
 			{name: "bottom", structure: PictureBottomField},
 		} {
 			for _, cabac := range []bool{false, true} {
-				for _, deblockMode := range []int32{0, 1} {
+				for _, deblockMode := range []int32{0, 1, 2} {
 					for _, weight := range weights {
 						entropy := "cavlc"
 						if cabac {

@@ -130,7 +130,7 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHighChromaFieldWeig
 	for _, bitDepth := range []int32{10, 12, 14} {
 		for _, chromaFormatIDC := range []uint32{2, 3} {
 			for _, picture := range []int32{PictureTopField, PictureBottomField} {
-				for _, deblock := range []int32{0, 1} {
+				for _, deblock := range []int32{0, 1, 2} {
 					for _, weight := range weights {
 						for _, shape := range shapes {
 							t.Run(fmt.Sprintf("%s/chroma%d/picture%d/mode%d/%s/%s", bitDepthName(bitDepth), chromaFormatIDC, picture, deblock, weight.name, shape.name), func(t *testing.T) {

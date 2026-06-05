@@ -1258,8 +1258,8 @@ func TestMacroblockTablesFilterFrameHigh444SliceBoundaryModeSkipsCrossSliceBound
 	}
 }
 
-func TestMacroblockTablesFilterFrameHigh1214ChromaFieldSliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
-	for _, bitDepth := range []int{12, 14} {
+func TestMacroblockTablesFilterFrameHighChromaFieldSliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
+	for _, bitDepth := range []int{10, 12, 14} {
 		for _, chromaFormatIDC := range []int{2, 3} {
 			t.Run(fmt.Sprintf("%s/%s", bitDepthName(int32(bitDepth)), chromaFormatName(chromaFormatIDC)), func(t *testing.T) {
 				dst := highChromaFieldSliceBoundaryFrame(t, chromaFormatIDC)
