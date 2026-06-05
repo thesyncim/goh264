@@ -242,6 +242,59 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Chroma422FieldExplicitWei
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Chroma444FieldWeightedB(t *testing.T) {
+	weights := []struct {
+		name             string
+		weightedBipredID uint32
+		useWeight        int32
+		useWeightChroma  int32
+	}{
+		{name: "explicit-luma", weightedBipredID: 1, useWeight: 1},
+		{name: "explicit-chroma", weightedBipredID: 1, useWeightChroma: 1},
+		{name: "explicit-luma-chroma", weightedBipredID: 1, useWeight: 1, useWeightChroma: 1},
+		{name: "implicit", weightedBipredID: 2, useWeight: 2, useWeightChroma: 2},
+	}
+	for _, picture := range []struct {
+		name      string
+		structure int32
+	}{
+		{name: "top", structure: PictureTopField},
+		{name: "bottom", structure: PictureBottomField},
+	} {
+		for _, cabac := range []bool{false, true} {
+			for _, deblockMode := range []int32{0, 1} {
+				for _, weight := range weights {
+					entropy := "cavlc"
+					if cabac {
+						entropy = "cabac"
+					}
+					name := fmt.Sprintf("%s/%s/mode%d/%s", picture.name, entropy, deblockMode, weight.name)
+					t.Run(name, func(t *testing.T) {
+						m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 3, 2, deblockMode != 0, PictureTypeB)
+						sh.SPS.FrameMBSOnlyFlag = 0
+						sh.SPS.MBAFF = 1
+						sh.PictureStructure = picture.structure
+						sh.RefCount = [2]uint32{1, 1}
+						if cabac {
+							sh.PPS.CABAC = 1
+						}
+						sh.PPS.WeightedBipredIDC = weight.weightedBipredID
+						sh.PredWeightTable.UseWeight = weight.useWeight
+						sh.PredWeightTable.UseWeightChroma = weight.useWeightChroma
+
+						if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+							t.Fatalf("high10 444 weighted B field validation err = %v, want nil", err)
+						}
+						if err := validateSimpleFrameSliceDecodeInputHighRefs(sh, h264FrameSliceDecodeInputHigh{PredWeight: &sh.PredWeightTable}); err != nil {
+							t.Fatalf("high10 444 weighted B field ref validation err = %v, want nil", err)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedHigh10FieldPictures(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
@@ -252,11 +305,7 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedHigh10FieldPictures(t 
 	}{
 		{name: "420/I", chroma: 1, sliceType: PictureTypeI},
 		{name: "422/slice-boundary", chroma: 2, sliceType: PictureTypeI, deblockMode: 2},
-		{name: "444/explicit-weighted-B", chroma: 3, sliceType: PictureTypeB, run: func(sh *SliceHeader) {
-			sh.PPS.WeightedBipredIDC = 1
-			sh.PredWeightTable.UseWeight = 1
-			sh.PredWeightTable.UseWeightChroma = 1
-		}},
+		{name: "444/unweighted-B", chroma: 3, sliceType: PictureTypeB},
 		{name: "444/I", chroma: 3, sliceType: PictureTypeI},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
