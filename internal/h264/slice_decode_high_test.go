@@ -1029,27 +1029,31 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHighChromaWeightedPDeblock(t *t
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14ChromaCAVLCUnweightedDeblock(t *testing.T) {
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14ChromaUnweightedDeblock(t *testing.T) {
 	for _, chromaFormatIDC := range []int{2, 3} {
 		for _, deblockMode := range []int32{0, 1, 2} {
-			t.Run(fmt.Sprintf("%s/deblock%d/i", chromaFormatName(chromaFormatIDC), deblockMode), func(t *testing.T) {
-				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, chromaFormatIDC, 2, deblockMode != 0, PictureTypeI)
-				sh.DeblockingFilter = deblockMode
+			for _, cabac := range []int32{0, 1} {
+				t.Run(fmt.Sprintf("%s/deblock%d/cabac%d/i", chromaFormatName(chromaFormatIDC), deblockMode, cabac), func(t *testing.T) {
+					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, chromaFormatIDC, 2, deblockMode != 0, PictureTypeI)
+					sh.DeblockingFilter = deblockMode
+					sh.PPS.CABAC = cabac
 
-				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-					t.Fatalf("high14 chroma CAVLC unweighted I validation err = %v, want nil", err)
-				}
-			})
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high14 chroma unweighted I validation err = %v, want nil", err)
+					}
+				})
 
-			t.Run(fmt.Sprintf("%s/deblock%d/p", chromaFormatName(chromaFormatIDC), deblockMode), func(t *testing.T) {
-				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, chromaFormatIDC, 2, deblockMode != 0, PictureTypeP)
-				sh.DeblockingFilter = deblockMode
-				sh.RefCount = [2]uint32{1, 0}
+				t.Run(fmt.Sprintf("%s/deblock%d/cabac%d/p", chromaFormatName(chromaFormatIDC), deblockMode, cabac), func(t *testing.T) {
+					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, chromaFormatIDC, 2, deblockMode != 0, PictureTypeP)
+					sh.DeblockingFilter = deblockMode
+					sh.RefCount = [2]uint32{1, 0}
+					sh.PPS.CABAC = cabac
 
-				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
-					t.Fatalf("high14 chroma CAVLC unweighted P validation err = %v, want nil", err)
-				}
-			})
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high14 chroma unweighted P validation err = %v, want nil", err)
+					}
+				})
+			}
 		}
 	}
 }
@@ -1320,23 +1324,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHigh1214ChromaFieldWeightedP(t
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14ChromaCABACUnweightedP(t *testing.T) {
-	for _, chromaFormatIDC := range []int{2, 3} {
-		for _, deblockMode := range []int32{0, 1, 2} {
-			t.Run(fmt.Sprintf("%s/deblock%d", chromaFormatName(chromaFormatIDC), deblockMode), func(t *testing.T) {
-				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, chromaFormatIDC, 2, deblockMode != 0, PictureTypeP)
-				sh.DeblockingFilter = deblockMode
-				sh.RefCount = [2]uint32{1, 0}
-				sh.PPS.CABAC = 1
-
-				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
-					t.Fatalf("high14 chroma CABAC unweighted P validation err = %v, want ErrUnsupported", err)
-				}
-			})
-		}
-	}
-}
-
 func TestValidateHighFrameSliceReconstructAllowsHigh9IntraResidualScope(t *testing.T) {
 	_, _, sh := highFrameSliceDecodeFixture(t, 9, 1, false, PictureTypeI)
 
@@ -1560,6 +1547,27 @@ func TestValidateHighFrameSliceReconstructAllowsHigh14CABACIntraResidual(t *test
 
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0x101); err != ErrUnsupported {
 		t.Fatalf("high14 CABAC mixed residual reconstruct validation err = %v, want ErrUnsupported", err)
+	}
+}
+
+func TestValidateHighFrameSliceReconstructAllowsHigh14CABACChromaIntraResidual(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		chroma   int
+		cbp      int
+		cbpTable int
+	}{
+		{name: "422-intra4x4", chroma: 2, cbp: 0x23, cbpTable: 0xe3},
+		{name: "444-intra4x4", chroma: 3, cbp: 0x0f, cbpTable: 0x0f},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, sh := highFrameSliceDecodeFixture(t, 14, tt.chroma, false, PictureTypeI)
+			sh.PPS.CABAC = 1
+
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra4x4, nil, tt.cbp, tt.cbpTable); err != nil {
+				t.Fatalf("high14 CABAC chroma Intra4x4 reconstruct validation err = %v, want nil", err)
+			}
+		})
 	}
 }
 

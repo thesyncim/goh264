@@ -43,7 +43,7 @@ luma+chroma residual public fixtures plus mixed no-residual Intra4x4/Intra16x16 
 Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
 combined luma/chroma residual plus CAVLC/CABAC unweighted and weighted
 P-skip/P16x16 plus CAVLC mode-1/mode-2 I/P and weighted-P deblock plus
-public CAVLC 4:2:2/4:4:4 unweighted I/P no-deblock/mode-1/mode-2
+public CAVLC/CABAC 4:2:2/4:4:4 unweighted I/P no-deblock/mode-1/mode-2
 deblock plus CAVLC/CABAC luma-only and luma+chroma weighted-P
 no-deblock/mode-1/mode-2 deblock plus
 CAVLC/CABAC unweighted B no-deblock/mode-1/mode-2 deblock and mode-1/mode-2 I/P and

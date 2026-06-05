@@ -533,7 +533,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 			!isHigh10ChromaFieldWeightedPDeblockScope(sh) &&
 			!isHigh10Chroma444FieldWeightedBDeblockScope(sh) &&
 			!isHigh12ChromaWeightedPDeblockScope(sh) &&
-			!isHigh14ChromaCAVLCFrameDeblockScope(sh) &&
+			!isHigh14ChromaUnweightedDeblockScope(sh) &&
 			!isHigh14ChromaWeightedPDeblockScope(sh) &&
 			!isHigh10ChromaWeightedPSliceBoundaryDeblockScope(sh) &&
 			!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) {
@@ -612,7 +612,7 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 		if sh.SPS.ChromaFormatIDC == 1 {
 			return isHigh14Frame420Scope(sh)
 		}
-		return isHigh14ChromaCAVLCFrameDeblockScope(sh) ||
+		return isHigh14ChromaUnweightedDeblockScope(sh) ||
 			isHigh14ChromaWeightedPDeblockScope(sh)
 	default:
 		return false
@@ -772,14 +772,13 @@ func isHigh12ChromaWeightedPDeblockScope(sh *SliceHeader) bool {
 	return isHighChromaWeightedPDeblockScope(sh, 12)
 }
 
-func isHigh14ChromaCAVLCFrameDeblockScope(sh *SliceHeader) bool {
+func isHigh14ChromaUnweightedDeblockScope(sh *SliceHeader) bool {
 	if sh == nil || sh.SPS == nil || sh.PPS == nil {
 		return false
 	}
 	if sh.PictureStructure != PictureFrame ||
 		sh.SPS.BitDepthLuma != 14 ||
 		(sh.SPS.ChromaFormatIDC != 2 && sh.SPS.ChromaFormatIDC != 3) ||
-		sh.PPS.CABAC != 0 ||
 		sh.PPS.WeightedPred != 0 ||
 		sh.PredWeightTable.UseWeight != 0 ||
 		sh.PredWeightTable.UseWeightChroma != 0 {
@@ -1284,6 +1283,14 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 						(cbp == 0x15 && (cbpTable == 0xd5 || cbpTable == 0x1f015)) ||
 						(cbp == 0x17 && (cbpTable == 0xd7 || cbpTable == 0x7017))) {
 					return nil
+				}
+				if mbType == MBTypeIntra4x4 && sh.PPS != nil && sh.PPS.CABAC != 0 {
+					if sh.SPS.ChromaFormatIDC == 2 && cbp == 0x23 && cbpTable == 0xe3 {
+						return nil
+					}
+					if sh.SPS.ChromaFormatIDC == 3 && cbp == 0x0f && cbpTable == 0x0f {
+						return nil
+					}
 				}
 				if mbType == MBTypeIntra4x4 && cbp == 0x2f && (cbpTable == 0xef || cbpTable == 0x7f02f || cbpTable == 0xff02f) {
 					return nil

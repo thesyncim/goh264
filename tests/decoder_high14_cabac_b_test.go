@@ -869,7 +869,15 @@ func highCABACBRewriteSliceDeblockMode(t *testing.T, raw []byte, sh *h264.SliceH
 	if len(raw) < 2 || sh == nil || sh.PPS == nil || sh.SPS == nil {
 		t.Fatal("invalid slice rewrite input")
 	}
-	if deblockMode != 2 {
+	var disableIDC uint32
+	switch deblockMode {
+	case 0:
+		disableIDC = 1
+	case 1:
+		disableIDC = 0
+	case 2:
+		disableIDC = 2
+	default:
 		t.Fatalf("unsupported rewritten deblock mode %d", deblockMode)
 	}
 	rbsp := high14CABACBEBSPToRBSP(raw[1:])
@@ -882,7 +890,11 @@ func highCABACBRewriteSliceDeblockMode(t *testing.T, raw []byte, sh *h264.SliceH
 		}
 	}
 
-	header := bits[:disableStart] + high14CABACBUEBits(2) + bits[disableEnd:headerEnd]
+	replacement := high14CABACBUEBits(disableIDC)
+	if deblockMode != 0 {
+		replacement += bits[disableEnd:headerEnd]
+	}
+	header := bits[:disableStart] + replacement
 	if mod := len(header) % 8; mod != 0 {
 		header += strings.Repeat("1", 8-mod)
 	}
