@@ -1513,6 +1513,75 @@ func TestValidateHighFrameSliceReconstructAllowsHigh9IntraResidualScope(t *testi
 	}
 }
 
+func TestValidateHighFrameSliceReconstructAllowsHigh1214FrameMBAFFCAVLCIntraPCM(t *testing.T) {
+	for _, bitDepth := range []int32{12, 14} {
+		t.Run(bitDepthName(bitDepth), func(t *testing.T) {
+			_, _, sh := highFrameSliceDecodeFixture(t, bitDepth, 1, false, PictureTypeI)
+			sh.PictureStructure = PictureFrame
+			sh.SPS.FrameMBSOnlyFlag = 0
+			sh.SPS.MBAFF = 1
+			sh.PPS.CABAC = 0
+
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntraPCM|MBTypeInterlaced, nil, 0, 0); err != nil {
+				t.Fatalf("%s frame-MBAFF CAVLC IntraPCM reconstruct validation err = %v, want nil", bitDepthName(bitDepth), err)
+			}
+		})
+	}
+}
+
+func TestValidateHighFrameSliceReconstructRejectsHigh1214FrameMBAFFCAVLCIntraPCMBoundaries(t *testing.T) {
+	for _, bitDepth := range []int32{12, 14} {
+		for _, tt := range []struct {
+			name string
+			run  func(*SliceHeader) (uint32, int, int)
+		}{
+			{name: "cabac", run: func(sh *SliceHeader) (uint32, int, int) {
+				sh.PPS.CABAC = 1
+				return MBTypeIntraPCM | MBTypeInterlaced, 0, 0
+			}},
+			{name: "chroma422", run: func(sh *SliceHeader) (uint32, int, int) {
+				sh.SPS.ChromaFormatIDC = 2
+				return MBTypeIntraPCM | MBTypeInterlaced, 0, 0
+			}},
+			{name: "frame-only", run: func(sh *SliceHeader) (uint32, int, int) {
+				sh.SPS.FrameMBSOnlyFlag = 1
+				sh.SPS.MBAFF = 0
+				return MBTypeIntraPCM | MBTypeInterlaced, 0, 0
+			}},
+			{name: "top-field-picture", run: func(sh *SliceHeader) (uint32, int, int) {
+				sh.PictureStructure = PictureTopField
+				return MBTypeIntraPCM | MBTypeInterlaced, 0, 0
+			}},
+			{name: "residual-table", run: func(sh *SliceHeader) (uint32, int, int) {
+				return MBTypeIntraPCM | MBTypeInterlaced, 1, 1
+			}},
+			{name: "plain-intrapcm-still-allowed", run: func(sh *SliceHeader) (uint32, int, int) {
+				return MBTypeIntraPCM, 0, 0
+			}},
+		} {
+			t.Run(fmt.Sprintf("%s/%s", bitDepthName(bitDepth), tt.name), func(t *testing.T) {
+				_, _, sh := highFrameSliceDecodeFixture(t, bitDepth, 1, false, PictureTypeI)
+				sh.PictureStructure = PictureFrame
+				sh.SPS.FrameMBSOnlyFlag = 0
+				sh.SPS.MBAFF = 1
+				sh.PPS.CABAC = 0
+				mbType, cbp, cbpTable := tt.run(sh)
+
+				err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, nil, cbp, cbpTable)
+				if tt.name == "plain-intrapcm-still-allowed" {
+					if err != nil {
+						t.Fatalf("%s plain IntraPCM validation err = %v, want nil", bitDepthName(bitDepth), err)
+					}
+					return
+				}
+				if err != ErrUnsupported {
+					t.Fatalf("%s frame-MBAFF CAVLC IntraPCM boundary err = %v, want ErrUnsupported", bitDepthName(bitDepth), err)
+				}
+			})
+		}
+	}
+}
+
 func TestValidateHighFrameSliceReconstructAllowsHigh12IntraResidualScope(t *testing.T) {
 	_, _, sh := highFrameSliceDecodeFixture(t, 12, 1, false, PictureTypeI)
 

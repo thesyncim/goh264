@@ -1328,6 +1328,9 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 			if mbType == MBTypeIntraPCM {
 				return nil
 			}
+			if isHigh1214FrameMBAFFCAVLCIntraPCM(sh, mbType, cbp, cbpTable) {
+				return nil
+			}
 			if sh.SPS.BitDepthLuma == 12 {
 				if (mbType == MBTypeIntra4x4 || mbType == MBTypeIntra16x16) && cbp == 0 && cbpTable == 0 {
 					return nil
@@ -1484,6 +1487,23 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 		return nil
 	}
 	return ErrUnsupported
+}
+
+func isHigh1214FrameMBAFFCAVLCIntraPCM(sh *SliceHeader, mbType uint32, cbp int, cbpTable int) bool {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil {
+		return false
+	}
+	return sh.PictureStructure == PictureFrame &&
+		sh.SliceTypeNoS == PictureTypeI &&
+		sh.SPS.FrameMBSOnlyFlag == 0 &&
+		sh.SPS.MBAFF != 0 &&
+		sh.SPS.ChromaFormatIDC == 1 &&
+		(sh.SPS.BitDepthLuma == 12 || sh.SPS.BitDepthLuma == 14) &&
+		sh.SPS.BitDepthChroma == sh.SPS.BitDepthLuma &&
+		sh.PPS.CABAC == 0 &&
+		mbType == MBTypeIntraPCM|MBTypeInterlaced &&
+		cbp == 0 &&
+		cbpTable == 0
 }
 
 func isHighPIntraMacroblock(mbType uint32) bool {
