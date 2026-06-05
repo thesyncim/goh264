@@ -47,10 +47,12 @@ defaults:
 Current safe point: the public control contract is present in `encoder.go` and
 covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
 constrained-baseline realtime/WebRTC configs can be constructed, invalid
-controls are rejected, and runtime bitrate, framerate, payload-size, PLI/FIR,
-force-IDR, and partial reconfiguration controls are tested. `ParameterSets`
-generates SPS/PPS NALs, Annex B sequence headers, and avcC records accepted by
-the decoder parsers. `RecoveryPointSEI` generates Annex B and AVC recovery-point
+controls are rejected, and runtime bitrate, framerate, payload-size, SPS/PPS
+cadence, PLI/FIR, force-IDR, and partial reconfiguration controls are tested.
+`ParameterSets` generates SPS/PPS NALs, Annex B sequence headers, and avcC
+records accepted by the decoder parsers. IDR header cadence is explicit for
+in-band keyframes, out-of-band headers, and every-IDR emission.
+`RecoveryPointSEI` generates Annex B and AVC recovery-point
 SEI NAL surfaces and is proved by injecting the encoder output before a P-frame
 and checking the public decoder recovery side data. `Encode` and `EncodeInto`
 now validate frame shape and emit the first admitted frame bitstream paths:
@@ -106,7 +108,8 @@ P-slice `mb_type=30` macroblocks.
    STAP-A parameter-set aggregation with marker-bit boundaries plus
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
    bytes, callback-style packet metadata, and automatic timestamp progression
-   for frames without explicit PTS.
+   for frames without explicit PTS, plus explicit SPS/PPS in-band,
+   out-of-band, and every-IDR cadence semantics.
 6. Add realtime allocation budgets, encode timing benchmarks, and control-loop
    stress tests.
 

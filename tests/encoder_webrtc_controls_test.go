@@ -206,6 +206,76 @@ func TestEncoderKeyframeRequestsQueueIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderSPSPPSCadenceModesControlIDRHeaders(t *testing.T) {
+	tests := []struct {
+		name       string
+		mode       goh264.EncoderSPSPPSMode
+		beforeIDR  bool
+		wantIDRNAL []uint8
+	}{
+		{
+			name:       "in-band keyframes",
+			mode:       goh264.EncoderSPSPPSInBandKeyframes,
+			beforeIDR:  true,
+			wantIDRNAL: []uint8{7, 8, 5},
+		},
+		{
+			name:       "in-band keyframes disabled",
+			mode:       goh264.EncoderSPSPPSInBandKeyframes,
+			beforeIDR:  false,
+			wantIDRNAL: []uint8{5},
+		},
+		{
+			name:       "out-of-band suppresses in-band headers",
+			mode:       goh264.EncoderSPSPPSOutOfBand,
+			beforeIDR:  true,
+			wantIDRNAL: []uint8{5},
+		},
+		{
+			name:       "every IDR overrides boolean",
+			mode:       goh264.EncoderSPSPPSEveryIDR,
+			beforeIDR:  false,
+			wantIDRNAL: []uint8{7, 8, 5},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = goh264.EncoderOutputAnnexB
+			cfg.RTPMaxPayloadSize = 0
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.SPSPPSMode = tt.mode
+			cfg.SPSPPSBeforeIDR = tt.beforeIDR
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			frame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if !first.IDR || !first.KeyFrame {
+				t.Fatalf("first frame IDR/key = %v/%v, want IDR keyframe", first.IDR, first.KeyFrame)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, tt.wantIDRNAL)
+
+			frame.PTS += int64(cfg.RTPTimestampIncrement)
+			enc.ForceIDR()
+			forced, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode forced IDR: %v", err)
+			}
+			if !forced.IDR || !forced.KeyFrame {
+				t.Fatalf("forced frame IDR/key = %v/%v, want IDR keyframe", forced.IDR, forced.KeyFrame)
+			}
+			assertEncoderNALTypes(t, forced.NALUnits, tt.wantIDRNAL)
+		})
+	}
+}
+
 func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(638, 478)
 	cfg.FrameRateNum = 30000

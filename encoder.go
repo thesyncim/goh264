@@ -416,7 +416,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	}
 	idr := e.shouldEncodeIDR(view, frame)
 	var nals []encoderRawNAL
-	if idr && e.cfg.SPSPPSBeforeIDR && e.cfg.SPSPPSMode != EncoderSPSPPSOutOfBand {
+	if e.shouldEmitParameterSets(idr) {
 		sets, err := e.ParameterSets()
 		if err != nil {
 			return EncodedFrame{}, err
@@ -746,6 +746,20 @@ func (e *Encoder) shouldEncodeIDR(view encoderFrameView, frame EncoderFrame) boo
 		return true
 	}
 	return false
+}
+
+func (e *Encoder) shouldEmitParameterSets(idr bool) bool {
+	if !idr {
+		return false
+	}
+	switch e.cfg.SPSPPSMode {
+	case EncoderSPSPPSOutOfBand:
+		return false
+	case EncoderSPSPPSEveryIDR:
+		return true
+	default:
+		return e.cfg.SPSPPSBeforeIDR
+	}
 }
 
 func (e *Encoder) referenceMatches(view encoderFrameView) bool {

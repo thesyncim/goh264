@@ -111,16 +111,17 @@ raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 Realtime/WebRTC encoder proof currently covers control admission and
 parameter-set headers: default 8-bit I420 constrained-baseline RTP config,
 invalid-control rejection, bitrate, framerate, RTP payload-size,
-PLI/FIR/force-IDR, partial reconfiguration, public SPS/PPS/Annex B/avcC header
-generation, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
-generation, identical-reference CAVLC P-skip with IDR fallback for changed or
-forced-keyframe frames, FFmpeg rawvideo decode, RTP packetization-mode 1 FU-A
-reassembly, STAP-A parameter-set aggregation, and RTP payload-type/SSRC/sequence
-metadata. Internal writer proof covers raw bit/Exp-Golomb writing, RBSP
-trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
-decoder configuration records, baseline SPS/PPS syntax, recovery-point SEI
-syntax, and Baseline IDR plus P-skip slice syntax via decoder-parser and
-encoded-frame round trips.
+SPS/PPS cadence modes, PLI/FIR/force-IDR, partial reconfiguration, public
+SPS/PPS/Annex B/avcC header generation, recovery-point SEI packaging, IDR
+IntraPCM Annex B/AVC frame generation, identical-reference CAVLC P-skip,
+changed-frame P IntraPCM recovery pictures, forced-keyframe IDR, FFmpeg rawvideo
+decode, RTP packetization-mode 1 FU-A reassembly, STAP-A parameter-set
+aggregation, RTP payload-type/SSRC/sequence metadata, full RTP header bytes, and
+optional RTP callback metadata. Internal writer proof covers raw bit/Exp-Golomb
+writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
+packaging, AVC decoder configuration records, baseline SPS/PPS syntax,
+recovery-point SEI syntax, and Baseline IDR plus P-skip/P IntraPCM slice syntax
+via decoder-parser and encoded-frame round trips.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder

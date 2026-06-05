@@ -74,10 +74,11 @@ lockstep.
 
 Encoder status: `DefaultEncoderConfig`, `NewEncoder`, `ParameterSets`,
 `RecoveryPointSEI`, `Encode`/`EncodeInto`, PLI/FIR/force-IDR,
-bitrate/framerate/payload reconfiguration, and the WebRTC control fields are
-public and covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit
-I420 constrained-baseline realtime configs are admitted as control state;
-SPS/PPS parameter sets, Annex B sequence headers, avcC records, and
+bitrate/framerate/payload reconfiguration, SPS/PPS cadence modes, and the
+WebRTC control fields are public and covered by
+`tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420 constrained-baseline
+realtime configs are admitted as control state; SPS/PPS parameter sets, Annex B
+sequence headers, avcC records, in-band/out-of-band/every-IDR cadence, and
 recovery-point SEI Annex B/AVC NAL surfaces are generated and parser-proved.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
 Annex B, AVC, and RTP packetization-mode 1, including FU-A fragmentation and
@@ -275,9 +276,10 @@ then emit the admitted IDR IntraPCM, identical-reference P-skip, or
 changed-frame P IntraPCM frame path. Changed-frame P IntraPCM recovery pictures
 carry recovery-point SEI when enabled. RTP output includes payloads plus
 complete RTP packet bytes, optional per-packet callback metadata, and automatic
-timestamp progression when frames omit explicit PTS. Motion-search inter
-prediction, quantized residual coding, and rate-control decisions are still
-future encoder slices.
+timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
+separate in-band keyframe headers, out-of-band headers, and every-IDR emission.
+Motion-search inter prediction, quantized residual coding, and rate-control
+decisions are still future encoder slices.
 
 ## Supported Inputs
 

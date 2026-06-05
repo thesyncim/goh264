@@ -126,20 +126,22 @@ Encoder readiness evidence currently covers controls, parameter-set headers,
 recovery-point SEI packaging, and the first IDR frame writer:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 rejects invalid or not-yet-admitted realtime controls, validates runtime
-bitrate, framerate, payload-size, PLI/FIR, force-IDR, and partial
-reconfiguration paths, proves `ParameterSets` emits SPS/PPS NALs, Annex B
-headers, and avcC records accepted by the public decoder parsers, proves
+bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
+partial reconfiguration paths, proves `ParameterSets` emits SPS/PPS NALs,
+Annex B headers, and avcC records accepted by the public decoder parsers,
+proves in-band keyframe, out-of-band, and every-IDR header modes, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL
 surfaces accepted by public decode paths, verifies frame-shape validation, and
 proves `Encode`/`EncodeInto` emit IDR IntraPCM access units that round-trip
 through local Annex B/AVC decode, FFmpeg rawvideo decode, RTP FU-A reassembly,
 STAP-A parameter-set aggregation, and RTP packet payload-type/SSRC/sequence
-metadata plus full RTP header bytes. It also proves identical second frames can
-emit CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo
-decode, while changed second frames and queued IDR requests fall back to IDR.
+metadata plus full RTP header bytes and optional RTP callback metadata. It also
+proves identical second frames can emit CAVLC P-skip slices through stateful
+local decode and FFmpeg rawvideo decode, changed second frames can emit
+P IntraPCM recovery pictures, and queued IDR requests emit IDR.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and
-Baseline IDR plus P-skip slice syntax. Changed-frame P prediction, residual
-CAVLC coding, rate-control feedback, RTP callback metadata, and realtime
-allocation/performance gates remain pending.
+Baseline IDR plus P-skip slice syntax. Motion-search P prediction, residual
+CAVLC coding, rate-control feedback, and realtime allocation/performance gates
+remain pending.
