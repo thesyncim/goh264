@@ -16,7 +16,8 @@ P-skip/P16x16, internal High12 no-deblock weighted P-skip and
 weighted P16x16/partitioned P plus
 P16x16 residual handoff plus no-deblock/mode-1 I/P deblock including
 CABAC unweighted B no-deblock/mode-1/mode-2 deblock including
-B-skip/direct-sub mode-1/mode-2 deblock and partitioned B8x8 no-deblock,
+B-skip/direct-sub no-deblock and mode-1/mode-2 deblock plus partitioned
+B16x8/B8x16/B8x8 no-deblock and mode-1/mode-2 deblock,
 unweighted 4:2:2/4:4:4 I/P chroma deblock plus 4:2:0 I/P
 slice-boundary mode-2 deblock and unweighted 4:2:2/4:4:4 I/P chroma
 slice-boundary mode-2 deblock, High14 CAVLC/CABAC IntraPCM plus
@@ -29,7 +30,8 @@ fixtures, mixed no-residual
 intra, separate and combined Intra16x16 luma/chroma residual plus
 CAVLC/CABAC unweighted and weighted P-skip/P16x16 plus CAVLC mode-1/mode-2
 I/P and weighted-P deblock and CABAC unweighted B no-deblock/mode-1/mode-2 deblock
-including B-skip/direct-sub mode-1/mode-2 deblock and partitioned B8x8 no-deblock
+including B-skip/direct-sub no-deblock and mode-1/mode-2 deblock plus partitioned
+B16x8/B8x16/B8x8 no-deblock and mode-1/mode-2 deblock
 plus mode-1/mode-2 I/P and weighted-P deblock, High10 frame-MBAFF field-coded CAVLC IntraPCM
 entropy/reconstruct pairing plus public High10/High422 field-coded
 frame-MBAFF deblock rows, complete FFmpeg FRext FATE row coverage including

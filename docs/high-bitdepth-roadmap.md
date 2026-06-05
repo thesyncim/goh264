@@ -19,8 +19,10 @@ luma/chroma residual plus P-skip/P16x16,
 internal High12 Intra16x16 luma-AC, luma-DC+AC, and luma/chroma-DC plus
 chroma-AC/DC+AC and combined luma/chroma residual plus no-deblock
 weighted P-skip and weighted P16x16/partitioned P plus P16x16 residual
-handoff plus CABAC unweighted B no-deblock/mode-1 deblock and
-mode-1/mode-2 B-skip/direct-sub deblock plus partitioned B8x8 no-deblock,
+handoff plus CABAC unweighted B no-deblock/mode-1 deblock,
+B-skip/direct-sub no-deblock and mode-1/mode-2 deblock, partitioned
+B16x8/B8x16/B8x8 no-deblock, and partitioned B16x8/B8x16/B8x8
+mode-1/mode-2 deblock,
 mode-1 I/P deblock, 4:2:0 I/P
 slice-boundary mode-2 deblock, including unweighted 4:2:2/4:4:4
 I/P chroma no-deblock/mode-1 deblock plus unweighted 4:2:2/4:4:4 I/P chroma
@@ -35,8 +37,9 @@ Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
 combined luma/chroma residual plus CAVLC/CABAC unweighted and weighted
 P-skip/P16x16 plus CAVLC mode-1/mode-2 I/P and weighted-P deblock plus
 CABAC unweighted B no-deblock/mode-1 deblock and mode-1/mode-2 I/P and
-weighted-P deblock, mode-1/mode-2 B-skip/direct-sub deblock, and partitioned
-B8x8 no-deblock, High10 frame-MBAFF
+weighted-P deblock, B-skip/direct-sub no-deblock and mode-1/mode-2 deblock,
+partitioned B16x8/B8x16/B8x8 no-deblock, and partitioned
+B16x8/B8x16/B8x8 mode-1/mode-2 deblock, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, and public High10/
 High422 field-coded frame-MBAFF deblock rows, plus public High9 4:2:0
 SPS reinit metadata from 9-bit to 8-bit output, public High444 10-bit SPS

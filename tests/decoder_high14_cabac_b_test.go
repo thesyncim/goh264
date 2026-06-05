@@ -25,6 +25,8 @@ type high14CABACBCase struct {
 	direct8x8    int32
 	checkDirect8 bool
 	mode2Deblock bool
+	wantSlices   []int32
+	ppsRefCount  [2]uint32
 	width        int
 	height       int
 	rawFrameSize int
@@ -105,7 +107,7 @@ func TestDecodeConfiguredAVCHigh14CABACBFramesAcrossSamplesFlush(t *testing.T) {
 					t.Fatalf("nalLengthSize=%d flush: %v", nalLengthSize, err)
 				}
 				frameCounts = append(frameCounts, len(out))
-				assertHigh14CABACBConfiguredSampleCounts(t, tt.name, nalLengthSize, frameCounts)
+				assertHigh14CABACBConfiguredSampleCounts(t, tt, nalLengthSize, frameCounts)
 				frames = append(frames, out...)
 				assertHigh14CABACBFrames(t, frames, tt)
 			}
@@ -246,6 +248,39 @@ func high14CABACBCases() []high14CABACBCase {
 			rawVideoMD5: "320b1242759143fe62c86e5bdb48f949",
 		},
 		{
+			name:         "temporal-bskip-no-deblock",
+			sourceFile:   "high10_bskip_temporal_cabac.h264",
+			direct8x8:    1,
+			checkDirect8: true,
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "d6225f602f9da77ccb30bc2bf63e95d3",
+			frameMD5: []string{
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+			},
+			rawVideoMD5: "db1f712add67d8ba54cb8cf10b86419f",
+		},
+		{
+			name:         "spatial-bskip-no-deblock",
+			sourceFile:   "high10_bskip_spatial_cabac.h264",
+			direct:       1,
+			direct8x8:    1,
+			checkDirect8: true,
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "579632a48be662103d6ecd5e18950de1",
+			frameMD5: []string{
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+			},
+			rawVideoMD5: "db1f712add67d8ba54cb8cf10b86419f",
+		},
+		{
 			name:         "temporal-bskip-mode1-deblock",
 			sourceFile:   "high10_bskip_deblock_temporal_cabac.h264",
 			deblockMode:  1,
@@ -316,6 +351,70 @@ func high14CABACBCases() []high14CABACBCase {
 				"6d3514a30f506561e144447d287270ab",
 			},
 			rawVideoMD5: "1f17900b95954131ed58ae42da301444",
+		},
+		{
+			name:         "direct-sub-b8x8-temporal-no-deblock",
+			sourceFile:   "high10_cabac_b8x8_temporal_direct_sub.h264",
+			direct8x8:    1,
+			checkDirect8: true,
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "1d73322fcf49ef52c136ecc801f08a69",
+			frameMD5: []string{
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+			},
+			rawVideoMD5: "db1f712add67d8ba54cb8cf10b86419f",
+		},
+		{
+			name:         "direct-sub-b8x8-spatial-no-deblock",
+			sourceFile:   "high10_cabac_b8x8_spatial_direct_sub.h264",
+			direct:       1,
+			direct8x8:    1,
+			checkDirect8: true,
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "8b8fbeb90151dc5620c039ed8f93cd17",
+			frameMD5: []string{
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+			},
+			rawVideoMD5: "db1f712add67d8ba54cb8cf10b86419f",
+		},
+		{
+			name:         "direct-sub-b4x4-temporal-no-deblock",
+			sourceFile:   "high10_cabac_b4x4_temporal_direct_sub.h264",
+			checkDirect8: true,
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "6f4846a778d028f3d4d603bb5149f6d0",
+			frameMD5: []string{
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+			},
+			rawVideoMD5: "db1f712add67d8ba54cb8cf10b86419f",
+		},
+		{
+			name:         "direct-sub-b4x4-spatial-no-deblock",
+			sourceFile:   "high10_cabac_b4x4_spatial_direct_sub.h264",
+			direct:       1,
+			checkDirect8: true,
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "68b325aedc000c9e81d64c3cf530af04",
+			frameMD5: []string{
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+				"2163eb71b459070d04147dc124aac7c8",
+			},
+			rawVideoMD5: "db1f712add67d8ba54cb8cf10b86419f",
 		},
 		{
 			name:         "direct-sub-b8x8-temporal-mode1-deblock",
@@ -458,6 +557,34 @@ func high14CABACBCases() []high14CABACBCase {
 			rawVideoMD5: "1f17900b95954131ed58ae42da301444",
 		},
 		{
+			name:         "partitioned-b16x8-no-deblock",
+			sourceFile:   "high10_partitioned_b16x8_cabac.h264",
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "74ec2df51ef06c8bef5cd2e27ff9e69f",
+			frameMD5: []string{
+				"ab9822e28369daf9b7cf3684a15a00d4",
+				"75867a3f647b0896d7a8e491431bd2e6",
+				"84654175ca7cc28ee8ccd2b93610731b",
+			},
+			rawVideoMD5: "dd61881fd1190b9d1778ec5897427e62",
+		},
+		{
+			name:         "partitioned-b8x16-no-deblock",
+			sourceFile:   "high10_partitioned_b8x16_cabac.h264",
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "6e253f4a418c90e0cb8e93bd2aaf6211",
+			frameMD5: []string{
+				"0602b9991b87ff67a6562312914d5fe6",
+				"75867a3f647b0896d7a8e491431bd2e6",
+				"ccf4838bb508322a2feb5836297faf46",
+			},
+			rawVideoMD5: "529819e477450b2324bf63e96370fab3",
+		},
+		{
 			name:         "partitioned-b8x8-no-deblock",
 			sourceFile:   "high10_partitioned_b8x8_cabac.h264",
 			width:        16,
@@ -470,6 +597,129 @@ func high14CABACBCases() []high14CABACBCase {
 				"cfa61b078410719a4d5051efbf0d6102",
 			},
 			rawVideoMD5: "7bb8fc9419d32bfa8cf9f0bbda44c8e4",
+		},
+		{
+			name:         "partitioned-b16x8-mode1-deblock",
+			sourceFile:   "high10_partitioned_b_deblock_b16x8_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  1,
+			wantSlices:   []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			ppsRefCount:  [2]uint32{1, 1},
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "108957b7746869b424011958a662360d",
+			frameMD5: []string{
+				"08cfce46517b1a3fb82d43b66d6c3327",
+				"25b3112989747893b18c7f892ef06151",
+				"470141d109848e52435486bf0c5b6ae4",
+				"12208fd0262429f37e5942b9e2d1f9d8",
+				"2d4008fca992537dbf2c34325410aedd",
+			},
+			rawVideoMD5: "e1efe229db403233497496cb150b5ace",
+		},
+		{
+			name:         "partitioned-b16x8-mode2-deblock",
+			sourceFile:   "high10_partitioned_b_deblock_b16x8_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  2,
+			mode2Deblock: true,
+			wantSlices:   []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			ppsRefCount:  [2]uint32{1, 1},
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "438585a81f4d61604348ab983b7d34f6",
+			frameMD5: []string{
+				"08cfce46517b1a3fb82d43b66d6c3327",
+				"25b3112989747893b18c7f892ef06151",
+				"470141d109848e52435486bf0c5b6ae4",
+				"12208fd0262429f37e5942b9e2d1f9d8",
+				"2d4008fca992537dbf2c34325410aedd",
+			},
+			rawVideoMD5: "e1efe229db403233497496cb150b5ace",
+		},
+		{
+			name:         "partitioned-b8x16-mode1-deblock",
+			sourceFile:   "high10_partitioned_b_deblock_b8x16_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  1,
+			wantSlices:   []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			ppsRefCount:  [2]uint32{1, 1},
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "b60c8d21c9e4aac09ddc7e46c2722895",
+			frameMD5: []string{
+				"f7e31af362f75c2c72082c963526bd62",
+				"d896c9943347af8118cfd7e8b8e021bd",
+				"bf92b2cd0f34d54e19c5dbe961cb60dd",
+				"6186d1560513c04ea7cddcca9defa484",
+				"1a92c8cee6d17718c047e7346827c480",
+			},
+			rawVideoMD5: "ada175004bdc3976dff2653f07193259",
+		},
+		{
+			name:         "partitioned-b8x16-mode2-deblock",
+			sourceFile:   "high10_partitioned_b_deblock_b8x16_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  2,
+			mode2Deblock: true,
+			wantSlices:   []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			ppsRefCount:  [2]uint32{1, 1},
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "08d1be7b15a0f0c4df883ad8f81b8934",
+			frameMD5: []string{
+				"f7e31af362f75c2c72082c963526bd62",
+				"d896c9943347af8118cfd7e8b8e021bd",
+				"bf92b2cd0f34d54e19c5dbe961cb60dd",
+				"6186d1560513c04ea7cddcca9defa484",
+				"1a92c8cee6d17718c047e7346827c480",
+			},
+			rawVideoMD5: "ada175004bdc3976dff2653f07193259",
+		},
+		{
+			name:         "partitioned-b8x8-mode1-deblock",
+			sourceFile:   "high10_partitioned_b_deblock_b8x8_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  1,
+			wantSlices:   []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			ppsRefCount:  [2]uint32{1, 1},
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "d071207c616fad31c6011b50b85634ec",
+			frameMD5: []string{
+				"6bcadaf1ef408dfb87ed0eef55afc867",
+				"1447660696bf1e7ef5e216de8a4187ef",
+				"44f20649f43ffd1d26039128351cef1b",
+				"7659b11af00b55241e074e254fd9b4d2",
+				"068d4c19adf6515d32e3448f379fa2d6",
+			},
+			rawVideoMD5: "30f9c8fd55f5fc21f321f112c469ca1c",
+		},
+		{
+			name:         "partitioned-b8x8-mode2-deblock",
+			sourceFile:   "high10_partitioned_b_deblock_b8x8_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  2,
+			mode2Deblock: true,
+			wantSlices:   []int32{h264.PictureTypeI, h264.PictureTypeP, h264.PictureTypeB, h264.PictureTypeB, h264.PictureTypeP},
+			ppsRefCount:  [2]uint32{1, 1},
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "65730926786f93f990c812cb0bad437d",
+			frameMD5: []string{
+				"6bcadaf1ef408dfb87ed0eef55afc867",
+				"1447660696bf1e7ef5e216de8a4187ef",
+				"44f20649f43ffd1d26039128351cef1b",
+				"7659b11af00b55241e074e254fd9b4d2",
+				"068d4c19adf6515d32e3448f379fa2d6",
+			},
+			rawVideoMD5: "30f9c8fd55f5fc21f321f112c469ca1c",
 		},
 	}
 }
@@ -987,10 +1237,11 @@ func assertHigh14CABACBFixtureSyntax(t *testing.T, data []byte, tt high14CABACBC
 			if err != nil {
 				t.Fatal(err)
 			}
+			wantRefs := highCABACBPPSRefCount(tt.ppsRefCount)
 			if i != 1 || pps.CABAC != 1 || pps.Transform8x8Mode != 0 || pps.WeightedPred != 0 ||
-				pps.WeightedBipredIDC != 0 || pps.RefCount != [2]uint32{2, 1} {
-				t.Fatalf("PPS = nal[%d] cabac/8x8/weights/refs = %d/%d/%d/%d/%v, want CABAC/no-8x8/unweighted refs=2/1",
-					i, pps.CABAC, pps.Transform8x8Mode, pps.WeightedPred, pps.WeightedBipredIDC, pps.RefCount)
+				pps.WeightedBipredIDC != 0 || pps.RefCount != wantRefs {
+				t.Fatalf("PPS = nal[%d] cabac/8x8/weights/refs = %d/%d/%d/%d/%v, want CABAC/no-8x8/unweighted refs=%v",
+					i, pps.CABAC, pps.Transform8x8Mode, pps.WeightedPred, pps.WeightedBipredIDC, pps.RefCount, wantRefs)
 			}
 			ppsList[pps.PPSID] = pps
 		case h264.NALIDRSlice, h264.NALSlice:
@@ -1037,20 +1288,26 @@ func assertHigh14CABACBFixtureSyntax(t *testing.T, data []byte, tt high14CABACBC
 			t.Fatalf("unexpected NAL type %d", nal.Type)
 		}
 	}
-	if len(gotSlices) != 3 || gotSlices[0] != h264.PictureTypeI || gotSlices[1] != h264.PictureTypeP || gotSlices[2] != h264.PictureTypeB {
-		t.Fatalf("slice types = %v, want I/P/B", gotSlices)
+	wantSlices := highCABACBExpectedSlices(tt.wantSlices)
+	if len(gotSlices) != len(wantSlices) {
+		t.Fatalf("slice types = %v, want %v", gotSlices, wantSlices)
+	}
+	for i := range wantSlices {
+		if gotSlices[i] != wantSlices[i] {
+			t.Fatalf("slice types = %v, want %v", gotSlices, wantSlices)
+		}
 	}
 }
 
-func assertHigh14CABACBConfiguredSampleCounts(t *testing.T, name string, nalLengthSize int, got []int) {
+func assertHigh14CABACBConfiguredSampleCounts(t *testing.T, tt high14CABACBCase, nalLengthSize int, got []int) {
 	t.Helper()
-	want := []int{0, 1, 1, 1}
+	want := highCABACBConfiguredSampleCounts(len(tt.frameMD5))
 	if len(got) != len(want) {
-		t.Fatalf("%s nalLengthSize=%d configured sample/flush counts = %v, want %v", name, nalLengthSize, got, want)
+		t.Fatalf("%s nalLengthSize=%d configured sample/flush counts = %v, want %v", tt.name, nalLengthSize, got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("%s nalLengthSize=%d configured sample/flush counts = %v, want %v", name, nalLengthSize, got, want)
+			t.Fatalf("%s nalLengthSize=%d configured sample/flush counts = %v, want %v", tt.name, nalLengthSize, got, want)
 		}
 	}
 }
