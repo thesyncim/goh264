@@ -448,6 +448,9 @@ func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	if d == nil || d.avcNALLengthSize == 0 {
 		return nil, ErrInvalidData
 	}
+	if len(data) == 0 {
+		return d.FlushDelayedFrames()
+	}
 	frames, err := d.simple.DecodeAVCFrames(data, d.avcNALLengthSize)
 	if err != nil {
 		return framesFromH264WithError(frames, err)

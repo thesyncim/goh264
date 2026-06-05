@@ -92,7 +92,10 @@ failure ledger is non-empty or the worktree is dirty.
 
 Public API delayed-output coverage includes AVC configured samples and Annex B
 access-unit streaming through `DecodeFrames`, with end-of-stream flush via an
-empty packet and an empty second flush.
+empty packet and an empty second flush. Configured AVC stateful decode also
+drains delayed B-frame output through `DecodeConfiguredAVCFrames(nil)`,
+including the single-frame helper when the empty packet releases exactly one
+frame.
 
 Malformed-input safety evidence now includes deterministic public-surface
 corruption rows plus `FuzzDecodePublicSurfacesNoPanic`, a bounded fuzz target

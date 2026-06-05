@@ -194,6 +194,7 @@ frames, err := dec.DecodeFrames(data)                  // auto Annex B / AVC / c
 frames, err := dec.DecodeAnnexBFrames(annexB)          // Annex B bytestream
 frames, err := dec.DecodeAVCFrames(packet, lengthSize) // length-prefixed NAL units
 frames, err := dec.DecodeConfiguredAVCFrames(packet)   // after parsing avcC
+frames, err := dec.DecodeConfiguredAVCFrames(nil)      // delayed configured-AVC output
 frames, err := dec.DecodeAVCFramesWithConfigurationRecord(avcc, packet)
 frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
 ```
@@ -204,8 +205,9 @@ Single-frame helpers (`Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`,
 packet produces exactly one valid frame before a later decode error, the helper
 returns that frame with the error. For stream processing, prefer `DecodeFrames` or
 `DecodePacketFrames`; they retain decoder reference state across packets and
-flush delayed output when called with empty data. Annex B access-unit streams
-use the same retained reference and delayed B-frame output path.
+flush delayed output when called with empty data. `DecodeConfiguredAVCFrames`
+does the same after an AVC configuration record has been parsed. Annex B
+access-unit streams use the same retained reference and delayed B-frame output path.
 `DecodeAVCFramesWithConfigurationRecord` updates the decoder's AVC
 configuration without resetting retained references, then drains delayed output
 for the supplied AVC packet.

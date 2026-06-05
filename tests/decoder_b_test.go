@@ -207,6 +207,71 @@ func TestDecodeConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 	}
 }
 
+func TestDecodeConfiguredAVCTestsrcBFramesFlushesOnEmptyPacket(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+
+	var frames []*Frame
+	for i, sample := range samples {
+		out, err := dec.DecodeConfiguredAVCFrames(sample)
+		if err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+		frames = append(frames, out...)
+	}
+
+	out, err := dec.DecodeConfiguredAVCFrames(nil)
+	if err != nil {
+		t.Fatalf("empty configured AVC packet flush: %v", err)
+	}
+	frames = append(frames, out...)
+	assertFrameMD5Strings(t, frames, []string{
+		"4296e3dc95829cc27071a8685a428494",
+		"36f5a9b9064709ee891652e8f4e06992",
+		"aa778b981f96d21489196f6a0faa0959",
+	})
+
+	out, err = dec.DecodeConfiguredAVCFrames(nil)
+	if err != nil {
+		t.Fatalf("second empty configured AVC packet flush: %v", err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("second empty configured AVC packet frames = %d, want 0", len(out))
+	}
+}
+
+func TestDecodeConfiguredAVCTestsrcBFrameReturnsDelayedFrameOnEmptyPacket(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	for i, sample := range samples {
+		if _, err := dec.DecodeConfiguredAVCFrames(sample); err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+	}
+
+	frame, err := dec.DecodeConfiguredAVC(nil)
+	if err != nil {
+		t.Fatalf("single-frame empty configured AVC packet flush: %v", err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"aa778b981f96d21489196f6a0faa0959"})
+}
+
 func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
