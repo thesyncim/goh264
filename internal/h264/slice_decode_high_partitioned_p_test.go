@@ -93,7 +93,7 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsFieldPShapes(t *tes
 	}
 }
 
-func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10ChromaFieldWeightedP(t *testing.T) {
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHighChromaFieldWeightedP(t *testing.T) {
 	weights := []struct {
 		name  string
 		table func(chromaFormatIDC int) PredWeightTable
@@ -127,30 +127,32 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10ChromaFieldWe
 		{name: "p8x16 residual", mbType: MBType8x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced, cbp: 2, cbpTable: 2},
 		{name: "p8x8 explicit sub", mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced, sub: &sub, cbp: 4, cbpTable: 4},
 	}
-	for _, chromaFormatIDC := range []uint32{2, 3} {
-		for _, picture := range []int32{PictureTopField, PictureBottomField} {
-			for _, deblock := range []int32{0, 1} {
-				for _, weight := range weights {
-					for _, shape := range shapes {
-						t.Run(fmt.Sprintf("chroma%d/picture%d/mode%d/%s/%s", chromaFormatIDC, picture, deblock, weight.name, shape.name), func(t *testing.T) {
-							sh := &SliceHeader{
-								SliceTypeNoS:     PictureTypeP,
-								PictureStructure: picture,
-								DeblockingFilter: deblock,
-								SPS: &SPS{
-									BitDepthLuma:     10,
-									BitDepthChroma:   10,
-									ChromaFormatIDC:  chromaFormatIDC,
-									FrameMBSOnlyFlag: 0,
-									MBAFF:            1,
-								},
-								PPS:             &PPS{WeightedPred: 1},
-								PredWeightTable: weight.table(int(chromaFormatIDC)),
-							}
-							if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, shape.sub, shape.cbp, shape.cbpTable); err != nil {
-								t.Fatalf("validate high10 chroma field weighted P reconstruct err = %v, want nil", err)
-							}
-						})
+	for _, bitDepth := range []int32{10, 12, 14} {
+		for _, chromaFormatIDC := range []uint32{2, 3} {
+			for _, picture := range []int32{PictureTopField, PictureBottomField} {
+				for _, deblock := range []int32{0, 1} {
+					for _, weight := range weights {
+						for _, shape := range shapes {
+							t.Run(fmt.Sprintf("%s/chroma%d/picture%d/mode%d/%s/%s", bitDepthName(bitDepth), chromaFormatIDC, picture, deblock, weight.name, shape.name), func(t *testing.T) {
+								sh := &SliceHeader{
+									SliceTypeNoS:     PictureTypeP,
+									PictureStructure: picture,
+									DeblockingFilter: deblock,
+									SPS: &SPS{
+										BitDepthLuma:     bitDepth,
+										BitDepthChroma:   bitDepth,
+										ChromaFormatIDC:  chromaFormatIDC,
+										FrameMBSOnlyFlag: 0,
+										MBAFF:            1,
+									},
+									PPS:             &PPS{WeightedPred: 1},
+									PredWeightTable: weight.table(int(chromaFormatIDC)),
+								}
+								if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, shape.sub, shape.cbp, shape.cbpTable); err != nil {
+									t.Fatalf("validate %s chroma field weighted P reconstruct err = %v, want nil", bitDepthName(bitDepth), err)
+								}
+							})
+						}
 					}
 				}
 			}
