@@ -51,7 +51,8 @@ constrained-baseline realtime/WebRTC configs can be constructed, invalid
 controls are rejected, including I420 crop offsets that H.264 cannot represent,
 and runtime bitrate, framerate, payload-size, slice-count/byte-target,
 SPS/PPS cadence, PLI/FIR, force-IDR, and partial reconfiguration controls are
-tested. `ParameterSets`
+tested. `MaxFrameSize` and `SliceMaxBytes` are now enforced as encode-time
+guards before frame/reference/RTP state advances. `ParameterSets`
 generates SPS/PPS NALs, crop metadata, Annex B sequence headers, and avcC
 records accepted by the decoder parsers. IDR header cadence is explicit for
 in-band keyframes, out-of-band headers, and every-IDR emission.
@@ -70,16 +71,15 @@ local raw-frame decode, FFmpeg rawvideo decode, recovery-point side data,
 multi-slice `first_mb_in_slice` ordering, RTP packetization-mode 0 single-NAL
 reassembly and oversize rejection, RTP FU-A reassembly, STAP-A parameter-set
 aggregation, payload-type, SSRC, and sequence-number packet metadata. RTP
-packets also carry
-complete 12-byte RTP headers plus payload
-bytes, and `SetRTPPacketCallback` reports callback-style packet metadata for
+packets also carry complete 12-byte RTP headers plus payload bytes, and
+`SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form, NAL type/count, FU-A start/end, and parameter-set
 packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
 from frame duration or `RTPTimestampIncrement`. Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
-frame. Queued IDR requests still emit IDR, and motion-search prediction plus
-residual coding remain pending.
+frame. Queued IDR requests still emit IDR, and motion-search prediction,
+residual coding, and rate-control feedback remain pending.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -125,7 +125,8 @@ can emit multiple VCL NALs in one access unit.
    for frames without explicit PTS, plus explicit SPS/PPS in-band,
    out-of-band, and every-IDR cadence semantics. Configured `SliceCount`
    output now feeds RTP mode 1 as separate VCL NAL packets when each slice fits
-   the payload limit.
+   the payload limit, and configured `MaxFrameSize`/`SliceMaxBytes` budgets now
+   reject oversized encoded output without advancing encoder state.
 6. Add realtime allocation budgets, encode timing benchmarks, and control-loop
    stress tests.
 

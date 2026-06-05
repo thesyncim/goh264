@@ -507,6 +507,13 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		}
 	}
 
+	outputSize, err := encoderAccessUnitOutputSize(e.cfg.OutputFormat, nals)
+	if err != nil {
+		return EncodedFrame{}, err
+	}
+	if err := validateEncoderOutputBudgets(e.cfg, nals, outputSize); err != nil {
+		return EncodedFrame{}, err
+	}
 	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
 	if err != nil {
 		return EncodedFrame{}, err
@@ -922,6 +929,45 @@ func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []enco
 		}
 	}
 	return dst, units, nil
+}
+
+func encoderAccessUnitOutputSize(format EncoderOutputFormat, nals []encoderRawNAL) (int, error) {
+	var size int
+	for _, nal := range nals {
+		if len(nal.raw) == 0 {
+			return 0, encoderInvalid("empty encoder NAL")
+		}
+		switch format {
+		case EncoderOutputAVC:
+			if uint64(len(nal.raw)) > uint64(^uint32(0)) {
+				return 0, encoderInvalid("encoder NAL is too large for AVC output")
+			}
+			size += 4 + len(nal.raw)
+		case EncoderOutputAnnexB, EncoderOutputRTP:
+			size += 4 + len(nal.raw)
+		default:
+			return 0, encoderInvalid("unknown encoder output format")
+		}
+	}
+	return size, nil
+}
+
+func validateEncoderOutputBudgets(cfg EncoderConfig, nals []encoderRawNAL, outputSize int) error {
+	if cfg.SliceMaxBytes > 0 {
+		for _, nal := range nals {
+			if encoderRawNALIsVCL(nal) && len(nal.raw) > cfg.SliceMaxBytes {
+				return encoderInvalid("encoded slice exceeds slice byte target")
+			}
+		}
+	}
+	if cfg.MaxFrameSize > 0 && outputSize > cfg.MaxFrameSize {
+		return encoderInvalid("encoded access unit exceeds max frame size")
+	}
+	return nil
+}
+
+func encoderRawNALIsVCL(nal encoderRawNAL) bool {
+	return nal.typ == uint8(h264.NALSlice) || nal.typ == uint8(h264.NALIDRSlice)
 }
 
 func packetizeEncoderRTPSingleNAL(nals []encoderRawNAL, maxPayloadSize int, timestamp uint32) ([]EncoderRTPPacket, error) {

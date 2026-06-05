@@ -878,6 +878,66 @@ func TestEncoderSliceCountFeedsRTPMode1SingleNALPackets(t *testing.T) {
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
 }
 
+func TestEncoderMaxFrameSizeRejectsOversizeAccessUnitWithoutAdvancingState(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	cfg.MaxFrameSize = 16
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+
+	if _, err := enc.Encode(frame); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("oversize MaxFrameSize encode error = %v, want ErrInvalidData", err)
+	}
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 4096}); err != nil {
+		t.Fatalf("raise MaxFrameSize: %v", err)
+	}
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode after rejected MaxFrameSize frame: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLFrameNums(t, first.Data, []uint8{5}, []uint32{0})
+
+	secondFrame := frame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode second frame after MaxFrameSize recovery: %v", err)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertEncoderVCLFrameNums(t, append(append([]byte(nil), first.Data...), second.Data...), []uint8{5, 1}, []uint32{0, 1})
+}
+
+func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingRTPState(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.SliceMaxBytes = 1
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+
+	if _, err := enc.Encode(frame); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("oversize SliceMaxBytes encode error = %v, want ErrInvalidData", err)
+	}
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{SliceMaxBytes: 4096}); err != nil {
+		t.Fatalf("raise SliceMaxBytes: %v", err)
+	}
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode after rejected SliceMaxBytes frame: %v", err)
+	}
+	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLFrameNums(t, out.Data, []uint8{5}, []uint32{0})
+	assertRTPPacketMetadata(t, out.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+}
+
 func TestEncoderEncodeRecoveryPointSEICanBeDisabled(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
@@ -1550,6 +1610,45 @@ func assertEncoderVCLFirstMBs(t *testing.T, annexB []byte, wantTypes []uint8, wa
 	if !reflect.DeepEqual(gotTypes, wantTypes) || !reflect.DeepEqual(gotFirstMBs, wantFirstMBs) {
 		t.Fatalf("VCL types/first MBs = %v/%v, want %v/%v",
 			gotTypes, gotFirstMBs, wantTypes, wantFirstMBs)
+	}
+}
+
+func assertEncoderVCLFrameNums(t *testing.T, annexB []byte, wantTypes []uint8, wantFrameNums []uint32) {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(annexB)
+	if err != nil {
+		t.Fatalf("SplitAnnexB: %v", err)
+	}
+	var spsList [32]*h264.SPS
+	var ppsList [256]*h264.PPS
+	var gotTypes []uint8
+	var gotFrameNums []uint32
+	for _, nal := range nals {
+		switch nal.Type {
+		case h264.NALSPS:
+			sps, err := h264.DecodeSPS(nal.RBSP)
+			if err != nil {
+				t.Fatalf("DecodeSPS: %v", err)
+			}
+			spsList[sps.SPSID] = sps
+		case h264.NALPPS:
+			pps, err := h264.DecodePPS(nal.RBSP, &spsList)
+			if err != nil {
+				t.Fatalf("DecodePPS: %v", err)
+			}
+			ppsList[pps.PPSID] = pps
+		case h264.NALIDRSlice, h264.NALSlice:
+			sh, err := h264.ParseSliceHeader(nal, &ppsList)
+			if err != nil {
+				t.Fatalf("ParseSliceHeader nal=%d: %v", nal.Type, err)
+			}
+			gotTypes = append(gotTypes, uint8(nal.Type))
+			gotFrameNums = append(gotFrameNums, sh.FrameNum)
+		}
+	}
+	if !reflect.DeepEqual(gotTypes, wantTypes) || !reflect.DeepEqual(gotFrameNums, wantFrameNums) {
+		t.Fatalf("VCL types/frame nums = %v/%v, want %v/%v",
+			gotTypes, gotFrameNums, wantTypes, wantFrameNums)
 	}
 }
 

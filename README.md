@@ -13,7 +13,8 @@ identical references, and changed-frame P IntraPCM recovery pictures with
 Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
 single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
 FFmpeg rawvideo decode, recovery-point side data, RTP mode-0 reassembly, RTP
-FU-A reassembly, and STAP-A parameter-set aggregation tests.
+FU-A reassembly, STAP-A parameter-set aggregation tests, and encode-time
+`MaxFrameSize`/`SliceMaxBytes` budget guards.
 The goal is not a loose rewrite: internal codec paths keep upstream state
 machines, syntax handling, math, and edge cases recognizable, then prove
 behavior against oracle vectors.
@@ -23,8 +24,8 @@ behavior against oracle vectors.
   bitrate, latency, keyframe, packetization, profile/level, runtime
   reconfiguration controls, out-of-band SPS/PPS/avcC headers, and crop-aware
   SPS/encoded visible output plus recovery-point SEI packaging and
-  `SliceCount`-backed multi-slice output, with first IDR IntraPCM, P-skip, and
-  P IntraPCM Annex B/AVC/RTP output paths.
+  `SliceCount`-backed multi-slice output plus frame/slice byte-budget guards,
+  with first IDR IntraPCM, P-skip, and P IntraPCM Annex B/AVC/RTP output paths.
 - **Annex B and AVC input surfaces** - automatic packet splitting, explicit
   Annex B / length-prefixed AVC APIs, and AVC decoder configuration records.
 - **Raw frame output** - `Frame` exposes Y/Cb/Cr planes, crop, strides, VUI
@@ -91,7 +92,8 @@ payload-type/SSRC/sequence metadata, full RTP packet headers, marker-bit
 boundaries, oversize mode-0 rejection, and optional RTP packet callbacks with
 packet index/count, frame timing, payload form, NAL type/count, FU-A start/end,
 and parameter-set metadata. RTP timestamps honor explicit frame PTS and advance
-zero-PTS frames from frame duration or `RTPTimestampIncrement`.
+zero-PTS frames from frame duration or `RTPTimestampIncrement`. `MaxFrameSize`
+and `SliceMaxBytes` are enforced before frame/reference/RTP state advances.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
 when deblocking is disabled; changed frames can use a guarded CAVLC P IntraPCM
 slice in the same admitted path with recovery-point SEI emission when enabled,
