@@ -219,6 +219,22 @@ type highFrameMBAFFP16x16LumaChromaResidualCase = highFrameMBAFFP16x16NoResidual
 type highFrameMBAFFFrameP16x16NoResidualCase = highFrameMBAFFP16x16NoResidualCase
 type highFrameMBAFFFrameP16x16LumaResidualCase = highFrameMBAFFP16x16NoResidualCase
 
+type highFrameMBAFFP16x16DeblockCase struct {
+	name                       string
+	bitDepth                   int
+	pskip                      bool
+	fieldFlag                  uint32
+	cbp                        uint32
+	payloadBits                string
+	residualTailBits           string
+	disableDeblockingFilterIDC uint32
+	deblockMode                int32
+	bitstreamMD5               string
+	refFrameMD5                string
+	pFrameMD5                  string
+	rawVideoMD5                string
+}
+
 type highFrameMBAFFPartitionedPLumaChromaResidualCase struct {
 	name         string
 	bitDepth     int
@@ -307,6 +323,19 @@ func TestHigh1214FrameMBAFFFrameP16x16LumaResidualFixtureSyntax(t *testing.T) {
 				t.Fatalf("%s frame-MBAFF frame-coded P16x16 luma-residual bitstream md5 = %s, want %s", tt.name, got, tt.bitstreamMD5)
 			}
 			assertHighFrameMBAFFFrameP16x16LumaResidualFixtureSyntax(t, data, tt)
+		})
+	}
+}
+
+func TestHigh1214FrameMBAFFP16x16DeblockFixtureSyntax(t *testing.T) {
+	for _, tt := range highFrameMBAFFP16x16DeblockCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFP16x16DeblockFixture(tt)
+			sum := md5.Sum(data)
+			if got := hex.EncodeToString(sum[:]); got != tt.bitstreamMD5 {
+				t.Fatalf("%s frame-MBAFF P16x16 deblock bitstream md5 = %s, want %s", tt.name, got, tt.bitstreamMD5)
+			}
+			assertHighFrameMBAFFP16x16DeblockFixtureSyntax(t, data, tt)
 		})
 	}
 }
@@ -434,6 +463,21 @@ func TestDecodeAnnexBHigh1214FrameMBAFFFrameP16x16LumaResidualFrames(t *testing.
 				t.Fatalf("decode %s frame-MBAFF frame-coded P16x16 luma-residual Annex B: %v", tt.name, err)
 			}
 			assertHighFrameMBAFFFrameP16x16LumaResidualFrames(t, frames, tt)
+		})
+	}
+}
+
+func TestDecodeAnnexBHigh1214FrameMBAFFP16x16DeblockFrames(t *testing.T) {
+	for _, tt := range highFrameMBAFFP16x16DeblockCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFP16x16DeblockFixture(tt)
+			assertHighFrameMBAFFP16x16DeblockFixtureSyntax(t, data, tt)
+
+			frames, err := NewDecoder().DecodeAnnexBFrames(data)
+			if err != nil {
+				t.Fatalf("decode %s frame-MBAFF P16x16 deblock Annex B: %v", tt.name, err)
+			}
+			assertHighFrameMBAFFP16x16DeblockFrames(t, frames, tt)
 		})
 	}
 }
@@ -578,6 +622,23 @@ func TestDecodeAVCHigh1214FrameMBAFFFrameP16x16LumaResidualFrames(t *testing.T) 
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF frame-coded P16x16 luma-residual AVC: %v", nalLengthSize, tt.name, err)
 				}
 				assertHighFrameMBAFFFrameP16x16LumaResidualFrames(t, frames, tt)
+			}
+		})
+	}
+}
+
+func TestDecodeAVCHigh1214FrameMBAFFP16x16DeblockFrames(t *testing.T) {
+	for _, tt := range highFrameMBAFFP16x16DeblockCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFP16x16DeblockFixture(tt)
+			assertHighFrameMBAFFP16x16DeblockFixtureSyntax(t, data, tt)
+
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P16x16 deblock AVC: %v", nalLengthSize, tt.name, err)
+				}
+				assertHighFrameMBAFFP16x16DeblockFrames(t, frames, tt)
 			}
 		})
 	}
@@ -736,6 +797,24 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameP16x16LumaResidu
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF frame-coded P16x16 luma-residual configured AVC: %v", nalLengthSize, tt.name, err)
 				}
 				assertHighFrameMBAFFFrameP16x16LumaResidualFrames(t, frames, tt)
+			}
+		})
+	}
+}
+
+func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16DeblockFrames(t *testing.T) {
+	for _, tt := range highFrameMBAFFP16x16DeblockCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFP16x16DeblockFixture(tt)
+			assertHighFrameMBAFFP16x16DeblockFixtureSyntax(t, data, tt)
+
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
+				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P16x16 deblock configured AVC: %v", nalLengthSize, tt.name, err)
+				}
+				assertHighFrameMBAFFP16x16DeblockFrames(t, frames, tt)
 			}
 		})
 	}
@@ -1069,6 +1148,67 @@ func TestFFmpegRawVideoMD5OracleHigh1214FrameMBAFFFrameP16x16LumaResidual(t *tes
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFFrameP16x16LumaResidualFixture(tt.bitDepth)
 			assertHighFrameMBAFFFrameP16x16LumaResidualFixtureSyntax(t, data, tt)
+			path := writeTempH264(t, data)
+			pixFmt := fmt.Sprintf("yuv420p%dle", tt.bitDepth)
+
+			framemd5 := exec.Command(
+				"ffmpeg",
+				"-v", "error",
+				"-f", "h264",
+				"-i", path,
+				"-an", "-sn", "-dn",
+				"-pix_fmt", pixFmt,
+				"-f", "framemd5",
+				"-",
+			)
+			framemd5Out, err := framemd5.Output()
+			if err != nil {
+				t.Fatalf("ffmpeg framemd5: %v", err)
+			}
+			for i, want := range []string{tt.refFrameMD5, tt.pFrameMD5} {
+				line := []byte(fmt.Sprintf("0, %10d, %10d,        1,     1536, %s", i, i, want))
+				if !bytes.Contains(framemd5Out, line) {
+					t.Fatalf("missing %q in framemd5:\n%s", line, framemd5Out)
+				}
+			}
+
+			rawvideo := exec.Command(
+				"ffmpeg",
+				"-v", "error",
+				"-f", "h264",
+				"-i", path,
+				"-an", "-sn", "-dn",
+				"-pix_fmt", pixFmt,
+				"-f", "rawvideo",
+				"-",
+			)
+			raw, err := rawvideo.Output()
+			if err != nil {
+				t.Fatalf("ffmpeg rawvideo: %v", err)
+			}
+			if len(raw) != 3072 {
+				t.Fatalf("rawvideo size = %d, want 3072", len(raw))
+			}
+			sum := md5.Sum(raw)
+			if got := hex.EncodeToString(sum[:]); got != tt.rawVideoMD5 {
+				t.Fatalf("rawvideo md5 = %s, want %s", got, tt.rawVideoMD5)
+			}
+		})
+	}
+}
+
+func TestFFmpegRawVideoMD5OracleHigh1214FrameMBAFFP16x16Deblock(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	for _, tt := range highFrameMBAFFP16x16DeblockCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFP16x16DeblockFixture(tt)
+			assertHighFrameMBAFFP16x16DeblockFixtureSyntax(t, data, tt)
 			path := writeTempH264(t, data)
 			pixFmt := fmt.Sprintf("yuv420p%dle", tt.bitDepth)
 
@@ -1463,6 +1603,383 @@ func highFrameMBAFFFrameP16x16LumaResidualCases() []highFrameMBAFFFrameP16x16Lum
 			refFrameMD5:  high14FrameMBAFFIntraPCMFrameMD5,
 			pFrameMD5:    high14FrameMBAFFFrameP16x16LumaResidualPFrameMD5,
 			rawVideoMD5:  high14FrameMBAFFFrameP16x16LumaResidualRawVideoMD5,
+		},
+	}
+}
+
+func highFrameMBAFFP16x16DeblockCases() []highFrameMBAFFP16x16DeblockCase {
+	return []highFrameMBAFFP16x16DeblockCase{
+		{
+			name:                       "High12PSkipDeblockMode1",
+			bitDepth:                   12,
+			pskip:                      true,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "608b9216c7968c2237653c4e220cde61",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFPSkipNoResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFPSkipNoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FieldP16x16NoResidualDeblockMode1",
+			bitDepth:                   12,
+			fieldFlag:                  1,
+			cbp:                        0,
+			payloadBits:                highFrameMBAFFP16x16NoResidualPayloadBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "acd28f7457c9749c4b387891665ea1a4",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFP16x16NoResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFP16x16NoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FieldP16x16LumaResidualDeblockMode1",
+			bitDepth:                   12,
+			fieldFlag:                  1,
+			cbp:                        1,
+			payloadBits:                highFrameMBAFFP16x16LumaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaResidualTailBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "a803c5425184576a14ef49ddb30be5b3",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFP16x16LumaResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFP16x16LumaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FieldP16x16LumaChromaResidualDeblockMode1",
+			bitDepth:                   12,
+			fieldFlag:                  1,
+			cbp:                        33,
+			payloadBits:                highFrameMBAFFP16x16LumaChromaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaChromaResidualTailBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "18cca3d955ee085a69ed0ad4995505e1",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFP16x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FrameP16x16NoResidualDeblockMode1",
+			bitDepth:                   12,
+			fieldFlag:                  0,
+			cbp:                        0,
+			payloadBits:                highFrameMBAFFFrameP16x16NoResidualPayloadBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "38cbd9a0806d3a7d3e37d073fadfed72",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFFrameP16x16NoResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFFrameP16x16NoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FrameP16x16LumaResidualDeblockMode1",
+			bitDepth:                   12,
+			fieldFlag:                  0,
+			cbp:                        1,
+			payloadBits:                highFrameMBAFFFrameP16x16LumaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaResidualTailBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "ea7ffd5c2efe2695560f9d3c2a564294",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFFrameP16x16LumaResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFFrameP16x16LumaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FrameP16x16LumaChromaResidualDeblockMode1",
+			bitDepth:                   12,
+			fieldFlag:                  0,
+			cbp:                        33,
+			payloadBits:                highFrameMBAFFFrameP16x16LumaChromaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaChromaResidualTailBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "090b99a424826c453ad894e23d6ae501",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFFrameP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFFrameP16x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12PSkipDeblockMode2",
+			bitDepth:                   12,
+			pskip:                      true,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "7f66740b1b274e36811dab05f558addc",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFPSkipNoResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFPSkipNoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FieldP16x16NoResidualDeblockMode2",
+			bitDepth:                   12,
+			fieldFlag:                  1,
+			cbp:                        0,
+			payloadBits:                highFrameMBAFFP16x16NoResidualPayloadBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "0310cff17dd6568f86cc3a670143a00c",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFP16x16NoResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFP16x16NoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FieldP16x16LumaResidualDeblockMode2",
+			bitDepth:                   12,
+			fieldFlag:                  1,
+			cbp:                        1,
+			payloadBits:                highFrameMBAFFP16x16LumaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaResidualTailBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "31d665552533173bd6e7b12db68ae9fc",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFP16x16LumaResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFP16x16LumaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FieldP16x16LumaChromaResidualDeblockMode2",
+			bitDepth:                   12,
+			fieldFlag:                  1,
+			cbp:                        33,
+			payloadBits:                highFrameMBAFFP16x16LumaChromaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaChromaResidualTailBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "964e6b4135d0ff26a64dfbb6fd6eeade",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFP16x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FrameP16x16NoResidualDeblockMode2",
+			bitDepth:                   12,
+			fieldFlag:                  0,
+			cbp:                        0,
+			payloadBits:                highFrameMBAFFFrameP16x16NoResidualPayloadBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "a954eb2c54b5fb83d8819095a4c60711",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFFrameP16x16NoResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFFrameP16x16NoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FrameP16x16LumaResidualDeblockMode2",
+			bitDepth:                   12,
+			fieldFlag:                  0,
+			cbp:                        1,
+			payloadBits:                highFrameMBAFFFrameP16x16LumaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaResidualTailBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "27365539290b8929a69e21b5b63e904f",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFFrameP16x16LumaResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFFrameP16x16LumaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High12FrameP16x16LumaChromaResidualDeblockMode2",
+			bitDepth:                   12,
+			fieldFlag:                  0,
+			cbp:                        33,
+			payloadBits:                highFrameMBAFFFrameP16x16LumaChromaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaChromaResidualTailBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "3b34687c5c2da799bc6de264d75b0afd",
+			refFrameMD5:                high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high12FrameMBAFFFrameP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:                high12FrameMBAFFFrameP16x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14PSkipDeblockMode1",
+			bitDepth:                   14,
+			pskip:                      true,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "ec0d3b183eaa775a772fc354dae7161e",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFPSkipNoResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFPSkipNoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FieldP16x16NoResidualDeblockMode1",
+			bitDepth:                   14,
+			fieldFlag:                  1,
+			cbp:                        0,
+			payloadBits:                highFrameMBAFFP16x16NoResidualPayloadBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "77a0a6e988de2c3cde0678f99a6f9ecb",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFP16x16NoResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFP16x16NoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FieldP16x16LumaResidualDeblockMode1",
+			bitDepth:                   14,
+			fieldFlag:                  1,
+			cbp:                        1,
+			payloadBits:                highFrameMBAFFP16x16LumaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaResidualTailBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "b74276c97423f43b0855eee818d3d08f",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFP16x16LumaResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFP16x16LumaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FieldP16x16LumaChromaResidualDeblockMode1",
+			bitDepth:                   14,
+			fieldFlag:                  1,
+			cbp:                        33,
+			payloadBits:                highFrameMBAFFP16x16LumaChromaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaChromaResidualTailBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "6fcc2c21bf81d640c9834ed9870efc41",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFP16x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FrameP16x16NoResidualDeblockMode1",
+			bitDepth:                   14,
+			fieldFlag:                  0,
+			cbp:                        0,
+			payloadBits:                highFrameMBAFFFrameP16x16NoResidualPayloadBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "ca9482c6cf08291174b81a7ef9ca3be6",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFFrameP16x16NoResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFFrameP16x16NoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FrameP16x16LumaResidualDeblockMode1",
+			bitDepth:                   14,
+			fieldFlag:                  0,
+			cbp:                        1,
+			payloadBits:                highFrameMBAFFFrameP16x16LumaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaResidualTailBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "dffc96eebf983476ad09a0fab2bcb908",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFFrameP16x16LumaResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFFrameP16x16LumaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FrameP16x16LumaChromaResidualDeblockMode1",
+			bitDepth:                   14,
+			fieldFlag:                  0,
+			cbp:                        33,
+			payloadBits:                highFrameMBAFFFrameP16x16LumaChromaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaChromaResidualTailBits,
+			disableDeblockingFilterIDC: 0,
+			deblockMode:                1,
+			bitstreamMD5:               "64cfd8aa7c0d300da6ec72ffe0bd2f50",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFFrameP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFFrameP16x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14PSkipDeblockMode2",
+			bitDepth:                   14,
+			pskip:                      true,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "b358f93b6d1bf810ac7a720ee5bfb420",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFPSkipNoResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFPSkipNoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FieldP16x16NoResidualDeblockMode2",
+			bitDepth:                   14,
+			fieldFlag:                  1,
+			cbp:                        0,
+			payloadBits:                highFrameMBAFFP16x16NoResidualPayloadBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "35cf1d5a423c4f9bedd5962a6a2986a0",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFP16x16NoResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFP16x16NoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FieldP16x16LumaResidualDeblockMode2",
+			bitDepth:                   14,
+			fieldFlag:                  1,
+			cbp:                        1,
+			payloadBits:                highFrameMBAFFP16x16LumaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaResidualTailBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "c5640c7b503dd597aa860d4c6a153037",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFP16x16LumaResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFP16x16LumaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FieldP16x16LumaChromaResidualDeblockMode2",
+			bitDepth:                   14,
+			fieldFlag:                  1,
+			cbp:                        33,
+			payloadBits:                highFrameMBAFFP16x16LumaChromaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaChromaResidualTailBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "d14f1036c4c2aecca37b5f28f8075f41",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFP16x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FrameP16x16NoResidualDeblockMode2",
+			bitDepth:                   14,
+			fieldFlag:                  0,
+			cbp:                        0,
+			payloadBits:                highFrameMBAFFFrameP16x16NoResidualPayloadBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "300f11e4238688ca463c2a0c93f7a868",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFFrameP16x16NoResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFFrameP16x16NoResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FrameP16x16LumaResidualDeblockMode2",
+			bitDepth:                   14,
+			fieldFlag:                  0,
+			cbp:                        1,
+			payloadBits:                highFrameMBAFFFrameP16x16LumaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaResidualTailBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "3c36dcd36227649291fc20835fa0322d",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFFrameP16x16LumaResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFFrameP16x16LumaResidualRawVideoMD5,
+		},
+		{
+			name:                       "High14FrameP16x16LumaChromaResidualDeblockMode2",
+			bitDepth:                   14,
+			fieldFlag:                  0,
+			cbp:                        33,
+			payloadBits:                highFrameMBAFFFrameP16x16LumaChromaResidualPayloadBits,
+			residualTailBits:           highFrameMBAFFP16x16LumaChromaResidualTailBits,
+			disableDeblockingFilterIDC: 2,
+			deblockMode:                2,
+			bitstreamMD5:               "66ac79f719abe37e2ab43108f4f313e6",
+			refFrameMD5:                high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:                  high14FrameMBAFFFrameP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:                high14FrameMBAFFFrameP16x16LumaChromaResidualRawVideoMD5,
 		},
 	}
 }
@@ -1988,6 +2505,19 @@ func highFrameMBAFFFrameP16x16LumaResidualFixture(bitDepth int) []byte {
 	return data
 }
 
+func highFrameMBAFFP16x16DeblockFixture(tt highFrameMBAFFP16x16DeblockCase) []byte {
+	var data []byte
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSPS), highFrameMBAFFInterSPSRBSP(tt.bitDepth)))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALPPS), highIntraPCMPPSRBSP(tt.bitDepth)))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALIDRSlice), highFrameMBAFFIntraPCMSliceRBSP(tt.bitDepth)))
+	if tt.pskip {
+		data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSlice), highFrameMBAFFPSkipNoResidualSliceRBSPWithDeblock(tt.disableDeblockingFilterIDC)))
+	} else {
+		data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSlice), highFrameMBAFFPInterSliceRBSPWithDeblock(tt.payloadBits, tt.disableDeblockingFilterIDC)))
+	}
+	return data
+}
+
 func highFrameMBAFFPartitionedPSparseResidualFixture(bitDepth int, payloadBits string) []byte {
 	var data []byte
 	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSPS), highFrameMBAFFInterSPSRBSP(bitDepth)))
@@ -2050,6 +2580,10 @@ func highFrameMBAFFInterSPSRBSP(bitDepth int) []byte {
 }
 
 func highFrameMBAFFPSkipNoResidualSliceRBSP() []byte {
+	return highFrameMBAFFPSkipNoResidualSliceRBSPWithDeblock(1)
+}
+
+func highFrameMBAFFPSkipNoResidualSliceRBSPWithDeblock(disableDeblockingFilterIDC uint32) []byte {
 	var b decoderSEIBitBuilder
 	b.writeUE(0)
 	b.writeUE(0)
@@ -2060,7 +2594,7 @@ func highFrameMBAFFPSkipNoResidualSliceRBSP() []byte {
 	b.writeBit(0)
 	b.writeBit(0)
 	b.writeSE(0)
-	b.writeUE(1)
+	writeHighCAVLCDeblockSyntax(&b, disableDeblockingFilterIDC)
 	b.writeUE(2)
 	return b.rbsp()
 }
@@ -2118,6 +2652,10 @@ func highFrameMBAFFPartitionedPLumaChromaResidualSliceRBSP(payloadBits string) [
 }
 
 func highFrameMBAFFPInterSliceRBSP(payloadBits string) []byte {
+	return highFrameMBAFFPInterSliceRBSPWithDeblock(payloadBits, 1)
+}
+
+func highFrameMBAFFPInterSliceRBSPWithDeblock(payloadBits string, disableDeblockingFilterIDC uint32) []byte {
 	var b decoderSEIBitBuilder
 	b.writeUE(0)
 	b.writeUE(0)
@@ -2128,7 +2666,7 @@ func highFrameMBAFFPInterSliceRBSP(payloadBits string) []byte {
 	b.writeBit(0)
 	b.writeBit(0)
 	b.writeSE(0)
-	b.writeUE(1)
+	writeHighCAVLCDeblockSyntax(&b, disableDeblockingFilterIDC)
 	highIntra16x16WritePayloadBits(&b, payloadBits)
 	return b.rbsp()
 }
@@ -2206,6 +2744,37 @@ func assertHighFrameMBAFFFrameP16x16LumaResidualFixtureSyntax(t *testing.T, data
 		if mb.skipRun != 0 || mb.mbType != 0 || mb.refIdxFlag != 0 || mb.cbp != 1 {
 			t.Fatalf("%s frame-coded P macroblock[%d] skip/mb_type/ref_idx_flag/cbp = %d/%d/%d/%d (code %d), want P16x16 luma residual",
 				tt.name, i, mb.skipRun, mb.mbType, mb.refIdxFlag, mb.cbp, mb.cbpCode)
+		}
+	}
+}
+
+func assertHighFrameMBAFFP16x16DeblockFixtureSyntax(t *testing.T, data []byte, tt highFrameMBAFFP16x16DeblockCase) {
+	t.Helper()
+	parseCase := highFrameMBAFFP16x16NoResidualCase{
+		name:         tt.name,
+		bitDepth:     tt.bitDepth,
+		bitstreamMD5: tt.bitstreamMD5,
+		refFrameMD5:  tt.refFrameMD5,
+		pFrameMD5:    tt.pFrameMD5,
+		rawVideoMD5:  tt.rawVideoMD5,
+	}
+	nals, spsList, ppsList := parseHighFrameMBAFFInterFixtureSyntaxWithDeblock(t, data, parseCase, tt.deblockMode)
+	if tt.pskip {
+		skipRun := readHighFrameMBAFFPSkipRun(t, nals[1], spsList[0], ppsList[0], tt.disableDeblockingFilterIDC)
+		if skipRun != 2 {
+			t.Fatalf("%s frame-MBAFF P-skip skip_run = %d, want macroblock-pair skip_run 2", tt.name, skipRun)
+		}
+		return
+	}
+
+	pair := readHighFrameMBAFFCAVLCP16x16PairWithDeblock(t, nals[1], spsList[0], ppsList[0], tt.residualTailBits, tt.disableDeblockingFilterIDC)
+	if pair.fieldFlag != tt.fieldFlag {
+		t.Fatalf("%s frame-MBAFF P16x16 pair field flag = %d, want %d", tt.name, pair.fieldFlag, tt.fieldFlag)
+	}
+	for i, mb := range []highFrameMBAFFCAVLCP16x16Macroblock{pair.top, pair.bottom} {
+		if mb.skipRun != 0 || mb.mbType != 0 || mb.refIdxFlag != tt.fieldFlag || mb.cbp != tt.cbp {
+			t.Fatalf("%s P16x16 deblock macroblock[%d] skip/mb_type/ref_idx_flag/cbp = %d/%d/%d/%d (code %d), want fieldFlag %d cbp %d",
+				tt.name, i, mb.skipRun, mb.mbType, mb.refIdxFlag, mb.cbp, mb.cbpCode, tt.fieldFlag, tt.cbp)
 		}
 	}
 }
@@ -2345,6 +2914,11 @@ func assertHighFrameMBAFFFrameCodedPLumaChromaResidualFixtureSyntax(t *testing.T
 
 func parseHighFrameMBAFFInterFixtureSyntax(t *testing.T, data []byte, tt highFrameMBAFFP16x16NoResidualCase) ([]h264.NALUnit, [32]*h264.SPS, [256]*h264.PPS) {
 	t.Helper()
+	return parseHighFrameMBAFFInterFixtureSyntaxWithDeblock(t, data, tt, 0)
+}
+
+func parseHighFrameMBAFFInterFixtureSyntaxWithDeblock(t *testing.T, data []byte, tt highFrameMBAFFP16x16NoResidualCase, wantDeblockMode int32) ([]h264.NALUnit, [32]*h264.SPS, [256]*h264.PPS) {
+	t.Helper()
 	nals, err := h264.SplitAnnexB(data)
 	if err != nil {
 		t.Fatal(err)
@@ -2387,10 +2961,14 @@ func parseHighFrameMBAFFInterFixtureSyntax(t *testing.T, data []byte, tt highFra
 			if err != nil {
 				t.Fatal(err)
 			}
-			if sh.PictureStructure != h264.PictureFrame || sh.DeblockingFilter != 0 ||
+			wantSliceDeblockMode := wantDeblockMode
+			if sh.SliceTypeNoS != h264.PictureTypeP {
+				wantSliceDeblockMode = 0
+			}
+			if sh.PictureStructure != h264.PictureFrame || sh.DeblockingFilter != wantSliceDeblockMode ||
 				sh.QScale != 26 || sh.SPS.MBAFF != 1 {
-				t.Fatalf("slice picture/deblock/qp/mbaff = %d/%d/%d/%d, want frame/disabled/26/1",
-					sh.PictureStructure, sh.DeblockingFilter, sh.QScale, sh.SPS.MBAFF)
+				t.Fatalf("slice picture/deblock/qp/mbaff = %d/%d/%d/%d, want frame/mode-%d/26/1",
+					sh.PictureStructure, sh.DeblockingFilter, sh.QScale, sh.SPS.MBAFF, wantSliceDeblockMode)
 			}
 			if sh.SliceTypeNoS == h264.PictureTypeP && (sh.ListCount != 1 || sh.RefCount[0] != 1) {
 				t.Fatalf("P slice lists/refs = %d/%v, want one L0 ref", sh.ListCount, sh.RefCount)
@@ -2446,6 +3024,11 @@ type highFrameMBAFFCAVLCPartitionedPPair struct {
 
 func readHighFrameMBAFFCAVLCP16x16Pair(t *testing.T, nal h264.NALUnit, sps *h264.SPS, pps *h264.PPS, residualTailBits string) highFrameMBAFFCAVLCP16x16Pair {
 	t.Helper()
+	return readHighFrameMBAFFCAVLCP16x16PairWithDeblock(t, nal, sps, pps, residualTailBits, 1)
+}
+
+func readHighFrameMBAFFCAVLCP16x16PairWithDeblock(t *testing.T, nal h264.NALUnit, sps *h264.SPS, pps *h264.PPS, residualTailBits string, disableDeblockingFilterIDC uint32) highFrameMBAFFCAVLCP16x16Pair {
+	t.Helper()
 	if sps == nil || pps == nil {
 		t.Fatal("missing SPS/PPS for frame-MBAFF P macroblock syntax check")
 	}
@@ -2483,8 +3066,16 @@ func readHighFrameMBAFFCAVLCP16x16Pair(t *testing.T, nal h264.NALUnit, sps *h264
 	br.readSE(t)
 	if pps.DeblockingFilterParametersPresent != 0 {
 		disableIDC := br.readUE(t)
+		if disableIDC != disableDeblockingFilterIDC {
+			t.Fatalf("disable_deblocking_filter_idc = %d, want %d", disableIDC, disableDeblockingFilterIDC)
+		}
 		if disableIDC != 1 {
-			t.Fatalf("disable_deblocking_filter_idc = %d, want 1", disableIDC)
+			if alphaOffset := br.readSE(t); alphaOffset != 0 {
+				t.Fatalf("slice_alpha_c0_offset_div2 = %d, want 0", alphaOffset)
+			}
+			if betaOffset := br.readSE(t); betaOffset != 0 {
+				t.Fatalf("slice_beta_offset_div2 = %d, want 0", betaOffset)
+			}
 		}
 	}
 
@@ -2499,6 +3090,59 @@ func readHighFrameMBAFFCAVLCP16x16Pair(t *testing.T, nal h264.NALUnit, sps *h264
 		top:       top,
 		bottom:    bottom,
 	}
+}
+
+func readHighFrameMBAFFPSkipRun(t *testing.T, nal h264.NALUnit, sps *h264.SPS, pps *h264.PPS, disableDeblockingFilterIDC uint32) uint32 {
+	t.Helper()
+	if sps == nil || pps == nil {
+		t.Fatal("missing SPS/PPS for frame-MBAFF P-skip syntax check")
+	}
+	br := high10ResidualCAVLCBitReader{data: nal.RBSP}
+	firstMB := br.readUE(t)
+	rawSliceType := br.readUE(t)
+	sliceTypeNoS := high10ResidualCAVLCSliceTypeNoS(t, rawSliceType)
+	ppsID := br.readUE(t)
+	if firstMB != 0 || sliceTypeNoS != h264.PictureTypeP || ppsID != pps.PPSID {
+		t.Fatalf("slice header first_mb/type/pps = %d/%d/%d, want first P-skip slice with PPS %d", firstMB, sliceTypeNoS, ppsID, pps.PPSID)
+	}
+	br.readBits(t, int(sps.Log2MaxFrameNum))
+	fieldPic := br.readBit(t)
+	if fieldPic != 0 {
+		t.Fatalf("field_pic_flag = %d, want frame picture", fieldPic)
+	}
+	if sps.PocType == 0 {
+		br.readBits(t, int(sps.Log2MaxPocLSB))
+		if pps.PicOrderPresent != 0 {
+			br.readSE(t)
+		}
+	}
+	if br.readBit(t) != 0 {
+		br.readUE(t)
+	}
+	high10ResidualCAVLCReadRefPicListModifications(t, &br, 1)
+	if pps.WeightedPred != 0 {
+		t.Fatal("fixture unexpectedly uses weighted P prediction")
+	}
+	high10ResidualCAVLCReadRefPicMarking(t, &br, nal)
+	if pps.CABAC != 0 {
+		br.readUE(t)
+	}
+	br.readSE(t)
+	if pps.DeblockingFilterParametersPresent != 0 {
+		disableIDC := br.readUE(t)
+		if disableIDC != disableDeblockingFilterIDC {
+			t.Fatalf("disable_deblocking_filter_idc = %d, want %d", disableIDC, disableDeblockingFilterIDC)
+		}
+		if disableIDC != 1 {
+			if alphaOffset := br.readSE(t); alphaOffset != 0 {
+				t.Fatalf("slice_alpha_c0_offset_div2 = %d, want 0", alphaOffset)
+			}
+			if betaOffset := br.readSE(t); betaOffset != 0 {
+				t.Fatalf("slice_beta_offset_div2 = %d, want 0", betaOffset)
+			}
+		}
+	}
+	return br.readUE(t)
 }
 
 func h264MBAFFRefCountForSyntax(refCount uint32, fieldFlag uint32) uint32 {
@@ -2704,6 +3348,18 @@ func assertHighFrameMBAFFFrameCodedPLumaChromaResidualFrames(t *testing.T, frame
 }
 
 func assertHighFrameMBAFFPartitionedPSparseResidualFrames(t *testing.T, frames []*Frame, tt highFrameMBAFFPartitionedPSparseResidualCase) {
+	t.Helper()
+	assertHighFrameMBAFFP16x16NoResidualFrames(t, frames, highFrameMBAFFP16x16NoResidualCase{
+		name:         tt.name,
+		bitDepth:     tt.bitDepth,
+		bitstreamMD5: tt.bitstreamMD5,
+		refFrameMD5:  tt.refFrameMD5,
+		pFrameMD5:    tt.pFrameMD5,
+		rawVideoMD5:  tt.rawVideoMD5,
+	})
+}
+
+func assertHighFrameMBAFFP16x16DeblockFrames(t *testing.T, frames []*Frame, tt highFrameMBAFFP16x16DeblockCase) {
 	t.Helper()
 	assertHighFrameMBAFFP16x16NoResidualFrames(t, frames, highFrameMBAFFP16x16NoResidualCase{
 		name:         tt.name,
