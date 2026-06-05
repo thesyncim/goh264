@@ -544,6 +544,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 			!isHigh14ChromaUnweightedDeblockScope(sh) &&
 			!isHigh14ChromaWeightedPDeblockScope(sh) &&
 			!isHigh10ChromaWeightedPSliceBoundaryDeblockScope(sh) &&
+			!isHigh9ChromaUnweightedBSliceBoundaryDeblockScope(sh) &&
 			!isHigh9ChromaImplicitWeightedBSliceBoundaryDeblockScope(sh) &&
 			!isHigh9ChromaExplicitWeightedBDeblockScope(sh) &&
 			!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) {
@@ -618,6 +619,7 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 		return sh.SPS.ChromaFormatIDC == 1 ||
 			isHighChromaFrameDeblockScope(sh) ||
 			isHighChromaSliceBoundaryDeblockScope(sh) ||
+			isHigh9ChromaUnweightedBSliceBoundaryDeblockScope(sh) ||
 			isHigh9ChromaImplicitWeightedBSliceBoundaryDeblockScope(sh) ||
 			isHigh9ChromaExplicitWeightedBDeblockScope(sh)
 	case 10:
@@ -1149,6 +1151,21 @@ func isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh *SliceHeader) bool {
 	}
 }
 
+func isHigh9ChromaUnweightedBSliceBoundaryDeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil {
+		return false
+	}
+	if sh.PictureStructure != PictureFrame ||
+		sh.SPS.BitDepthLuma != 9 ||
+		(sh.SPS.ChromaFormatIDC != 2 && sh.SPS.ChromaFormatIDC != 3) ||
+		sh.SliceTypeNoS != PictureTypeB ||
+		sh.DeblockingFilter != 2 ||
+		sh.PPS.WeightedBipredIDC != 0 {
+		return false
+	}
+	return sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0
+}
+
 func isHigh9ChromaImplicitWeightedBSliceBoundaryDeblockScope(sh *SliceHeader) bool {
 	if sh == nil || sh.SPS == nil || sh.PPS == nil {
 		return false
@@ -1288,6 +1305,7 @@ func validateHighFrameSliceDeblockingScope(sh *SliceHeader) error {
 		if sh.SliceTypeNoS == PictureTypeB &&
 			!isHigh12Or14Frame420BSliceBoundaryDeblockScope(sh) &&
 			!isHigh1214ChromaFieldWeightedBDeblockScope(sh) &&
+			!isHigh9ChromaUnweightedBSliceBoundaryDeblockScope(sh) &&
 			!isHigh9ChromaImplicitWeightedBSliceBoundaryDeblockScope(sh) &&
 			!isHigh9ChromaExplicitWeightedBDeblockScope(sh) &&
 			!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) &&
@@ -1330,6 +1348,7 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32,
 	if sh.DeblockingFilter == 1 ||
 		isHigh12Or14Frame420BSliceBoundaryDeblockScope(sh) ||
 		isHigh1214ChromaFieldWeightedBDeblockScope(sh) ||
+		isHigh9ChromaUnweightedBSliceBoundaryDeblockScope(sh) ||
 		isHigh9ChromaImplicitWeightedBSliceBoundaryDeblockScope(sh) ||
 		isHigh9ChromaExplicitWeightedBDeblockScope(sh) ||
 		isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) ||
