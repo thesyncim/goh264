@@ -235,6 +235,46 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Chroma422UnweightedFieldI
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaFieldUnweightedBBoundary(t *testing.T) {
+	for _, chroma := range []struct {
+		name string
+		idc  int
+	}{
+		{name: "422", idc: 2},
+		{name: "444", idc: 3},
+	} {
+		for _, picture := range []struct {
+			name      string
+			structure int32
+		}{
+			{name: "top", structure: PictureTopField},
+			{name: "bottom", structure: PictureBottomField},
+		} {
+			for _, cabac := range []bool{false, true} {
+				entropy := "cavlc"
+				if cabac {
+					entropy = "cabac"
+				}
+				t.Run(fmt.Sprintf("%s/%s/%s/mode2", chroma.name, picture.name, entropy), func(t *testing.T) {
+					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chroma.idc, 2, true, PictureTypeB)
+					sh.SPS.FrameMBSOnlyFlag = 0
+					sh.SPS.MBAFF = 1
+					sh.PictureStructure = picture.structure
+					sh.DeblockingFilter = 2
+					sh.RefCount = [2]uint32{1, 1}
+					if cabac {
+						sh.PPS.CABAC = 1
+					}
+
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high10 chroma unweighted field B boundary validation err = %v, want nil", err)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Chroma422FieldExplicitWeightedB(t *testing.T) {
 	weights := []struct {
 		name            string
@@ -452,8 +492,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedHigh10FieldPictures(t 
 		run         func(*SliceHeader)
 	}{
 		{name: "420/I", chroma: 1, sliceType: PictureTypeI},
-		{name: "422/slice-boundary-unweighted-B", chroma: 2, sliceType: PictureTypeB, deblockMode: 2},
-		{name: "444/slice-boundary-unweighted-B", chroma: 3, sliceType: PictureTypeB, deblockMode: 2},
 		{name: "444/unnormalized-chroma-only-weighted-P", chroma: 3, sliceType: PictureTypeP, run: func(sh *SliceHeader) {
 			sh.PPS.WeightedPred = 1
 			sh.PredWeightTable = highSourceChromaOnlyWeightedPPredWeightTable(3)
