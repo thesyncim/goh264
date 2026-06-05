@@ -82,17 +82,19 @@ recovery-point SEI Annex B/AVC NAL surfaces are generated and parser-proved.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
 Annex B, AVC, and RTP packetization-mode 1, including FU-A fragmentation and
 STAP-A parameter-set aggregation, payload-type/SSRC/sequence metadata, full RTP
-packet headers, and marker-bit boundaries. Identical frames after a decoded
-reference can use a guarded CAVLC P-skip slice when deblocking is disabled;
-changed frames can use a guarded CAVLC P IntraPCM slice in the same admitted
-path with recovery-point SEI emission when enabled, while forced keyframe
-requests still emit IDR. Internal writer primitives
+packet headers, marker-bit boundaries, and optional RTP packet callbacks with
+packet index/count, frame timing, payload form, NAL type/count, FU-A start/end,
+and parameter-set metadata. Identical frames after a decoded reference can use
+a guarded CAVLC P-skip slice when deblocking is disabled; changed frames can
+use a guarded CAVLC P IntraPCM slice in the same admitted path with
+recovery-point SEI emission when enabled, while forced keyframe requests still
+emit IDR. Internal writer primitives
 cover raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR, P-skip, and P IntraPCM slice payloads. Motion-search P
-prediction, residual CAVLC coding, rate-control feedback, RTP callback metadata, and
-realtime allocation/performance evidence remain pending.
+prediction, residual CAVLC coding, rate-control feedback, and realtime
+allocation/performance evidence remain pending.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
@@ -259,6 +261,9 @@ if err != nil {
 }
 enc.HandlePLI() // queues the next frame as an IDR request
 err = enc.SetRTPMaxPayloadSize(1200)
+enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+	// Optional per-packet WebRTC metadata hook.
+})
 headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
 out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P IntraPCM
@@ -268,9 +273,9 @@ out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P IntraPCM
 then emit the admitted IDR IntraPCM, identical-reference P-skip, or
 changed-frame P IntraPCM frame path. Changed-frame P IntraPCM recovery pictures
 carry recovery-point SEI when enabled. RTP output includes payloads plus
-complete RTP packet bytes. Motion-search inter prediction, quantized residual
-coding, rate-control decisions, and RTP callback metadata are still future
-encoder slices.
+complete RTP packet bytes and optional per-packet callback metadata. Motion-search
+inter prediction, quantized residual coding, and rate-control decisions are
+still future encoder slices.
 
 ## Supported Inputs
 

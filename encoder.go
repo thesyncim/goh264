@@ -195,6 +195,34 @@ type EncoderRTPPacket struct {
 	Marker         bool
 }
 
+type EncoderRTPPayloadFormat uint8
+
+const (
+	EncoderRTPPayloadSingleNAL EncoderRTPPayloadFormat = iota + 1
+	EncoderRTPPayloadSTAPA
+	EncoderRTPPayloadFUA
+)
+
+type EncoderRTPPacketMetadata struct {
+	PacketIndex int
+	PacketCount int
+
+	FramePTS int64
+	FrameDTS int64
+	RTPTime  uint32
+	KeyFrame bool
+	IDR      bool
+
+	PayloadFormat EncoderRTPPayloadFormat
+	NALUnitType   uint8
+	NALUnitCount  int
+	StartOfNAL    bool
+	EndOfNAL      bool
+	ParameterSet  bool
+}
+
+type EncoderRTPPacketCallback func(packet EncoderRTPPacket, metadata EncoderRTPPacketMetadata)
+
 type EncodedFrame struct {
 	Data       []byte
 	NALUnits   []EncoderNALUnit
@@ -243,6 +271,7 @@ type Encoder struct {
 	rtpSequenceNumber uint16
 	reference         encoderReferenceFrame
 	framesSinceIDR    int
+	rtpPacketCallback EncoderRTPPacketCallback
 }
 
 func DefaultEncoderConfig(width, height int) EncoderConfig {
@@ -469,6 +498,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			return EncodedFrame{}, err
 		}
 		e.stampRTPPackets(packets)
+		e.notifyRTPPacketCallback(packets, frame, rtpTime, idr, idr)
 	}
 
 	e.storeReference(view)
@@ -553,6 +583,12 @@ func (e *Encoder) SetRTPMaxPayloadSize(size int) error {
 	}
 	e.cfg = normalized
 	return nil
+}
+
+func (e *Encoder) SetRTPPacketCallback(callback EncoderRTPPacketCallback) {
+	if e != nil {
+		e.rtpPacketCallback = callback
+	}
 }
 
 func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
@@ -889,6 +925,93 @@ func appendEncoderRTPPacket(dst []byte, pkt EncoderRTPPacket) []byte {
 		byte(pkt.SSRC>>24), byte(pkt.SSRC>>16), byte(pkt.SSRC>>8), byte(pkt.SSRC),
 	)
 	return append(dst, pkt.Payload...)
+}
+
+func (e *Encoder) notifyRTPPacketCallback(packets []EncoderRTPPacket, frame EncoderFrame, rtpTime uint32, keyFrame bool, idr bool) {
+	callback := e.rtpPacketCallback
+	if callback == nil {
+		return
+	}
+	for i, pkt := range packets {
+		meta := encoderRTPPacketMetadataFromPayload(pkt.Payload)
+		meta.PacketIndex = i
+		meta.PacketCount = len(packets)
+		meta.FramePTS = frame.PTS
+		meta.FrameDTS = frame.PTS
+		meta.RTPTime = rtpTime
+		meta.KeyFrame = keyFrame
+		meta.IDR = idr
+		callback(cloneEncoderRTPPacket(pkt), meta)
+	}
+}
+
+func cloneEncoderRTPPacket(pkt EncoderRTPPacket) EncoderRTPPacket {
+	pkt.Data = append([]byte(nil), pkt.Data...)
+	pkt.Payload = append([]byte(nil), pkt.Payload...)
+	return pkt
+}
+
+func encoderRTPPacketMetadataFromPayload(payload []byte) EncoderRTPPacketMetadata {
+	if len(payload) == 0 {
+		return EncoderRTPPacketMetadata{}
+	}
+	typ := payload[0] & 0x1f
+	switch typ {
+	case 24:
+		count, parameterSet := encoderRTPSTAPAMetadata(payload)
+		return EncoderRTPPacketMetadata{
+			PayloadFormat: EncoderRTPPayloadSTAPA,
+			NALUnitType:   24,
+			NALUnitCount:  count,
+			ParameterSet:  parameterSet,
+		}
+	case 28:
+		meta := EncoderRTPPacketMetadata{
+			PayloadFormat: EncoderRTPPayloadFUA,
+			NALUnitCount:  1,
+		}
+		if len(payload) >= 2 {
+			meta.NALUnitType = payload[1] & 0x1f
+			meta.StartOfNAL = payload[1]&0x80 != 0
+			meta.EndOfNAL = payload[1]&0x40 != 0
+			meta.ParameterSet = encoderRTPNALTypeIsParameterSet(meta.NALUnitType)
+		}
+		return meta
+	default:
+		return EncoderRTPPacketMetadata{
+			PayloadFormat: EncoderRTPPayloadSingleNAL,
+			NALUnitType:   typ,
+			NALUnitCount:  1,
+			StartOfNAL:    true,
+			EndOfNAL:      true,
+			ParameterSet:  encoderRTPNALTypeIsParameterSet(typ),
+		}
+	}
+}
+
+func encoderRTPSTAPAMetadata(payload []byte) (int, bool) {
+	count := 0
+	parameterSet := true
+	for pos := 1; pos < len(payload); {
+		if pos+2 > len(payload) {
+			return count, false
+		}
+		size := int(payload[pos])<<8 | int(payload[pos+1])
+		pos += 2
+		if size <= 0 || pos+size > len(payload) {
+			return count, false
+		}
+		if !encoderRTPNALTypeIsParameterSet(payload[pos] & 0x1f) {
+			parameterSet = false
+		}
+		count++
+		pos += size
+	}
+	return count, count != 0 && parameterSet
+}
+
+func encoderRTPNALTypeIsParameterSet(typ uint8) bool {
+	return typ == uint8(h264.NALSPS) || typ == uint8(h264.NALPPS)
 }
 
 func buildEncoderSTAPA(nals []encoderRawNAL, maxPayloadSize int) ([]byte, int, error) {

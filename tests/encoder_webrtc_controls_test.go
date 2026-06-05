@@ -839,6 +839,128 @@ func TestEncoderEncodeRTPPacketsCarryFullRTPHeaders(t *testing.T) {
 	}
 }
 
+func TestEncoderRTPPacketCallbackReceivesWebRTCMetadata(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPayloadType = 104
+	cfg.RTPSSRC = 0x01020304
+	cfg.RTPMaxPayloadSize = 128
+	cfg.STAPA = true
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackPackets []goh264.EncoderRTPPacket
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackPackets = append(callbackPackets, pkt)
+		callbackMetadata = append(callbackMetadata, meta)
+		if len(pkt.Payload) != 0 {
+			pkt.Payload[0] ^= 0xff
+		}
+		if len(pkt.Data) != 0 {
+			pkt.Data[0] ^= 0xff
+		}
+	})
+
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 0x010203
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode RTP with callback: %v", err)
+	}
+	if len(callbackPackets) != len(out.RTPPackets) || len(callbackMetadata) != len(out.RTPPackets) {
+		t.Fatalf("callback packets/meta = %d/%d, want RTP packet count %d",
+			len(callbackPackets), len(callbackMetadata), len(out.RTPPackets))
+	}
+	if len(out.RTPPackets) < 3 {
+		t.Fatalf("RTP packet count = %d, want STAP-A plus FU-A fragments", len(out.RTPPackets))
+	}
+	if callbackPackets[0].Payload[0] == out.RTPPackets[0].Payload[0] ||
+		callbackPackets[0].Data[0] == out.RTPPackets[0].Data[0] {
+		t.Fatal("callback packet aliases returned RTP packet storage")
+	}
+
+	var sawSTAPA, sawFUAStart, sawFUAEnd bool
+	for i, meta := range callbackMetadata {
+		pkt := callbackPackets[i]
+		if meta.PacketIndex != i || meta.PacketCount != len(out.RTPPackets) {
+			t.Fatalf("callback meta[%d] index/count = %d/%d, want %d/%d",
+				i, meta.PacketIndex, meta.PacketCount, i, len(out.RTPPackets))
+		}
+		if meta.FramePTS != frame.PTS || meta.FrameDTS != frame.PTS ||
+			meta.RTPTime != uint32(frame.PTS) || !meta.KeyFrame || !meta.IDR {
+			t.Fatalf("callback meta[%d] frame fields = %+v, want IDR frame PTS/RTP metadata", i, meta)
+		}
+		if pkt.SequenceNumber != out.RTPPackets[i].SequenceNumber ||
+			pkt.Timestamp != out.RTPPackets[i].Timestamp ||
+			pkt.PayloadType != cfg.RTPPayloadType ||
+			pkt.SSRC != cfg.RTPSSRC ||
+			pkt.Marker != (i == len(out.RTPPackets)-1) {
+			t.Fatalf("callback packet[%d] metadata = %+v, want returned RTP packet fields", i, pkt)
+		}
+		switch meta.PayloadFormat {
+		case goh264.EncoderRTPPayloadSTAPA:
+			if meta.NALUnitType != 24 || meta.NALUnitCount != 2 || !meta.ParameterSet ||
+				meta.StartOfNAL || meta.EndOfNAL {
+				t.Fatalf("STAP-A callback metadata = %+v, want SPS/PPS aggregate", meta)
+			}
+			sawSTAPA = true
+		case goh264.EncoderRTPPayloadFUA:
+			if meta.NALUnitType != 5 || meta.NALUnitCount != 1 || meta.ParameterSet {
+				t.Fatalf("FU-A callback metadata = %+v, want fragmented IDR NAL", meta)
+			}
+			sawFUAStart = sawFUAStart || meta.StartOfNAL
+			sawFUAEnd = sawFUAEnd || meta.EndOfNAL
+		default:
+			t.Fatalf("callback payload format = %v, want STAP-A or FU-A for this access unit", meta.PayloadFormat)
+		}
+	}
+	if !sawSTAPA || !sawFUAStart || !sawFUAEnd {
+		t.Fatalf("callback saw STAP-A/start/end = %v/%v/%v, want all true",
+			sawSTAPA, sawFUAStart, sawFUAEnd)
+	}
+}
+
+func TestEncoderRTPPacketCallbackCanBeClearedAndSkipsNonRTPOutput(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder Annex B: %v", err)
+	}
+	var calls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		calls++
+	})
+	if _, err := enc.Encode(patternedI420EncoderFrame(16, 16)); err != nil {
+		t.Fatalf("Encode Annex B with callback: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("Annex B callback calls = %d, want 0", calls)
+	}
+
+	cfg = goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err = goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder RTP: %v", err)
+	}
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		calls++
+	})
+	enc.SetRTPPacketCallback(nil)
+	if _, err := enc.Encode(patternedI420EncoderFrame(16, 16)); err != nil {
+		t.Fatalf("Encode RTP after clearing callback: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("cleared callback calls = %d, want 0", calls)
+	}
+}
+
 func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {
@@ -886,7 +1008,8 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	encType := reflect.TypeOf(&goh264.Encoder{})
 	for _, method := range []string{
 		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
-		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize", "Reconfigure",
+		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize",
+		"SetRTPPacketCallback", "Reconfigure",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
 			t.Fatalf("Encoder missing runtime control method %s", method)

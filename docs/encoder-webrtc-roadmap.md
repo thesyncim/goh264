@@ -63,8 +63,11 @@ and RTP packetization-mode 1 reassembly. Tests prove local raw-frame decode,
 FFmpeg rawvideo decode, recovery-point side data, RTP FU-A reassembly, STAP-A
 parameter-set aggregation, payload-type, SSRC, and sequence-number packet
 metadata. RTP packets also carry complete 12-byte RTP headers plus payload
-bytes. Queued IDR requests still emit
-IDR, and motion-search prediction plus residual coding remain pending.
+bytes, and `SetRTPPacketCallback` reports callback-style packet metadata for
+packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
+single-NAL payload form, NAL type/count, FU-A start/end, and parameter-set
+packets. Queued IDR requests still emit IDR, and motion-search prediction plus
+residual coding remain pending.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -100,8 +103,8 @@ P-slice `mb_type=30` macroblocks.
 5. In progress: add RTP packetization and WebRTC control handling with
    packet-level tests. Done for packetization-mode 1 single NAL/FU-A output and
    STAP-A parameter-set aggregation with marker-bit boundaries plus
-   payload-type, SSRC, sequence-number packet metadata, and complete RTP header
-   bytes; callback-style packet metadata remains pending.
+   payload-type, SSRC, sequence-number packet metadata, complete RTP header
+   bytes, and callback-style packet metadata.
 6. Add realtime allocation budgets, encode timing benchmarks, and control-loop
    stress tests.
 
