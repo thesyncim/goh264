@@ -81,6 +81,19 @@ func TestSplitAutoPacket(t *testing.T) {
 		t.Fatalf("annexb format/nals = %d/%v", format, nals)
 	}
 
+	shortLeadingAnnexB := []byte{
+		0x00, 0x00, 0x00, 0x01, 0x67,
+		0x00, 0x00, 0x00, 0x01, 0x68,
+		0x00, 0x00, 0x00, 0x01, 0x65, 0x88,
+	}
+	nals, format, err = SplitAutoPacket(shortLeadingAnnexB, 4)
+	if err != nil {
+		t.Fatalf("short-leading annexb configured length4: %v", err)
+	}
+	if format != H264PacketFormatAnnexB || len(nals) != 3 || nals[0].Type != NALSPS || nals[1].Type != NALPPS || nals[2].Type != NALIDRSlice {
+		t.Fatalf("short-leading annexb format/nals = %d/%v", format, nals)
+	}
+
 	nals, format, err = SplitAutoPacket(avc, 4)
 	if err != nil {
 		t.Fatalf("avc configured length4: %v", err)

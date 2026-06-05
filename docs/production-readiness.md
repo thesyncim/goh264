@@ -105,7 +105,9 @@ truncated VCL packet must return an error without preventing the next valid
 packet from matching the raw-MD5 oracle. Packet `NEW_EXTRADATA` recovery also
 guards malformed AVC and Annex B extradata: the bad side-data packet returns an
 error and the next packet still decodes against the last good configuration and
-reference state.
+reference state. In-band malformed SPS/PPS NALs are also guarded as non-fatal:
+they do not replace the last good parameter sets before the next valid slice on
+configured AVC or mixed configured-AVC/Annex B public decode paths.
 
 Encoder readiness evidence currently covers controls only:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,

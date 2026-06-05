@@ -296,6 +296,10 @@ func SplitAutoPacket(data []byte, configuredNALLengthSize int) ([]NALUnit, H264P
 	}
 	if configuredNALLengthSize >= 1 {
 		nals, err := SplitAVCC(data, configuredNALLengthSize)
+		if err != nil && looksAnnexB(data) {
+			nals, err = SplitAnnexB(data)
+			return nals, H264PacketFormatAnnexB, err
+		}
 		return nals, H264PacketFormatAVC, err
 	}
 	if looksAnnexB(data) {

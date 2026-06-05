@@ -87,6 +87,8 @@ bounded public decode/packet no-panic fuzz smoke,
 stateful valid-damaged-valid packet recovery guards across configured AVC,
 AVC configuration-record, packet `NEW_EXTRADATA`, and auto Annex B surfaces,
 malformed AVC/Annex B `NEW_EXTRADATA` recovery guards,
+malformed in-band SPS/PPS recovery across configured AVC and mixed
+configured-AVC/Annex B public decode surfaces,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
 Realtime/WebRTC encoder proof currently covers control admission only: default

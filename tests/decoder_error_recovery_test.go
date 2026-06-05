@@ -161,6 +161,62 @@ func TestDecodePacketFramesAnnexBRecoversAfterDamagedNewExtradata(t *testing.T) 
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeFramesAnnexBRecoversAfterMalformedInBandParameterSets(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if frames, err := dec.DecodeFrames(config); err != nil || len(frames) != 0 {
+		t.Fatalf("config frames=%d err=%v", len(frames), err)
+	}
+
+	first := avcSampleToAnnexB(t, samples[0], 4)
+	second := avcSampleToAnnexB(t, samples[1], 4)
+	frames, err := dec.DecodeFrames(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	packet := malformedInBandParameterSetsAnnexB()
+	packet = append(packet, second...)
+	frames, err = dec.DecodeFrames(packet)
+	if err != nil {
+		t.Fatalf("decode after malformed in-band parameter sets: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodeConfiguredAVCFramesRecoversAfterMalformedInBandParameterSets(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	sample := malformedInBandParameterSetsAVC(t, 4)
+	sample = append(sample, samples[1]...)
+	frames, err = dec.DecodeConfiguredAVCFrames(sample)
+	if err != nil {
+		t.Fatalf("decode after malformed in-band parameter sets: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeFramesAnnexBRecoversAfterDamagedSlicePacket(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -265,6 +321,21 @@ func truncateFirstParameterSetAnnexB(t *testing.T, data []byte) []byte {
 	if !truncated {
 		t.Fatal("no parameter-set NAL found")
 	}
+	return out
+}
+
+func malformedInBandParameterSetsAnnexB() []byte {
+	var out []byte
+	out = appendAnnexBNAL(out, []byte{0x60 | byte(h264.NALSPS)})
+	out = appendAnnexBNAL(out, []byte{0x60 | byte(h264.NALPPS)})
+	return out
+}
+
+func malformedInBandParameterSetsAVC(t *testing.T, nalLengthSize int) []byte {
+	t.Helper()
+	var out []byte
+	out = appendAVCNALUnit(t, out, []byte{0x60 | byte(h264.NALSPS)}, nalLengthSize)
+	out = appendAVCNALUnit(t, out, []byte{0x60 | byte(h264.NALPPS)}, nalLengthSize)
 	return out
 }
 
