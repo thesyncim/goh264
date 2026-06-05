@@ -47,6 +47,9 @@ func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
 	if got.RTPTimestampIncrement != 3000 {
 		t.Fatalf("RTP timestamp increment = %d, want 3000 for 30fps/90kHz", got.RTPTimestampIncrement)
 	}
+	if !got.RecoveryPointSEI {
+		t.Fatal("default WebRTC encoder config should emit recovery-point SEI on recovery pictures")
+	}
 }
 
 func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
@@ -132,6 +135,7 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 	}
 
 	noParameterSetsBeforeIDR := false
+	noRecoveryPointSEI := false
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
 		TargetBitrate:     800_000,
 		MaxBitrate:        900_000,
@@ -145,6 +149,7 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		Preset:            goh264.EncoderPresetBalanced,
 		ForceIDR:          true,
 		SPSPPSBeforeIDR:   &noParameterSetsBeforeIDR,
+		RecoveryPointSEI:  &noRecoveryPointSEI,
 	}); err != nil {
 		t.Fatalf("Reconfigure valid: %v", err)
 	}
@@ -156,7 +161,8 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		got.MaxFrameSize != 80_000 ||
 		got.MaxEncodeTimeUS != 5_000 ||
 		got.Preset != goh264.EncoderPresetBalanced ||
-		got.SPSPPSBeforeIDR {
+		got.SPSPPSBeforeIDR ||
+		got.RecoveryPointSEI {
 		t.Fatalf("reconfigured encoder = %+v, want realtime update applied", got)
 	}
 	if !enc.PendingIDR() {
@@ -252,6 +258,97 @@ func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 	}
 }
 
+func TestEncoderRecoveryPointSEIExposesWebRTCRecoverySignal(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	sei, err := enc.RecoveryPointSEI(0)
+	if err != nil {
+		t.Fatalf("RecoveryPointSEI: %v", err)
+	}
+	if len(sei.NAL) == 0 || sei.NAL[0]&0x1f != 6 {
+		t.Fatalf("SEI NAL = %x, want type 6", sei.NAL)
+	}
+	if !bytes.Contains(sei.AnnexB, sei.NAL) || !bytes.Contains(sei.AVC, sei.NAL) {
+		t.Fatalf("SEI packet surfaces do not contain raw NAL: annexb=%x avc=%x nal=%x", sei.AnnexB, sei.AVC, sei.NAL)
+	}
+	sei.NAL[0] = 0
+	again, err := enc.RecoveryPointSEI(0)
+	if err != nil {
+		t.Fatalf("RecoveryPointSEI after caller mutation: %v", err)
+	}
+	if len(again.NAL) == 0 || again.NAL[0]&0x1f != 6 {
+		t.Fatalf("SEI NAL aliases caller mutation: %x", again.NAL)
+	}
+	sei = again
+
+	annexB := insertAnnexBNALBeforeVCL(t, decodeHexFixture(t, black16IPAnnexBHex), sei.NAL, 1)
+	frames, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames: %v", err)
+	}
+	if len(frames) != 2 || !frames[0].KeyFrame || !frames[1].KeyFrame {
+		t.Fatalf("Annex B keyframes = len %d %v", len(frames), frameKeyFlags(frames))
+	}
+	if frames[1].SideData.RecoveryPoint == nil || frames[1].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("Annex B recovery point = %+v", frames[1].SideData.RecoveryPoint)
+	}
+
+	config, samples := annexBToAVCConfigAndSamples(t, decodeHexFixture(t, black16IPAnnexBHex), 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	samples[1] = append(append([]byte(nil), sei.AVC...), samples[1]...)
+	avcDec := goh264.NewDecoder()
+	if _, err := avcDec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+	first, err := avcDec.DecodeConfiguredAVC(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVC first: %v", err)
+	}
+	second, err := avcDec.DecodeConfiguredAVC(samples[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVC second: %v", err)
+	}
+	if !first.KeyFrame || !second.KeyFrame ||
+		second.SideData.RecoveryPoint == nil ||
+		second.SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("AVC recovery frames key=%t/%t side=%+v", first.KeyFrame, second.KeyFrame, second.SideData.RecoveryPoint)
+	}
+
+	delayed, err := enc.RecoveryPointSEI(4)
+	if err != nil {
+		t.Fatalf("RecoveryPointSEI nonzero: %v", err)
+	}
+	samples[1] = append(append([]byte(nil), delayed.AVC...), samples[1][len(sei.AVC):]...)
+	avcDec = goh264.NewDecoder()
+	if _, err := avcDec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord delayed: %v", err)
+	}
+	if _, err := avcDec.DecodeConfiguredAVC(samples[0]); err != nil {
+		t.Fatalf("DecodeConfiguredAVC delayed first: %v", err)
+	}
+	second, err = avcDec.DecodeConfiguredAVC(samples[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVC delayed second: %v", err)
+	}
+	if second.KeyFrame || second.SideData.RecoveryPoint == nil || second.SideData.RecoveryPoint.RecoveryFrameCount != 4 {
+		t.Fatalf("delayed recovery frame key=%t side=%+v, want non-key recovery count 4", second.KeyFrame, second.SideData.RecoveryPoint)
+	}
+}
+
+func TestEncoderRecoveryPointSEIRejectsInvalidFrameCount(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	if _, err := enc.RecoveryPointSEI(1 << 16); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("RecoveryPointSEI invalid error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestEncoderEncodeIntoValidatesFrameBeforeUnsupportedBitstream(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {
@@ -299,12 +396,20 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	encType := reflect.TypeOf(&goh264.Encoder{})
 	for _, method := range []string{
 		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
-		"PendingIDR", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize", "Reconfigure",
+		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize", "Reconfigure",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
 			t.Fatalf("Encoder missing runtime control method %s", method)
 		}
 	}
+}
+
+func frameKeyFlags(frames []*goh264.Frame) []bool {
+	out := make([]bool, len(frames))
+	for i, frame := range frames {
+		out[i] = frame.KeyFrame
+	}
+	return out
 }
 
 func validI420EncoderFrame(width, height int) goh264.EncoderFrame {

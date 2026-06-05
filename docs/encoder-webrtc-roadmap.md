@@ -50,8 +50,11 @@ constrained-baseline realtime/WebRTC configs can be constructed, invalid
 controls are rejected, and runtime bitrate, framerate, payload-size, PLI/FIR,
 force-IDR, and partial reconfiguration controls are tested. `ParameterSets`
 generates SPS/PPS NALs, Annex B sequence headers, and avcC records accepted by
-the decoder parsers. `Encode` and `EncodeInto` validate frame shape but still
-return `ErrUnsupported` for frame bitstream generation.
+the decoder parsers. `RecoveryPointSEI` generates Annex B and AVC recovery-point
+SEI NAL surfaces and is proved by injecting the encoder output before a P-frame
+and checking the public decoder recovery side data. `Encode` and `EncodeInto`
+validate frame shape but still return `ErrUnsupported` for frame bitstream
+generation.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -60,7 +63,9 @@ NAL packaging, and AVC decoder configuration records. The writer round-trips
 through the existing decoder readers/parsers in `internal/h264/bitwriter_test.go`.
 `internal/h264/encoder_headers.go` adds baseline SPS/PPS syntax writers in the
 same source-shaped style and round-trips through `DecodeSPS`, `DecodePPS`,
-`SplitAnnexB`, and the avcC parser.
+`SplitAnnexB`, and the avcC parser. `internal/h264/encoder_sei.go` adds the
+FFmpeg CBS-shaped recovery-point SEI writer, including extended SEI header
+encoding and Annex B/AVC parser round trips.
 
 ## Implementation Order
 
@@ -68,7 +73,8 @@ same source-shaped style and round-trips through `DecodeSPS`, `DecodePPS`,
    that reject invalid WebRTC configurations.
 2. In progress: add bitstream writer primitives. Done for raw NAL/RBSP,
    Exp-Golomb, Annex B/AVC packaging, AVC configuration records, and baseline
-   SPS/PPS syntax; next are SEI and slice-header syntax writers.
+   SPS/PPS plus recovery-point SEI syntax; next are slice-header syntax and
+   the first IDR slice payload path.
 3. Add an intra-only IDR path for I420 input and prove that local decode and
    FFmpeg decode produce matching raw frames.
 4. Add P-frame prediction, reference management, CAVLC residual coding, deblock

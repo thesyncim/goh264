@@ -208,6 +208,12 @@ type EncoderParameterSets struct {
 	AVCDecoderConfigurationRecord []byte
 }
 
+type EncoderSEI struct {
+	NAL    []byte
+	AnnexB []byte
+	AVC    []byte
+}
+
 type EncoderReconfigure struct {
 	TargetBitrate     int
 	MaxBitrate        int
@@ -221,6 +227,7 @@ type EncoderReconfigure struct {
 	Preset            EncoderPreset
 	ForceIDR          bool
 	SPSPPSBeforeIDR   *bool
+	RecoveryPointSEI  *bool
 }
 
 type Encoder struct {
@@ -263,6 +270,7 @@ func DefaultEncoderConfig(width, height int) EncoderConfig {
 		GOPSize:               60,
 		IDRInterval:           60,
 		SPSPPSBeforeIDR:       true,
+		RecoveryPointSEI:      true,
 		OutputFormat:          EncoderOutputRTP,
 		RTPMaxPayloadSize:     1200,
 		RTPPacketizationMode:  EncoderRTPPacketizationNonInterleaved,
@@ -329,6 +337,27 @@ func (e *Encoder) ParameterSets() (EncoderParameterSets, error) {
 		PPS:                           append([]byte(nil), sets.PPS...),
 		AnnexB:                        append([]byte(nil), sets.AnnexB...),
 		AVCDecoderConfigurationRecord: append([]byte(nil), sets.AVCDecoderConfigurationRecord...),
+	}, nil
+}
+
+func (e *Encoder) RecoveryPointSEI(recoveryFrameCount uint32) (EncoderSEI, error) {
+	if e == nil {
+		return EncoderSEI{}, encoderInvalid("nil encoder")
+	}
+	sei, err := h264.BuildEncoderRecoveryPointSEI(h264.EncoderRecoveryPointSEIConfig{
+		RecoveryFrameCount:    recoveryFrameCount,
+		ExactMatchFlag:        true,
+		BrokenLinkFlag:        e.cfg.BFrames > 0,
+		ChangingSliceGroupIDC: 0,
+		NALLengthSize:         4,
+	})
+	if err != nil {
+		return EncoderSEI{}, err
+	}
+	return EncoderSEI{
+		NAL:    append([]byte(nil), sei.NAL...),
+		AnnexB: append([]byte(nil), sei.AnnexB...),
+		AVC:    append([]byte(nil), sei.AVC...),
 	}, nil
 }
 
@@ -447,6 +476,9 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	}
 	if update.SPSPPSBeforeIDR != nil {
 		cfg.SPSPPSBeforeIDR = *update.SPSPPSBeforeIDR
+	}
+	if update.RecoveryPointSEI != nil {
+		cfg.RecoveryPointSEI = *update.RecoveryPointSEI
 	}
 	normalized, err := normalizeEncoderConfig(cfg)
 	if err != nil {

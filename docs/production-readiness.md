@@ -109,16 +109,19 @@ reference state. In-band malformed SPS/PPS NALs are also guarded as non-fatal:
 they do not replace the last good parameter sets before the next valid slice on
 configured AVC or mixed configured-AVC/Annex B public decode paths.
 
-Encoder readiness evidence currently covers controls and parameter-set headers:
+Encoder readiness evidence currently covers controls, parameter-set headers,
+and recovery-point SEI packaging:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 rejects invalid or not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, PLI/FIR, force-IDR, and partial
 reconfiguration paths, proves `ParameterSets` emits SPS/PPS NALs, Annex B
-headers, and avcC records accepted by the public decoder parsers, and verifies
-frame-shape validation before `Encode`/`EncodeInto` return `ErrUnsupported`.
+headers, and avcC records accepted by the public decoder parsers, proves
+`RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL
+surfaces accepted by public decode paths, and verifies frame-shape validation
+before `Encode`/`EncodeInto` return `ErrUnsupported`.
 No encoder frame bitstream, RTP packetizer, or FFmpeg/goh264 encoded-frame
 oracle has landed yet. Internal encoder writer evidence now covers raw
 bit/Exp-Golomb writing, RBSP trailing bits, EBSP emulation-prevention,
 Annex B/AVC NAL packaging, AVC decoder configuration records, and baseline
-SPS/PPS syntax through decoder-parser round-trip tests; SEI/slice syntax
-writers remain pending.
+SPS/PPS plus recovery-point SEI syntax through decoder-parser round-trip tests;
+slice syntax and broader SEI families remain pending.

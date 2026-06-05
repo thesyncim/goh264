@@ -4,10 +4,14 @@ Decoder scope: FFmpeg `n8.0.1` H.264 decoder path only.
 
 Expanded product scope: realtime/WebRTC H.264 encoder support is now planned in
 `docs/encoder-webrtc-roadmap.md`. The public encoder control contract now lives
-in `encoder.go` and is tested from the external `tests` package, but no encoder
-bitstream parity or production claim exists yet; encoder work must land behind
-its own controls, oracles, and release evidence while the decoder production
-bar stays green.
+in `encoder.go` and is tested from the external `tests` package. Encoder
+parameter-set and recovery-point SEI writers follow FFmpeg `n8.0.1`
+`libavcodec/cbs_h264_syntax_template.c` syntax order; recovery-point SEI
+defaults mirror the FFmpeg VAAPI/Vulkan encoder shape for I-picture recovery
+points (`recovery_frame_cnt=0`, exact-match set, broken-link only when B-frame
+chains exist). No encoder frame bitstream parity or production claim exists
+yet; encoder work must land behind its own controls, oracles, and release
+evidence while the decoder production bar stays green.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
