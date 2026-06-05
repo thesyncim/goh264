@@ -112,12 +112,14 @@ func TestDecodePacketFramesAVCRecoversAfterDamagedNewExtradata(t *testing.T) {
 
 	damagedConfig := append([]byte(nil), config...)
 	damagedConfig = damagedConfig[:len(damagedConfig)-1]
-	if out, err := dec.DecodePacketFrames(Packet{
+	frames, err = dec.DecodePacketFrames(Packet{
 		Data:     samples[1],
 		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedConfig}},
-	}); err == nil {
-		t.Fatalf("damaged avcC packet decoded frames=%d, want error", len(out))
+	})
+	if err != nil {
+		t.Fatalf("decode with damaged avcC side data: %v", err)
 	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
 	frames, err = dec.DecodePacketFrames(Packet{Data: samples[1]})
 	if err != nil {
@@ -147,12 +149,14 @@ func TestDecodePacketFramesAnnexBRecoversAfterDamagedNewExtradata(t *testing.T) 
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
 	damagedExtradata := truncateFirstParameterSetAnnexB(t, extradata)
-	if out, err := dec.DecodePacketFrames(Packet{
+	frames, err = dec.DecodePacketFrames(Packet{
 		Data:     second,
 		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedExtradata}},
-	}); err == nil {
-		t.Fatalf("damaged Annex B extradata packet decoded frames=%d, want error", len(out))
+	})
+	if err != nil {
+		t.Fatalf("decode with damaged Annex B extradata side data: %v", err)
 	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
 	frames, err = dec.DecodePacketFrames(Packet{Data: second})
 	if err != nil {

@@ -97,7 +97,7 @@ valid-prefix damaged-packet recovery across configured AVC, AVC
 configuration-record, bare AVC, packet AVC, stateful Annex B, and one-shot
 Annex B surfaces including single-frame helpers and delayed B-frame
 configuration-record one-shot flush,
-malformed AVC/Annex B `NEW_EXTRADATA` recovery guards,
+malformed AVC/Annex B `NEW_EXTRADATA` non-fatal packet-side-data guards,
 malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.

@@ -392,9 +392,9 @@ func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
 		if side.Type != PacketSideDataNewExtradata {
 			continue
 		}
-		if err := d.decodeNewExtradata(side.Data); err != nil {
-			return nil, err
-		}
+		// h264_decode_frame calls ff_h264_decode_extradata for packet
+		// NEW_EXTRADATA and ignores its return value before decoding buf.
+		_ = d.decodeNewExtradata(side.Data)
 	}
 	return d.decodeFrames(pkt.Data, packetFrameSideDataFromPacket(pkt.SideData))
 }

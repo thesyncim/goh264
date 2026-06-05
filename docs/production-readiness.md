@@ -110,11 +110,11 @@ Annex B also return valid frames decoded before a later damaged slice in the
 same packet alongside the damaged-slice error, including the sole valid frame on
 single-frame decode helpers and delayed B-frame prefix output from
 configuration-record one-shot decode. Packet `NEW_EXTRADATA` recovery also guards
-malformed AVC and Annex B extradata: the bad side-data packet returns an error
-and the next packet still decodes against the last good configuration and
-reference state. In-band malformed SPS/PPS NALs are also guarded as non-fatal:
-they do not replace the last good parameter sets before the next valid slice on
-configured AVC or mixed configured-AVC/Annex B public decode paths.
+malformed AVC and Annex B extradata as non-fatal side data: the current valid
+packet still decodes against the last good configuration and reference state.
+In-band malformed SPS/PPS NALs are also guarded as non-fatal: they do not
+replace the last good parameter sets before the next valid slice on configured
+AVC or mixed configured-AVC/Annex B public decode paths.
 
 Encoder readiness evidence currently covers controls, parameter-set headers,
 recovery-point SEI packaging, and the first IDR frame writer:

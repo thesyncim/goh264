@@ -110,10 +110,11 @@ poisoning the next valid decode, and valid frames decoded before a later
 damaged slice in the same packet are returned alongside that error, including
 the sole valid frame on single-frame decode helpers and delayed B-frame prefix
 output from configuration-record one-shot decode. Packet
-`NEW_EXTRADATA` recovery also proves malformed AVC and Annex B extradata errors
-do not wipe the last good decoder configuration or reference state. Malformed
-in-band SPS/PPS NALs are skipped without replacing the last good parameter sets
-on configured AVC and mixed configured-AVC/Annex B decode paths.
+`NEW_EXTRADATA` recovery also proves malformed AVC and Annex B extradata is
+non-fatal, does not replace the last good decoder configuration or reference
+state, and lets the current valid packet decode. Malformed in-band SPS/PPS NALs
+are skipped without replacing the last good parameter sets on configured AVC and
+mixed configured-AVC/Annex B decode paths.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
 field/inter streams beyond the public High12/High14 frame-MBAFF IntraPCM/P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, luma+chroma-residual, and P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows plus internal High10/High12/High14 field weighted-B/weighted-P guard matrices,
