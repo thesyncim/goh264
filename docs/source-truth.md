@@ -82,6 +82,7 @@ first-field recovery, container-backed FATE H.264 vectors extracted to Annex B
 with both source and extracted bitstream MD5s, auxiliary API/MOV/MPEG-TS/MKV/CBS H.264 sample rows,
 public FATE vector harness,
 bounded public decode/packet no-panic fuzz smoke,
+stateful valid-damaged-valid packet recovery guards,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest

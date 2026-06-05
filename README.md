@@ -80,6 +80,9 @@ vectors, and SEI side-data surfaces.
 Public malformed-input safety coverage includes deterministic corrupt packet
 rows plus a bounded no-panic fuzz target over Annex B, AVC, configured AVC,
 auto-detect, and packet side-data decode surfaces.
+Stateful damaged-packet recovery guards prove configured AVC and auto-detected
+Annex B valid-damaged-valid sequences return an error for the damaged packet
+without poisoning the next valid decode.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
 field/inter streams beyond the public High12/High14 frame-MBAFF IntraPCM/P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, luma+chroma-residual, and P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows plus internal High10/High12/High14 field weighted-B/weighted-P guard matrices,
