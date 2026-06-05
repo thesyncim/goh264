@@ -160,6 +160,53 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHighChromaFieldWeig
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma444UnweightedFieldP(t *testing.T) {
+	sub := [4]uint32{
+		MBType16x16 | MBTypeP0L0,
+		MBType16x8 | MBTypeP0L0,
+		MBType8x16 | MBTypeP0L0,
+		MBType8x8 | MBTypeP0L0,
+	}
+	for _, picture := range []int32{PictureTopField, PictureBottomField} {
+		for _, deblock := range []int32{0, 1, 2} {
+			for _, cabac := range []int32{0, 1} {
+				for _, shape := range []struct {
+					name     string
+					mbType   uint32
+					sub      *[4]uint32
+					cbp      int
+					cbpTable int
+				}{
+					{name: "pskip", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip | MBTypeInterlaced},
+					{name: "p16x16 residual", mbType: MBType16x16 | MBTypeP0L0 | MBTypeInterlaced, cbp: 1, cbpTable: 1},
+					{name: "p16x8 residual", mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced, cbp: 1, cbpTable: 1},
+					{name: "p8x16 residual", mbType: MBType8x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced, cbp: 2, cbpTable: 2},
+					{name: "p8x8 explicit sub", mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced, sub: &sub, cbp: 4, cbpTable: 4},
+				} {
+					t.Run(fmt.Sprintf("picture%d/mode%d/cabac%d/%s", picture, deblock, cabac, shape.name), func(t *testing.T) {
+						sh := &SliceHeader{
+							SliceTypeNoS:     PictureTypeP,
+							PictureStructure: picture,
+							DeblockingFilter: deblock,
+							SPS: &SPS{
+								BitDepthLuma:     10,
+								BitDepthChroma:   10,
+								ChromaFormatIDC:  3,
+								FrameMBSOnlyFlag: 0,
+								MBAFF:            1,
+							},
+							PPS: &PPS{CABAC: cabac},
+						}
+						if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, shape.sub, shape.cbp, shape.cbpTable); err != nil {
+							t.Fatalf("validate high10 444 field unweighted P reconstruct err = %v, want nil", err)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructRejectsUnsupportedPartitionedP(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
 	p8x8Sub := [4]uint32{

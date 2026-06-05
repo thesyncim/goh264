@@ -298,6 +298,54 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Chroma444FieldWeightedB(t
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Chroma444UnweightedFieldPictures(t *testing.T) {
+	for _, picture := range []struct {
+		name      string
+		structure int32
+	}{
+		{name: "top", structure: PictureTopField},
+		{name: "bottom", structure: PictureBottomField},
+	} {
+		for _, cabac := range []bool{false, true} {
+			for _, tt := range []struct {
+				name    string
+				slice   int32
+				deblock []int32
+			}{
+				{name: "I", slice: PictureTypeI, deblock: []int32{0, 1, 2}},
+				{name: "P", slice: PictureTypeP, deblock: []int32{0, 1, 2}},
+				{name: "B", slice: PictureTypeB, deblock: []int32{0, 1}},
+			} {
+				for _, deblockMode := range tt.deblock {
+					entropy := "cavlc"
+					if cabac {
+						entropy = "cabac"
+					}
+					t.Run(fmt.Sprintf("%s/%s/%s/mode%d", picture.name, entropy, tt.name, deblockMode), func(t *testing.T) {
+						m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 3, 2, deblockMode != 0, tt.slice)
+						sh.SPS.FrameMBSOnlyFlag = 0
+						sh.SPS.MBAFF = 1
+						sh.PictureStructure = picture.structure
+						sh.DeblockingFilter = deblockMode
+						if cabac {
+							sh.PPS.CABAC = 1
+						}
+						if tt.slice == PictureTypeP {
+							sh.RefCount = [2]uint32{1, 0}
+						} else if tt.slice == PictureTypeB {
+							sh.RefCount = [2]uint32{1, 1}
+						}
+
+						if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+							t.Fatalf("high10 444 unweighted field validation err = %v, want nil", err)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaFieldWeightedP(t *testing.T) {
 	weights := []struct {
 		name  string
@@ -364,15 +412,12 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedHigh10FieldPictures(t 
 		{name: "420/I", chroma: 1, sliceType: PictureTypeI},
 		{name: "422/slice-boundary", chroma: 2, sliceType: PictureTypeI, deblockMode: 2},
 		{name: "422/slice-boundary-unweighted-B", chroma: 2, sliceType: PictureTypeB, deblockMode: 2},
-		{name: "444/unweighted-B", chroma: 3, sliceType: PictureTypeB},
 		{name: "444/slice-boundary-unweighted-B", chroma: 3, sliceType: PictureTypeB, deblockMode: 2},
-		{name: "444/unweighted-P", chroma: 3, sliceType: PictureTypeP},
 		{name: "444/unnormalized-chroma-only-weighted-P", chroma: 3, sliceType: PictureTypeP, run: func(sh *SliceHeader) {
 			sh.PPS.WeightedPred = 1
 			sh.PredWeightTable = highSourceChromaOnlyWeightedPPredWeightTable(3)
 			sh.PredWeightTable.UseWeight = 0
 		}},
-		{name: "444/I", chroma: 3, sliceType: PictureTypeI},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, tt.chroma, 2, true, tt.sliceType)

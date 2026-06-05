@@ -286,6 +286,60 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma444Fiel
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma444UnweightedFieldIB(t *testing.T) {
+	bSub := [4]uint32{
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L1,
+	}
+	for _, picture := range []int32{PictureTopField, PictureBottomField} {
+		for _, cabac := range []int32{0, 1} {
+			for _, shape := range []struct {
+				name     string
+				slice    int32
+				deblock  []int32
+				mbType   uint32
+				sub      *[4]uint32
+				cbp      int
+				cbpTable int
+			}{
+				{name: "I/intra4x4", slice: PictureTypeI, deblock: []int32{0, 1, 2}, mbType: MBTypeIntra4x4},
+				{name: "I/intra16x16", slice: PictureTypeI, deblock: []int32{0, 1, 2}, mbType: MBTypeIntra16x16},
+				{name: "I/intrapcm", slice: PictureTypeI, deblock: []int32{0, 1, 2}, mbType: MBTypeIntraPCM},
+				{name: "B/b16x16-l0", slice: PictureTypeB, deblock: []int32{0, 1}, mbType: MBType16x16 | MBTypeP0L0 | MBTypeInterlaced},
+				{name: "B/b16x16-bi", slice: PictureTypeB, deblock: []int32{0, 1}, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeInterlaced},
+				{name: "B/b16x16-direct", slice: PictureTypeB, deblock: []int32{0, 1}, mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2 | MBTypeInterlaced},
+				{name: "B/direct-skip", slice: PictureTypeB, deblock: []int32{0, 1}, mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip | MBTypeInterlaced},
+				{name: "B/b16x8-residual", slice: PictureTypeB, deblock: []int32{0, 1}, mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1 | MBTypeInterlaced, cbp: 1, cbpTable: 1},
+				{name: "B/b8x16", slice: PictureTypeB, deblock: []int32{0, 1}, mbType: MBType8x16 | MBTypeP0L0 | MBTypeP1L1 | MBTypeInterlaced},
+				{name: "B/b8x8-sub", slice: PictureTypeB, deblock: []int32{0, 1}, mbType: MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1 | MBTypeInterlaced, sub: &bSub, cbp: 4, cbpTable: 4},
+			} {
+				for _, deblock := range shape.deblock {
+					t.Run(fmt.Sprintf("picture%d/cabac%d/%s/mode%d", picture, cabac, shape.name, deblock), func(t *testing.T) {
+						sh := &SliceHeader{
+							SliceTypeNoS:     shape.slice,
+							PictureStructure: picture,
+							DeblockingFilter: deblock,
+							SPS: &SPS{
+								BitDepthLuma:     10,
+								BitDepthChroma:   10,
+								ChromaFormatIDC:  3,
+								FrameMBSOnlyFlag: 0,
+								MBAFF:            1,
+							},
+							PPS: &PPS{CABAC: cabac},
+						}
+						if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, shape.sub, shape.cbp, shape.cbpTable); err != nil {
+							t.Fatalf("validate high10 444 field unweighted %s reconstruct err = %v, want nil", shape.name, err)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh1214ChromaFieldWeightedB(t *testing.T) {
 	weights := []struct {
 		name             string
