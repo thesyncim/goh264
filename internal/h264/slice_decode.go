@@ -655,13 +655,24 @@ func isHigh12Frame420Scope(sh *SliceHeader) bool {
 	switch sh.DeblockingFilter {
 	case 0, 1:
 		return sh.SliceTypeNoS == PictureTypeI ||
-			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh))
+			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)) ||
+			isHigh12CABACFrame420BScope(sh)
 	case 2:
 		return sh.SliceTypeNoS == PictureTypeI ||
 			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh))
 	default:
 		return false
 	}
+}
+
+func isHigh12CABACFrame420BScope(sh *SliceHeader) bool {
+	if sh == nil || sh.PPS == nil || sh.PPS.CABAC == 0 || sh.SliceTypeNoS != PictureTypeB {
+		return false
+	}
+	if sh.PPS.WeightedBipredIDC != 0 {
+		return false
+	}
+	return sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0
 }
 
 func isHigh12ChromaFrameDeblockScope(sh *SliceHeader) bool {
@@ -951,6 +962,9 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 				if (mbType == MBTypeIntra4x4 || mbType == MBTypeIntra16x16) && cbp == 0 && cbpTable == 0 {
 					return nil
 				}
+				if mbType == MBTypeIntra4x4 && cbp == 0x2f && cbpTable == 0xef {
+					return nil
+				}
 				if mbType == MBTypeIntra16x16 && cbp == 0 && cbpTable == 0x100 {
 					return nil
 				}
@@ -963,7 +977,7 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 				if mbType == MBTypeIntra16x16 && cbp == 0x20 && cbpTable == 0x60 {
 					return nil
 				}
-				if mbType == MBTypeIntra16x16 && cbp == 0x2f && (cbpTable == 0x16f || cbpTable == 0xf02f) {
+				if mbType == MBTypeIntra16x16 && cbp == 0x2f && (cbpTable == 0xef || cbpTable == 0x16f || cbpTable == 0xf02f) {
 					return nil
 				}
 				if mbType == MBTypeIntra16x16 && cbp == 0x0f && (cbpTable == 0x0f || cbpTable == 0xf00f) {

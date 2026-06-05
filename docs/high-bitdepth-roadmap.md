@@ -19,7 +19,8 @@ luma/chroma residual plus P-skip/P16x16,
 internal High12 Intra16x16 luma-AC, luma-DC+AC, and luma/chroma-DC plus
 chroma-AC/DC+AC and combined luma/chroma residual plus no-deblock
 weighted P-skip and weighted P16x16/partitioned P plus P16x16 residual
-handoff plus mode-1 I/P deblock, 4:2:0 I/P
+handoff plus CABAC unweighted B no-deblock/mode-1 deblock and
+mode-1 I/P deblock, 4:2:0 I/P
 slice-boundary mode-2 deblock, including unweighted 4:2:2/4:4:4
 I/P chroma no-deblock/mode-1 deblock plus unweighted 4:2:2/4:4:4 I/P chroma
 slice-boundary mode-2 deblock, plus

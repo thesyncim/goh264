@@ -384,6 +384,21 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CABACBNoDeblockAndMode1(t
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12CABACBNoDeblockAndMode1(t *testing.T) {
+	for _, deblockMode := range []int32{0, 1} {
+		t.Run(fmt.Sprintf("mode%d/B", deblockMode), func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, 1, 1, deblockMode != 0, PictureTypeB)
+			sh.PPS.CABAC = 1
+			sh.DeblockingFilter = deblockMode
+			sh.RefCount = [2]uint32{1, 1}
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high12 CABAC B mode-%d validation err = %v, want nil", deblockMode, err)
+			}
+		})
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CABACDeblockingIP(t *testing.T) {
 	for _, deblockMode := range []int32{1, 2} {
 		for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {
@@ -917,6 +932,9 @@ func TestValidateHighFrameSliceReconstructAllowsHigh12IntraResidualScope(t *test
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra4x4, nil, 0, 0); err != nil {
 		t.Fatalf("high12 Intra4x4 no-residual reconstruct validation err = %v, want nil", err)
 	}
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra4x4, nil, 0x2f, 0xef); err != nil {
+		t.Fatalf("high12 Intra4x4 x264 luma/chroma residual reconstruct validation err = %v, want nil", err)
+	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra4x4, nil, 1, 1); err != ErrUnsupported {
 		t.Fatalf("high12 Intra4x4 residual reconstruct validation err = %v, want ErrUnsupported", err)
 	}
@@ -943,6 +961,9 @@ func TestValidateHighFrameSliceReconstructAllowsHigh12IntraResidualScope(t *test
 	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x2f, 0x16f); err != nil {
 		t.Fatalf("high12 Intra16x16 luma/chroma CABAC residual reconstruct validation err = %v, want nil", err)
+	}
+	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x2f, 0xef); err != nil {
+		t.Fatalf("high12 Intra16x16 x264 luma/chroma CABAC residual reconstruct validation err = %v, want nil", err)
 	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x0f, 0x0f); err != nil {
 		t.Fatalf("high12 Intra16x16 luma-AC CABAC residual reconstruct validation err = %v, want nil", err)
