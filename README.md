@@ -111,7 +111,7 @@ CABAC, weighted and direct motion paths including High12/High14 CAVLC/CABAC
 direct-sub residual, deblock modes, selected field/PAFF/MBAFF rows
 including High10 4:2:2/4:4:4 weighted-B and weighted-P top/bottom field guards for deblock modes 0/1/2,
 internal High12/High14 4:2:2/4:4:4 weighted-B plus luma-weighted, luma+chroma-weighted, and source-normalized chroma-only weighted-P top/bottom field guards for deblock modes 0/1/2,
-internal High9 4:2:2/4:4:4 weighted-P frame-deblock modes 0/1 and I/P slice-boundary mode-2 validation and loop-filter guards,
+internal High9 4:2:2/4:4:4 weighted-P frame-deblock modes 0/1 plus weighted-P and I/P slice-boundary mode-2 validation and loop-filter guards,
 public High12/High14 4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows,
 reinit metadata rows, lossless High444
 transform-bypass rows, configured AVC surfaces, container-extracted Annex B
