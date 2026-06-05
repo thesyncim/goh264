@@ -45,7 +45,7 @@ and is checked by the freshness/matrix gates when populated.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
-rows including implicit and explicit weighted B, High12 CAVLC and High14 CAVLC/CABAC 4:2:2/4:4:4
+rows including implicit and explicit weighted B, High12/High14 CAVLC/CABAC 4:2:2/4:4:4
 unweighted I/P plus CAVLC/CABAC luma-only/luma+chroma weighted-P no-deblock, frame-deblock,
 and slice-boundary rows, High10 4:2:2/4:4:4
 CAVLC/CABAC implicit and explicit weighted B frame and slice-boundary deblock plus weighted-P frame and slice-boundary rows, I/P/B slices, CAVLC and

@@ -1550,22 +1550,25 @@ func TestValidateHighFrameSliceReconstructAllowsHigh14CABACIntraResidual(t *test
 	}
 }
 
-func TestValidateHighFrameSliceReconstructAllowsHigh14CABACChromaIntraResidual(t *testing.T) {
+func TestValidateHighFrameSliceReconstructAllowsHigh1214CABACChromaIntraResidual(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
+		bitDepth int32
 		chroma   int
 		cbp      int
 		cbpTable int
 	}{
-		{name: "422-intra4x4", chroma: 2, cbp: 0x23, cbpTable: 0xe3},
-		{name: "444-intra4x4", chroma: 3, cbp: 0x0f, cbpTable: 0x0f},
+		{name: "high12-422-intra4x4", bitDepth: 12, chroma: 2, cbp: 0x23, cbpTable: 0xe3},
+		{name: "high12-444-intra4x4", bitDepth: 12, chroma: 3, cbp: 0x0f, cbpTable: 0x0f},
+		{name: "high14-422-intra4x4", bitDepth: 14, chroma: 2, cbp: 0x23, cbpTable: 0xe3},
+		{name: "high14-444-intra4x4", bitDepth: 14, chroma: 3, cbp: 0x0f, cbpTable: 0x0f},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, sh := highFrameSliceDecodeFixture(t, 14, tt.chroma, false, PictureTypeI)
+			_, _, sh := highFrameSliceDecodeFixture(t, tt.bitDepth, tt.chroma, false, PictureTypeI)
 			sh.PPS.CABAC = 1
 
 			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra4x4, nil, tt.cbp, tt.cbpTable); err != nil {
-				t.Fatalf("high14 CABAC chroma Intra4x4 reconstruct validation err = %v, want nil", err)
+				t.Fatalf("%s CABAC chroma Intra4x4 reconstruct validation err = %v, want nil", bitDepthName(tt.bitDepth), err)
 			}
 		})
 	}
