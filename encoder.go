@@ -185,6 +185,7 @@ type EncoderNALUnit struct {
 }
 
 type EncoderRTPPacket struct {
+	Data           []byte
 	Payload        []byte
 	PayloadType    uint8
 	SequenceNumber uint16
@@ -732,8 +733,24 @@ func (e *Encoder) stampRTPPackets(packets []EncoderRTPPacket) {
 		packets[i].PayloadType = e.cfg.RTPPayloadType
 		packets[i].SequenceNumber = e.rtpSequenceNumber
 		packets[i].SSRC = e.cfg.RTPSSRC
+		packets[i].Data = appendEncoderRTPPacket(nil, packets[i])
 		e.rtpSequenceNumber++
 	}
+}
+
+func appendEncoderRTPPacket(dst []byte, pkt EncoderRTPPacket) []byte {
+	markerPayloadType := pkt.PayloadType & 0x7f
+	if pkt.Marker {
+		markerPayloadType |= 0x80
+	}
+	dst = append(dst,
+		0x80,
+		markerPayloadType,
+		byte(pkt.SequenceNumber>>8), byte(pkt.SequenceNumber),
+		byte(pkt.Timestamp>>24), byte(pkt.Timestamp>>16), byte(pkt.Timestamp>>8), byte(pkt.Timestamp),
+		byte(pkt.SSRC>>24), byte(pkt.SSRC>>16), byte(pkt.SSRC>>8), byte(pkt.SSRC),
+	)
+	return append(dst, pkt.Payload...)
 }
 
 func buildEncoderSTAPA(nals []encoderRawNAL, maxPayloadSize int) ([]byte, int, error) {
@@ -963,6 +980,9 @@ func normalizeEncoderConfig(cfg EncoderConfig) (EncoderConfig, error) {
 		}
 		if cfg.RTPPayloadType == 0 {
 			cfg.RTPPayloadType = 96
+		}
+		if cfg.RTPPayloadType > 127 {
+			return cfg, encoderInvalid("RTP payload type must fit in seven bits")
 		}
 	}
 	if cfg.RTPTimestampIncrement == 0 {

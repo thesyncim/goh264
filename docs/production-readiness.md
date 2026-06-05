@@ -5,7 +5,7 @@ now in scope, with a tested public control contract in `encoder.go`. Encoder
 bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
 IDR/IntraPCM path with Annex B, AVC, and RTP packetization-mode 1 output.
 Encoder production gates live in `docs/encoder-webrtc-roadmap.md` until
-P-frames, residual coding, rate control, RTP header/callback metadata, allocation
+P-frames, residual coding, rate control, RTP callback metadata, allocation
 budgets, and oracle evidence land.
 
 Harness-first status:
@@ -131,9 +131,9 @@ surfaces accepted by public decode paths, verifies frame-shape validation, and
 proves `Encode`/`EncodeInto` emit IDR IntraPCM access units that round-trip
 through local Annex B/AVC decode, FFmpeg rawvideo decode, RTP FU-A reassembly,
 STAP-A parameter-set aggregation, and RTP packet payload-type/SSRC/sequence
-metadata. Internal encoder writer evidence now covers raw bit/Exp-Golomb
-writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
-packaging, AVC decoder configuration records, baseline SPS/PPS, recovery-point
-SEI syntax, and Baseline IDR slice syntax. P-frame prediction, residual CAVLC
-coding, rate-control feedback, RTP header/callback metadata, and realtime
-allocation/performance gates remain pending.
+metadata plus full RTP header bytes. Internal encoder writer evidence now
+covers raw bit/Exp-Golomb writing, RBSP trailing bits, EBSP
+emulation-prevention, Annex B/AVC NAL packaging, AVC decoder configuration
+records, baseline SPS/PPS, recovery-point SEI syntax, and Baseline IDR slice
+syntax. P-frame prediction, residual CAVLC coding, rate-control feedback, RTP
+callback metadata, and realtime allocation/performance gates remain pending.

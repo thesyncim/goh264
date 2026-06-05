@@ -5,6 +5,7 @@ package goh264_test
 import (
 	"bytes"
 	"crypto/md5"
+	"encoding/binary"
 	"errors"
 	"os"
 	"os/exec"
@@ -78,6 +79,7 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 		{name: "idr interval beyond gop", mutate: func(c *goh264.EncoderConfig) { c.IDRInterval = c.GOPSize + 1 }, want: goh264.ErrInvalidData},
 		{name: "intra refresh not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.IntraRefresh = true }, want: goh264.ErrUnsupported},
 		{name: "rtp payload too small", mutate: func(c *goh264.EncoderConfig) { c.RTPMaxPayloadSize = 2 }, want: goh264.ErrInvalidData},
+		{name: "rtp payload type too large", mutate: func(c *goh264.EncoderConfig) { c.RTPPayloadType = 128 }, want: goh264.ErrInvalidData},
 		{name: "rtp packetization mode 0 not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL }, want: goh264.ErrUnsupported},
 		{name: "don enabled not admitted", mutate: func(c *goh264.EncoderConfig) { c.DONDisabled = false }, want: goh264.ErrUnsupported},
 	}
@@ -526,6 +528,55 @@ func TestEncoderEncodeRTPPacketsCarryWebRTCMetadata(t *testing.T) {
 		t.Fatalf("Encode second RTP frame: %v", err)
 	}
 	assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)))
+}
+
+func TestEncoderEncodeRTPPacketsCarryFullRTPHeaders(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPayloadType = 102
+	cfg.RTPSSRC = 0xdecafbad
+	cfg.RTPMaxPayloadSize = 32
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 0x01020304
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode RTP frame: %v", err)
+	}
+	if len(out.RTPPackets) == 0 {
+		t.Fatal("RTP packet list is empty")
+	}
+	for i, pkt := range out.RTPPackets {
+		if len(pkt.Data) != 12+len(pkt.Payload) {
+			t.Fatalf("packet[%d] full RTP packet length = %d, want header plus payload %d",
+				i, len(pkt.Data), 12+len(pkt.Payload))
+		}
+		if !bytes.Equal(pkt.Data[12:], pkt.Payload) {
+			t.Fatalf("packet[%d] RTP payload bytes do not match Data payload", i)
+		}
+		if pkt.Data[0] != 0x80 {
+			t.Fatalf("packet[%d] RTP version/P/X/CC byte = %#x, want 0x80", i, pkt.Data[0])
+		}
+		if got := pkt.Data[1] & 0x7f; got != cfg.RTPPayloadType {
+			t.Fatalf("packet[%d] RTP payload type = %d, want %d", i, got, cfg.RTPPayloadType)
+		}
+		if got := pkt.Data[1]&0x80 != 0; got != pkt.Marker {
+			t.Fatalf("packet[%d] RTP marker header = %v, want packet marker %v", i, got, pkt.Marker)
+		}
+		if got := binary.BigEndian.Uint16(pkt.Data[2:4]); got != pkt.SequenceNumber {
+			t.Fatalf("packet[%d] RTP sequence = %d, want %d", i, got, pkt.SequenceNumber)
+		}
+		if got := binary.BigEndian.Uint32(pkt.Data[4:8]); got != pkt.Timestamp {
+			t.Fatalf("packet[%d] RTP timestamp = %d, want %d", i, got, pkt.Timestamp)
+		}
+		if got := binary.BigEndian.Uint32(pkt.Data[8:12]); got != pkt.SSRC {
+			t.Fatalf("packet[%d] RTP SSRC = %#x, want %#x", i, got, pkt.SSRC)
+		}
+	}
 }
 
 func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {

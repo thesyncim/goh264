@@ -80,13 +80,13 @@ SPS/PPS parameter sets, Annex B sequence headers, avcC records, and
 recovery-point SEI Annex B/AVC NAL surfaces are generated and parser-proved.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
 Annex B, AVC, and RTP packetization-mode 1, including FU-A fragmentation and
-STAP-A parameter-set aggregation, payload-type/SSRC/sequence metadata, and
-marker-bit boundaries. Internal writer primitives cover raw bit/Exp-Golomb
+STAP-A parameter-set aggregation, payload-type/SSRC/sequence metadata, full RTP
+packet headers, and marker-bit boundaries. Internal writer primitives cover raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR slice payload. P-frame prediction, residual CAVLC coding,
-rate-control feedback, RTP header/callback metadata, and realtime
-allocation/performance evidence remain pending.
+rate-control feedback, RTP callback metadata, and realtime allocation/performance
+evidence remain pending.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
@@ -257,9 +257,10 @@ out, err := enc.Encode(frame)       // first admitted path: IDR/IntraPCM
 ```
 
 `Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
-then emit the first admitted IDR/IntraPCM frame path. Inter prediction,
-quantized residual coding, rate-control decisions, and RTP header/callback
-metadata are still future encoder slices.
+then emit the first admitted IDR/IntraPCM frame path. RTP output includes
+payloads plus complete RTP packet bytes. Inter prediction, quantized residual
+coding, rate-control decisions, and RTP callback metadata are still future
+encoder slices.
 
 ## Supported Inputs
 

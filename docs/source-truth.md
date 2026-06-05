@@ -11,10 +11,12 @@ defaults mirror the FFmpeg VAAPI/Vulkan encoder shape for I-picture recovery
 points (`recovery_frame_cnt=0`, exact-match set, broken-link only when B-frame
 chains exist). The first encoder frame bitstream path is an 8-bit I420
 Constrained Baseline IDR IntraPCM slice writer following FFmpeg CBS H.264 slice
-header and reference-marking syntax order; no P-frame, rate-control, or
-production encoder claim exists yet. Encoder work must land behind its own
-controls, oracles, and release evidence while the decoder production bar stays
-green.
+header and reference-marking syntax order. RTP packet header emission follows
+FFmpeg `libavformat/rtpenc.c` `ff_rtp_send_data()` field order and H.264 RTP
+payload boundaries follow `libavformat/rtpenc_h264_hevc.c`; no P-frame,
+rate-control, or production encoder claim exists yet. Encoder work must land
+behind its own controls, oracles, and release evidence while the decoder
+production bar stays green.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
