@@ -129,7 +129,7 @@ and slice-boundary rows, High10 4:2:2/4:4:4
 CAVLC/CABAC implicit and explicit weighted B frame and slice-boundary deblock plus weighted-P frame and slice-boundary rows, I/P/B slices, CAVLC and
 CABAC, weighted and direct motion paths including High12/High14 CAVLC/CABAC
 direct-sub residual, deblock modes, selected field/PAFF/MBAFF rows
-including High10 4:4:4 unweighted top/bottom field I/P guards for deblock modes 0/1/2
+including High10 4:2:2/4:4:4 unweighted top/bottom field I/P guards for deblock modes 0/1/2
 and B guards for deblock modes 0/1, High10 4:2:2/4:4:4 weighted-B and weighted-P top/bottom field guards for deblock modes 0/1/2,
 internal High12/High14 4:2:2/4:4:4 weighted-B plus luma-weighted, luma+chroma-weighted, and source-normalized chroma-only weighted-P top/bottom field guards for deblock modes 0/1/2,
 internal High9 4:2:2/4:4:4 weighted-P frame-deblock modes 0/1 plus weighted-P, implicit/explicit weighted-B, and I/P slice-boundary mode-2 validation and loop-filter guards,

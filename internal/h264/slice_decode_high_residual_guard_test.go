@@ -340,6 +340,40 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma444Unwe
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma422UnweightedFieldIBoundary(t *testing.T) {
+	for _, picture := range []int32{PictureTopField, PictureBottomField} {
+		for _, cabac := range []int32{0, 1} {
+			for _, shape := range []struct {
+				name   string
+				mbType uint32
+			}{
+				{name: "intra4x4", mbType: MBTypeIntra4x4},
+				{name: "intra16x16", mbType: MBTypeIntra16x16},
+				{name: "intrapcm", mbType: MBTypeIntraPCM},
+			} {
+				t.Run(fmt.Sprintf("picture%d/cabac%d/%s/mode2", picture, cabac, shape.name), func(t *testing.T) {
+					sh := &SliceHeader{
+						SliceTypeNoS:     PictureTypeI,
+						PictureStructure: picture,
+						DeblockingFilter: 2,
+						SPS: &SPS{
+							BitDepthLuma:     10,
+							BitDepthChroma:   10,
+							ChromaFormatIDC:  2,
+							FrameMBSOnlyFlag: 0,
+							MBAFF:            1,
+						},
+						PPS: &PPS{CABAC: cabac},
+					}
+					if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, nil, 0, 0); err != nil {
+						t.Fatalf("validate high10 422 field unweighted I boundary reconstruct err = %v, want nil", err)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh1214ChromaFieldWeightedB(t *testing.T) {
 	weights := []struct {
 		name             string
