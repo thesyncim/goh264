@@ -93,6 +93,10 @@ type benchResult struct {
 	NSPerRawByte         float64                `json:"ns_per_raw_byte,omitempty"`
 	AllocBytes           uint64                 `json:"alloc_bytes,omitempty"`
 	Allocs               uint64                 `json:"allocs,omitempty"`
+	AllocBytesPerIter    float64                `json:"alloc_bytes_per_iter,omitempty"`
+	AllocsPerIter        float64                `json:"allocs_per_iter,omitempty"`
+	AllocBytesPerFrame   float64                `json:"alloc_bytes_per_frame,omitempty"`
+	AllocsPerFrame       float64                `json:"allocs_per_frame,omitempty"`
 	RawMD5               string                 `json:"raw_md5,omitempty"`
 	ExpectedRawMD5       string                 `json:"expected_raw_md5,omitempty"`
 	ExpectedPixFmt       string                 `json:"expected_raw_pixel_format,omitempty"`
@@ -125,14 +129,16 @@ type benchResult struct {
 }
 
 type benchSample struct {
-	ElapsedMS   float64 `json:"elapsed_ms"`
-	TotalFrames int     `json:"total_frames,omitempty"`
-	TotalBytes  int64   `json:"total_bytes,omitempty"`
-	FPS         float64 `json:"fps,omitempty"`
-	MiBPerSec   float64 `json:"mib_per_sec,omitempty"`
-	AllocBytes  uint64  `json:"alloc_bytes,omitempty"`
-	Allocs      uint64  `json:"allocs,omitempty"`
-	RawMD5      string  `json:"raw_md5,omitempty"`
+	ElapsedMS         float64 `json:"elapsed_ms"`
+	TotalFrames       int     `json:"total_frames,omitempty"`
+	TotalBytes        int64   `json:"total_bytes,omitempty"`
+	FPS               float64 `json:"fps,omitempty"`
+	MiBPerSec         float64 `json:"mib_per_sec,omitempty"`
+	AllocBytes        uint64  `json:"alloc_bytes,omitempty"`
+	Allocs            uint64  `json:"allocs,omitempty"`
+	AllocBytesPerIter float64 `json:"alloc_bytes_per_iter,omitempty"`
+	AllocsPerIter     float64 `json:"allocs_per_iter,omitempty"`
+	RawMD5            string  `json:"raw_md5,omitempty"`
 }
 
 type benchFrameDiagnostic struct {
@@ -340,10 +346,10 @@ func main() {
 		if r.NSPerRawByte > 0 {
 			fmt.Printf(", %.2f ns/raw-byte", r.NSPerRawByte)
 		}
-		if r.Allocs > 0 || r.AllocBytes > 0 {
+		if r.AllocsPerIter > 0 || r.AllocBytesPerIter > 0 {
 			fmt.Printf(", %.2f allocs/iter, %.2f MiB alloc/iter",
-				float64(r.Allocs)/float64(r.Iterations),
-				float64(r.AllocBytes)/float64(r.Iterations)/(1024*1024))
+				r.AllocsPerIter,
+				r.AllocBytesPerIter/(1024*1024))
 		}
 		if r.RawMD5 != "" {
 			fmt.Printf(", raw md5 %s", r.RawMD5)
@@ -1891,15 +1897,23 @@ func sampleFromTotals(iters int, framesPerIter int, bytesPerIter int64, elapsed 
 	if totalBytes > 0 && seconds > 0 {
 		mibPerSec = float64(totalBytes) / (1024 * 1024) / seconds
 	}
+	var allocBytesPerIter float64
+	var allocsPerIter float64
+	if iters > 0 {
+		allocBytesPerIter = float64(allocBytes) / float64(iters)
+		allocsPerIter = float64(allocs) / float64(iters)
+	}
 	return benchSample{
-		ElapsedMS:   float64(elapsed.Microseconds()) / 1000,
-		TotalFrames: totalFrames,
-		TotalBytes:  totalBytes,
-		FPS:         fps,
-		MiBPerSec:   mibPerSec,
-		AllocBytes:  allocBytes,
-		Allocs:      allocs,
-		RawMD5:      rawMD5,
+		ElapsedMS:         float64(elapsed.Microseconds()) / 1000,
+		TotalFrames:       totalFrames,
+		TotalBytes:        totalBytes,
+		FPS:               fps,
+		MiBPerSec:         mibPerSec,
+		AllocBytes:        allocBytes,
+		Allocs:            allocs,
+		AllocBytesPerIter: allocBytesPerIter,
+		AllocsPerIter:     allocsPerIter,
+		RawMD5:            rawMD5,
 	}
 }
 
@@ -1956,7 +1970,19 @@ func resultFromSamples(name string, input string, iters int, repeats int, warmup
 }
 
 func annotateBenchRates(result *benchResult) {
-	if result == nil || result.ElapsedMS <= 0 {
+	if result == nil {
+		return
+	}
+	if result.Iterations > 0 && result.Repeats > 0 {
+		totalIters := result.Iterations * result.Repeats
+		result.AllocBytesPerIter = float64(result.AllocBytes) / float64(totalIters)
+		result.AllocsPerIter = float64(result.Allocs) / float64(totalIters)
+	}
+	if result.TotalFrames > 0 {
+		result.AllocBytesPerFrame = float64(result.AllocBytes) / float64(result.TotalFrames)
+		result.AllocsPerFrame = float64(result.Allocs) / float64(result.TotalFrames)
+	}
+	if result.ElapsedMS <= 0 {
 		return
 	}
 	elapsedNS := result.ElapsedMS * 1e6

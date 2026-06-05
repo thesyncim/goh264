@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSampleStats(t *testing.T) {
@@ -34,6 +35,17 @@ func TestSampleStats(t *testing.T) {
 	}
 }
 
+func TestSampleFromTotalsReportsAllocationRates(t *testing.T) {
+	sample := sampleFromTotals(4, 2, 10, 2*time.Millisecond, 128, 8, "abc")
+	if sample.TotalFrames != 8 || sample.TotalBytes != 40 {
+		t.Fatalf("totals = %d/%d, want 8/40", sample.TotalFrames, sample.TotalBytes)
+	}
+	if sample.AllocBytesPerIter != 32 || sample.AllocsPerIter != 2 {
+		t.Fatalf("alloc rates = %v/%v, want 32 bytes and 2 allocs per iter",
+			sample.AllocBytesPerIter, sample.AllocsPerIter)
+	}
+}
+
 func TestResultFromSamplesAggregatesRepeats(t *testing.T) {
 	result := resultFromSamples("goh264", "in.h264", 2, 2, 1, true, 3, 12, []benchSample{
 		{ElapsedMS: 10, TotalFrames: 6, TotalBytes: 24, AllocBytes: 100, Allocs: 4, RawMD5: "abc"},
@@ -44,6 +56,12 @@ func TestResultFromSamplesAggregatesRepeats(t *testing.T) {
 	}
 	if result.AllocBytes != 300 || result.Allocs != 10 {
 		t.Fatalf("allocs = %d/%d, want 300/10", result.AllocBytes, result.Allocs)
+	}
+	if result.AllocBytesPerIter != 75 || result.AllocsPerIter != 2.5 {
+		t.Fatalf("alloc/iter = %v/%v, want 75/2.5", result.AllocBytesPerIter, result.AllocsPerIter)
+	}
+	if result.AllocBytesPerFrame != 25 || result.AllocsPerFrame != 10.0/12.0 {
+		t.Fatalf("alloc/frame = %v/%v, want 25/%v", result.AllocBytesPerFrame, result.AllocsPerFrame, 10.0/12.0)
 	}
 	if result.MeanElapsedMS != 15 || result.MedianElapsedMS != 15 || result.ElapsedMS != 30 {
 		t.Fatalf("elapsed summary = total %v mean %v median %v, want 30/15/15",

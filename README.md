@@ -266,7 +266,8 @@ go run ./cmd/goh264bench \
 ```
 
 The JSON report includes selected/green/known-red counts, backend kind, CPU
-flags, comparison lane, raw MD5 parity, oracle quality status, and FFmpeg-vs-Go
+flags, comparison lane, raw MD5 parity, oracle quality status, Go allocation
+totals plus per-iteration/per-frame allocation rates, and FFmpeg-vs-Go
 peer quality status. Diagnostic mode also treats expected `decode-error` rows
 as oracle rows and marks them green only when the decoder error matches
 `expected_error`.
