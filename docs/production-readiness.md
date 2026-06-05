@@ -17,6 +17,7 @@ scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH
 scripts/h264-real-vector-release-alloc.sh # checked-in Go allocation canary budget
 scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder canary
 scripts/h264-performance-evidence.sh  # local benchstat, JSON, CPU, and heap profile bundle
+scripts/h264-decoder-release-evidence.sh # full decoder release-evidence runner
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_RED_QUEUE=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorRedQueue
@@ -78,6 +79,10 @@ for one-shot Annex B decode and stateful Annex B access-unit streaming with
 real-vector benchmark report, CPU and heap profiles, and run metadata. Pending:
 checked-in reviewed profile artifacts, larger performance corpus, and
 in-process libavcodec baseline.
+`scripts/h264-decoder-release-evidence.sh` runs the decoder release checklist
+as one gate and writes per-command logs plus the local performance bundle under
+`.artifacts/h264-release-evidence/`. It fails by default if the known-red
+failure ledger is non-empty or the worktree is dirty.
 
 Public API delayed-output coverage includes AVC configured samples and Annex B
 access-unit streaming through `DecodeFrames`, with end-of-stream flush via an
