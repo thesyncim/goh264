@@ -90,6 +90,9 @@ public FATE vector harness,
 bounded public decode/packet no-panic fuzz smoke,
 stateful valid-damaged-valid packet recovery guards across configured AVC,
 AVC configuration-record, packet `NEW_EXTRADATA`, and auto Annex B surfaces,
+valid-prefix damaged-packet recovery across configured AVC, AVC
+configuration-record, packet AVC, stateful Annex B, and one-shot Annex B
+surfaces,
 malformed AVC/Annex B `NEW_EXTRADATA` recovery guards,
 malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,

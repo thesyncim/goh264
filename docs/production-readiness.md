@@ -102,9 +102,12 @@ Damaged-packet recovery evidence includes valid-damaged-valid stateful decode
 guards for configured AVC samples, AVC samples decoded with a configuration
 record, packet `NEW_EXTRADATA`, and auto-detected Annex B access units. A
 truncated VCL packet must return an error without preventing the next valid
-packet from matching the raw-MD5 oracle. Packet `NEW_EXTRADATA` recovery also
-guards malformed AVC and Annex B extradata: the bad side-data packet returns an
-error and the next packet still decodes against the last good configuration and
+packet from matching the raw-MD5 oracle. Configured AVC, AVC with a
+configuration record, packet AVC, stateful Annex B, and one-shot Annex B also
+return valid frames decoded before a later damaged slice in the same packet
+alongside the damaged-slice error. Packet `NEW_EXTRADATA` recovery also guards
+malformed AVC and Annex B extradata: the bad side-data packet returns an error
+and the next packet still decodes against the last good configuration and
 reference state. In-band malformed SPS/PPS NALs are also guarded as non-fatal:
 they do not replace the last good parameter sets before the next valid slice on
 configured AVC or mixed configured-AVC/Annex B public decode paths.

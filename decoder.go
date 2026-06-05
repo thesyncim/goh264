@@ -376,7 +376,7 @@ func (d *Decoder) decodeFrames(data []byte, packetSideData h264.DecodedFrameSide
 	}
 	frames, err := d.simple.DecodeNALUnitsWithSideData(nals, packetSideData)
 	if err != nil {
-		return nil, err
+		return framesFromH264WithError(frames, err)
 	}
 	return framesFromH264(frames), nil
 }
@@ -427,7 +427,7 @@ func (d *Decoder) DecodeAnnexBFrames(data []byte) ([]*Frame, error) {
 	}
 	frames, err := h264.DecodeAnnexBSimpleFrames(data)
 	if err != nil {
-		return nil, err
+		return framesFromH264WithError(frames, err)
 	}
 	out := make([]*Frame, len(frames))
 	for i, frame := range frames {
@@ -453,7 +453,7 @@ func (d *Decoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*Frame, err
 	}
 	frames, err := h264.DecodeAVCSimpleFrames(data, nalLengthSize)
 	if err != nil {
-		return nil, err
+		return framesFromH264WithError(frames, err)
 	}
 	out := make([]*Frame, len(frames))
 	for i, frame := range frames {
@@ -479,7 +479,7 @@ func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	}
 	frames, err := d.simple.DecodeAVCFrames(data, d.avcNALLengthSize)
 	if err != nil {
-		return nil, err
+		return framesFromH264WithError(frames, err)
 	}
 	return framesFromH264(frames), nil
 }
@@ -521,16 +521,23 @@ func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []b
 func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConfigurationRecord) ([]*Frame, error) {
 	frames, err := d.simple.DecodeAVCFrames(data, cfg.NALLengthSize)
 	if err != nil {
-		return nil, err
+		return framesFromH264WithError(frames, err)
 	}
 	flushed, err := d.simple.FlushDelayedFrames()
 	if err != nil {
-		return nil, err
+		return framesFromH264WithError(frames, err)
 	}
 	if len(flushed) != 0 {
 		frames = append(frames, flushed...)
 	}
 	return framesFromH264(frames), nil
+}
+
+func framesFromH264WithError(frames []*h264.DecodedFrame, err error) ([]*Frame, error) {
+	if len(frames) != 0 {
+		return framesFromH264(frames), err
+	}
+	return nil, err
 }
 
 func framesFromH264(frames []*h264.DecodedFrame) []*Frame {
