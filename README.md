@@ -52,13 +52,13 @@ CAVLC/CABAC implicit and explicit weighted B frame and slice-boundary deblock pl
 CABAC, weighted and direct motion paths, deblock modes, selected field/PAFF/MBAFF rows
 including High10 4:2:2/4:4:4 weighted-B and weighted-P top/bottom field guards for deblock modes 0/1/2,
 internal High12/High14 4:2:2/4:4:4 weighted-B plus luma-weighted, luma+chroma-weighted, and source-normalized chroma-only weighted-P top/bottom field guards for deblock modes 0/1/2,
-public High12/High14 4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, P16x16 no-residual, and P16x16 luma-residual rows,
+public High12/High14 4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, P16x16 no-residual, P16x16 luma-residual, and P16x16 luma+chroma-residual rows,
 reinit metadata rows, lossless High444
 transform-bypass rows, configured AVC surfaces, container-extracted Annex B
 vectors, and SEI side-data surfaces.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
-field/inter streams beyond the public High12/High14 frame-MBAFF IntraPCM/P-skip/P16x16 no-residual/luma-residual rows and internal High10/High12/High14 field weighted-B/weighted-P guard matrices,
+field/inter streams beyond the public High12/High14 frame-MBAFF IntraPCM/P-skip/P16x16 no-residual/luma-residual/luma+chroma-residual rows and internal High10/High12/High14 field weighted-B/weighted-P guard matrices,
 broader damaged-slice error resilience, threading/SIMD and
 bulk allocation hardening, and exact libavcodec delayed-output behavior.
 Intentionally unsupported at the pinned FFmpeg parity boundary: FMO, which
