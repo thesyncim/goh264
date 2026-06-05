@@ -16,6 +16,8 @@ Intra16x16 luma, chroma, and combined luma/chroma residual plus public
 P-skip/P16x16, internal High12 no-deblock weighted P-skip and
 weighted P16x16/partitioned P plus
 P16x16 residual handoff plus no-deblock/mode-1 I/P deblock including
+public CAVLC 4:2:2/4:4:4 luma-only and luma+chroma weighted-P
+no-deblock/mode-1/mode-2 deblock,
 CAVLC/CABAC unweighted B no-deblock/mode-1/mode-2 deblock including
 B-skip/direct-sub no-deblock and mode-1/mode-2 deblock plus partitioned
 B16x8/B8x16/B8x8 no-deblock and mode-1/mode-2 deblock,
@@ -87,7 +89,7 @@ stream; FFmpeg exits with decode error) and `mkv/h264_tta_undecodable.mkv` (no
 H.264 video stream).
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad slice-boundary
-high modes including broader High12/field weighted-P slice-boundary deblock modes, public 12/14-bit
+high modes including High12 CABAC/field weighted-P slice-boundary deblock modes, public 12/14-bit
 high streams beyond the current FFmpeg FATE 8-bit/10-bit set, broader
 damaged-slice error resilience, threading/SIMD, and full libavcodec
 delayed-output behavior.

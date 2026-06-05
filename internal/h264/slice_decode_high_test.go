@@ -968,6 +968,49 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaWeightedPSliceBound
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12ChromaCAVLCWeightedPDeblock(t *testing.T) {
+	weights := []struct {
+		name  string
+		table func(chromaFormatIDC int) PredWeightTable
+	}{
+		{name: "luma-only", table: func(int) PredWeightTable {
+			pwt := highWeightedPPredWeightTable()
+			pwt.UseWeightChroma = 0
+			return pwt
+		}},
+		{name: "luma-chroma", table: func(int) PredWeightTable {
+			return highWeightedPPredWeightTable()
+		}},
+	}
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, deblockMode := range []int32{0, 1, 2} {
+			t.Run(fmt.Sprintf("%s/deblock%d/weighted-pps-i", chromaFormatName(chromaFormatIDC), deblockMode), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, chromaFormatIDC, 2, deblockMode != 0, PictureTypeI)
+				sh.DeblockingFilter = deblockMode
+				sh.PPS.WeightedPred = 1
+
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high12 chroma CAVLC weighted-P PPS I validation err = %v, want nil", err)
+				}
+			})
+
+			for _, weight := range weights {
+				t.Run(fmt.Sprintf("%s/deblock%d/%s", chromaFormatName(chromaFormatIDC), deblockMode, weight.name), func(t *testing.T) {
+					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, chromaFormatIDC, 2, deblockMode != 0, PictureTypeP)
+					sh.DeblockingFilter = deblockMode
+					sh.RefCount = [2]uint32{1, 0}
+					sh.PPS.WeightedPred = 1
+					sh.PredWeightTable = weight.table(chromaFormatIDC)
+
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high12 chroma CAVLC weighted P validation err = %v, want nil", err)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestPredWeightTableCollapsesChromaOnlyPWeightToUseWeight(t *testing.T) {
 	gb := bitReaderFromBits(t, "011 010 0 1 00110 011 00100 010")
 	sh := &SliceHeader{
@@ -1187,12 +1230,6 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 	}{
 		{name: "9-bit-422", bitDepth: 9, chroma: 9, format: 2, slice: PictureTypeP},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeP},
-		{name: "high12-422-weighted-chroma-deblock-disabled", bitDepth: 12, chroma: 12, format: 2, slice: PictureTypeP},
-		{name: "high12-444-weighted-chroma-deblock-disabled", bitDepth: 12, chroma: 12, format: 3, slice: PictureTypeP},
-		{name: "high12-422-weighted-chroma-deblock", bitDepth: 12, chroma: 12, format: 2, deblock: true, slice: PictureTypeP},
-		{name: "high12-444-weighted-chroma-deblock", bitDepth: 12, chroma: 12, format: 3, deblock: true, slice: PictureTypeP},
-		{name: "high12-422-weighted-chroma-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 2, deblockMode: 2, slice: PictureTypeP},
-		{name: "high12-444-weighted-chroma-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 3, deblockMode: 2, slice: PictureTypeP},
 		{name: "b-slice", bitDepth: 10, chroma: 10, format: 1, slice: PictureTypeB},
 	}
 	for _, tt := range tests {
@@ -1211,6 +1248,25 @@ func TestValidateSimpleFrameSliceDecodeHighWeightedPStillRejectsStagedBoundaries
 				t.Fatalf("weighted high validation err = %v, want ErrUnsupported", err)
 			}
 		})
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsHigh12ChromaCABACWeightedP(t *testing.T) {
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, deblockMode := range []int32{0, 1, 2} {
+			t.Run(fmt.Sprintf("%s/deblock%d", chromaFormatName(chromaFormatIDC), deblockMode), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, chromaFormatIDC, 2, deblockMode != 0, PictureTypeP)
+				sh.DeblockingFilter = deblockMode
+				sh.RefCount = [2]uint32{1, 0}
+				sh.PPS.CABAC = 1
+				sh.PPS.WeightedPred = 1
+				sh.PredWeightTable = highWeightedPPredWeightTable()
+
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+					t.Fatalf("high12 chroma CABAC weighted P validation err = %v, want ErrUnsupported", err)
+				}
+			})
+		}
 	}
 }
 
