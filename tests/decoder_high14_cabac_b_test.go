@@ -208,6 +208,41 @@ func high14CABACBCases() []high14CABACBCase {
 			},
 			rawVideoMD5: "320b1242759143fe62c86e5bdb48f949",
 		},
+		{
+			name:         "spatial-direct-mode1-deblock",
+			sourceFile:   "high10_direct_b_deblock_spatial_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  1,
+			direct:       1,
+			width:        32,
+			height:       16,
+			rawFrameSize: 1536,
+			bitstreamMD5: "2955209619ffe400bab53ebe950ee86a",
+			frameMD5: []string{
+				"4135c86c2c49ff515cd47c8fda7bd346",
+				"8c071eddc38468b305f03a50124a669b",
+				"1e8f8515a4867af7b44578c01fa04914",
+			},
+			rawVideoMD5: "320b1242759143fe62c86e5bdb48f949",
+		},
+		{
+			name:         "spatial-direct-mode2-deblock",
+			sourceFile:   "high10_direct_b_deblock_spatial_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  2,
+			direct:       1,
+			mode2Deblock: true,
+			width:        32,
+			height:       16,
+			rawFrameSize: 1536,
+			bitstreamMD5: "f32baca43ee1ef0117e01b161e028d24",
+			frameMD5: []string{
+				"4135c86c2c49ff515cd47c8fda7bd346",
+				"8c071eddc38468b305f03a50124a669b",
+				"1e8f8515a4867af7b44578c01fa04914",
+			},
+			rawVideoMD5: "320b1242759143fe62c86e5bdb48f949",
+		},
 	}
 }
 
