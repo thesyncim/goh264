@@ -49,13 +49,14 @@ no-deblock, mode-1/mode-2 deblock, direct-sub deblock, and partitioned B
 deblock plus 4:2:0 explicit weighted B no-deblock, mode-1/mode-2 deblock,
 direct-sub deblock, and partitioned B deblock, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, and public High10/
-High422 field-coded frame-MBAFF deblock rows, plus public High9 4:2:0
+High422 field-coded frame-MBAFF deblock rows, plus internal High10 4:2:2
+top/bottom field explicit weighted B luma/chroma deblock modes 0/1, plus public High9 4:2:0
 SPS reinit metadata from 9-bit to 8-bit output, public High444 10-bit SPS
 reinit metadata, and the XAVC High422 terminal damaged top-field row that
 FFmpeg conceals while draining already-complete delayed frames.
 
 Next: public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
-weighted chroma field variants and broader slice-boundary modes, broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
+remaining 4:4:4 weighted chroma field variants and broader slice-boundary modes, broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
 damaged-slice error resilience beyond terminal first-field recovery.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and

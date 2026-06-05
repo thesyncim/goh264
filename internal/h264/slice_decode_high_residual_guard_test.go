@@ -160,6 +160,67 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsFieldBShapes(t *tes
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma422FieldExplicitWeightedB(t *testing.T) {
+	weights := []struct {
+		name            string
+		useWeight       int32
+		useWeightChroma int32
+	}{
+		{name: "luma", useWeight: 1},
+		{name: "chroma", useWeightChroma: 1},
+		{name: "luma-chroma", useWeight: 1, useWeightChroma: 1},
+	}
+	shapes := []struct {
+		name     string
+		mbType   uint32
+		sub      *[4]uint32
+		cbp      int
+		cbpTable int
+	}{
+		{name: "b16x16-l0", mbType: MBType16x16 | MBTypeP0L0 | MBTypeInterlaced},
+		{name: "b16x16-l1", mbType: MBType16x16 | MBTypeP0L1 | MBTypeInterlaced},
+		{name: "b16x16-bi", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeInterlaced},
+		{name: "b16x8-bi-residual", mbType: MBType16x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1 | MBTypeInterlaced, cbp: 1, cbpTable: 1},
+		{name: "b8x16-l0-l1", mbType: MBType8x16 | MBTypeP0L0 | MBTypeP1L1 | MBTypeInterlaced},
+		{name: "b8x8-explicit-sub", mbType: MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1 | MBTypeInterlaced, sub: &([4]uint32{
+			MBType16x16 | MBTypeP0L0,
+			MBType16x16 | MBTypeP0L1,
+			MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+			MBType16x16 | MBTypeP0L1,
+		})},
+	}
+	for _, picture := range []int32{PictureTopField, PictureBottomField} {
+		for _, deblock := range []int32{0, 1} {
+			for _, weight := range weights {
+				for _, shape := range shapes {
+					t.Run(fmt.Sprintf("picture%d/mode%d/%s/%s", picture, deblock, weight.name, shape.name), func(t *testing.T) {
+						sh := &SliceHeader{
+							SliceTypeNoS:     PictureTypeB,
+							PictureStructure: picture,
+							DeblockingFilter: deblock,
+							SPS: &SPS{
+								BitDepthLuma:     10,
+								BitDepthChroma:   10,
+								ChromaFormatIDC:  2,
+								FrameMBSOnlyFlag: 0,
+								MBAFF:            1,
+							},
+							PPS: &PPS{WeightedBipredIDC: 1},
+							PredWeightTable: PredWeightTable{
+								UseWeight:       weight.useWeight,
+								UseWeightChroma: weight.useWeightChroma,
+							},
+						}
+						if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, shape.sub, shape.cbp, shape.cbpTable); err != nil {
+							t.Fatalf("validate high10 422 field explicit weighted B reconstruct err = %v, want nil", err)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsBDirectSkip(t *testing.T) {
 	sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
 	directSub := [4]uint32{
