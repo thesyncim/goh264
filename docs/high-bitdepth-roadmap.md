@@ -61,8 +61,8 @@ top/bottom field luma-only, luma+chroma, and source-normalized chroma-only
 weighted P deblock modes 0/1/2, plus internal High12/High14 4:2:2/4:4:4
 top/bottom field explicit/implicit weighted B plus luma-only, luma+chroma, and source-normalized chroma-only
 weighted P deblock modes 0/1/2,
-plus internal High9 4:2:2/4:4:4 I/P slice-boundary mode-2 validation and
-loop-filter proof, plus public High9 4:2:0
+plus internal High9 4:2:2/4:4:4 weighted-P frame-deblock modes 0/1 and
+I/P slice-boundary mode-2 validation and loop-filter proof, plus public High9 4:2:0
 SPS reinit metadata from 9-bit to 8-bit output, public High444 10-bit SPS
 reinit metadata, and the XAVC High422 terminal damaged top-field row that
 FFmpeg conceals while draining already-complete delayed frames.

@@ -546,7 +546,8 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 			return ErrUnsupported
 		}
 		if sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
-			if !isHigh10ChromaWeightedPFrameDeblockScope(sh) &&
+			if !isHigh9ChromaWeightedPFrameDeblockScope(sh) &&
+				!isHigh10ChromaWeightedPFrameDeblockScope(sh) &&
 				!isHigh10ChromaWeightedPSliceBoundaryDeblockScope(sh) &&
 				!isHigh12ChromaWeightedPDeblockScope(sh) &&
 				!isHigh14ChromaWeightedPDeblockScope(sh) &&
@@ -886,6 +887,22 @@ func isHigh10ChromaWeightedPFrameDeblockScope(sh *SliceHeader) bool {
 	}
 	return sh.PictureStructure == PictureFrame &&
 		isHigh10ChromaWeightedPDeblockScope(sh)
+}
+
+func isHigh9ChromaWeightedPFrameDeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil {
+		return false
+	}
+	if sh.PictureStructure != PictureFrame ||
+		sh.SPS.BitDepthLuma != 9 ||
+		(sh.SPS.ChromaFormatIDC != 2 && sh.SPS.ChromaFormatIDC != 3) ||
+		sh.SliceTypeNoS != PictureTypeP ||
+		(sh.DeblockingFilter != 0 && sh.DeblockingFilter != 1) ||
+		sh.PPS.WeightedPred == 0 {
+		return false
+	}
+	return sh.PredWeightTable.UseWeight == 1 &&
+		(sh.PredWeightTable.UseWeightChroma == 0 || sh.PredWeightTable.UseWeightChroma == 1)
 }
 
 func isHigh10ChromaWeightedPSliceBoundaryDeblockScope(sh *SliceHeader) bool {
