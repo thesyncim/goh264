@@ -258,6 +258,49 @@ func TestH264HLMotionFrameHigh10ExplicitLumaOnlyWeightedField444List0(t *testing
 	requireH264BlockEqualHigh(t, dst.Cr, want.Cr, dst.ChromaStride, crOff, crOff, chromaWidth, chromaHeight)
 }
 
+func TestH264HLMotionFrameHigh10ExplicitSourceChromaOnlyWeightedField444List0(t *testing.T) {
+	const bitDepth = 10
+	dst := makeH264MotionCompPictureHigh(3, bitDepth, 37)
+	want := makeH264MotionCompPictureHigh(3, bitDepth, 37)
+	ref0 := makeH264MotionCompPictureHigh(3, bitDepth, 113)
+	applySimpleFieldRefPlaneHigh(dst, PictureTopField)
+	applySimpleFieldRefPlaneHigh(want, PictureTopField)
+	applySimpleFieldRefPlaneHigh(ref0, PictureTopField)
+	refs := [2][]*h264PicturePlanesHigh{{ref0}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+
+	pwt := highSourceChromaOnlyWeightedPPredWeightTable(3)
+
+	const mbX = 1
+	const mbY = 1
+	mbType := MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	if err := h264HLMotionFrameWeightedHigh(dst, refs, &cache, mbType, [4]uint32{}, mbX, mbY, 1, &pwt, nil, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+	if err := h264HLMotionFrameHigh(want, refs, &cache, mbType, [4]uint32{}, mbX, mbY, 1, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+	yOff, cbOff, crOff, err := h264MBDestPartOffsetsHigh(want, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chromaHeight, chromaWidth, err := h264ChromaWeightGeometry(want.ChromaFormatIDC, 16, 8, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h264WeightPixelsHigh(want.Cb[cbOff:], want.ChromaStride, chromaHeight, 1, 3, -1, chromaWidth, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+	if err := h264WeightPixelsHigh(want.Cr[crOff:], want.ChromaStride, chromaHeight, 1, 2, 1, chromaWidth, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+
+	requireH264BlockEqualHigh(t, dst.Y, want.Y, dst.LumaStride, yOff, yOff, 16, 16)
+	requireH264BlockEqualHigh(t, dst.Cb, want.Cb, dst.ChromaStride, cbOff, cbOff, chromaWidth, chromaHeight)
+	requireH264BlockEqualHigh(t, dst.Cr, want.Cr, dst.ChromaStride, crOff, crOff, chromaWidth, chromaHeight)
+}
+
 func TestH264HLMotionFrameHigh10ImplicitWeightedField444BipredUsesParityWeight(t *testing.T) {
 	const bitDepth = 10
 	dst := makeH264MotionCompPictureHigh(3, bitDepth, 31)

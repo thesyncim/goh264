@@ -297,11 +297,18 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Chroma444FieldWeightedB(t
 
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaFieldWeightedP(t *testing.T) {
 	weights := []struct {
-		name            string
-		useWeightChroma int32
+		name  string
+		table func(chromaFormatIDC int) PredWeightTable
 	}{
-		{name: "luma-only"},
-		{name: "luma-chroma", useWeightChroma: 1},
+		{name: "luma-only", table: func(int) PredWeightTable {
+			pwt := highWeightedPPredWeightTable()
+			pwt.UseWeightChroma = 0
+			return pwt
+		}},
+		{name: "luma-chroma", table: func(int) PredWeightTable {
+			return highWeightedPPredWeightTable()
+		}},
+		{name: "source-chroma-only", table: highSourceChromaOnlyWeightedPPredWeightTable},
 	}
 	for _, chromaFormatIDC := range []int{2, 3} {
 		for _, picture := range []struct {
@@ -329,8 +336,7 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaFieldWeightedP(t *t
 								sh.PPS.CABAC = 1
 							}
 							sh.PPS.WeightedPred = 1
-							sh.PredWeightTable = highWeightedPPredWeightTable()
-							sh.PredWeightTable.UseWeightChroma = weight.useWeightChroma
+							sh.PredWeightTable = weight.table(chromaFormatIDC)
 
 							if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
 								t.Fatalf("high10 chroma weighted P field validation err = %v, want nil", err)
@@ -355,11 +361,10 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedHigh10FieldPictures(t 
 		{name: "422/slice-boundary", chroma: 2, sliceType: PictureTypeI, deblockMode: 2},
 		{name: "444/unweighted-B", chroma: 3, sliceType: PictureTypeB},
 		{name: "444/unweighted-P", chroma: 3, sliceType: PictureTypeP},
-		{name: "444/chroma-only-weighted-P", chroma: 3, sliceType: PictureTypeP, run: func(sh *SliceHeader) {
+		{name: "444/unnormalized-chroma-only-weighted-P", chroma: 3, sliceType: PictureTypeP, run: func(sh *SliceHeader) {
 			sh.PPS.WeightedPred = 1
-			sh.PredWeightTable = highWeightedPPredWeightTable()
+			sh.PredWeightTable = highSourceChromaOnlyWeightedPPredWeightTable(3)
 			sh.PredWeightTable.UseWeight = 0
-			sh.PredWeightTable.UseWeightChroma = 1
 		}},
 		{name: "444/I", chroma: 3, sliceType: PictureTypeI},
 	} {
@@ -928,17 +933,51 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaWeightedPFrameDeblo
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighRejectsHigh10ChromaChromaOnlyWeightedP(t *testing.T) {
+func TestPredWeightTableCollapsesChromaOnlyPWeightToUseWeight(t *testing.T) {
+	gb := bitReaderFromBits(t, "011 010 0 1 00110 011 00100 010")
+	sh := &SliceHeader{
+		SliceTypeNoS:     PictureTypeP,
+		PictureStructure: PictureTopField,
+		RefCount:         [2]uint32{1, 0},
+		SPS:              &SPS{ChromaFormatIDC: 3},
+	}
+
+	if err := predWeightTable(&gb, sh); err != nil {
+		t.Fatalf("pred weight table err = %v, want nil", err)
+	}
+	if gb.bitsLeft() != 0 {
+		t.Fatalf("bits left = %d, want 0", gb.bitsLeft())
+	}
+
+	pwt := sh.PredWeightTable
+	if pwt.UseWeight != 1 || pwt.UseWeightChroma != 1 {
+		t.Fatalf("use weight = %d/%d, want source-normalized chroma-only 1/1", pwt.UseWeight, pwt.UseWeightChroma)
+	}
+	if pwt.LumaWeightFlag[0] != 0 || pwt.ChromaWeightFlag[0] != 1 {
+		t.Fatalf("weight flags = luma %d chroma %d, want 0/1", pwt.LumaWeightFlag[0], pwt.ChromaWeightFlag[0])
+	}
+	if got, want := pwt.LumaWeight[0][0], ([2]int32{4, 0}); got != want {
+		t.Fatalf("luma weight = %v, want %v", got, want)
+	}
+	if got, want := pwt.ChromaWeight[0][0][0], ([2]int32{3, -1}); got != want {
+		t.Fatalf("cb weight = %v, want %v", got, want)
+	}
+	if got, want := pwt.ChromaWeight[0][0][1], ([2]int32{2, 1}); got != want {
+		t.Fatalf("cr weight = %v, want %v", got, want)
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsUnnormalizedChromaOnlyWeightedPMetadata(t *testing.T) {
 	for _, chromaFormatIDC := range []int{2, 3} {
 		t.Run(chromaFormatName(chromaFormatIDC), func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, false, PictureTypeP)
 			sh.RefCount = [2]uint32{1, 0}
 			sh.PPS.WeightedPred = 1
-			sh.PredWeightTable = highWeightedPPredWeightTable()
+			sh.PredWeightTable = highSourceChromaOnlyWeightedPPredWeightTable(chromaFormatIDC)
 			sh.PredWeightTable.UseWeight = 0
 
 			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
-				t.Fatalf("high chroma chroma-only weighted P validation err = %v, want ErrUnsupported", err)
+				t.Fatalf("unnormalized high chroma weighted P validation err = %v, want ErrUnsupported", err)
 			}
 		})
 	}

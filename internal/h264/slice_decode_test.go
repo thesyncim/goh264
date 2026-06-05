@@ -835,6 +835,18 @@ func highWeightedPPredWeightTable() PredWeightTable {
 	return pwt
 }
 
+func highSourceChromaOnlyWeightedPPredWeightTable(chromaFormatIDC int) PredWeightTable {
+	pwt := h264MotionCompTestPWT(chromaFormatIDC)
+	pwt.UseWeight = 1
+	pwt.UseWeightChroma = 1
+	pwt.LumaLog2WeightDenom = 2
+	pwt.ChromaLog2WeightDenom = 1
+	pwt.LumaWeight[0][0] = [2]int32{4, 0}
+	pwt.ChromaWeight[0][0][0] = [2]int32{3, -1}
+	pwt.ChromaWeight[0][0][1] = [2]int32{2, 1}
+	return pwt
+}
+
 func h264HighWeightedPReference(t *testing.T, ref *h264PicturePlanesHigh, pwt *PredWeightTable, bitDepth int) *h264PicturePlanesHigh {
 	t.Helper()
 

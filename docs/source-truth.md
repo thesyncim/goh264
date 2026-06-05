@@ -86,7 +86,7 @@ stream; FFmpeg exits with decode error) and `mkv/h264_tta_undecodable.mkv` (no
 H.264 video stream).
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad slice-boundary
-high modes including chroma-only weighted-P field variants and broader slice-boundary deblock modes, public 12/14-bit
+high modes including broader weighted-P slice-boundary deblock modes, public 12/14-bit
 high streams beyond the current FFmpeg FATE 8-bit/10-bit set, broader
 damaged-slice error resilience, threading/SIMD, and full libavcodec
 delayed-output behavior.

@@ -95,11 +95,18 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsFieldPShapes(t *tes
 
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10ChromaFieldWeightedP(t *testing.T) {
 	weights := []struct {
-		name            string
-		useWeightChroma int32
+		name  string
+		table func(chromaFormatIDC int) PredWeightTable
 	}{
-		{name: "luma-only"},
-		{name: "luma-chroma", useWeightChroma: 1},
+		{name: "luma-only", table: func(int) PredWeightTable {
+			pwt := highWeightedPPredWeightTable()
+			pwt.UseWeightChroma = 0
+			return pwt
+		}},
+		{name: "luma-chroma", table: func(int) PredWeightTable {
+			return highWeightedPPredWeightTable()
+		}},
+		{name: "source-chroma-only", table: highSourceChromaOnlyWeightedPPredWeightTable},
 	}
 	sub := [4]uint32{
 		MBType16x16 | MBTypeP0L0,
@@ -137,11 +144,8 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10ChromaFieldWe
 									FrameMBSOnlyFlag: 0,
 									MBAFF:            1,
 								},
-								PPS: &PPS{WeightedPred: 1},
-								PredWeightTable: PredWeightTable{
-									UseWeight:       1,
-									UseWeightChroma: weight.useWeightChroma,
-								},
+								PPS:             &PPS{WeightedPred: 1},
+								PredWeightTable: weight.table(int(chromaFormatIDC)),
 							}
 							if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, shape.sub, shape.cbp, shape.cbpTable); err != nil {
 								t.Fatalf("validate high10 chroma field weighted P reconstruct err = %v, want nil", err)
