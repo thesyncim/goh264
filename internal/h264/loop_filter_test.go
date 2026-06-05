@@ -1197,7 +1197,7 @@ func TestMacroblockTablesFilterFrameHigh420SliceBoundaryModeSkipsCrossSliceBound
 }
 
 func TestMacroblockTablesFilterFrameHigh422SliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
-	for _, bitDepth := range []int{10, 12} {
+	for _, bitDepth := range []int{9, 10, 12} {
 		t.Run(bitDepthName(int32(bitDepth)), func(t *testing.T) {
 			dst := high422SliceBoundaryFrame()
 			m, params := high422SliceBoundaryTables(t, bitDepth, 2)
@@ -1228,7 +1228,7 @@ func TestMacroblockTablesFilterFrameHigh422SliceBoundaryModeSkipsCrossSliceBound
 }
 
 func TestMacroblockTablesFilterFrameHigh444SliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
-	for _, bitDepth := range []int{10, 12} {
+	for _, bitDepth := range []int{9, 10, 12} {
 		t.Run(bitDepthName(int32(bitDepth)), func(t *testing.T) {
 			dst := high444SliceBoundaryFrame()
 			m, params := high444SliceBoundaryTables(t, bitDepth, 2)

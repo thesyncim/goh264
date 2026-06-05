@@ -466,7 +466,8 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 		slice       int32
 	}{
 		{name: "8-bit", bitDepth: 8, chroma: 8, format: 1, slice: PictureTypeI},
-		{name: "9-bit-422-slice-boundary-deblock", bitDepth: 9, chroma: 9, format: 2, deblockMode: 2, slice: PictureTypeI},
+		{name: "9-bit-422-slice-boundary-B", bitDepth: 9, chroma: 9, format: 2, deblockMode: 2, slice: PictureTypeB},
+		{name: "9-bit-444-slice-boundary-B", bitDepth: 9, chroma: 9, format: 3, deblockMode: 2, slice: PictureTypeB},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeI},
 		{name: "monochrome", bitDepth: 10, chroma: 10, format: 0, slice: PictureTypeI},
 	}
@@ -1115,7 +1116,7 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnnormalizedChromaOnlyWeighted
 }
 
 func TestValidateSimpleFrameSliceDecodeHighAllowsChromaSliceBoundaryDeblocking(t *testing.T) {
-	for _, bitDepth := range []int32{10, 12} {
+	for _, bitDepth := range []int32{9, 10, 12} {
 		for _, chromaFormatIDC := range []int{2, 3} {
 			for _, cabac := range []int32{0, 1} {
 				for _, sliceType := range []int32{PictureTypeI, PictureTypeP} {

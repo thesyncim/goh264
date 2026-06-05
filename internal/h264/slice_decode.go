@@ -607,7 +607,9 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 			sh.PictureStructure == PictureFrame &&
 			sh.SPS.ChromaFormatIDC == 1
 	case 9:
-		return sh.SPS.ChromaFormatIDC == 1 || isHighChromaFrameDeblockScope(sh)
+		return sh.SPS.ChromaFormatIDC == 1 ||
+			isHighChromaFrameDeblockScope(sh) ||
+			isHighChromaSliceBoundaryDeblockScope(sh)
 	case 10:
 		return true
 	case 12:
@@ -872,7 +874,7 @@ func isHighChromaSliceBoundaryDeblockScope(sh *SliceHeader) bool {
 	if sh == nil || sh.SPS == nil {
 		return false
 	}
-	return (sh.SPS.BitDepthLuma == 10 || sh.SPS.BitDepthLuma == 12) &&
+	return (sh.SPS.BitDepthLuma == 9 || sh.SPS.BitDepthLuma == 10 || sh.SPS.BitDepthLuma == 12) &&
 		(sh.SPS.ChromaFormatIDC == 2 || sh.SPS.ChromaFormatIDC == 3) &&
 		sh.DeblockingFilter == 2 &&
 		(sh.SliceTypeNoS == PictureTypeI || sh.SliceTypeNoS == PictureTypeP)
