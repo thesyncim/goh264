@@ -4,6 +4,9 @@ package goh264_test
 
 import "testing"
 
+var rawOutputAllocationByteSink []byte
+var rawOutputAllocationUint16Sink []uint16
+
 func TestFrameRawPixelFormatAndSize(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -230,6 +233,172 @@ func TestFrameAppendRawYUVExpands8BitMonochromeWithoutChromaDepth(t *testing.T) 
 	}
 	if string(got) != string([]byte{1, 2, 3, 4, 128, 128}) {
 		t.Fatalf("AppendRawYUV = %v, want [1 2 3 4 128 128]", got)
+	}
+}
+
+func TestFrameAppendRawYUVUsesCallerBufferWithoutAllocation(t *testing.T) {
+	frame := Frame{
+		Width:           2,
+		Height:          2,
+		ChromaFormatIDC: 1,
+		BitDepthLuma:    8,
+		BitDepthChroma:  8,
+		YStride:         2,
+		CStride:         1,
+		Y:               []byte{1, 2, 3, 4},
+		Cb:              []byte{5},
+		Cr:              []byte{6},
+	}
+	wantSize, err := frame.RawYUVSize()
+	if err != nil {
+		t.Fatalf("RawYUVSize: %v", err)
+	}
+	buf := make([]byte, 0, wantSize)
+	out, err := frame.AppendRawYUV(buf)
+	if err != nil {
+		t.Fatalf("AppendRawYUV: %v", err)
+	}
+	if len(out) != wantSize || len(buf) != 0 || cap(out) != cap(buf) || &out[0] != &buf[:cap(buf)][0] {
+		t.Fatalf("AppendRawYUV caller buffer len/cap/pointer = %d/%d/%t, want len %d cap %d original backing",
+			len(out), cap(out), &out[0] == &buf[:cap(buf)][0], wantSize, cap(buf))
+	}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		out, err := frame.AppendRawYUV(buf[:0])
+		if err != nil {
+			t.Fatalf("AppendRawYUV: %v", err)
+		}
+		if len(out) != wantSize {
+			t.Fatalf("AppendRawYUV len = %d, want %d", len(out), wantSize)
+		}
+		rawOutputAllocationByteSink = out
+	})
+	if allocs != 0 {
+		t.Fatalf("AppendRawYUV allocations/run = %.0f, want 0 with caller-owned buffer", allocs)
+	}
+}
+
+func TestFrameAppendRawYUVBytesLEUsesCallerBufferWithoutAllocation(t *testing.T) {
+	tests := []struct {
+		name  string
+		frame Frame
+	}{
+		{
+			name: "8-bit",
+			frame: Frame{
+				Width:           2,
+				Height:          2,
+				ChromaFormatIDC: 1,
+				BitDepthLuma:    8,
+				BitDepthChroma:  8,
+				YStride:         2,
+				CStride:         1,
+				Y:               []byte{1, 2, 3, 4},
+				Cb:              []byte{5},
+				Cr:              []byte{6},
+			},
+		},
+		{
+			name: "10-bit-cropped",
+			frame: Frame{
+				Width:           4,
+				Height:          4,
+				CropLeft:        2,
+				CropTop:         1,
+				ChromaFormatIDC: 1,
+				BitDepthLuma:    10,
+				BitDepthChroma:  10,
+				YStride:         8,
+				CStride:         5,
+				Y16:             make([]uint16, 5*8),
+				Cb16:            make([]uint16, 2*5),
+				Cr16:            make([]uint16, 2*5),
+			},
+		},
+	}
+	fillUint16Ramp(tests[1].frame.Y16, 100)
+	fillUint16Ramp(tests[1].frame.Cb16, 500)
+	fillUint16Ramp(tests[1].frame.Cr16, 800)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			frame := tt.frame
+			wantSize, err := frame.RawYUVSize()
+			if err != nil {
+				t.Fatalf("RawYUVSize: %v", err)
+			}
+			buf := make([]byte, 0, wantSize)
+			out, err := frame.AppendRawYUVBytesLE(buf)
+			if err != nil {
+				t.Fatalf("AppendRawYUVBytesLE: %v", err)
+			}
+			if len(out) != wantSize || len(buf) != 0 || cap(out) != cap(buf) || &out[0] != &buf[:cap(buf)][0] {
+				t.Fatalf("AppendRawYUVBytesLE caller buffer len/cap/pointer = %d/%d/%t, want len %d cap %d original backing",
+					len(out), cap(out), &out[0] == &buf[:cap(buf)][0], wantSize, cap(buf))
+			}
+
+			allocs := testing.AllocsPerRun(100, func() {
+				out, err := frame.AppendRawYUVBytesLE(buf[:0])
+				if err != nil {
+					t.Fatalf("AppendRawYUVBytesLE: %v", err)
+				}
+				if len(out) != wantSize {
+					t.Fatalf("AppendRawYUVBytesLE len = %d, want %d", len(out), wantSize)
+				}
+				rawOutputAllocationByteSink = out
+			})
+			if allocs != 0 {
+				t.Fatalf("AppendRawYUVBytesLE allocations/run = %.0f, want 0 with caller-owned buffer", allocs)
+			}
+		})
+	}
+}
+
+func TestFrameAppendRawYUV16UsesCallerBufferWithoutAllocation(t *testing.T) {
+	frame := Frame{
+		Width:           4,
+		Height:          4,
+		CropLeft:        2,
+		CropTop:         1,
+		ChromaFormatIDC: 1,
+		BitDepthLuma:    10,
+		BitDepthChroma:  10,
+		YStride:         8,
+		CStride:         5,
+		Y16:             make([]uint16, 5*8),
+		Cb16:            make([]uint16, 2*5),
+		Cr16:            make([]uint16, 2*5),
+	}
+	fillUint16Ramp(frame.Y16, 100)
+	fillUint16Ramp(frame.Cb16, 500)
+	fillUint16Ramp(frame.Cr16, 800)
+	wantBytes, err := frame.RawYUVSize()
+	if err != nil {
+		t.Fatalf("RawYUVSize: %v", err)
+	}
+	wantSamples := wantBytes / 2
+	buf := make([]uint16, 0, wantSamples)
+	out, err := frame.AppendRawYUV16(buf)
+	if err != nil {
+		t.Fatalf("AppendRawYUV16: %v", err)
+	}
+	if len(out) != wantSamples || len(buf) != 0 || cap(out) != cap(buf) || &out[0] != &buf[:cap(buf)][0] {
+		t.Fatalf("AppendRawYUV16 caller buffer len/cap/pointer = %d/%d/%t, want len %d cap %d original backing",
+			len(out), cap(out), &out[0] == &buf[:cap(buf)][0], wantSamples, cap(buf))
+	}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		out, err := frame.AppendRawYUV16(buf[:0])
+		if err != nil {
+			t.Fatalf("AppendRawYUV16: %v", err)
+		}
+		if len(out) != wantSamples {
+			t.Fatalf("AppendRawYUV16 len = %d, want %d", len(out), wantSamples)
+		}
+		rawOutputAllocationUint16Sink = out
+	})
+	if allocs != 0 {
+		t.Fatalf("AppendRawYUV16 allocations/run = %.0f, want 0 with caller-owned buffer", allocs)
 	}
 }
 

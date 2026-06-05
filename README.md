@@ -263,7 +263,8 @@ as oracle rows and marks them green only when the decoder error matches
 `expected_error`.
 
 Performance status is intentionally conservative: the benchmark harness exists
-and rejects quality drift before timing, but bulk steady-state allocation gates,
+and rejects quality drift before timing, and public raw-output helpers have
+caller-buffer zero-allocation guards. Bulk decode steady-state allocation gates,
 benchstat/profile evidence, a larger performance corpus, and an in-process
 libavcodec baseline are still pending. Treat the decoder as pre-production for
 throughput-sensitive use until [docs/production-readiness.md](docs/production-readiness.md)

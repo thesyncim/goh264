@@ -40,6 +40,11 @@ Use `-fair-cpu-lanes` for both `pure-c-vs-pure-go` and
 `native-c+asm-vs-go+asm`; extracted container rows require FFmpeg on `PATH`
 when the cache does not already contain the `.h264-annexb` derived stream.
 Result `backend_kind` records the backend actually
-measured, so current no-asm Go builds still report `go-pure`. Pending: bulk
+measured, so current no-asm Go builds still report `go-pure`.
+
+Allocation evidence: `tests/decoder_high_output_test.go` guards
+`Frame.AppendRawYUV`, `Frame.AppendRawYUVBytesLE`, and `Frame.AppendRawYUV16`
+with exact-capacity caller-owned buffers and requires zero steady-state
+allocations for 8-bit and high-bit-depth output paths. Pending: bulk decode
 allocation gates, benchstat/profile output, larger performance corpus, and
 in-process libavcodec baseline.
