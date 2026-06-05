@@ -43,6 +43,22 @@ const (
 	high12FrameMBAFFP8x8LumaChromaResidualPFrameMD5    = "c0dbf6a3e55009aee8c9ac804179c384"
 	high12FrameMBAFFP8x8LumaChromaResidualRawVideoMD5  = "70b549601284196fd1131bc5f30efd7e"
 
+	high12FrameMBAFFFrameP16x16LumaChromaResidualBitstreamMD5 = "54073b34105bcf336879f86db856478e"
+	high12FrameMBAFFFrameP16x16LumaChromaResidualPFrameMD5    = "9fcdad62af62ebe33d99daaf8d3e79ac"
+	high12FrameMBAFFFrameP16x16LumaChromaResidualRawVideoMD5  = "97ff9eb67f1ece11b4755aff72d135d6"
+
+	high12FrameMBAFFFrameP16x8LumaChromaResidualBitstreamMD5 = "787db7ce68fc112939ba24cd06ef45c4"
+	high12FrameMBAFFFrameP16x8LumaChromaResidualPFrameMD5    = "9fcdad62af62ebe33d99daaf8d3e79ac"
+	high12FrameMBAFFFrameP16x8LumaChromaResidualRawVideoMD5  = "97ff9eb67f1ece11b4755aff72d135d6"
+
+	high12FrameMBAFFFrameP8x16LumaChromaResidualBitstreamMD5 = "7ad60733dc3dc8983c10cfbc56a187e0"
+	high12FrameMBAFFFrameP8x16LumaChromaResidualPFrameMD5    = "9fcdad62af62ebe33d99daaf8d3e79ac"
+	high12FrameMBAFFFrameP8x16LumaChromaResidualRawVideoMD5  = "97ff9eb67f1ece11b4755aff72d135d6"
+
+	high12FrameMBAFFFrameP8x8LumaChromaResidualBitstreamMD5 = "7766d1ed42f4d97c43e3152bec537278"
+	high12FrameMBAFFFrameP8x8LumaChromaResidualPFrameMD5    = "9fcdad62af62ebe33d99daaf8d3e79ac"
+	high12FrameMBAFFFrameP8x8LumaChromaResidualRawVideoMD5  = "97ff9eb67f1ece11b4755aff72d135d6"
+
 	high14FrameMBAFFPSkipNoResidualBitstreamMD5 = "446edd4f33960f9a60ab97902d081c23"
 	high14FrameMBAFFPSkipNoResidualPFrameMD5    = "7da709fea95b8767edeb8e5963b37f2a"
 	high14FrameMBAFFPSkipNoResidualRawVideoMD5  = "237561940e2f07d30cac465fcea640bb"
@@ -71,6 +87,22 @@ const (
 	high14FrameMBAFFP8x8LumaChromaResidualPFrameMD5    = "5474386e384e7353bd7b33c2d44d04c1"
 	high14FrameMBAFFP8x8LumaChromaResidualRawVideoMD5  = "c5a9d16416f05bc6db747b0c603cabc5"
 
+	high14FrameMBAFFFrameP16x16LumaChromaResidualBitstreamMD5 = "31c1aeb4e6aada6859ca417fe24279f2"
+	high14FrameMBAFFFrameP16x16LumaChromaResidualPFrameMD5    = "b85b53afe622571ae0124eab6310392b"
+	high14FrameMBAFFFrameP16x16LumaChromaResidualRawVideoMD5  = "2d65809bb1c4417f27154b4f3ec9bf01"
+
+	high14FrameMBAFFFrameP16x8LumaChromaResidualBitstreamMD5 = "44557f7a612b0d4878ee367ecac2c2b8"
+	high14FrameMBAFFFrameP16x8LumaChromaResidualPFrameMD5    = "b85b53afe622571ae0124eab6310392b"
+	high14FrameMBAFFFrameP16x8LumaChromaResidualRawVideoMD5  = "2d65809bb1c4417f27154b4f3ec9bf01"
+
+	high14FrameMBAFFFrameP8x16LumaChromaResidualBitstreamMD5 = "79e811513606ca25fd5e80a6f969ba66"
+	high14FrameMBAFFFrameP8x16LumaChromaResidualPFrameMD5    = "b85b53afe622571ae0124eab6310392b"
+	high14FrameMBAFFFrameP8x16LumaChromaResidualRawVideoMD5  = "2d65809bb1c4417f27154b4f3ec9bf01"
+
+	high14FrameMBAFFFrameP8x8LumaChromaResidualBitstreamMD5 = "7fe988f8aa00a0fc3d1d9aa05b7757ca"
+	high14FrameMBAFFFrameP8x8LumaChromaResidualPFrameMD5    = "b85b53afe622571ae0124eab6310392b"
+	high14FrameMBAFFFrameP8x8LumaChromaResidualRawVideoMD5  = "2d65809bb1c4417f27154b4f3ec9bf01"
+
 	highFrameMBAFFP16x16NoResidualPayloadBits   = "1111111111111"
 	highFrameMBAFFP16x16LumaResidualPayloadBits = "11111101110101111" +
 		"1111101110101111"
@@ -90,6 +122,22 @@ const (
 		"1" + highFrameMBAFFP8x16LumaChromaResidualMacroblockBits
 	highFrameMBAFFP8x8LumaChromaResidualPayloadBits = "11" + highFrameMBAFFP8x8LumaChromaResidualMacroblockBits +
 		"1" + highFrameMBAFFP8x8LumaChromaResidualMacroblockBits
+	highFrameMBAFFFrameP16x16LumaChromaResidualMacroblockBits = "1" + "11" + "000011001" +
+		highFrameMBAFFP16x16LumaChromaResidualTailBits
+	highFrameMBAFFFrameP16x8LumaChromaResidualMacroblockBits = "010" + "1111" + "000011001" +
+		highFrameMBAFFP16x16LumaChromaResidualTailBits
+	highFrameMBAFFFrameP8x16LumaChromaResidualMacroblockBits = "011" + "1111" + "000011001" +
+		highFrameMBAFFP16x16LumaChromaResidualTailBits
+	highFrameMBAFFFrameP8x8LumaChromaResidualMacroblockBits = "00100" + "1111" + "11111111" + "000011001" +
+		highFrameMBAFFP16x16LumaChromaResidualTailBits
+	highFrameMBAFFFrameP16x16LumaChromaResidualPayloadBits = "10" + highFrameMBAFFFrameP16x16LumaChromaResidualMacroblockBits +
+		"1" + highFrameMBAFFFrameP16x16LumaChromaResidualMacroblockBits
+	highFrameMBAFFFrameP16x8LumaChromaResidualPayloadBits = "10" + highFrameMBAFFFrameP16x8LumaChromaResidualMacroblockBits +
+		"1" + highFrameMBAFFFrameP16x8LumaChromaResidualMacroblockBits
+	highFrameMBAFFFrameP8x16LumaChromaResidualPayloadBits = "10" + highFrameMBAFFFrameP8x16LumaChromaResidualMacroblockBits +
+		"1" + highFrameMBAFFFrameP8x16LumaChromaResidualMacroblockBits
+	highFrameMBAFFFrameP8x8LumaChromaResidualPayloadBits = "10" + highFrameMBAFFFrameP8x8LumaChromaResidualMacroblockBits +
+		"1" + highFrameMBAFFFrameP8x8LumaChromaResidualMacroblockBits
 )
 
 type highFrameMBAFFP16x16NoResidualCase struct {
@@ -115,6 +163,8 @@ type highFrameMBAFFPartitionedPLumaChromaResidualCase struct {
 	pFrameMD5    string
 	rawVideoMD5  string
 }
+
+type highFrameMBAFFFrameCodedPLumaChromaResidualCase = highFrameMBAFFPartitionedPLumaChromaResidualCase
 
 func TestHigh1214FrameMBAFFPSkipNoResidualFixtureSyntax(t *testing.T) {
 	for _, tt := range highFrameMBAFFPSkipNoResidualCases() {
@@ -177,6 +227,19 @@ func TestHigh1214FrameMBAFFPartitionedPLumaChromaResidualFixtureSyntax(t *testin
 				t.Fatalf("%s frame-MBAFF partitioned P luma+chroma-residual bitstream md5 = %s, want %s", tt.name, got, tt.bitstreamMD5)
 			}
 			assertHighFrameMBAFFPartitionedPLumaChromaResidualFixtureSyntax(t, data, tt)
+		})
+	}
+}
+
+func TestHigh1214FrameMBAFFFrameCodedPLumaChromaResidualFixtureSyntax(t *testing.T) {
+	for _, tt := range highFrameMBAFFFrameCodedPLumaChromaResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFFrameCodedPLumaChromaResidualFixture(tt.bitDepth, tt.payloadBits)
+			sum := md5.Sum(data)
+			if got := hex.EncodeToString(sum[:]); got != tt.bitstreamMD5 {
+				t.Fatalf("%s frame-MBAFF frame-coded P luma+chroma-residual bitstream md5 = %s, want %s", tt.name, got, tt.bitstreamMD5)
+			}
+			assertHighFrameMBAFFFrameCodedPLumaChromaResidualFixtureSyntax(t, data, tt)
 		})
 	}
 }
@@ -252,6 +315,21 @@ func TestDecodeAnnexBHigh1214FrameMBAFFPartitionedPLumaChromaResidualFrames(t *t
 				t.Fatalf("decode %s frame-MBAFF partitioned P luma+chroma-residual Annex B: %v", tt.name, err)
 			}
 			assertHighFrameMBAFFPartitionedPLumaChromaResidualFrames(t, frames, tt)
+		})
+	}
+}
+
+func TestDecodeAnnexBHigh1214FrameMBAFFFrameCodedPLumaChromaResidualFrames(t *testing.T) {
+	for _, tt := range highFrameMBAFFFrameCodedPLumaChromaResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFFrameCodedPLumaChromaResidualFixture(tt.bitDepth, tt.payloadBits)
+			assertHighFrameMBAFFFrameCodedPLumaChromaResidualFixtureSyntax(t, data, tt)
+
+			frames, err := NewDecoder().DecodeAnnexBFrames(data)
+			if err != nil {
+				t.Fatalf("decode %s frame-MBAFF frame-coded P luma+chroma-residual Annex B: %v", tt.name, err)
+			}
+			assertHighFrameMBAFFFrameCodedPLumaChromaResidualFrames(t, frames, tt)
 		})
 	}
 }
@@ -336,6 +414,23 @@ func TestDecodeAVCHigh1214FrameMBAFFPartitionedPLumaChromaResidualFrames(t *test
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF partitioned P luma+chroma-residual AVC: %v", nalLengthSize, tt.name, err)
 				}
 				assertHighFrameMBAFFPartitionedPLumaChromaResidualFrames(t, frames, tt)
+			}
+		})
+	}
+}
+
+func TestDecodeAVCHigh1214FrameMBAFFFrameCodedPLumaChromaResidualFrames(t *testing.T) {
+	for _, tt := range highFrameMBAFFFrameCodedPLumaChromaResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFFrameCodedPLumaChromaResidualFixture(tt.bitDepth, tt.payloadBits)
+			assertHighFrameMBAFFFrameCodedPLumaChromaResidualFixtureSyntax(t, data, tt)
+
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF frame-coded P luma+chroma-residual AVC: %v", nalLengthSize, tt.name, err)
+				}
+				assertHighFrameMBAFFFrameCodedPLumaChromaResidualFrames(t, frames, tt)
 			}
 		})
 	}
@@ -426,6 +521,24 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPLumaChrom
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF partitioned P luma+chroma-residual configured AVC: %v", nalLengthSize, tt.name, err)
 				}
 				assertHighFrameMBAFFPartitionedPLumaChromaResidualFrames(t, frames, tt)
+			}
+		})
+	}
+}
+
+func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameCodedPLumaChromaResidualFrames(t *testing.T) {
+	for _, tt := range highFrameMBAFFFrameCodedPLumaChromaResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFFrameCodedPLumaChromaResidualFixture(tt.bitDepth, tt.payloadBits)
+			assertHighFrameMBAFFFrameCodedPLumaChromaResidualFixtureSyntax(t, data, tt)
+
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
+				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF frame-coded P luma+chroma-residual configured AVC: %v", nalLengthSize, tt.name, err)
+				}
+				assertHighFrameMBAFFFrameCodedPLumaChromaResidualFrames(t, frames, tt)
 			}
 		})
 	}
@@ -736,6 +849,67 @@ func TestFFmpegRawVideoMD5OracleHigh1214FrameMBAFFPartitionedPLumaChromaResidual
 	}
 }
 
+func TestFFmpegRawVideoMD5OracleHigh1214FrameMBAFFFrameCodedPLumaChromaResidual(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	for _, tt := range highFrameMBAFFFrameCodedPLumaChromaResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFFrameCodedPLumaChromaResidualFixture(tt.bitDepth, tt.payloadBits)
+			assertHighFrameMBAFFFrameCodedPLumaChromaResidualFixtureSyntax(t, data, tt)
+			path := writeTempH264(t, data)
+			pixFmt := fmt.Sprintf("yuv420p%dle", tt.bitDepth)
+
+			framemd5 := exec.Command(
+				"ffmpeg",
+				"-v", "error",
+				"-f", "h264",
+				"-i", path,
+				"-an", "-sn", "-dn",
+				"-pix_fmt", pixFmt,
+				"-f", "framemd5",
+				"-",
+			)
+			framemd5Out, err := framemd5.Output()
+			if err != nil {
+				t.Fatalf("ffmpeg framemd5: %v", err)
+			}
+			for i, want := range []string{tt.refFrameMD5, tt.pFrameMD5} {
+				line := []byte(fmt.Sprintf("0, %10d, %10d,        1,     1536, %s", i, i, want))
+				if !bytes.Contains(framemd5Out, line) {
+					t.Fatalf("missing %q in framemd5:\n%s", line, framemd5Out)
+				}
+			}
+
+			rawvideo := exec.Command(
+				"ffmpeg",
+				"-v", "error",
+				"-f", "h264",
+				"-i", path,
+				"-an", "-sn", "-dn",
+				"-pix_fmt", pixFmt,
+				"-f", "rawvideo",
+				"-",
+			)
+			raw, err := rawvideo.Output()
+			if err != nil {
+				t.Fatalf("ffmpeg rawvideo: %v", err)
+			}
+			if len(raw) != 3072 {
+				t.Fatalf("rawvideo size = %d, want 3072", len(raw))
+			}
+			sum := md5.Sum(raw)
+			if got := hex.EncodeToString(sum[:]); got != tt.rawVideoMD5 {
+				t.Fatalf("rawvideo md5 = %s, want %s", got, tt.rawVideoMD5)
+			}
+		})
+	}
+}
+
 func highFrameMBAFFPSkipNoResidualCases() []highFrameMBAFFPSkipNoResidualCase {
 	return []highFrameMBAFFPSkipNoResidualCase{
 		{
@@ -885,6 +1059,91 @@ func highFrameMBAFFPartitionedPLumaChromaResidualCases() []highFrameMBAFFPartiti
 	}
 }
 
+func highFrameMBAFFFrameCodedPLumaChromaResidualCases() []highFrameMBAFFFrameCodedPLumaChromaResidualCase {
+	return []highFrameMBAFFFrameCodedPLumaChromaResidualCase{
+		{
+			name:         "High12FrameP16x16",
+			bitDepth:     12,
+			mbType:       0,
+			payloadBits:  highFrameMBAFFFrameP16x16LumaChromaResidualPayloadBits,
+			bitstreamMD5: high12FrameMBAFFFrameP16x16LumaChromaResidualBitstreamMD5,
+			refFrameMD5:  high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high12FrameMBAFFFrameP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:  high12FrameMBAFFFrameP16x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:         "High12FrameP16x8",
+			bitDepth:     12,
+			mbType:       1,
+			payloadBits:  highFrameMBAFFFrameP16x8LumaChromaResidualPayloadBits,
+			bitstreamMD5: high12FrameMBAFFFrameP16x8LumaChromaResidualBitstreamMD5,
+			refFrameMD5:  high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high12FrameMBAFFFrameP16x8LumaChromaResidualPFrameMD5,
+			rawVideoMD5:  high12FrameMBAFFFrameP16x8LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:         "High12FrameP8x16",
+			bitDepth:     12,
+			mbType:       2,
+			payloadBits:  highFrameMBAFFFrameP8x16LumaChromaResidualPayloadBits,
+			bitstreamMD5: high12FrameMBAFFFrameP8x16LumaChromaResidualBitstreamMD5,
+			refFrameMD5:  high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high12FrameMBAFFFrameP8x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:  high12FrameMBAFFFrameP8x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:         "High12FrameP8x8",
+			bitDepth:     12,
+			mbType:       3,
+			payloadBits:  highFrameMBAFFFrameP8x8LumaChromaResidualPayloadBits,
+			bitstreamMD5: high12FrameMBAFFFrameP8x8LumaChromaResidualBitstreamMD5,
+			refFrameMD5:  high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high12FrameMBAFFFrameP8x8LumaChromaResidualPFrameMD5,
+			rawVideoMD5:  high12FrameMBAFFFrameP8x8LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:         "High14FrameP16x16",
+			bitDepth:     14,
+			mbType:       0,
+			payloadBits:  highFrameMBAFFFrameP16x16LumaChromaResidualPayloadBits,
+			bitstreamMD5: high14FrameMBAFFFrameP16x16LumaChromaResidualBitstreamMD5,
+			refFrameMD5:  high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high14FrameMBAFFFrameP16x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:  high14FrameMBAFFFrameP16x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:         "High14FrameP16x8",
+			bitDepth:     14,
+			mbType:       1,
+			payloadBits:  highFrameMBAFFFrameP16x8LumaChromaResidualPayloadBits,
+			bitstreamMD5: high14FrameMBAFFFrameP16x8LumaChromaResidualBitstreamMD5,
+			refFrameMD5:  high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high14FrameMBAFFFrameP16x8LumaChromaResidualPFrameMD5,
+			rawVideoMD5:  high14FrameMBAFFFrameP16x8LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:         "High14FrameP8x16",
+			bitDepth:     14,
+			mbType:       2,
+			payloadBits:  highFrameMBAFFFrameP8x16LumaChromaResidualPayloadBits,
+			bitstreamMD5: high14FrameMBAFFFrameP8x16LumaChromaResidualBitstreamMD5,
+			refFrameMD5:  high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high14FrameMBAFFFrameP8x16LumaChromaResidualPFrameMD5,
+			rawVideoMD5:  high14FrameMBAFFFrameP8x16LumaChromaResidualRawVideoMD5,
+		},
+		{
+			name:         "High14FrameP8x8",
+			bitDepth:     14,
+			mbType:       3,
+			payloadBits:  highFrameMBAFFFrameP8x8LumaChromaResidualPayloadBits,
+			bitstreamMD5: high14FrameMBAFFFrameP8x8LumaChromaResidualBitstreamMD5,
+			refFrameMD5:  high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high14FrameMBAFFFrameP8x8LumaChromaResidualPFrameMD5,
+			rawVideoMD5:  high14FrameMBAFFFrameP8x8LumaChromaResidualRawVideoMD5,
+		},
+	}
+}
+
 func highFrameMBAFFPSkipNoResidualFixture(bitDepth int) []byte {
 	var data []byte
 	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSPS), highFrameMBAFFInterSPSRBSP(bitDepth)))
@@ -922,6 +1181,15 @@ func highFrameMBAFFP16x16LumaChromaResidualFixture(bitDepth int) []byte {
 }
 
 func highFrameMBAFFPartitionedPLumaChromaResidualFixture(bitDepth int, payloadBits string) []byte {
+	var data []byte
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSPS), highFrameMBAFFInterSPSRBSP(bitDepth)))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALPPS), highIntraPCMPPSRBSP(bitDepth)))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALIDRSlice), highFrameMBAFFIntraPCMSliceRBSP(bitDepth)))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSlice), highFrameMBAFFPartitionedPLumaChromaResidualSliceRBSP(payloadBits)))
+	return data
+}
+
+func highFrameMBAFFFrameCodedPLumaChromaResidualFixture(bitDepth int, payloadBits string) []byte {
 	var data []byte
 	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSPS), highFrameMBAFFInterSPSRBSP(bitDepth)))
 	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALPPS), highIntraPCMPPSRBSP(bitDepth)))
@@ -1115,6 +1383,59 @@ func assertHighFrameMBAFFPartitionedPLumaChromaResidualFixtureSyntax(t *testing.
 			for j, subType := range mb.subMBType {
 				if subType != 0 {
 					t.Fatalf("%s P macroblock[%d] sub_mb_type[%d] = %d, want P_L0_8x8", tt.name, i, j, subType)
+				}
+			}
+		}
+	}
+}
+
+func assertHighFrameMBAFFFrameCodedPLumaChromaResidualFixtureSyntax(t *testing.T, data []byte, tt highFrameMBAFFFrameCodedPLumaChromaResidualCase) {
+	t.Helper()
+	parseCase := highFrameMBAFFP16x16NoResidualCase{
+		name:         tt.name,
+		bitDepth:     tt.bitDepth,
+		bitstreamMD5: tt.bitstreamMD5,
+		refFrameMD5:  tt.refFrameMD5,
+		pFrameMD5:    tt.pFrameMD5,
+		rawVideoMD5:  tt.rawVideoMD5,
+	}
+	nals, spsList, ppsList := parseHighFrameMBAFFInterFixtureSyntax(t, data, parseCase)
+	if tt.mbType == 0 {
+		pair := readHighFrameMBAFFCAVLCP16x16Pair(t, nals[1], spsList[0], ppsList[0], highFrameMBAFFP16x16LumaChromaResidualTailBits)
+		if pair.fieldFlag != 0 {
+			t.Fatalf("%s frame-MBAFF P pair field flag = %d, want frame-coded", tt.name, pair.fieldFlag)
+		}
+		for i, mb := range []highFrameMBAFFCAVLCP16x16Macroblock{pair.top, pair.bottom} {
+			if mb.skipRun != 0 || mb.mbType != 0 || mb.refIdxFlag != 0 || mb.cbp != 33 {
+				t.Fatalf("%s frame-coded P macroblock[%d] skip/mb_type/ref_idx_flag/cbp = %d/%d/%d/%d (code %d), want P16x16 luma+chroma residual",
+					tt.name, i, mb.skipRun, mb.mbType, mb.refIdxFlag, mb.cbp, mb.cbpCode)
+			}
+		}
+		return
+	}
+
+	pair := readHighFrameMBAFFCAVLCPartitionedPPair(t, nals[1], spsList[0], ppsList[0], highFrameMBAFFP16x16LumaChromaResidualTailBits)
+	if pair.fieldFlag != 0 {
+		t.Fatalf("%s frame-MBAFF P pair field flag = %d, want frame-coded", tt.name, pair.fieldFlag)
+	}
+	wantRefIdxCount := highFrameMBAFFPartitionedPRefIdxCount(t, tt.mbType)
+	for i, mb := range []highFrameMBAFFCAVLCPartitionedPMacroblock{pair.top, pair.bottom} {
+		if mb.skipRun != 0 || mb.mbType != tt.mbType || mb.cbp != 33 {
+			t.Fatalf("%s frame-coded P macroblock[%d] skip/mb_type/cbp = %d/%d/%d (code %d), want partitioned P luma+chroma residual",
+				tt.name, i, mb.skipRun, mb.mbType, mb.cbp, mb.cbpCode)
+		}
+		if mb.refIdxCount != wantRefIdxCount {
+			t.Fatalf("%s frame-coded P macroblock[%d] ref_idx count = %d, want %d", tt.name, i, mb.refIdxCount, wantRefIdxCount)
+		}
+		for j := 0; j < mb.refIdxCount; j++ {
+			if mb.refIdxFlags[j] != 0 {
+				t.Fatalf("%s frame-coded P macroblock[%d] ref_idx_l0[%d] flag = %d, want implicit frame ref 0", tt.name, i, j, mb.refIdxFlags[j])
+			}
+		}
+		if tt.mbType == 3 {
+			for j, subType := range mb.subMBType {
+				if subType != 0 {
+					t.Fatalf("%s frame-coded P macroblock[%d] sub_mb_type[%d] = %d, want P_L0_8x8", tt.name, i, j, subType)
 				}
 			}
 		}
@@ -1458,6 +1779,18 @@ func assertHighFrameMBAFFP16x16LumaChromaResidualFrames(t *testing.T, frames []*
 }
 
 func assertHighFrameMBAFFPartitionedPLumaChromaResidualFrames(t *testing.T, frames []*Frame, tt highFrameMBAFFPartitionedPLumaChromaResidualCase) {
+	t.Helper()
+	assertHighFrameMBAFFP16x16NoResidualFrames(t, frames, highFrameMBAFFP16x16NoResidualCase{
+		name:         tt.name,
+		bitDepth:     tt.bitDepth,
+		bitstreamMD5: tt.bitstreamMD5,
+		refFrameMD5:  tt.refFrameMD5,
+		pFrameMD5:    tt.pFrameMD5,
+		rawVideoMD5:  tt.rawVideoMD5,
+	})
+}
+
+func assertHighFrameMBAFFFrameCodedPLumaChromaResidualFrames(t *testing.T, frames []*Frame, tt highFrameMBAFFFrameCodedPLumaChromaResidualCase) {
 	t.Helper()
 	assertHighFrameMBAFFP16x16NoResidualFrames(t, frames, highFrameMBAFFP16x16NoResidualCase{
 		name:         tt.name,
