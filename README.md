@@ -285,11 +285,12 @@ and `GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER`.
 
 Performance status is intentionally conservative: the benchmark harness exists
 and rejects quality drift before timing, and public raw-output helpers have
-caller-buffer zero-allocation guards. Checked-in release allocation budgets,
-benchstat/profile evidence, a larger performance corpus, and an in-process
-libavcodec baseline are still pending. Treat the decoder as pre-production for
-throughput-sensitive use until [docs/production-readiness.md](docs/production-readiness.md)
-has those release artifacts.
+caller-buffer zero-allocation guards. A checked-in public-vector allocation
+canary now exists, while benchstat/profile evidence, a larger performance
+corpus, and an in-process libavcodec baseline are still pending. Treat the
+decoder as pre-production for throughput-sensitive use until
+[docs/production-readiness.md](docs/production-readiness.md) has those release
+artifacts.
 
 ## Project Layout
 
@@ -322,6 +323,8 @@ No tag should be treated as production until a release-evidence pass proves:
   `testdata/h264/realvectors/upstream-inventory.jsonl`, except documented
   non-decoder exclusions.
 - Known-red rows, if any, are current in `testdata/h264/realvectors/failures.jsonl`.
+- `scripts/h264-real-vector-release-alloc.sh` is green with the checked-in Go
+  allocation canary budget.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until

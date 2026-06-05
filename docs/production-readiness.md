@@ -14,6 +14,7 @@ scripts/h264-real-vector-red-queue.sh   # exits non-zero only while known-red ro
 scripts/h264-real-vector-red-each.sh    # per-row red queue report when the ledger is populated
 scripts/h264-real-vector-upstream-audit.sh # pinned FFmpeg H.264 FATE coverage
 scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C vs pure Go and native C+asm vs Go+asm lanes
+scripts/h264-real-vector-release-alloc.sh # checked-in Go allocation canary budget
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_RED_QUEUE=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorRedQueue
@@ -60,6 +61,9 @@ timed Go lane; `-max-go-alloc-bytes-per-iter` and
 `-max-go-allocs-per-iter` turn those rates into failing budget gates. The
 real-vector benchmark script forwards
 `GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER` and
-`GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER` to those flags. Pending: checked-in
-release budget values, benchstat/profile output, larger performance corpus,
-and in-process libavcodec baseline.
+`GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER` to those flags.
+`scripts/h264-real-vector-release-alloc.sh` is the checked-in release canary:
+it runs the CANL4 public vector with defaults of 64,000,000 Go allocation
+bytes/iteration and 10,000 Go allocations/iteration. Pending:
+benchstat/profile output, larger performance corpus, and in-process libavcodec
+baseline.
