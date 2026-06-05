@@ -1617,41 +1617,58 @@ func TestValidateHighFrameSliceReconstructAllowsHigh12IntraResidualScope(t *test
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0); err != nil {
 		t.Fatalf("high12 Intra16x16 no-residual reconstruct validation err = %v, want nil", err)
 	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0x100); err != nil {
-		t.Fatalf("high12 Intra16x16 luma-DC residual reconstruct validation err = %v, want nil", err)
-	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x10, 0x10); err != nil {
 		t.Fatalf("high12 Intra16x16 chroma-DC CAVLC residual reconstruct validation err = %v, want nil", err)
-	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x10, 0x50); err != nil {
-		t.Fatalf("high12 Intra16x16 chroma-DC CABAC residual reconstruct validation err = %v, want nil", err)
-	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x10, 0x1d0); err != nil {
-		t.Fatalf("high12 Intra16x16 partition chroma-DC CABAC residual reconstruct validation err = %v, want nil", err)
 	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x20, 0x20); err != nil {
 		t.Fatalf("high12 Intra16x16 chroma-AC residual reconstruct validation err = %v, want nil", err)
 	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x20, 0x60); err != nil {
-		t.Fatalf("high12 Intra16x16 chroma-DC/AC CABAC residual reconstruct validation err = %v, want nil", err)
-	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x2f, 0xf02f); err != nil {
 		t.Fatalf("high12 Intra16x16 luma/chroma CAVLC residual reconstruct validation err = %v, want nil", err)
-	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x2f, 0x16f); err != nil {
-		t.Fatalf("high12 Intra16x16 luma/chroma CABAC residual reconstruct validation err = %v, want nil", err)
-	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x2f, 0xef); err != nil {
-		t.Fatalf("high12 Intra16x16 x264 luma/chroma CABAC residual reconstruct validation err = %v, want nil", err)
-	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x0f, 0x0f); err != nil {
-		t.Fatalf("high12 Intra16x16 luma-AC CABAC residual reconstruct validation err = %v, want nil", err)
 	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x0f, 0xf00f); err != nil {
 		t.Fatalf("high12 Intra16x16 luma-AC CAVLC residual reconstruct validation err = %v, want nil", err)
 	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x0f, 0x10f); err != nil {
-		t.Fatalf("high12 Intra16x16 luma-DC/AC CABAC residual reconstruct validation err = %v, want nil", err)
+	for _, tt := range []struct {
+		name     string
+		cbp      int
+		cbpTable int
+	}{
+		{name: "luma-dc", cbp: 0, cbpTable: 0x100},
+		{name: "chroma-dc", cbp: 0x10, cbpTable: 0x50},
+		{name: "partition-chroma-dc", cbp: 0x10, cbpTable: 0x1d0},
+		{name: "chroma-dc-ac", cbp: 0x20, cbpTable: 0x60},
+		{name: "luma-chroma", cbp: 0x2f, cbpTable: 0x16f},
+		{name: "x264-luma-chroma", cbp: 0x2f, cbpTable: 0xef},
+		{name: "luma-ac", cbp: 0x0f, cbpTable: 0x0f},
+		{name: "luma-dc-ac", cbp: 0x0f, cbpTable: 0x10f},
+	} {
+		t.Run("intra16x16-reject-cabac-only-under-cavlc-"+tt.name, func(t *testing.T) {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, tt.cbp, tt.cbpTable); err != ErrUnsupported {
+				t.Fatalf("high12 CAVLC Intra16x16 %s CABAC-only residual err = %v, want ErrUnsupported", tt.name, err)
+			}
+		})
+	}
+	sh.PPS.CABAC = 1
+	for _, tt := range []struct {
+		name     string
+		cbp      int
+		cbpTable int
+	}{
+		{name: "luma-dc", cbp: 0, cbpTable: 0x100},
+		{name: "chroma-dc", cbp: 0x10, cbpTable: 0x50},
+		{name: "partition-chroma-dc", cbp: 0x10, cbpTable: 0x1d0},
+		{name: "chroma-dc-ac", cbp: 0x20, cbpTable: 0x60},
+		{name: "luma-chroma", cbp: 0x2f, cbpTable: 0x16f},
+		{name: "x264-luma-chroma", cbp: 0x2f, cbpTable: 0xef},
+		{name: "luma-ac", cbp: 0x0f, cbpTable: 0x0f},
+		{name: "luma-dc-ac", cbp: 0x0f, cbpTable: 0x10f},
+	} {
+		t.Run("intra16x16-cabac-"+tt.name, func(t *testing.T) {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, tt.cbp, tt.cbpTable); err != nil {
+				t.Fatalf("high12 CABAC Intra16x16 %s residual reconstruct validation err = %v, want nil", tt.name, err)
+			}
+		})
 	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 1, 1); err != ErrUnsupported {
 		t.Fatalf("high12 Intra16x16 residual reconstruct validation err = %v, want ErrUnsupported", err)
@@ -1708,23 +1725,37 @@ func TestValidateHighFrameSliceReconstructAllowsHigh14IntraResidualScope(t *test
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0); err != nil {
 		t.Fatalf("high14 Intra16x16 no-residual reconstruct validation err = %v, want nil", err)
 	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0, 0x100); err != nil {
-		t.Fatalf("high14 Intra16x16 luma-DC residual reconstruct validation err = %v, want nil", err)
-	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x0f, 0xf00f); err != nil {
 		t.Fatalf("high14 Intra16x16 luma-AC/DC residual reconstruct validation err = %v, want nil", err)
 	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x10, 0x10); err != nil {
 		t.Fatalf("high14 Intra16x16 chroma-DC residual reconstruct validation err = %v, want nil", err)
 	}
-	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x10, 0x1d0); err != nil {
-		t.Fatalf("high14 Intra16x16 partition chroma-DC CABAC residual reconstruct validation err = %v, want nil", err)
-	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x20, 0x20); err != nil {
 		t.Fatalf("high14 Intra16x16 chroma-AC/DC residual reconstruct validation err = %v, want nil", err)
 	}
 	if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, 0x2f, 0xf02f); err != nil {
 		t.Fatalf("high14 Intra16x16 luma/chroma residual reconstruct validation err = %v, want nil", err)
+	}
+	for _, tt := range []struct {
+		name     string
+		cbp      int
+		cbpTable int
+	}{
+		{name: "luma-dc", cbp: 0, cbpTable: 0x100},
+		{name: "chroma-dc", cbp: 0x10, cbpTable: 0x50},
+		{name: "partition-chroma-dc", cbp: 0x10, cbpTable: 0x1d0},
+		{name: "chroma-dc-ac", cbp: 0x20, cbpTable: 0x60},
+		{name: "luma-chroma", cbp: 0x2f, cbpTable: 0x16f},
+		{name: "x264-luma-chroma", cbp: 0x2f, cbpTable: 0xef},
+		{name: "luma-ac", cbp: 0x0f, cbpTable: 0x0f},
+		{name: "luma-dc-ac", cbp: 0x0f, cbpTable: 0x10f},
+	} {
+		t.Run("intra16x16-reject-cabac-only-under-cavlc-"+tt.name, func(t *testing.T) {
+			if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, MBTypeIntra16x16, nil, tt.cbp, tt.cbpTable); err != ErrUnsupported {
+				t.Fatalf("high14 CAVLC Intra16x16 %s CABAC-only residual err = %v, want ErrUnsupported", tt.name, err)
+			}
+		})
 	}
 	for _, tt := range []struct {
 		name     string
