@@ -487,6 +487,9 @@ func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []b
 }
 
 func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConfigurationRecord) ([]*Frame, error) {
+	if len(data) == 0 {
+		return d.FlushDelayedFrames()
+	}
 	frames, decodeErr := d.simple.DecodeAVCFrames(data, cfg.NALLengthSize)
 	flushed, flushErr := d.simple.FlushDelayedFrames()
 	if len(flushed) != 0 {

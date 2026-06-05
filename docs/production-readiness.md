@@ -95,7 +95,9 @@ access-unit streaming through `DecodeFrames`, with end-of-stream flush via an
 empty packet and an empty second flush. Configured AVC stateful decode also
 drains delayed B-frame output through `DecodeConfiguredAVCFrames(nil)`,
 including the single-frame helper when the empty packet releases exactly one
-frame.
+frame. AVC-with-configuration-record decode follows the same empty-packet
+delayed flush rule after updating parameter sets, with fixture-matrix coverage
+for 2/3/4-byte AVC length sizes.
 
 Malformed-input safety evidence now includes deterministic public-surface
 corruption rows plus `FuzzDecodePublicSurfacesNoPanic`, a bounded fuzz target

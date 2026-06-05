@@ -272,6 +272,72 @@ func TestDecodeConfiguredAVCTestsrcBFrameReturnsDelayedFrameOnEmptyPacket(t *tes
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"aa778b981f96d21489196f6a0faa0959"})
 }
 
+func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesOnEmptyPacket(t *testing.T) {
+	for _, tt := range bFrameFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := tt.decode(t)
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
+				if len(samples) != len(tt.want) {
+					t.Fatalf("nalLengthSize=%d: samples = %d, want %d", nalLengthSize, len(samples), len(tt.want))
+				}
+
+				dec := NewDecoder()
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
+				}
+
+				var frames []*Frame
+				for i, sample := range samples {
+					out, err := dec.DecodeConfiguredAVCFrames(sample)
+					if err != nil {
+						t.Fatalf("nalLengthSize=%d sample[%d]: %v", nalLengthSize, i, err)
+					}
+					frames = append(frames, out...)
+				}
+				out, err := dec.DecodeAVCFramesWithConfigurationRecord(config, nil)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d empty configuration-record AVC packet flush: %v", nalLengthSize, err)
+				}
+				frames = append(frames, out...)
+				assertFrameMD5Strings(t, frames, tt.want)
+
+				out, err = dec.DecodeAVCFramesWithConfigurationRecord(config, nil)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d second empty configuration-record AVC packet flush: %v", nalLengthSize, err)
+				}
+				if len(out) != 0 {
+					t.Fatalf("nalLengthSize=%d second empty configuration-record AVC packet frames = %d, want 0", nalLengthSize, len(out))
+				}
+			}
+		})
+	}
+}
+
+func TestDecodeAVCWithConfigurationRecordBFrameReturnsDelayedFrameOnEmptyPacket(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	for i, sample := range samples {
+		if _, err := dec.DecodeConfiguredAVCFrames(sample); err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+	}
+
+	frame, err := dec.DecodeAVCWithConfigurationRecord(config, nil)
+	if err != nil {
+		t.Fatalf("single-frame empty configuration-record AVC packet flush: %v", err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"aa778b981f96d21489196f6a0faa0959"})
+}
+
 func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)

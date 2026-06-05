@@ -99,7 +99,8 @@ valid-prefix damaged-packet recovery across configured AVC, AVC
 configuration-record, bare AVC, packet AVC, stateful Annex B, and one-shot
 Annex B surfaces including single-frame helpers and delayed B-frame
 configuration-record one-shot flush,
-configured AVC empty-packet delayed B-frame flush,
+configured AVC and AVC configuration-record empty-packet delayed B-frame flush
+matching `h264_decode_frame()` `buf_size == 0` delayed-output behavior,
 malformed AVC/Annex B `NEW_EXTRADATA` non-fatal packet-side-data guards,
 malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,

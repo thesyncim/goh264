@@ -196,6 +196,7 @@ frames, err := dec.DecodeAVCFrames(packet, lengthSize) // length-prefixed NAL un
 frames, err := dec.DecodeConfiguredAVCFrames(packet)   // after parsing avcC
 frames, err := dec.DecodeConfiguredAVCFrames(nil)      // delayed configured-AVC output
 frames, err := dec.DecodeAVCFramesWithConfigurationRecord(avcc, packet)
+frames, err := dec.DecodeAVCFramesWithConfigurationRecord(avcc, nil) // delayed config-record AVC output
 frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
 ```
 
@@ -210,7 +211,8 @@ does the same after an AVC configuration record has been parsed. Annex B
 access-unit streams use the same retained reference and delayed B-frame output path.
 `DecodeAVCFramesWithConfigurationRecord` updates the decoder's AVC
 configuration without resetting retained references, then drains delayed output
-for the supplied AVC packet.
+for the supplied AVC packet. Passing an empty AVC packet with a configuration
+record drains delayed output without reporting an invalid packet.
 
 Parse headers without decoding full frames:
 
