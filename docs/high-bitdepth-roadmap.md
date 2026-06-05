@@ -9,6 +9,8 @@ handoff/full slice plus implicit/deblock full slice, selected deblock lanes
 plus fixture-backed high-B residual filter, slice-boundary IDR/P, and
 unweighted 4:2:2/4:4:4 I/P chroma no-deblock plus weighted
 4:2:2/4:4:4 luma-only/chroma P frame deblock modes 0/1 and slice-boundary mode-2 deblock,
+plus CAVLC/CABAC 4:2:2/4:4:4 implicit and explicit weighted B frame
+deblock mode 1,
 public High12 IntraPCM plus CAVLC Intra16x16 no-residual and
 luma-DC/luma-AC/luma-DC+AC/chroma-DC/chroma-AC/chroma-DC+AC/luma+chroma
 residual fixtures plus two-frame CAVLC P-skip/P16x16 no-residual and
@@ -53,7 +55,7 @@ reinit metadata, and the XAVC High422 terminal damaged top-field row that
 FFmpeg conceals while draining already-complete delayed frames.
 
 Next: public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
-broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
+weighted chroma field and slice-boundary variants, broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
 damaged-slice error resilience beyond terminal first-field recovery.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and

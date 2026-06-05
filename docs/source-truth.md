@@ -5,7 +5,8 @@ Scope: FFmpeg `n8.0.1` H.264 decoder path only.
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
 no-deblock plus weighted 4:2:2/4:4:4 luma-only/chroma P frame deblock modes 0/1 and
-slice-boundary mode-2 deblock, High12 CAVLC IntraPCM, public CAVLC
+slice-boundary mode-2 deblock plus CAVLC/CABAC 4:2:2/4:4:4 implicit and
+explicit weighted B frame deblock mode 1, High12 CAVLC IntraPCM, public CAVLC
 Intra16x16 no-residual and luma-DC/luma-AC/luma-DC+AC/chroma-DC/chroma-AC/
 chroma-DC+AC/luma+chroma residual plus two-frame CAVLC P-skip/P16x16
 no-residual and P16x16 luma-residual/luma+chroma residual plus
@@ -82,7 +83,7 @@ stream; FFmpeg exits with decode error) and `mkv/h264_tta_undecodable.mkv` (no
 H.264 video stream).
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad slice-boundary
-high modes including remaining chroma deblock variants, public 12/14-bit
+high modes including remaining weighted chroma field and slice-boundary deblock variants, public 12/14-bit
 high streams beyond the current FFmpeg FATE 8-bit/10-bit set, broader
 damaged-slice error resilience, threading/SIMD, and full libavcodec
 delayed-output behavior.

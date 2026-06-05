@@ -45,14 +45,16 @@ and is checked by the freshness/matrix gates when populated.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
-rows including implicit and explicit weighted B, I/P/B slices, CAVLC and
+rows including implicit and explicit weighted B, High10 4:2:2/4:4:4
+CAVLC/CABAC implicit and explicit weighted B frame deblock, I/P/B slices, CAVLC and
 CABAC, weighted and direct motion paths, deblock modes, selected field/PAFF/MBAFF rows,
 reinit metadata rows, lossless High444
 transform-bypass rows, configured AVC surfaces, container-extracted Annex B
 vectors, and SEI side-data surfaces.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
-field/inter streams, broader damaged-slice error resilience, threading/SIMD and
+field/inter streams including weighted chroma field and slice-boundary variants,
+broader damaged-slice error resilience, threading/SIMD and
 bulk allocation hardening, and exact libavcodec delayed-output behavior.
 Intentionally unsupported at the pinned FFmpeg parity boundary: FMO, which
 FFmpeg n8.0.1 compiles out and rejects while parsing PPS slice groups, and

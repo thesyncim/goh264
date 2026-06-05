@@ -531,6 +531,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 			if !isHigh10ChromaWeightedPFrameDeblockScope(sh) &&
 				!isHigh9ChromaImplicitWeightedBDeblockScope(sh) &&
 				!isHigh10ChromaFrameImplicitWeightedBDeblockScope(sh) &&
+				!isHigh10ChromaFrameExplicitWeightedBDeblockScope(sh) &&
 				!isHigh10Chroma422FieldImplicitWeightedBDeblockScope(sh) {
 				return ErrUnsupported
 			}
@@ -814,6 +815,23 @@ func isHigh10ChromaFrameImplicitWeightedBDeblockScope(sh *SliceHeader) bool {
 		return false
 	}
 	if sh.PredWeightTable.UseWeight != 2 || sh.PredWeightTable.UseWeightChroma != 2 {
+		return false
+	}
+	return sh.DeblockingFilter == 0 || sh.DeblockingFilter == 1
+}
+
+func isHigh10ChromaFrameExplicitWeightedBDeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil {
+		return false
+	}
+	if sh.PictureStructure != PictureFrame ||
+		sh.SPS.BitDepthLuma != 10 ||
+		(sh.SPS.ChromaFormatIDC != 2 && sh.SPS.ChromaFormatIDC != 3) ||
+		sh.SliceTypeNoS != PictureTypeB ||
+		sh.PPS.WeightedBipredIDC != 1 {
+		return false
+	}
+	if sh.PredWeightTable.UseWeight != 1 && sh.PredWeightTable.UseWeightChroma != 1 {
 		return false
 	}
 	return sh.DeblockingFilter == 0 || sh.DeblockingFilter == 1

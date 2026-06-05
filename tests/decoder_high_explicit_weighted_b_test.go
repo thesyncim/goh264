@@ -364,8 +364,8 @@ func highExplicitWeightedBPredWeightInsertPoint(t *testing.T, bits string, sh *h
 
 func highExplicitWeightedBPredWeightTableBits(t *testing.T, sh *h264.SliceHeader) string {
 	t.Helper()
-	if sh == nil || sh.SPS == nil || sh.SPS.ChromaFormatIDC != 1 || sh.ListCount != 2 {
-		t.Fatalf("explicit weighted-B source shape = chroma %v lists %v, want 4:2:0 B with two lists", sh.SPS, sh.ListCount)
+	if sh == nil || sh.SPS == nil || sh.SPS.ChromaFormatIDC == 0 || sh.ListCount != 2 {
+		t.Fatalf("explicit weighted-B source shape = chroma %v lists %v, want chroma B with two lists", sh.SPS, sh.ListCount)
 	}
 	bits := high14CABACBUEBits(1) + high14CABACBUEBits(1)
 	for list := int32(0); list < sh.ListCount; list++ {
