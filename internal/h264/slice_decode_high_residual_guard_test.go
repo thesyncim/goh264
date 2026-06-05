@@ -850,3 +850,49 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsImplicitWeightedB16
 		})
 	}
 }
+
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10ChromaWeightedBSliceBoundaryDeblock(t *testing.T) {
+	for _, chromaFormatIDC := range []uint32{2, 3} {
+		for _, shape := range []struct {
+			name   string
+			mbType uint32
+		}{
+			{name: "l0", mbType: MBType16x16 | MBTypeP0L0},
+			{name: "l1", mbType: MBType16x16 | MBTypeP0L1},
+			{name: "bi", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1},
+		} {
+			for _, tt := range []struct {
+				name            string
+				pps             *PPS
+				useWeight       int32
+				useWeightChroma int32
+				cbpTable        int
+			}{
+				{name: "cavlc implicit", pps: &PPS{WeightedBipredIDC: 2}, useWeight: 2, useWeightChroma: 2, cbpTable: 0xf00f},
+				{name: "cabac implicit", pps: &PPS{CABAC: 1, WeightedBipredIDC: 2}, useWeight: 2, useWeightChroma: 2, cbpTable: 0xf},
+				{name: "cavlc explicit", pps: &PPS{WeightedBipredIDC: 1}, useWeight: 1, useWeightChroma: 1, cbpTable: 0xf00f},
+				{name: "cabac explicit", pps: &PPS{CABAC: 1, WeightedBipredIDC: 1}, useWeight: 1, useWeightChroma: 1, cbpTable: 0xf},
+			} {
+				t.Run(fmt.Sprintf("%s/%s/%s", chromaFormatName(int(chromaFormatIDC)), shape.name, tt.name), func(t *testing.T) {
+					sh := &SliceHeader{
+						SliceTypeNoS:     PictureTypeB,
+						PictureStructure: PictureFrame,
+						DeblockingFilter: 2,
+						SPS: &SPS{
+							BitDepthLuma:    10,
+							ChromaFormatIDC: chromaFormatIDC,
+						},
+						PPS: tt.pps,
+						PredWeightTable: PredWeightTable{
+							UseWeight:       tt.useWeight,
+							UseWeightChroma: tt.useWeightChroma,
+						},
+					}
+					if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, nil, 0xf, tt.cbpTable); err != nil {
+						t.Fatalf("validate high10 chroma weighted-B mode-2 deblock err = %v, want nil", err)
+					}
+				})
+			}
+		}
+	}
+}

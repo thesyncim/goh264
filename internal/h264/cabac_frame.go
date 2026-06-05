@@ -650,8 +650,13 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	mb.ChromaQP = chromaQP
 	mb.CBPTable = cbpTable
 	if in.RejectUnsupportedHighB {
+		pictureStructure := int32(PictureFrame)
+		if in.FieldPicture {
+			pictureStructure = PictureTopField
+		}
 		sh := &SliceHeader{
 			SliceTypeNoS:     in.SliceTypeNoS,
+			PictureStructure: pictureStructure,
 			DeblockingFilter: in.DeblockingFilter,
 			PPS:              in.PPS,
 			SPS:              in.SPS,

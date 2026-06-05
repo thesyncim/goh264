@@ -524,7 +524,10 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 		if sh.SliceTypeNoS != PictureTypeI && sh.SliceTypeNoS != PictureTypeP && sh.SliceTypeNoS != PictureTypeB {
 			return ErrUnsupported
 		}
-		if !isHighChromaFrameDeblockScope(sh) && !isHighChromaSliceBoundaryDeblockScope(sh) && !isHigh10Chroma422FieldPictureScope(sh) {
+		if !isHighChromaFrameDeblockScope(sh) &&
+			!isHighChromaSliceBoundaryDeblockScope(sh) &&
+			!isHigh10Chroma422FieldPictureScope(sh) &&
+			!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) {
 			return ErrUnsupported
 		}
 		if sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0 {
@@ -532,6 +535,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 				!isHigh9ChromaImplicitWeightedBDeblockScope(sh) &&
 				!isHigh10ChromaFrameImplicitWeightedBDeblockScope(sh) &&
 				!isHigh10ChromaFrameExplicitWeightedBDeblockScope(sh) &&
+				!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) &&
 				!isHigh10Chroma422FieldImplicitWeightedBDeblockScope(sh) {
 				return ErrUnsupported
 			}
@@ -837,6 +841,30 @@ func isHigh10ChromaFrameExplicitWeightedBDeblockScope(sh *SliceHeader) bool {
 	return sh.DeblockingFilter == 0 || sh.DeblockingFilter == 1
 }
 
+func isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil {
+		return false
+	}
+	if sh.PictureStructure != PictureFrame ||
+		sh.SPS.BitDepthLuma != 10 ||
+		(sh.SPS.ChromaFormatIDC != 2 && sh.SPS.ChromaFormatIDC != 3) ||
+		sh.SliceTypeNoS != PictureTypeB ||
+		sh.DeblockingFilter != 2 {
+		return false
+	}
+	switch sh.PPS.WeightedBipredIDC {
+	case 1:
+		return (sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0) ||
+			sh.PredWeightTable.UseWeight == 1 ||
+			sh.PredWeightTable.UseWeightChroma == 1
+	case 2:
+		return (sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0) ||
+			(sh.PredWeightTable.UseWeight == 2 && sh.PredWeightTable.UseWeightChroma == 2)
+	default:
+		return false
+	}
+}
+
 func isHigh10Chroma422FieldImplicitWeightedBDeblockScope(sh *SliceHeader) bool {
 	if sh == nil || sh.PPS == nil {
 		return false
@@ -878,7 +906,9 @@ func validateHighFrameSliceDeblockingScope(sh *SliceHeader) error {
 		return ErrInvalidData
 	}
 	if sh.DeblockingFilter == 2 {
-		if sh.SliceTypeNoS == PictureTypeB && !isHigh12Or14Frame420BSliceBoundaryDeblockScope(sh) {
+		if sh.SliceTypeNoS == PictureTypeB &&
+			!isHigh12Or14Frame420BSliceBoundaryDeblockScope(sh) &&
+			!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) {
 			return ErrUnsupported
 		}
 	}
@@ -912,7 +942,9 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32,
 	if sh.PPS == nil {
 		return ErrInvalidData
 	}
-	if sh.DeblockingFilter == 1 || isHigh12Or14Frame420BSliceBoundaryDeblockScope(sh) {
+	if sh.DeblockingFilter == 1 ||
+		isHigh12Or14Frame420BSliceBoundaryDeblockScope(sh) ||
+		isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) {
 		if !isHighBImplicitWeighted(sh) {
 			if isHighB16x16ExplicitMacroblockForReconstruct(mbType, cbp) || isHighB16x16DirectMacroblockForReconstruct(mbType, cbp) {
 				return nil

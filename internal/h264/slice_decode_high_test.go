@@ -681,6 +681,40 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaExplicitWeightedBDe
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaWeightedBSliceBoundaryDeblock(t *testing.T) {
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, cabac := range []int32{0, 1} {
+			for _, tt := range []struct {
+				name            string
+				weightedBipred  uint32
+				useWeight       int32
+				useWeightChroma int32
+			}{
+				{name: "implicit-serialized", weightedBipred: 2},
+				{name: "implicit-initialized", weightedBipred: 2, useWeight: 2, useWeightChroma: 2},
+				{name: "explicit-default", weightedBipred: 1},
+				{name: "explicit-luma", weightedBipred: 1, useWeight: 1},
+				{name: "explicit-chroma", weightedBipred: 1, useWeightChroma: 1},
+				{name: "explicit-luma-chroma", weightedBipred: 1, useWeight: 1, useWeightChroma: 1},
+			} {
+				t.Run(fmt.Sprintf("%s/cabac%d/%s", chromaFormatName(chromaFormatIDC), cabac, tt.name), func(t *testing.T) {
+					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, true, PictureTypeB)
+					sh.DeblockingFilter = 2
+					sh.RefCount = [2]uint32{2, 1}
+					sh.PPS.CABAC = cabac
+					sh.PPS.WeightedBipredIDC = tt.weightedBipred
+					sh.PredWeightTable.UseWeight = tt.useWeight
+					sh.PredWeightTable.UseWeightChroma = tt.useWeightChroma
+
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high10 chroma weighted-B slice-boundary deblock validation err = %v, want nil", err)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaWeightedPFrameDeblock(t *testing.T) {
 	for _, chromaFormatIDC := range []int{2, 3} {
 		for _, deblockMode := range []int32{0, 1} {

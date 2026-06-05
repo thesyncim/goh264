@@ -19,6 +19,7 @@ type high10ChromaWeightedBCase struct {
 	name         string
 	sourceFile   string
 	explicit     bool
+	mode2Deblock bool
 	cabac        int32
 	profileIDC   int32
 	chromaFormat uint32
@@ -118,7 +119,7 @@ func TestFFmpegRawVideoFrameMD5OracleHigh10ChromaWeightedB(t *testing.T) {
 }
 
 func high10ChromaWeightedBCases() []high10ChromaWeightedBCase {
-	return []high10ChromaWeightedBCase{
+	base := []high10ChromaWeightedBCase{
 		{
 			name:         "422-cavlc-implicit",
 			sourceFile:   "high10_weighted422_cavlc_b.h264",
@@ -264,6 +265,28 @@ func high10ChromaWeightedBCases() []high10ChromaWeightedBCase {
 			},
 		},
 	}
+	return append(base, high10ChromaWeightedBMode2Cases(base)...)
+}
+
+func high10ChromaWeightedBMode2Cases(base []high10ChromaWeightedBCase) []high10ChromaWeightedBCase {
+	expected := map[string]string{
+		"422-cavlc-implicit-mode2": "0d652d362653e0407c613b81367b01e1",
+		"422-cavlc-explicit-mode2": "255b9a5ac96b7717de76c2aec91040d2",
+		"422-cabac-implicit-mode2": "414c3641b55e39d1c8ac4fea1be12b74",
+		"422-cabac-explicit-mode2": "ea9459c0183e49f8de16dbbd58ce98c5",
+		"444-cavlc-implicit-mode2": "bf23fea603c1b888c5869694304aeae6",
+		"444-cavlc-explicit-mode2": "53054070aa69758862fd8ca88a8faac2",
+		"444-cabac-implicit-mode2": "0b62c859094ed823aecb8c688d173d46",
+		"444-cabac-explicit-mode2": "6ea84035a33fa09cc9755e2da968bded",
+	}
+	out := make([]high10ChromaWeightedBCase, 0, len(base))
+	for _, tt := range base {
+		tt.name += "-mode2"
+		tt.mode2Deblock = true
+		tt.bitstreamMD5 = expected[tt.name]
+		out = append(out, tt)
+	}
+	return out
 }
 
 func high10ChromaWeightedBFixture(t *testing.T, tt high10ChromaWeightedBCase) []byte {
@@ -272,8 +295,8 @@ func high10ChromaWeightedBFixture(t *testing.T, tt high10ChromaWeightedBCase) []
 	if err != nil {
 		t.Fatalf("read %s: %v", tt.sourceFile, err)
 	}
-	if tt.explicit {
-		data = high10ChromaExplicitWeightedBRewriteAnnexB(t, data)
+	if tt.explicit || tt.mode2Deblock {
+		data = high10ChromaWeightedBRewriteAnnexB(t, data, tt.explicit, tt.mode2Deblock)
 	}
 	sum := md5.Sum(data)
 	if got := hex.EncodeToString(sum[:]); got != tt.bitstreamMD5 {
@@ -375,8 +398,12 @@ func assertHigh10ChromaWeightedBFixtureSyntax(t *testing.T, data []byte, tt high
 			if err != nil {
 				t.Fatal(err)
 			}
-			if sh.PictureStructure != h264.PictureFrame || sh.DeblockingFilter != 1 {
-				t.Fatalf("slice picture/deblock = %d/%d, want frame/mode1", sh.PictureStructure, sh.DeblockingFilter)
+			wantDeblock := int32(1)
+			if tt.mode2Deblock && nal.Type == h264.NALSlice {
+				wantDeblock = 2
+			}
+			if sh.PictureStructure != h264.PictureFrame || sh.DeblockingFilter != wantDeblock {
+				t.Fatalf("slice picture/deblock = %d/%d, want frame/mode%d", sh.PictureStructure, sh.DeblockingFilter, wantDeblock)
 			}
 			gotVCL = append(gotVCL, nal.Type)
 			gotSlices = append(gotSlices, sh.SliceTypeNoS)
@@ -468,7 +495,7 @@ func assertFFmpegHigh10ChromaWeightedBRawVideoOracle(t *testing.T, data []byte, 
 	}
 }
 
-func high10ChromaExplicitWeightedBRewriteAnnexB(t *testing.T, data []byte) []byte {
+func high10ChromaWeightedBRewriteAnnexB(t *testing.T, data []byte, explicit bool, mode2Deblock bool) []byte {
 	t.Helper()
 	start, prefixLen, ok := high14CABACBFindStartCode(data, 0)
 	if !ok {
@@ -505,19 +532,38 @@ func high10ChromaExplicitWeightedBRewriteAnnexB(t *testing.T, data []byte) []byt
 					t.Fatalf("decode source PPS: %v", err)
 				}
 				sourcePPSList[sourcePPS.PPSID] = sourcePPS
-				raw = highExplicitWeightedBRewritePPSRaw(t, raw)
-				rewrittenPPS, err := h264.DecodePPS(high14CABACBEBSPToRBSP(raw[1:]), &rewrittenSPSList)
-				if err != nil {
-					t.Fatalf("decode rewritten PPS: %v", err)
+				if explicit {
+					raw = highExplicitWeightedBRewritePPSRaw(t, raw)
+					rewrittenPPS, err := h264.DecodePPS(high14CABACBEBSPToRBSP(raw[1:]), &rewrittenSPSList)
+					if err != nil {
+						t.Fatalf("decode rewritten PPS: %v", err)
+					}
+					rewrittenPPSList[rewrittenPPS.PPSID] = rewrittenPPS
 				}
-				rewrittenPPSList[rewrittenPPS.PPSID] = rewrittenPPS
 			case h264.NALSlice, h264.NALIDRSlice:
 				nal := h264.NALUnit{RefIDC: raw[0] >> 5 & 0x03, Type: nalType, Raw: raw, RBSP: rbsp}
 				sh, err := h264.ParseSliceHeader(nal, &sourcePPSList)
 				if err != nil {
 					t.Fatalf("parse source slice: %v", err)
 				}
-				if sh.SliceTypeNoS == h264.PictureTypeB {
+				if mode2Deblock && nalType == h264.NALSlice && sh.DeblockingFilter == 1 {
+					if sh.PPS.CABAC != 0 {
+						raw = highCABACBRewriteSliceDeblockMode(t, raw, sh, 2)
+					} else {
+						raw = highCAVLCBRewriteSliceDeblockMode(t, raw, sh)
+					}
+					rbsp = high14CABACBEBSPToRBSP(raw[1:])
+					nal.RBSP = rbsp
+					nal.Raw = raw
+					sh, err = h264.ParseSliceHeader(nal, &sourcePPSList)
+					if err != nil {
+						t.Fatalf("parse mode-2 rewritten source slice: %v", err)
+					}
+					if sh.DeblockingFilter != 2 {
+						t.Fatalf("mode-2 rewritten slice deblock = %d, want 2", sh.DeblockingFilter)
+					}
+				}
+				if explicit && sh.SliceTypeNoS == h264.PictureTypeB {
 					raw = highExplicitWeightedBRewriteSliceRaw(t, raw, sh)
 					rbsp = high14CABACBEBSPToRBSP(raw[1:])
 					nal.RBSP = rbsp
