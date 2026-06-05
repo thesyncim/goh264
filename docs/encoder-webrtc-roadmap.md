@@ -56,12 +56,12 @@ and checking the public decoder recovery side data. `Encode` and `EncodeInto`
 now validate frame shape and emit the first admitted frame bitstream paths:
 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B, AVC,
 and RTP packetization-mode 1 output, plus guarded CAVLC P-skip slices for
-identical frames after a reference when deblocking is disabled. Tests prove
-local raw-frame decode, FFmpeg rawvideo decode, RTP FU-A reassembly, STAP-A
-parameter-set aggregation, payload-type, SSRC, and sequence-number packet
-metadata. RTP packets also carry complete 12-byte RTP headers plus payload
-bytes. Changed frames and queued IDR requests still fall back to IDR until
-motion search/residual coding land.
+identical frames and guarded CAVLC P IntraPCM slices for changed frames after a
+reference when deblocking is disabled. Tests prove local raw-frame decode,
+FFmpeg rawvideo decode, RTP FU-A reassembly, STAP-A parameter-set aggregation,
+payload-type, SSRC, and sequence-number packet metadata. RTP packets also carry
+complete 12-byte RTP headers plus payload bytes. Queued IDR requests still emit
+IDR, and motion-search prediction plus residual coding remain pending.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -75,7 +75,9 @@ FFmpeg CBS-shaped recovery-point SEI writer, including extended SEI header
 encoding and Annex B/AVC parser round trips. `internal/h264/encoder_slice.go`
 adds the first Baseline IDR slice writer using CAVLC I_PCM macroblocks, with
 edge padding and deblock-control syntax kept explicit, plus a parse-proved
-Baseline P-skip writer that emits a single `mb_skip_run` covering the picture.
+Baseline P-skip writer that emits a single `mb_skip_run` covering the picture
+and a parse-proved Baseline P IntraPCM writer that emits `mb_skip_run=0` plus
+P-slice `mb_type=30` macroblocks.
 
 ## Implementation Order
 
@@ -89,8 +91,8 @@ Baseline P-skip writer that emits a single `mb_skip_run` covering the picture.
    frames.
 4. In progress: add P-frame prediction, reference management, CAVLC residual
    coding, deblock policy, and rate-control feedback in small oracle-backed
-   slices. Done for identical-reference P-skip with deblock disabled and IDR
-   fallback for changed frames/forced keyframes.
+   slices. Done for identical-reference P-skip and changed-frame P IntraPCM
+   with deblock disabled; forced keyframes still emit IDR.
 5. In progress: add RTP packetization and WebRTC control handling with
    packet-level tests. Done for packetization-mode 1 single NAL/FU-A output and
    STAP-A parameter-set aggregation with marker-bit boundaries plus

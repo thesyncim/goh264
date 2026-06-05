@@ -25,6 +25,22 @@ type EncoderI420IntraPCMIDRConfig struct {
 	NALLengthSize              int
 }
 
+type EncoderI420IntraPCMPConfig struct {
+	Width    int
+	Height   int
+	StrideY  int
+	StrideCb int
+	StrideCr int
+	Y        []byte
+	Cb       []byte
+	Cr       []byte
+
+	FrameNum                   uint32
+	InitialQP                  int
+	DisableDeblockingFilterIDC uint32
+	NALLengthSize              int
+}
+
 type EncoderI420PSkipConfig struct {
 	Width  int
 	Height int
@@ -43,6 +59,13 @@ type EncoderIDRSlice struct {
 }
 
 type EncoderPSkipSlice struct {
+	RBSP   []byte
+	NAL    []byte
+	AnnexB []byte
+	AVC    []byte
+}
+
+type EncoderPSlice struct {
 	RBSP   []byte
 	NAL    []byte
 	AnnexB []byte
@@ -70,6 +93,34 @@ func BuildEncoderI420IntraPCMIDRSlice(cfg EncoderI420IntraPCMIDRConfig) (Encoder
 		return EncoderIDRSlice{}, err
 	}
 	return EncoderIDRSlice{
+		RBSP:   rbsp,
+		NAL:    nal,
+		AnnexB: annexB,
+		AVC:    avc,
+	}, nil
+}
+
+func BuildEncoderI420IntraPCMPSlice(cfg EncoderI420IntraPCMPConfig) (EncoderPSlice, error) {
+	if cfg.NALLengthSize == 0 {
+		cfg.NALLengthSize = 4
+	}
+	rbsp, err := EncodeI420IntraPCMPSliceRBSP(cfg)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	nal, err := AppendNAL(nil, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	annexB, err := AppendAnnexBNAL(nil, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	avc, err := AppendAVCNAL(nil, cfg.NALLengthSize, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	return EncoderPSlice{
 		RBSP:   rbsp,
 		NAL:    nal,
 		AnnexB: annexB,
@@ -117,13 +168,70 @@ func EncodeI420IntraPCMIDRSliceRBSP(cfg EncoderI420IntraPCMIDRConfig) ([]byte, e
 
 	mbWidth := (cfg.Width + 15) >> 4
 	mbHeight := (cfg.Height + 15) >> 4
+	samples := encoderI420IntraPCMSamples{
+		Width:    cfg.Width,
+		Height:   cfg.Height,
+		StrideY:  cfg.StrideY,
+		StrideCb: cfg.StrideCb,
+		StrideCr: cfg.StrideCr,
+		Y:        cfg.Y,
+		Cb:       cfg.Cb,
+		Cr:       cfg.Cr,
+	}
 	for mbY := 0; mbY < mbHeight; mbY++ {
 		for mbX := 0; mbX < mbWidth; mbX++ {
 			if err := bw.WriteUEGolomb(25); err != nil { // I_PCM
 				return nil, err
 			}
 			bw.WriteZeroAlign()
-			if err := writeEncoderI420IntraPCMMacroblock(&bw, cfg, mbX, mbY); err != nil {
+			if err := writeEncoderI420IntraPCMMacroblock(&bw, samples, mbX, mbY); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	bw.WriteRBSPTrailingBits()
+	return bw.Bytes(), nil
+}
+
+func EncodeI420IntraPCMPSliceRBSP(cfg EncoderI420IntraPCMPConfig) ([]byte, error) {
+	if err := validateEncoderI420IntraPCMPConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	var bw BitWriter
+	if err := writeEncoderI420PSliceHeader(&bw, EncoderI420PSkipConfig{
+		Width:                      cfg.Width,
+		Height:                     cfg.Height,
+		FrameNum:                   cfg.FrameNum,
+		InitialQP:                  cfg.InitialQP,
+		DisableDeblockingFilterIDC: cfg.DisableDeblockingFilterIDC,
+	}); err != nil {
+		return nil, err
+	}
+
+	mbWidth := (cfg.Width + 15) >> 4
+	mbHeight := (cfg.Height + 15) >> 4
+	samples := encoderI420IntraPCMSamples{
+		Width:    cfg.Width,
+		Height:   cfg.Height,
+		StrideY:  cfg.StrideY,
+		StrideCb: cfg.StrideCb,
+		StrideCr: cfg.StrideCr,
+		Y:        cfg.Y,
+		Cb:       cfg.Cb,
+		Cr:       cfg.Cr,
+	}
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		for mbX := 0; mbX < mbWidth; mbX++ {
+			if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
+				return nil, err
+			}
+			if err := bw.WriteUEGolomb(30); err != nil { // P-slice I_PCM = 5 P types + 25 I_PCM index
+				return nil, err
+			}
+			bw.WriteZeroAlign()
+			if err := writeEncoderI420IntraPCMMacroblock(&bw, samples, mbX, mbY); err != nil {
 				return nil, err
 			}
 		}
@@ -220,7 +328,18 @@ func writeEncoderI420PSliceHeader(bw *BitWriter, cfg EncoderI420PSkipConfig) err
 	return nil
 }
 
-func writeEncoderI420IntraPCMMacroblock(bw *BitWriter, cfg EncoderI420IntraPCMIDRConfig, mbX int, mbY int) error {
+type encoderI420IntraPCMSamples struct {
+	Width    int
+	Height   int
+	StrideY  int
+	StrideCb int
+	StrideCr int
+	Y        []byte
+	Cb       []byte
+	Cr       []byte
+}
+
+func writeEncoderI420IntraPCMMacroblock(bw *BitWriter, cfg encoderI420IntraPCMSamples, mbX int, mbY int) error {
 	var pcm [384]byte
 	i := 0
 	baseX := mbX << 4
@@ -258,6 +377,50 @@ func writeEncoderI420IntraPCMMacroblock(bw *BitWriter, cfg EncoderI420IntraPCMID
 }
 
 func validateEncoderI420IntraPCMIDRConfig(cfg EncoderI420IntraPCMIDRConfig) error {
+	if err := validateEncoderI420IntraPCMSamples(encoderI420IntraPCMSamples{
+		Width:    cfg.Width,
+		Height:   cfg.Height,
+		StrideY:  cfg.StrideY,
+		StrideCb: cfg.StrideCb,
+		StrideCr: cfg.StrideCr,
+		Y:        cfg.Y,
+		Cb:       cfg.Cb,
+		Cr:       cfg.Cr,
+	}); err != nil {
+		return ErrInvalidData
+	}
+	if cfg.FrameNum >= 1<<8 || cfg.IDRPicID > 65535 ||
+		cfg.InitialQP < 0 || cfg.InitialQP > 51 ||
+		cfg.DisableDeblockingFilterIDC > 2 ||
+		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+func validateEncoderI420IntraPCMPConfig(cfg EncoderI420IntraPCMPConfig) error {
+	if err := validateEncoderI420IntraPCMSamples(encoderI420IntraPCMSamples{
+		Width:    cfg.Width,
+		Height:   cfg.Height,
+		StrideY:  cfg.StrideY,
+		StrideCb: cfg.StrideCb,
+		StrideCr: cfg.StrideCr,
+		Y:        cfg.Y,
+		Cb:       cfg.Cb,
+		Cr:       cfg.Cr,
+	}); err != nil {
+		return ErrInvalidData
+	}
+	if cfg.FrameNum >= 1<<8 ||
+		cfg.InitialQP < 0 || cfg.InitialQP > 51 ||
+		cfg.DisableDeblockingFilterIDC > 2 ||
+		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+func validateEncoderI420IntraPCMSamples(cfg encoderI420IntraPCMSamples) error {
 	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width&1 != 0 || cfg.Height&1 != 0 {
 		return ErrInvalidData
 	}
@@ -269,12 +432,6 @@ func validateEncoderI420IntraPCMIDRConfig(cfg EncoderI420IntraPCMIDRConfig) erro
 	}
 	chromaHeight := cfg.Height >> 1
 	if len(cfg.Cb) < cfg.StrideCb*chromaHeight || len(cfg.Cr) < cfg.StrideCr*chromaHeight {
-		return ErrInvalidData
-	}
-	if cfg.FrameNum >= 1<<8 || cfg.IDRPicID > 65535 ||
-		cfg.InitialQP < 0 || cfg.InitialQP > 51 ||
-		cfg.DisableDeblockingFilterIDC > 2 ||
-		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
 		return ErrInvalidData
 	}
 	return nil

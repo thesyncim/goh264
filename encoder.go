@@ -416,10 +416,29 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			return EncodedFrame{}, err
 		}
 		nals = append(nals, encoderRawNAL{typ: uint8(h264.NALIDRSlice), raw: slice.NAL, keyFrame: true})
-	} else {
+	} else if e.referenceMatches(view) {
 		slice, err := h264.BuildEncoderI420PSkipSlice(h264.EncoderI420PSkipConfig{
 			Width:                      view.width,
 			Height:                     view.height,
+			FrameNum:                   e.frameNum & 0xff,
+			InitialQP:                  e.cfg.InitialQP,
+			DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+			NALLengthSize:              4,
+		})
+		if err != nil {
+			return EncodedFrame{}, err
+		}
+		nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: slice.NAL})
+	} else {
+		slice, err := h264.BuildEncoderI420IntraPCMPSlice(h264.EncoderI420IntraPCMPConfig{
+			Width:                      view.width,
+			Height:                     view.height,
+			StrideY:                    view.strideY,
+			StrideCb:                   view.strideCb,
+			StrideCr:                   view.strideCr,
+			Y:                          view.y,
+			Cb:                         view.cb,
+			Cr:                         view.cr,
 			FrameNum:                   e.frameNum & 0xff,
 			InitialQP:                  e.cfg.InitialQP,
 			DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
@@ -680,7 +699,7 @@ func (e *Encoder) shouldEncodeIDR(view encoderFrameView, frame EncoderFrame) boo
 	if e.cfg.DeblockMode != EncoderDeblockDisabled {
 		return true
 	}
-	return !e.referenceMatches(view)
+	return false
 }
 
 func (e *Encoder) referenceMatches(view encoderFrameView) bool {

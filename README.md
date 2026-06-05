@@ -7,11 +7,11 @@ decoder path, pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`. Encoder
 support is now in scope for realtime/WebRTC use, tracked in
 [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md). The encoder
 API currently exposes a tested realtime/WebRTC control contract and valid
-SPS/PPS parameter-set plus recovery-point SEI generation. The first frame
-bitstream path is now admitted for 8-bit I420 Constrained Baseline IDR
-IntraPCM pictures with Annex B, AVC, and RTP packetization-mode 1 output,
-proved by local decode, FFmpeg rawvideo decode, RTP FU-A reassembly, and STAP-A
-parameter-set aggregation tests.
+SPS/PPS parameter-set plus recovery-point SEI generation. The first admitted
+bitstream paths cover 8-bit I420 Constrained Baseline IDR IntraPCM, P-skip for
+identical references, and changed-frame P IntraPCM pictures with Annex B, AVC,
+and RTP packetization-mode 1 output, proved by local decode, FFmpeg rawvideo
+decode, RTP FU-A reassembly, and STAP-A parameter-set aggregation tests.
 The goal is not a loose rewrite: internal codec paths keep upstream state
 machines, syntax handling, math, and edge cases recognizable, then prove
 behavior against oracle vectors.
@@ -20,8 +20,8 @@ behavior against oracle vectors.
 - **Realtime/WebRTC encoder scope** - tested encoder controls cover explicit
   bitrate, latency, keyframe, packetization, profile/level, runtime
   reconfiguration controls, out-of-band SPS/PPS/avcC headers, and
-  recovery-point SEI packaging, with a first IDR/IntraPCM Annex B/AVC/RTP
-  output path.
+  recovery-point SEI packaging, with first IDR IntraPCM, P-skip, and P
+  IntraPCM Annex B/AVC/RTP output paths.
 - **Annex B and AVC input surfaces** - automatic packet splitting, explicit
   Annex B / length-prefixed AVC APIs, and AVC decoder configuration records.
 - **Raw frame output** - `Frame` exposes Y/Cb/Cr planes, crop, strides, VUI
@@ -83,12 +83,13 @@ Annex B, AVC, and RTP packetization-mode 1, including FU-A fragmentation and
 STAP-A parameter-set aggregation, payload-type/SSRC/sequence metadata, full RTP
 packet headers, and marker-bit boundaries. Identical frames after a decoded
 reference can use a guarded CAVLC P-skip slice when deblocking is disabled;
-changed frames and forced keyframe requests still fall back to IDR. Internal
-writer primitives cover raw bit/Exp-Golomb
+changed frames can use a guarded CAVLC P IntraPCM slice in the same admitted
+path, while forced keyframe requests still emit IDR. Internal writer primitives
+cover raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
-first Baseline IDR plus P-skip slice payloads. Motion-search P prediction,
-residual CAVLC coding, rate-control feedback, RTP callback metadata, and
+first Baseline IDR, P-skip, and P IntraPCM slice payloads. Motion-search P
+prediction, residual CAVLC coding, rate-control feedback, RTP callback metadata, and
 realtime allocation/performance evidence remain pending.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
@@ -258,14 +259,15 @@ enc.HandlePLI() // queues the next frame as an IDR request
 err = enc.SetRTPMaxPayloadSize(1200)
 headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
-out, err := enc.Encode(frame)       // first admitted path: IDR/IntraPCM
+out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P IntraPCM
 ```
 
 `Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
-then emit the first admitted IDR/IntraPCM frame path. RTP output includes
-payloads plus complete RTP packet bytes. Inter prediction, quantized residual
-coding, rate-control decisions, and RTP callback metadata are still future
-encoder slices.
+then emit the admitted IDR IntraPCM, identical-reference P-skip, or
+changed-frame P IntraPCM frame path. RTP output includes payloads plus complete
+RTP packet bytes. Motion-search inter prediction, quantized residual coding,
+rate-control decisions, and RTP callback metadata are still future encoder
+slices.
 
 ## Supported Inputs
 
@@ -439,7 +441,7 @@ No tag should be treated as production until a release-evidence pass proves:
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until
   [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md) has matching
-  changed-frame P prediction, residual bitstream implementation, rate-control
+  motion-search P prediction, residual bitstream implementation, rate-control
   behavior, packetizer breadth, controls, and oracle evidence.
 - The source-truth and translation-ledger docs match the committed tests.
 

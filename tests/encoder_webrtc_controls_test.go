@@ -460,7 +460,7 @@ func TestEncoderEncodeIdenticalSecondFrameUsesPSkipReference(t *testing.T) {
 	assertFFmpegRawVideoOracle(t, stream, wantStream)
 }
 
-func TestEncoderEncodeChangedSecondFrameFallsBackToIDR(t *testing.T) {
+func TestEncoderEncodeChangedSecondFrameUsesPIntraPCM(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -483,20 +483,27 @@ func TestEncoderEncodeChangedSecondFrameFallsBackToIDR(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encode changed second frame: %v", err)
 	}
-	if !second.KeyFrame || !second.IDR {
-		t.Fatalf("changed second frame key=%v idr=%v, want IDR fallback", second.KeyFrame, second.IDR)
+	if second.KeyFrame || second.IDR {
+		t.Fatalf("changed second frame key=%v idr=%v, want non-IDR P IntraPCM", second.KeyFrame, second.IDR)
 	}
-	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
 
 	dec := goh264.NewDecoder()
-	if _, err := dec.DecodeFrames(first.Data); err != nil {
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
 		t.Fatalf("Decode first IDR: %v", err)
 	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
 	decodedSecond, err := dec.DecodeFrames(second.Data)
 	if err != nil {
-		t.Fatalf("Decode changed IDR: %v", err)
+		t.Fatalf("Decode changed P IntraPCM: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+
+	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	wantStream := appendI420FrameBytes(nil, firstFrame)
+	wantStream = appendI420FrameBytes(wantStream, secondFrame)
+	assertFFmpegRawVideoOracle(t, stream, wantStream)
 }
 
 func TestEncoderEncodeForceIDRBypassesPSkipReference(t *testing.T) {
