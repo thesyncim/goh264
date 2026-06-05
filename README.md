@@ -52,13 +52,13 @@ CAVLC/CABAC implicit and explicit weighted B frame and slice-boundary deblock pl
 CABAC, weighted and direct motion paths, deblock modes, selected field/PAFF/MBAFF rows
 including High10 4:2:2/4:4:4 weighted-B and weighted-P top/bottom field guards for deblock modes 0/1/2,
 internal High12/High14 4:2:2/4:4:4 weighted-B plus luma-weighted, luma+chroma-weighted, and source-normalized chroma-only weighted-P top/bottom field guards for deblock modes 0/1/2,
-public High12/High14 4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, field-coded/frame-coded P16x16 no-residual and P16x16 luma-residual, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 luma+chroma-residual rows,
+public High12/High14 4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows,
 reinit metadata rows, lossless High444
 transform-bypass rows, configured AVC surfaces, container-extracted Annex B
 vectors, and SEI side-data surfaces.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
-field/inter streams beyond the public High12/High14 frame-MBAFF IntraPCM/P-skip/field-coded and frame-coded P16x16 no-residual/luma-residual and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 luma+chroma-residual rows plus internal High10/High12/High14 field weighted-B/weighted-P guard matrices,
+field/inter streams beyond the public High12/High14 frame-MBAFF IntraPCM/P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus internal High10/High12/High14 field weighted-B/weighted-P guard matrices,
 broader damaged-slice error resilience, threading/SIMD and
 bulk allocation hardening, and exact libavcodec delayed-output behavior.
 Intentionally unsupported at the pinned FFmpeg parity boundary: FMO, which
