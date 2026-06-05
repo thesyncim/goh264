@@ -14,8 +14,9 @@ Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
 single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
 FFmpeg rawvideo decode, recovery-point side data, RTP mode-0 reassembly, RTP
 FU-A reassembly, STAP-A parameter-set aggregation tests, and encode-time
-`MaxFrameSize`/`SliceMaxBytes` budget guards plus runtime RTP/output,
-rate-control, QP, GOP/IDR, and deblock reconfiguration gates.
+`MaxFrameSize`/`SliceMaxBytes` budget guards with hard-error and dropped-frame
+paths plus runtime RTP/output, rate-control, QP, GOP/IDR, and deblock
+reconfiguration gates.
 The goal is not a loose rewrite: internal codec paths keep upstream state
 machines, syntax handling, math, and edge cases recognizable, then prove
 behavior against oracle vectors.
@@ -26,8 +27,9 @@ behavior against oracle vectors.
   reconfiguration controls including rate-control/QP/GOP/deblock updates,
   out-of-band SPS/PPS/avcC headers, and crop-aware SPS/encoded visible output
   plus recovery-point SEI packaging and
-  `SliceCount`-backed multi-slice output plus frame/slice byte-budget guards,
-  with first IDR IntraPCM, P-skip, and P IntraPCM Annex B/AVC/RTP output paths.
+  `SliceCount`-backed multi-slice output plus frame/slice byte-budget reject
+  and realtime drop guards, with first IDR IntraPCM, P-skip, and P IntraPCM
+  Annex B/AVC/RTP output paths.
 - **Annex B and AVC input surfaces** - automatic packet splitting, explicit
   Annex B / length-prefixed AVC APIs, and AVC decoder configuration records.
 - **Raw frame output** - `Frame` exposes Y/Cb/Cr planes, crop, strides, VUI
@@ -97,7 +99,10 @@ boundaries, oversize mode-0 rejection, and optional RTP packet callbacks with
 packet index/count, frame timing, payload form, NAL type/count, FU-A start/end,
 and parameter-set metadata. RTP timestamps honor explicit frame PTS and advance
 zero-PTS frames from frame duration or `RTPTimestampIncrement`. `MaxFrameSize`
-and `SliceMaxBytes` are enforced before frame/reference/RTP state advances.
+and `SliceMaxBytes` are enforced before frame/reference/packet state advances:
+`FrameDropDisabled` preserves the hard-error path, while
+`FrameDropToBitrate` returns `EncodedFrame.Dropped` without emitted bytes or RTP
+packets and advances the RTP timestamp timeline.
 Runtime reconfiguration now covers SPS/PPS cadence, Annex B/AVC/RTP output
 format, RTP packetization mode 0/1, STAP-A aggregation, payload type, SSRC, and
 custom RTP timestamp increments plus rate-control mode, VBV size,
@@ -297,6 +302,9 @@ enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRT
 headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
 out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P IntraPCM
+if out.Dropped {
+	// Realtime budget drop: no bytes or RTP packets were emitted.
+}
 ```
 
 `Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
@@ -310,7 +318,8 @@ timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
 separate in-band keyframe headers, out-of-band headers, and every-IDR emission,
 and runtime reconfiguration can switch output format and RTP packetization
 controls plus rate-control/QP/GOP/deblock controls while preserving state on
-rejected updates.
+rejected updates. Bitrate-budget drops surface through `EncodedFrame.Dropped`
+when `FrameDropToBitrate` is active.
 Motion-search inter prediction, quantized residual coding, and rate-control
 decisions are still future encoder slices.
 

@@ -232,6 +232,7 @@ type EncodedFrame struct {
 	PTS        int64
 	DTS        int64
 	RTPTime    uint32
+	Dropped    bool
 }
 
 type EncoderParameterSets struct {
@@ -527,14 +528,23 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	if err != nil {
 		return EncodedFrame{}, err
 	}
-	if err := validateEncoderOutputBudgets(e.cfg, nals, outputSize); err != nil {
+	rtpTime := e.encoderRTPTime(frame)
+	if miss, err := encoderOutputBudgetMiss(e.cfg, nals, outputSize); err != nil {
+		if e.cfg.FrameDrop == EncoderFrameDropToBitrate && miss != encoderOutputBudgetNone {
+			e.advanceEncoderRTPTime(frame, rtpTime)
+			return EncodedFrame{
+				PTS:     frame.PTS,
+				DTS:     frame.PTS,
+				RTPTime: rtpTime,
+				Dropped: true,
+			}, nil
+		}
 		return EncodedFrame{}, err
 	}
 	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
 	if err != nil {
 		return EncodedFrame{}, err
 	}
-	rtpTime := e.encoderRTPTime(frame)
 	var packets []EncoderRTPPacket
 	if e.cfg.OutputFormat == EncoderOutputRTP {
 		switch e.cfg.RTPPacketizationMode {
@@ -1020,18 +1030,31 @@ func encoderAccessUnitOutputSize(format EncoderOutputFormat, nals []encoderRawNA
 	return size, nil
 }
 
+type encoderOutputBudget uint8
+
+const (
+	encoderOutputBudgetNone encoderOutputBudget = iota
+	encoderOutputBudgetSlice
+	encoderOutputBudgetFrame
+)
+
 func validateEncoderOutputBudgets(cfg EncoderConfig, nals []encoderRawNAL, outputSize int) error {
+	_, err := encoderOutputBudgetMiss(cfg, nals, outputSize)
+	return err
+}
+
+func encoderOutputBudgetMiss(cfg EncoderConfig, nals []encoderRawNAL, outputSize int) (encoderOutputBudget, error) {
 	if cfg.SliceMaxBytes > 0 {
 		for _, nal := range nals {
 			if encoderRawNALIsVCL(nal) && len(nal.raw) > cfg.SliceMaxBytes {
-				return encoderInvalid("encoded slice exceeds slice byte target")
+				return encoderOutputBudgetSlice, encoderInvalid("encoded slice exceeds slice byte target")
 			}
 		}
 	}
 	if cfg.MaxFrameSize > 0 && outputSize > cfg.MaxFrameSize {
-		return encoderInvalid("encoded access unit exceeds max frame size")
+		return encoderOutputBudgetFrame, encoderInvalid("encoded access unit exceeds max frame size")
 	}
-	return nil
+	return encoderOutputBudgetNone, nil
 }
 
 func encoderRawNALIsVCL(nal encoderRawNAL) bool {

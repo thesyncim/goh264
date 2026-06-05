@@ -1242,6 +1242,7 @@ func TestEncoderMaxFrameSizeRejectsOversizeAccessUnitWithoutAdvancingState(t *te
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
 	cfg.RTPMaxPayloadSize = 0
 	cfg.MaxFrameSize = 16
 	enc, err := goh264.NewEncoder(cfg)
@@ -1276,6 +1277,7 @@ func TestEncoderMaxFrameSizeRejectsOversizeAccessUnitWithoutAdvancingState(t *te
 func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingRTPState(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
 	cfg.SliceMaxBytes = 1
 	enc, err := goh264.NewEncoder(cfg)
 	if err != nil {
@@ -1292,6 +1294,111 @@ func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingRTPState(t *tes
 	out, err := enc.Encode(frame)
 	if err != nil {
 		t.Fatalf("Encode after rejected SliceMaxBytes frame: %v", err)
+	}
+	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLFrameNums(t, out.Data, []uint8{5}, []uint32{0})
+	assertRTPPacketMetadata(t, out.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+}
+
+func TestEncoderFrameDropToBitrateDropsOversizeFrameWithoutAdvancingReferenceOrPacketState(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.MaxFrameSize = 4096
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 0
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count", firstPacketCount, callbackCalls)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 16}); err != nil {
+		t.Fatalf("lower MaxFrameSize: %v", err)
+	}
+	droppedFrame := patternedI420EncoderFrame(16, 16)
+	droppedFrame.PTS = 0
+	droppedFrame.Y[0] ^= 0x40
+	dropped, err := enc.Encode(droppedFrame)
+	if err != nil {
+		t.Fatalf("Encode dropped bitrate frame: %v", err)
+	}
+	if !dropped.Dropped || len(dropped.Data) != 0 || len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 {
+		t.Fatalf("dropped frame = %+v, want dropped metadata without output", dropped)
+	}
+	if dropped.RTPTime != first.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("dropped RTP time = %d, want %d", dropped.RTPTime, first.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("dropped frame invoked callback count %d, want still %d", callbackCalls, firstPacketCount)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 4096}); err != nil {
+		t.Fatalf("raise MaxFrameSize: %v", err)
+	}
+	thirdFrame := firstFrame
+	thirdFrame.PTS = 0
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode after dropped bitrate frame: %v", err)
+	}
+	if third.Dropped || third.IDR {
+		t.Fatalf("post-drop frame dropped=%v idr=%v, want transmitted P-skip", third.Dropped, third.IDR)
+	}
+	if third.RTPTime != dropped.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("post-drop RTP time = %d, want %d", third.RTPTime, dropped.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{1})
+	assertEncoderVCLFrameNums(t, append(append([]byte(nil), first.Data...), third.Data...), []uint8{5, 1}, []uint32{0, 1})
+	assertRTPPacketMetadata(t, third.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+}
+
+func TestEncoderFrameDropToBitrateDropsOversizeSliceWithoutAdvancingFrameState(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.SliceMaxBytes = 1
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 0
+
+	dropped, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode dropped slice-budget frame: %v", err)
+	}
+	if !dropped.Dropped || len(dropped.Data) != 0 || len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 {
+		t.Fatalf("slice-budget dropped frame = %+v, want dropped metadata without output", dropped)
+	}
+	if dropped.RTPTime != 0 {
+		t.Fatalf("first dropped RTP time = %d, want 0", dropped.RTPTime)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{SliceMaxBytes: 4096}); err != nil {
+		t.Fatalf("raise SliceMaxBytes: %v", err)
+	}
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode after dropped slice-budget frame: %v", err)
+	}
+	if out.Dropped || !out.IDR {
+		t.Fatalf("post-slice-drop frame dropped=%v idr=%v, want first transmitted IDR", out.Dropped, out.IDR)
+	}
+	if out.RTPTime != cfg.RTPTimestampIncrement {
+		t.Fatalf("post-slice-drop RTP time = %d, want %d", out.RTPTime, cfg.RTPTimestampIncrement)
 	}
 	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
 	assertEncoderVCLFrameNums(t, out.Data, []uint8{5}, []uint32{0})

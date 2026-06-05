@@ -58,7 +58,10 @@ cadence, deblock mode, SPS/PPS cadence, RTP output format, packetization-mode
 partial reconfiguration controls are tested, including rejected runtime
 rate-control and packetization updates that leave the prior config intact.
 QP updates queue an IDR/PPS refresh. `MaxFrameSize` and `SliceMaxBytes` are now
-enforced as encode-time guards before frame/reference/RTP state advances.
+enforced as encode-time guards before frame/reference/packet state advances:
+`FrameDropDisabled` keeps the hard-error path, while `FrameDropToBitrate`
+returns `EncodedFrame.Dropped` without emitted bytes or RTP packets and advances
+the RTP timestamp timeline.
 `ParameterSets`
 generates SPS/PPS NALs, crop metadata, Annex B sequence headers, and avcC
 records accepted by the decoder parsers. IDR header cadence is explicit for
@@ -139,7 +142,9 @@ can emit multiple VCL NALs in one access unit.
    Configured `SliceCount` output now feeds RTP mode 1 as separate VCL NAL
    packets when each slice fits the payload limit, and configured
    `MaxFrameSize`/`SliceMaxBytes` budgets now reject oversized encoded output
-   without advancing encoder state.
+   without advancing encoder state when frame dropping is disabled, or return
+   dropped-frame metadata without emitted packets when `FrameDropToBitrate` is
+   active.
 6. Add realtime allocation budgets, encode timing benchmarks, and control-loop
    stress tests.
 
