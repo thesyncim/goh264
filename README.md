@@ -159,7 +159,9 @@ frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
 
 Single-frame helpers (`Decode`, `DecodeAnnexB`, `DecodeAVC`,
 `DecodeConfiguredAVC`) return `ErrUnsupported` when a packet produces zero or
-multiple frames. For stream processing, prefer the `*Frames` methods.
+multiple frames. For stream processing, prefer `DecodeFrames` or
+`DecodePacketFrames`; they retain decoder reference state across packets and
+flush delayed output when called with empty data.
 
 Parse headers without decoding full frames:
 

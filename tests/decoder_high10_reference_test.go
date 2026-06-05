@@ -5,6 +5,8 @@ package goh264_test
 import (
 	"errors"
 	"testing"
+
+	"github.com/thesyncim/goh264/internal/h264"
 )
 
 const testsrc16High10CAVLCReferenceBoundaryAnnexBHex = `
@@ -43,4 +45,88 @@ func TestDecodeConfiguredAVCHigh10RetainsReferenceForResidualP(t *testing.T) {
 		t.Fatalf("P sample with retained reference decode: %v", err)
 	}
 	assertHigh10FrameMD5Strings(t, []*Frame{second}, []string{"df16162e1c5420c45702aee7bb936b15"})
+}
+
+func TestDecodeFramesAnnexBHigh10RetainsReferenceForResidualP(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16High10CAVLCReferenceBoundaryAnnexBHex)
+	parameterSets, samples := annexBParameterSetsAndAccessUnits(t, data)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	fresh := NewDecoder()
+	pSampleWithParameterSets := append(append([]byte{}, parameterSets...), samples[1]...)
+	if _, err := fresh.DecodeFrames(pSampleWithParameterSets); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("P sample without retained reference err = %v, want ErrInvalidData", err)
+	}
+
+	dec := NewDecoder()
+	first, err := dec.DecodeFrames(samples[0])
+	if err != nil {
+		t.Fatalf("IDR Annex B access unit decode: %v", err)
+	}
+	assertHigh10FrameMD5Strings(t, first, []string{"fd302f00e365b8502c44005ea308c468"})
+
+	second, err := dec.DecodeFrames(samples[1])
+	if err != nil {
+		t.Fatalf("P Annex B access unit with retained reference decode: %v", err)
+	}
+	assertHigh10FrameMD5Strings(t, second, []string{"df16162e1c5420c45702aee7bb936b15"})
+}
+
+func annexBParameterSetsAndAccessUnits(t *testing.T, data []byte) ([]byte, [][]byte) {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var spsList [32]*h264.SPS
+	var ppsList [256]*h264.PPS
+	var parameterSets []byte
+	var samples [][]byte
+	var sample []byte
+	hasVCL := false
+	for _, nal := range nals {
+		switch nal.Type {
+		case h264.NALSPS:
+			sps, err := h264.DecodeSPS(nal.RBSP)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spsList[sps.SPSID] = sps
+			parameterSets = appendAnnexBNAL(parameterSets, nal.Raw)
+		case h264.NALPPS:
+			pps, err := h264.DecodePPS(nal.RBSP, &spsList)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ppsList[pps.PPSID] = pps
+			parameterSets = appendAnnexBNAL(parameterSets, nal.Raw)
+		}
+
+		isVCL := nal.Type == h264.NALSlice || nal.Type == h264.NALIDRSlice
+		if isVCL {
+			sh, err := h264.ParseSliceHeader(nal, &ppsList)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasVCL && sh.FirstMBAddr == 0 {
+				samples = append(samples, sample)
+				sample = nil
+				hasVCL = false
+			}
+		}
+		sample = appendAnnexBNAL(sample, nal.Raw)
+		if isVCL {
+			hasVCL = true
+		}
+	}
+	if len(sample) != 0 {
+		samples = append(samples, sample)
+	}
+	if len(parameterSets) == 0 || len(samples) == 0 {
+		t.Fatalf("annexb split produced parameter_sets=%d samples=%d", len(parameterSets), len(samples))
+	}
+	return parameterSets, samples
 }
