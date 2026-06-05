@@ -4,6 +4,7 @@ package goh264
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 
 	"github.com/thesyncim/goh264/internal/h264"
@@ -483,16 +484,19 @@ func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []b
 }
 
 func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConfigurationRecord) ([]*Frame, error) {
-	frames, err := d.simple.DecodeAVCFrames(data, cfg.NALLengthSize)
-	if err != nil {
-		return framesFromH264WithError(frames, err)
-	}
-	flushed, err := d.simple.FlushDelayedFrames()
-	if err != nil {
-		return framesFromH264WithError(frames, err)
-	}
+	frames, decodeErr := d.simple.DecodeAVCFrames(data, cfg.NALLengthSize)
+	flushed, flushErr := d.simple.FlushDelayedFrames()
 	if len(flushed) != 0 {
 		frames = append(frames, flushed...)
+	}
+	if decodeErr != nil {
+		if flushErr != nil {
+			decodeErr = fmt.Errorf("%v; flush delayed: %w", decodeErr, flushErr)
+		}
+		return framesFromH264WithError(frames, decodeErr)
+	}
+	if flushErr != nil {
+		return framesFromH264WithError(frames, flushErr)
 	}
 	return framesFromH264(frames), nil
 }

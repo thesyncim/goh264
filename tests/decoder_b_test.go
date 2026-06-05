@@ -287,6 +287,62 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	}
 }
 
+func TestDecodeConfiguredAVCBFramesReturnsReorderedPrefixBeforeDamagedSlice(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+
+	packet := append([]byte(nil), samples[0]...)
+	packet = append(packet, samples[1]...)
+	packet = append(packet, truncateFirstVCLAVCPayload(t, samples[2], 4)...)
+	frames, err := dec.DecodeConfiguredAVCFrames(packet)
+	if err == nil {
+		t.Fatal("delayed B valid+damaged packet returned nil error")
+	}
+	assertFrameMD5Strings(t, frames, []string{"4296e3dc95829cc27071a8685a428494"})
+
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[2])
+	if err != nil {
+		t.Fatalf("decode after delayed B damaged packet: %v", err)
+	}
+	out, err := dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("flush after delayed B damaged packet: %v", err)
+	}
+	frames = append(frames, out...)
+	assertFrameMD5Strings(t, frames, []string{
+		"36f5a9b9064709ee891652e8f4e06992",
+		"aa778b981f96d21489196f6a0faa0959",
+	})
+}
+
+func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesReorderedPrefixBeforeDamagedSlice(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	packet := append([]byte(nil), samples[0]...)
+	packet = append(packet, samples[1]...)
+	packet = append(packet, truncateFirstVCLAVCPayload(t, samples[2], 4)...)
+	frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+	if err == nil {
+		t.Fatal("one-shot delayed B valid+damaged packet returned nil error")
+	}
+	assertFrameMD5Strings(t, frames, []string{
+		"4296e3dc95829cc27071a8685a428494",
+		"aa778b981f96d21489196f6a0faa0959",
+	})
+}
+
 func TestDecodeAutoConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {

@@ -108,7 +108,8 @@ configuration record, packet `NEW_EXTRADATA`, and auto-detected Annex B
 valid-damaged-valid sequences return an error for the damaged packet without
 poisoning the next valid decode, and valid frames decoded before a later
 damaged slice in the same packet are returned alongside that error, including
-the sole valid frame on single-frame decode helpers. Packet
+the sole valid frame on single-frame decode helpers and delayed B-frame prefix
+output from configuration-record one-shot decode. Packet
 `NEW_EXTRADATA` recovery also proves malformed AVC and Annex B extradata errors
 do not wipe the last good decoder configuration or reference state. Malformed
 in-band SPS/PPS NALs are skipped without replacing the last good parameter sets

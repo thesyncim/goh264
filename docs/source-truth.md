@@ -95,7 +95,8 @@ stateful valid-damaged-valid packet recovery guards across configured AVC,
 AVC configuration-record, packet `NEW_EXTRADATA`, and auto Annex B surfaces,
 valid-prefix damaged-packet recovery across configured AVC, AVC
 configuration-record, bare AVC, packet AVC, stateful Annex B, and one-shot
-Annex B surfaces including single-frame helpers,
+Annex B surfaces including single-frame helpers and delayed B-frame
+configuration-record one-shot flush,
 malformed AVC/Annex B `NEW_EXTRADATA` recovery guards,
 malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,
