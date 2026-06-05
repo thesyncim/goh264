@@ -56,7 +56,8 @@ and checking the public decoder recovery side data. `Encode` and `EncodeInto`
 now validate frame shape and emit the first admitted frame bitstream path:
 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B, AVC,
 and RTP packetization-mode 1 output. Tests prove local raw-frame decode,
-FFmpeg rawvideo decode, and RTP FU-A reassembly.
+FFmpeg rawvideo decode, RTP FU-A reassembly, and STAP-A parameter-set
+aggregation.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -85,8 +86,8 @@ edge padding and deblock-control syntax kept explicit.
    policy, and rate-control feedback in small oracle-backed slices.
 5. In progress: add RTP packetization and WebRTC control handling with
    packet-level tests. Done for packetization-mode 1 single NAL/FU-A output and
-   marker-bit boundaries; STAP-A aggregation and broader packet metadata remain
-   pending.
+   STAP-A parameter-set aggregation with marker-bit boundaries; broader packet
+   metadata remains pending.
 6. Add realtime allocation budgets, encode timing benchmarks, and control-loop
    stress tests.
 

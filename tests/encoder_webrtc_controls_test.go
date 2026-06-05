@@ -452,6 +452,56 @@ func TestEncoderEncodeRTPMode1FragmentsIDRAccessUnit(t *testing.T) {
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
 }
 
+func TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.STAPA = true
+	cfg.RTPMaxPayloadSize = 128
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 67890
+
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode RTP IDR with STAP-A: %v", err)
+	}
+	if len(out.RTPPackets) < 2 {
+		t.Fatalf("RTP packets = %d, want STAP-A plus VCL packets", len(out.RTPPackets))
+	}
+	stap := out.RTPPackets[0]
+	if len(stap.Payload) == 0 || stap.Payload[0]&0x1f != 24 {
+		t.Fatalf("first RTP payload = %x, want STAP-A type 24", stap.Payload)
+	}
+	if len(stap.Payload) > cfg.RTPMaxPayloadSize {
+		t.Fatalf("STAP-A payload size = %d, max %d", len(stap.Payload), cfg.RTPMaxPayloadSize)
+	}
+	if stap.Marker {
+		t.Fatal("STAP-A parameter-set packet unexpectedly has marker bit")
+	}
+	assertSTAPANALTypes(t, stap.Payload, []uint8{7, 8})
+	for i, pkt := range out.RTPPackets {
+		if pkt.Timestamp != out.RTPTime {
+			t.Fatalf("packet[%d] timestamp = %d, want %d", i, pkt.Timestamp, out.RTPTime)
+		}
+		if len(pkt.Payload) > cfg.RTPMaxPayloadSize {
+			t.Fatalf("packet[%d] payload size = %d, max %d", i, len(pkt.Payload), cfg.RTPMaxPayloadSize)
+		}
+		if pkt.Marker != (i == len(out.RTPPackets)-1) {
+			t.Fatalf("packet[%d] marker = %v, want only final marker", i, pkt.Marker)
+		}
+	}
+
+	annexB := annexBFromEncoderRTPPackets(t, out.RTPPackets)
+	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames reassembled STAP-A RTP: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
+}
+
 func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {
@@ -594,6 +644,29 @@ func assertDecodedEncoderFrameBytes(t *testing.T, frames []*goh264.Frame, want [
 	}
 }
 
+func assertSTAPANALTypes(t *testing.T, payload []byte, want []uint8) {
+	t.Helper()
+	if len(payload) == 0 || payload[0]&0x1f != 24 {
+		t.Fatalf("payload is not STAP-A: %x", payload)
+	}
+	var got []uint8
+	for pos := 1; pos < len(payload); {
+		if pos+2 > len(payload) {
+			t.Fatalf("truncated STAP-A length at byte %d: %x", pos, payload)
+		}
+		size := int(payload[pos])<<8 | int(payload[pos+1])
+		pos += 2
+		if size == 0 || pos+size > len(payload) {
+			t.Fatalf("invalid STAP-A NAL size %d at byte %d of %d", size, pos, len(payload))
+		}
+		got = append(got, payload[pos]&0x1f)
+		pos += size
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("STAP-A NAL types = %v, want %v", got, want)
+	}
+}
+
 func assertFFmpegRawVideoOracle(t *testing.T, annexB []byte, want []byte) {
 	t.Helper()
 	ffmpeg, err := exec.LookPath("ffmpeg")
@@ -630,6 +703,25 @@ func annexBFromEncoderRTPPackets(t *testing.T, packets []goh264.EncoderRTPPacket
 			t.Fatalf("packet[%d] empty payload", i)
 		}
 		typ := payload[0] & 0x1f
+		if typ == 24 {
+			if inFU {
+				t.Fatalf("packet[%d] STAP-A while FU-A is open", i)
+			}
+			for pos := 1; pos < len(payload); {
+				if pos+2 > len(payload) {
+					t.Fatalf("packet[%d] truncated STAP-A length at byte %d: %x", i, pos, payload)
+				}
+				size := int(payload[pos])<<8 | int(payload[pos+1])
+				pos += 2
+				if size == 0 || pos+size > len(payload) {
+					t.Fatalf("packet[%d] invalid STAP-A NAL size %d at byte %d of %d", i, size, pos, len(payload))
+				}
+				out = append(out, 0, 0, 0, 1)
+				out = append(out, payload[pos:pos+size]...)
+				pos += size
+			}
+			continue
+		}
 		if typ != 28 {
 			if inFU {
 				t.Fatalf("packet[%d] single NAL while FU-A is open", i)

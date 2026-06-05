@@ -375,10 +375,6 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	if err != nil {
 		return EncodedFrame{}, err
 	}
-	if e.cfg.OutputFormat == EncoderOutputRTP && e.cfg.STAPA {
-		return EncodedFrame{}, encoderUnsupported("STAP-A aggregation is planned but not admitted for generated frames yet")
-	}
-
 	var nals []encoderRawNAL
 	if e.cfg.SPSPPSBeforeIDR && e.cfg.SPSPPSMode != EncoderSPSPPSOutOfBand {
 		sets, err := e.ParameterSets()
@@ -418,7 +414,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	rtpTime := uint32(frame.PTS)
 	var packets []EncoderRTPPacket
 	if e.cfg.OutputFormat == EncoderOutputRTP {
-		packets, err = packetizeEncoderRTPMode1(nals, e.cfg.RTPMaxPayloadSize, rtpTime)
+		packets, err = packetizeEncoderRTPMode1(nals, e.cfg.RTPMaxPayloadSize, rtpTime, e.cfg.STAPA)
 		if err != nil {
 			return EncodedFrame{}, err
 		}
@@ -667,18 +663,31 @@ func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []enco
 	return dst, units, nil
 }
 
-func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestamp uint32) ([]EncoderRTPPacket, error) {
+func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestamp uint32, stapa bool) ([]EncoderRTPPacket, error) {
 	if maxPayloadSize < 3 {
 		return nil, encoderInvalid("RTP max payload size must leave room for FU-A headers")
 	}
 	var packets []EncoderRTPPacket
-	for _, nal := range nals {
+	for i := 0; i < len(nals); {
+		if stapa && nals[i].parameterSet {
+			payload, count, err := buildEncoderSTAPA(nals[i:], maxPayloadSize)
+			if err != nil {
+				return nil, err
+			}
+			if count >= 2 {
+				packets = append(packets, EncoderRTPPacket{Payload: payload, Timestamp: timestamp})
+				i += count
+				continue
+			}
+		}
+		nal := nals[i]
 		if len(nal.raw) == 0 {
 			return nil, encoderInvalid("empty encoder NAL")
 		}
 		if len(nal.raw) <= maxPayloadSize {
 			payload := append([]byte(nil), nal.raw...)
 			packets = append(packets, EncoderRTPPacket{Payload: payload, Timestamp: timestamp})
+			i++
 			continue
 		}
 		header := nal.raw[0]
@@ -705,11 +714,44 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 			payload = payload[n:]
 			first = false
 		}
+		i++
 	}
 	if len(packets) != 0 {
 		packets[len(packets)-1].Marker = true
 	}
 	return packets, nil
+}
+
+func buildEncoderSTAPA(nals []encoderRawNAL, maxPayloadSize int) ([]byte, int, error) {
+	payload := []byte{24}
+	var maxNRI byte
+	count := 0
+	for _, nal := range nals {
+		if !nal.parameterSet {
+			break
+		}
+		if len(nal.raw) == 0 {
+			return nil, 0, encoderInvalid("empty encoder NAL")
+		}
+		if len(nal.raw) > 0xffff {
+			return nil, 0, encoderInvalid("encoder NAL is too large for STAP-A")
+		}
+		need := 2 + len(nal.raw)
+		if len(payload)+need > maxPayloadSize {
+			break
+		}
+		if nri := nal.raw[0] & 0x60; nri > maxNRI {
+			maxNRI = nri
+		}
+		payload = append(payload, byte(len(nal.raw)>>8), byte(len(nal.raw)))
+		payload = append(payload, nal.raw...)
+		count++
+	}
+	if count < 2 {
+		return nil, count, nil
+	}
+	payload[0] = maxNRI | 24
+	return payload, count, nil
 }
 
 func encoderDeblockingFilterIDC(mode EncoderDeblockMode) uint32 {
