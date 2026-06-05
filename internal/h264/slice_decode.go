@@ -625,10 +625,13 @@ func isHigh14CABACFrame420DeblockScope(sh *SliceHeader) bool {
 	if sh.SliceTypeNoS == PictureTypeI {
 		return true
 	}
-	if sh.SliceTypeNoS != PictureTypeP || sh.PPS.WeightedPred != 0 {
+	if sh.SliceTypeNoS != PictureTypeP {
 		return false
 	}
-	return sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0
+	if sh.PPS.WeightedPred == 0 {
+		return sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0
+	}
+	return sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0
 }
 
 func isHigh12Frame420Scope(sh *SliceHeader) bool {

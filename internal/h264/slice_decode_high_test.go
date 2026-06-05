@@ -342,16 +342,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14UnprovedDeblockingVarian
 			run       func(*SliceHeader)
 		}{
 			{
-				name:      "cabac-weighted-P",
-				sliceType: PictureTypeP,
-				run: func(sh *SliceHeader) {
-					sh.RefCount = [2]uint32{1, 0}
-					sh.PPS.CABAC = 1
-					sh.PPS.WeightedPred = 1
-					sh.PredWeightTable = highWeightedPPredWeightTable()
-				},
-			},
-			{
 				name:      "B",
 				sliceType: PictureTypeB,
 				run: func(sh *SliceHeader) {
@@ -388,6 +378,19 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CABACDeblockingIP(t *test
 				}
 			})
 		}
+
+		t.Run(fmt.Sprintf("mode%d/weighted-P", deblockMode), func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, true, PictureTypeP)
+			sh.PPS.CABAC = 1
+			sh.PPS.WeightedPred = 1
+			sh.DeblockingFilter = deblockMode
+			sh.RefCount = [2]uint32{1, 0}
+			sh.PredWeightTable = highWeightedPPredWeightTable()
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high14 CABAC weighted P mode-%d deblock validation err = %v, want nil", deblockMode, err)
+			}
+		})
 	}
 }
 
