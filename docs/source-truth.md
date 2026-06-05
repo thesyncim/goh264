@@ -11,12 +11,14 @@ defaults mirror the FFmpeg VAAPI/Vulkan encoder shape for I-picture recovery
 points (`recovery_frame_cnt=0`, exact-match set, broken-link only when B-frame
 chains exist). The first encoder frame bitstream path is an 8-bit I420
 Constrained Baseline IDR IntraPCM slice writer following FFmpeg CBS H.264 slice
-header and reference-marking syntax order. RTP packet header emission follows
-FFmpeg `libavformat/rtpenc.c` `ff_rtp_send_data()` field order and H.264 RTP
-payload boundaries follow `libavformat/rtpenc_h264_hevc.c`; no P-frame,
-rate-control, or production encoder claim exists yet. Encoder work must land
-behind its own controls, oracles, and release evidence while the decoder
-production bar stays green.
+header and reference-marking syntax order; the first P path is guarded CAVLC
+P-skip for identical frames after a reference when deblocking is disabled.
+RTP packet header emission follows FFmpeg `libavformat/rtpenc.c`
+`ff_rtp_send_data()` field order and H.264 RTP payload boundaries follow
+`libavformat/rtpenc_h264_hevc.c`; changed-frame P prediction, rate-control, and
+production encoder claims do not exist yet. Encoder work must land behind its
+own controls, oracles, and release evidence while the decoder production bar
+stays green.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
@@ -111,12 +113,14 @@ parameter-set headers: default 8-bit I420 constrained-baseline RTP config,
 invalid-control rejection, bitrate, framerate, RTP payload-size,
 PLI/FIR/force-IDR, partial reconfiguration, public SPS/PPS/Annex B/avcC header
 generation, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
-generation, FFmpeg rawvideo decode, RTP packetization-mode 1 FU-A reassembly,
-STAP-A parameter-set aggregation, and RTP payload-type/SSRC/sequence metadata.
-Internal writer proof covers raw bit/Exp-Golomb writing, RBSP trailing bits,
-EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC decoder configuration
-records, baseline SPS/PPS syntax, recovery-point SEI syntax, and Baseline IDR
-slice syntax via decoder-parser and encoded-frame round trips.
+generation, identical-reference CAVLC P-skip with IDR fallback for changed or
+forced-keyframe frames, FFmpeg rawvideo decode, RTP packetization-mode 1 FU-A
+reassembly, STAP-A parameter-set aggregation, and RTP payload-type/SSRC/sequence
+metadata. Internal writer proof covers raw bit/Exp-Golomb writing, RBSP
+trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
+decoder configuration records, baseline SPS/PPS syntax, recovery-point SEI
+syntax, and Baseline IDR plus P-skip slice syntax via decoder-parser and
+encoded-frame round trips.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder

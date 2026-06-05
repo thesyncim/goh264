@@ -3,9 +3,10 @@
 The decoder is the current implemented path. Realtime/WebRTC encoder support is
 now in scope, with a tested public control contract in `encoder.go`. Encoder
 bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
-IDR/IntraPCM path with Annex B, AVC, and RTP packetization-mode 1 output.
-Encoder production gates live in `docs/encoder-webrtc-roadmap.md` until
-P-frames, residual coding, rate control, RTP callback metadata, allocation
+IDR/IntraPCM path with Annex B, AVC, and RTP packetization-mode 1 output, plus
+guarded identical-reference CAVLC P-skip when deblocking is disabled. Encoder
+production gates live in `docs/encoder-webrtc-roadmap.md` until changed-frame
+P prediction, residual coding, rate control, RTP callback metadata, allocation
 budgets, and oracle evidence land.
 
 Harness-first status:
@@ -133,9 +134,12 @@ surfaces accepted by public decode paths, verifies frame-shape validation, and
 proves `Encode`/`EncodeInto` emit IDR IntraPCM access units that round-trip
 through local Annex B/AVC decode, FFmpeg rawvideo decode, RTP FU-A reassembly,
 STAP-A parameter-set aggregation, and RTP packet payload-type/SSRC/sequence
-metadata plus full RTP header bytes. Internal encoder writer evidence now
-covers raw bit/Exp-Golomb writing, RBSP trailing bits, EBSP
-emulation-prevention, Annex B/AVC NAL packaging, AVC decoder configuration
-records, baseline SPS/PPS, recovery-point SEI syntax, and Baseline IDR slice
-syntax. P-frame prediction, residual CAVLC coding, rate-control feedback, RTP
-callback metadata, and realtime allocation/performance gates remain pending.
+metadata plus full RTP header bytes. It also proves identical second frames can
+emit CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo
+decode, while changed second frames and queued IDR requests fall back to IDR.
+Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
+trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
+decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and
+Baseline IDR plus P-skip slice syntax. Changed-frame P prediction, residual
+CAVLC coding, rate-control feedback, RTP callback metadata, and realtime
+allocation/performance gates remain pending.

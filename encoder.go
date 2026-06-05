@@ -3,6 +3,7 @@
 package goh264
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/thesyncim/goh264/internal/h264"
@@ -240,6 +241,8 @@ type Encoder struct {
 	frameNum          uint32
 	idrPicID          uint32
 	rtpSequenceNumber uint16
+	reference         encoderReferenceFrame
+	framesSinceIDR    int
 }
 
 func DefaultEncoderConfig(width, height int) EncoderConfig {
@@ -380,8 +383,9 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	if err != nil {
 		return EncodedFrame{}, err
 	}
+	idr := e.shouldEncodeIDR(view, frame)
 	var nals []encoderRawNAL
-	if e.cfg.SPSPPSBeforeIDR && e.cfg.SPSPPSMode != EncoderSPSPPSOutOfBand {
+	if idr && e.cfg.SPSPPSBeforeIDR && e.cfg.SPSPPSMode != EncoderSPSPPSOutOfBand {
 		sets, err := e.ParameterSets()
 		if err != nil {
 			return EncodedFrame{}, err
@@ -392,25 +396,40 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		)
 	}
 
-	slice, err := h264.BuildEncoderI420IntraPCMIDRSlice(h264.EncoderI420IntraPCMIDRConfig{
-		Width:                      view.width,
-		Height:                     view.height,
-		StrideY:                    view.strideY,
-		StrideCb:                   view.strideCb,
-		StrideCr:                   view.strideCr,
-		Y:                          view.y,
-		Cb:                         view.cb,
-		Cr:                         view.cr,
-		FrameNum:                   e.frameNum & 0xff,
-		IDRPicID:                   e.idrPicID & 0xffff,
-		InitialQP:                  e.cfg.InitialQP,
-		DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
-		NALLengthSize:              4,
-	})
-	if err != nil {
-		return EncodedFrame{}, err
+	if idr {
+		slice, err := h264.BuildEncoderI420IntraPCMIDRSlice(h264.EncoderI420IntraPCMIDRConfig{
+			Width:                      view.width,
+			Height:                     view.height,
+			StrideY:                    view.strideY,
+			StrideCb:                   view.strideCb,
+			StrideCr:                   view.strideCr,
+			Y:                          view.y,
+			Cb:                         view.cb,
+			Cr:                         view.cr,
+			FrameNum:                   e.frameNum & 0xff,
+			IDRPicID:                   e.idrPicID & 0xffff,
+			InitialQP:                  e.cfg.InitialQP,
+			DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+			NALLengthSize:              4,
+		})
+		if err != nil {
+			return EncodedFrame{}, err
+		}
+		nals = append(nals, encoderRawNAL{typ: uint8(h264.NALIDRSlice), raw: slice.NAL, keyFrame: true})
+	} else {
+		slice, err := h264.BuildEncoderI420PSkipSlice(h264.EncoderI420PSkipConfig{
+			Width:                      view.width,
+			Height:                     view.height,
+			FrameNum:                   e.frameNum & 0xff,
+			InitialQP:                  e.cfg.InitialQP,
+			DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+			NALLengthSize:              4,
+		})
+		if err != nil {
+			return EncodedFrame{}, err
+		}
+		nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: slice.NAL})
 	}
-	nals = append(nals, encoderRawNAL{typ: uint8(h264.NALIDRSlice), raw: slice.NAL, keyFrame: true})
 
 	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
 	if err != nil {
@@ -426,15 +445,21 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		e.stampRTPPackets(packets)
 	}
 
+	e.storeReference(view)
 	e.forceIDR = false
 	e.frameNum = (e.frameNum + 1) & 0xff
-	e.idrPicID = (e.idrPicID + 1) & 0xffff
+	if idr {
+		e.idrPicID = (e.idrPicID + 1) & 0xffff
+		e.framesSinceIDR = 1
+	} else {
+		e.framesSinceIDR++
+	}
 	return EncodedFrame{
 		Data:       data,
 		NALUnits:   units,
 		RTPPackets: packets,
-		KeyFrame:   true,
-		IDR:        true,
+		KeyFrame:   idr,
+		IDR:        idr,
 		PTS:        frame.PTS,
 		DTS:        frame.PTS,
 		RTPTime:    rtpTime,
@@ -509,6 +534,8 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 		return encoderInvalid("nil encoder")
 	}
 	cfg := e.cfg
+	oldWidth := cfg.Width
+	oldHeight := cfg.Height
 	if update.TargetBitrate != 0 {
 		cfg.TargetBitrate = update.TargetBitrate
 	}
@@ -550,6 +577,11 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 		return err
 	}
 	e.cfg = normalized
+	if normalized.Width != oldWidth || normalized.Height != oldHeight {
+		e.reference = encoderReferenceFrame{}
+		e.framesSinceIDR = 0
+		e.forceIDR = true
+	}
 	if update.ForceIDR {
 		e.forceIDR = true
 	}
@@ -572,6 +604,15 @@ type encoderRawNAL struct {
 	raw          []byte
 	keyFrame     bool
 	parameterSet bool
+}
+
+type encoderReferenceFrame struct {
+	valid  bool
+	width  int
+	height int
+	y      []byte
+	cb     []byte
+	cr     []byte
 }
 
 func (e *Encoder) validateFrame(frame EncoderFrame) error {
@@ -627,6 +668,77 @@ func (e *Encoder) validatedFrameView(frame EncoderFrame) (encoderFrameView, erro
 		strideCb: strideCb,
 		strideCr: strideCr,
 	}, nil
+}
+
+func (e *Encoder) shouldEncodeIDR(view encoderFrameView, frame EncoderFrame) bool {
+	if e.forceIDR || frame.ForceIDR || !e.reference.valid {
+		return true
+	}
+	if e.cfg.IDRInterval > 0 && e.framesSinceIDR >= e.cfg.IDRInterval {
+		return true
+	}
+	if e.cfg.DeblockMode != EncoderDeblockDisabled {
+		return true
+	}
+	return !e.referenceMatches(view)
+}
+
+func (e *Encoder) referenceMatches(view encoderFrameView) bool {
+	ref := &e.reference
+	if !ref.valid || ref.width != view.width || ref.height != view.height {
+		return false
+	}
+	if len(ref.y) != view.width*view.height {
+		return false
+	}
+	chromaWidth := view.width / 2
+	chromaHeight := view.height / 2
+	if len(ref.cb) != chromaWidth*chromaHeight || len(ref.cr) != chromaWidth*chromaHeight {
+		return false
+	}
+	for y := 0; y < view.height; y++ {
+		src := view.y[y*view.strideY : y*view.strideY+view.width]
+		dst := ref.y[y*view.width : (y+1)*view.width]
+		if !bytes.Equal(src, dst) {
+			return false
+		}
+	}
+	for y := 0; y < chromaHeight; y++ {
+		srcCb := view.cb[y*view.strideCb : y*view.strideCb+chromaWidth]
+		srcCr := view.cr[y*view.strideCr : y*view.strideCr+chromaWidth]
+		dstCb := ref.cb[y*chromaWidth : (y+1)*chromaWidth]
+		dstCr := ref.cr[y*chromaWidth : (y+1)*chromaWidth]
+		if !bytes.Equal(srcCb, dstCb) || !bytes.Equal(srcCr, dstCr) {
+			return false
+		}
+	}
+	return true
+}
+
+func (e *Encoder) storeReference(view encoderFrameView) {
+	chromaWidth := view.width / 2
+	chromaHeight := view.height / 2
+	ref := &e.reference
+	ref.width = view.width
+	ref.height = view.height
+	ref.y = resizeEncoderReferencePlane(ref.y, view.width*view.height)
+	ref.cb = resizeEncoderReferencePlane(ref.cb, chromaWidth*chromaHeight)
+	ref.cr = resizeEncoderReferencePlane(ref.cr, chromaWidth*chromaHeight)
+	for y := 0; y < view.height; y++ {
+		copy(ref.y[y*view.width:(y+1)*view.width], view.y[y*view.strideY:y*view.strideY+view.width])
+	}
+	for y := 0; y < chromaHeight; y++ {
+		copy(ref.cb[y*chromaWidth:(y+1)*chromaWidth], view.cb[y*view.strideCb:y*view.strideCb+chromaWidth])
+		copy(ref.cr[y*chromaWidth:(y+1)*chromaWidth], view.cr[y*view.strideCr:y*view.strideCr+chromaWidth])
+	}
+	ref.valid = true
+}
+
+func resizeEncoderReferencePlane(buf []byte, size int) []byte {
+	if cap(buf) < size {
+		return make([]byte, size)
+	}
+	return buf[:size]
 }
 
 func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []encoderRawNAL) ([]byte, []EncoderNALUnit, error) {

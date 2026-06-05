@@ -25,7 +25,24 @@ type EncoderI420IntraPCMIDRConfig struct {
 	NALLengthSize              int
 }
 
+type EncoderI420PSkipConfig struct {
+	Width  int
+	Height int
+
+	FrameNum                   uint32
+	InitialQP                  int
+	DisableDeblockingFilterIDC uint32
+	NALLengthSize              int
+}
+
 type EncoderIDRSlice struct {
+	RBSP   []byte
+	NAL    []byte
+	AnnexB []byte
+	AVC    []byte
+}
+
+type EncoderPSkipSlice struct {
 	RBSP   []byte
 	NAL    []byte
 	AnnexB []byte
@@ -53,6 +70,34 @@ func BuildEncoderI420IntraPCMIDRSlice(cfg EncoderI420IntraPCMIDRConfig) (Encoder
 		return EncoderIDRSlice{}, err
 	}
 	return EncoderIDRSlice{
+		RBSP:   rbsp,
+		NAL:    nal,
+		AnnexB: annexB,
+		AVC:    avc,
+	}, nil
+}
+
+func BuildEncoderI420PSkipSlice(cfg EncoderI420PSkipConfig) (EncoderPSkipSlice, error) {
+	if cfg.NALLengthSize == 0 {
+		cfg.NALLengthSize = 4
+	}
+	rbsp, err := EncodeI420PSkipSliceRBSP(cfg)
+	if err != nil {
+		return EncoderPSkipSlice{}, err
+	}
+	nal, err := AppendNAL(nil, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSkipSlice{}, err
+	}
+	annexB, err := AppendAnnexBNAL(nil, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSkipSlice{}, err
+	}
+	avc, err := AppendAVCNAL(nil, cfg.NALLengthSize, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSkipSlice{}, err
+	}
+	return EncoderPSkipSlice{
 		RBSP:   rbsp,
 		NAL:    nal,
 		AnnexB: annexB,
@@ -88,6 +133,25 @@ func EncodeI420IntraPCMIDRSliceRBSP(cfg EncoderI420IntraPCMIDRConfig) ([]byte, e
 	return bw.Bytes(), nil
 }
 
+func EncodeI420PSkipSliceRBSP(cfg EncoderI420PSkipConfig) ([]byte, error) {
+	if err := validateEncoderI420PSkipConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	var bw BitWriter
+	if err := writeEncoderI420PSliceHeader(&bw, cfg); err != nil {
+		return nil, err
+	}
+
+	mbWidth := (cfg.Width + 15) >> 4
+	mbHeight := (cfg.Height + 15) >> 4
+	if err := bw.WriteUEGolomb(uint32(mbWidth * mbHeight)); err != nil {
+		return nil, err
+	}
+	bw.WriteRBSPTrailingBits()
+	return bw.Bytes(), nil
+}
+
 func writeEncoderI420IDRSliceHeader(bw *BitWriter, cfg EncoderI420IntraPCMIDRConfig) error {
 	if err := bw.WriteUEGolomb(0); err != nil { // first_mb_in_slice
 		return err
@@ -106,6 +170,39 @@ func writeEncoderI420IDRSliceHeader(bw *BitWriter, cfg EncoderI420IntraPCMIDRCon
 	}
 	bw.WriteBit(0)                              // no_output_of_prior_pics_flag
 	bw.WriteBit(0)                              // long_term_reference_flag
+	if err := bw.WriteSEGolomb(0); err != nil { // slice_qp_delta
+		return err
+	}
+	if err := bw.WriteUEGolomb(cfg.DisableDeblockingFilterIDC); err != nil {
+		return err
+	}
+	if cfg.DisableDeblockingFilterIDC != 1 {
+		if err := bw.WriteSEGolomb(0); err != nil { // slice_alpha_c0_offset_div2
+			return err
+		}
+		if err := bw.WriteSEGolomb(0); err != nil { // slice_beta_offset_div2
+			return err
+		}
+	}
+	return nil
+}
+
+func writeEncoderI420PSliceHeader(bw *BitWriter, cfg EncoderI420PSkipConfig) error {
+	if err := bw.WriteUEGolomb(0); err != nil { // first_mb_in_slice
+		return err
+	}
+	if err := bw.WriteUEGolomb(0); err != nil { // slice_type P
+		return err
+	}
+	if err := bw.WriteUEGolomb(0); err != nil { // pic_parameter_set_id
+		return err
+	}
+	if err := bw.WriteBits(cfg.FrameNum, 8); err != nil {
+		return err
+	}
+	bw.WriteBit(0)                              // num_ref_idx_active_override_flag
+	bw.WriteBit(0)                              // ref_pic_list_modification_flag_l0
+	bw.WriteBit(0)                              // adaptive_ref_pic_marking_mode_flag
 	if err := bw.WriteSEGolomb(0); err != nil { // slice_qp_delta
 		return err
 	}
@@ -175,6 +272,19 @@ func validateEncoderI420IntraPCMIDRConfig(cfg EncoderI420IntraPCMIDRConfig) erro
 		return ErrInvalidData
 	}
 	if cfg.FrameNum >= 1<<8 || cfg.IDRPicID > 65535 ||
+		cfg.InitialQP < 0 || cfg.InitialQP > 51 ||
+		cfg.DisableDeblockingFilterIDC > 2 ||
+		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+func validateEncoderI420PSkipConfig(cfg EncoderI420PSkipConfig) error {
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width&1 != 0 || cfg.Height&1 != 0 {
+		return ErrInvalidData
+	}
+	if cfg.FrameNum >= 1<<8 ||
 		cfg.InitialQP < 0 || cfg.InitialQP > 51 ||
 		cfg.DisableDeblockingFilterIDC > 2 ||
 		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {

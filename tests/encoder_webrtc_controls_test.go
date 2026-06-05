@@ -413,6 +413,134 @@ func TestEncoderEncodeAVCIDRIntraPCMDecodesThroughConfiguredSurface(t *testing.T
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
 }
 
+func TestEncoderEncodeIdenticalSecondFrameUsesPSkipReference(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(18, 18)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(18, 18)
+	wantFrame := appendI420FrameBytes(nil, frame)
+
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	secondFrame := frame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode second identical P-skip: %v", err)
+	}
+	if second.KeyFrame || second.IDR || second.PTS != secondFrame.PTS || second.DTS != secondFrame.PTS {
+		t.Fatalf("second frame metadata key=%v idr=%v pts=%d dts=%d",
+			second.KeyFrame, second.IDR, second.PTS, second.DTS)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, wantFrame)
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode second P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, wantFrame)
+
+	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	wantStream := append(append([]byte(nil), wantFrame...), wantFrame...)
+	assertFFmpegRawVideoOracle(t, stream, wantStream)
+}
+
+func TestEncoderEncodeChangedSecondFrameFallsBackToIDR(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y[0] ^= 0x7f
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode changed second frame: %v", err)
+	}
+	if !second.KeyFrame || !second.IDR {
+		t.Fatalf("changed second frame key=%v idr=%v, want IDR fallback", second.KeyFrame, second.IDR)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+
+	dec := goh264.NewDecoder()
+	if _, err := dec.DecodeFrames(first.Data); err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode changed IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+}
+
+func TestEncoderEncodeForceIDRBypassesPSkipReference(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		request func(*goh264.Encoder, *goh264.EncoderFrame)
+	}{
+		{name: "encoder control", request: func(enc *goh264.Encoder, frame *goh264.EncoderFrame) {
+			enc.ForceIDR()
+			if !enc.PendingIDR() {
+				t.Fatal("ForceIDR did not queue an IDR")
+			}
+		}},
+		{name: "frame flag", request: func(_ *goh264.Encoder, frame *goh264.EncoderFrame) {
+			frame.ForceIDR = true
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = goh264.EncoderOutputAnnexB
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.RTPMaxPayloadSize = 0
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			frame := patternedI420EncoderFrame(16, 16)
+			if _, err := enc.Encode(frame); err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			frame.PTS += int64(cfg.RTPTimestampIncrement)
+			tt.request(enc, &frame)
+			out, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode forced IDR: %v", err)
+			}
+			if !out.KeyFrame || !out.IDR || enc.PendingIDR() {
+				t.Fatalf("forced frame key=%v idr=%v pending=%v, want completed IDR", out.KeyFrame, out.IDR, enc.PendingIDR())
+			}
+			assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+		})
+	}
+}
+
 func TestEncoderEncodeRTPMode1FragmentsIDRAccessUnit(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPMaxPayloadSize = 32

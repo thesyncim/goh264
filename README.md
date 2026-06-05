@@ -81,12 +81,15 @@ recovery-point SEI Annex B/AVC NAL surfaces are generated and parser-proved.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
 Annex B, AVC, and RTP packetization-mode 1, including FU-A fragmentation and
 STAP-A parameter-set aggregation, payload-type/SSRC/sequence metadata, full RTP
-packet headers, and marker-bit boundaries. Internal writer primitives cover raw bit/Exp-Golomb
+packet headers, and marker-bit boundaries. Identical frames after a decoded
+reference can use a guarded CAVLC P-skip slice when deblocking is disabled;
+changed frames and forced keyframe requests still fall back to IDR. Internal
+writer primitives cover raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
-first Baseline IDR slice payload. P-frame prediction, residual CAVLC coding,
-rate-control feedback, RTP callback metadata, and realtime allocation/performance
-evidence remain pending.
+first Baseline IDR plus P-skip slice payloads. Motion-search P prediction,
+residual CAVLC coding, rate-control feedback, RTP callback metadata, and
+realtime allocation/performance evidence remain pending.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
@@ -436,8 +439,8 @@ No tag should be treated as production until a release-evidence pass proves:
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until
   [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md) has matching
-  P-frame/residual bitstream implementation, rate-control behavior, packetizer
-  breadth, controls, and oracle evidence.
+  changed-frame P prediction, residual bitstream implementation, rate-control
+  behavior, packetizer breadth, controls, and oracle evidence.
 - The source-truth and translation-ledger docs match the committed tests.
 
 The release-evidence runner writes logs under

@@ -53,12 +53,15 @@ generates SPS/PPS NALs, Annex B sequence headers, and avcC records accepted by
 the decoder parsers. `RecoveryPointSEI` generates Annex B and AVC recovery-point
 SEI NAL surfaces and is proved by injecting the encoder output before a P-frame
 and checking the public decoder recovery side data. `Encode` and `EncodeInto`
-now validate frame shape and emit the first admitted frame bitstream path:
+now validate frame shape and emit the first admitted frame bitstream paths:
 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B, AVC,
-and RTP packetization-mode 1 output. Tests prove local raw-frame decode,
-FFmpeg rawvideo decode, RTP FU-A reassembly, and STAP-A parameter-set
-aggregation plus payload-type, SSRC, and sequence-number packet metadata.
-RTP packets also carry complete 12-byte RTP headers plus payload bytes.
+and RTP packetization-mode 1 output, plus guarded CAVLC P-skip slices for
+identical frames after a reference when deblocking is disabled. Tests prove
+local raw-frame decode, FFmpeg rawvideo decode, RTP FU-A reassembly, STAP-A
+parameter-set aggregation, payload-type, SSRC, and sequence-number packet
+metadata. RTP packets also carry complete 12-byte RTP headers plus payload
+bytes. Changed frames and queued IDR requests still fall back to IDR until
+motion search/residual coding land.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -71,7 +74,8 @@ same source-shaped style and round-trips through `DecodeSPS`, `DecodePPS`,
 FFmpeg CBS-shaped recovery-point SEI writer, including extended SEI header
 encoding and Annex B/AVC parser round trips. `internal/h264/encoder_slice.go`
 adds the first Baseline IDR slice writer using CAVLC I_PCM macroblocks, with
-edge padding and deblock-control syntax kept explicit.
+edge padding and deblock-control syntax kept explicit, plus a parse-proved
+Baseline P-skip writer that emits a single `mb_skip_run` covering the picture.
 
 ## Implementation Order
 
@@ -83,8 +87,10 @@ edge padding and deblock-control syntax kept explicit.
 3. Done: add an intra-only IDR path for I420 input and prove that local decode,
    FFmpeg decode, AVC decode, and RTP FU-A reassembly produce matching raw
    frames.
-4. Add P-frame prediction, reference management, CAVLC residual coding, deblock
-   policy, and rate-control feedback in small oracle-backed slices.
+4. In progress: add P-frame prediction, reference management, CAVLC residual
+   coding, deblock policy, and rate-control feedback in small oracle-backed
+   slices. Done for identical-reference P-skip with deblock disabled and IDR
+   fallback for changed frames/forced keyframes.
 5. In progress: add RTP packetization and WebRTC control handling with
    packet-level tests. Done for packetization-mode 1 single NAL/FU-A output and
    STAP-A parameter-set aggregation with marker-bit boundaries plus
