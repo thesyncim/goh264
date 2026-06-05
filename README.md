@@ -28,7 +28,7 @@ Requires Go 1.24 or newer.
 FFmpeg is not required to import the package. FFmpeg is used by the oracle,
 corpus-fetch, extraction, and benchmark scripts.
 
-## Status Snapshot (2026-06-04)
+## Status Snapshot (2026-06-05)
 
 Current public-vector matrix:
 
@@ -44,10 +44,11 @@ No known-red public-vector rows currently remain. The executable ledger at
 and is checked by the freshness/matrix gates when populated.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
-FRext and high-bit-depth fixtures, I/P/B slices, CAVLC and CABAC, weighted and
-direct motion paths, deblock modes, selected field/PAFF/MBAFF rows, reinit
-metadata rows, lossless High444 transform-bypass rows, configured AVC surfaces,
-container-extracted Annex B vectors, and SEI side-data surfaces.
+FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
+rows, I/P/B slices, CAVLC and CABAC, weighted and direct motion paths, deblock
+modes, selected field/PAFF/MBAFF rows, reinit metadata rows, lossless High444
+transform-bypass rows, configured AVC surfaces, container-extracted Annex B
+vectors, and SEI side-data surfaces.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
 field/inter streams, broader damaged-slice error resilience, threading/SIMD and

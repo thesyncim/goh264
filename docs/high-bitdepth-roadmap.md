@@ -19,7 +19,7 @@ luma/chroma residual plus P-skip/P16x16,
 internal High12 Intra16x16 luma-AC, luma-DC+AC, and luma/chroma-DC plus
 chroma-AC/DC+AC and combined luma/chroma residual plus no-deblock
 weighted P-skip and weighted P16x16/partitioned P plus P16x16 residual
-handoff plus CABAC unweighted B no-deblock/mode-1 deblock,
+handoff plus CAVLC/CABAC unweighted B no-deblock/mode-1/mode-2 deblock,
 B-skip/direct-sub no-deblock and mode-1/mode-2 deblock, partitioned
 B16x8/B8x16/B8x8 no-deblock, and partitioned B16x8/B8x16/B8x8
 mode-1/mode-2 deblock,
@@ -36,7 +36,7 @@ luma+chroma residual public fixtures plus mixed no-residual Intra4x4/Intra16x16 
 Intra16x16 luma-DC/luma-AC/DC+AC and chroma-DC/chroma-AC/DC+AC and
 combined luma/chroma residual plus CAVLC/CABAC unweighted and weighted
 P-skip/P16x16 plus CAVLC mode-1/mode-2 I/P and weighted-P deblock plus
-CABAC unweighted B no-deblock/mode-1 deblock and mode-1/mode-2 I/P and
+CAVLC/CABAC unweighted B no-deblock/mode-1/mode-2 deblock and mode-1/mode-2 I/P and
 weighted-P deblock, B-skip/direct-sub no-deblock and mode-1/mode-2 deblock,
 partitioned B16x8/B8x16/B8x8 no-deblock, and partitioned
 B16x8/B8x16/B8x8 mode-1/mode-2 deblock, High10 frame-MBAFF
