@@ -532,6 +532,8 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 			!isHigh10Chroma422FieldPictureScope(sh) &&
 			!isHigh10ChromaFieldWeightedPDeblockScope(sh) &&
 			!isHigh10Chroma444FieldWeightedBDeblockScope(sh) &&
+			!isHigh12ChromaCAVLCWeightedPDeblockScope(sh) &&
+			!isHigh14ChromaCAVLCWeightedPDeblockScope(sh) &&
 			!isHigh10ChromaWeightedPSliceBoundaryDeblockScope(sh) &&
 			!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) {
 			return ErrUnsupported
@@ -540,6 +542,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 			if !isHigh10ChromaWeightedPFrameDeblockScope(sh) &&
 				!isHigh10ChromaWeightedPSliceBoundaryDeblockScope(sh) &&
 				!isHigh12ChromaCAVLCWeightedPDeblockScope(sh) &&
+				!isHigh14ChromaCAVLCWeightedPDeblockScope(sh) &&
 				!isHigh9ChromaImplicitWeightedBDeblockScope(sh) &&
 				!isHigh10ChromaFrameImplicitWeightedBDeblockScope(sh) &&
 				!isHigh10ChromaFrameExplicitWeightedBDeblockScope(sh) &&
@@ -605,7 +608,10 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 		return isHigh12ChromaFrameDeblockScope(sh) ||
 			isHigh12ChromaCAVLCWeightedPDeblockScope(sh)
 	case 14:
-		return isHigh14Frame420Scope(sh)
+		if sh.SPS.ChromaFormatIDC == 1 {
+			return isHigh14Frame420Scope(sh)
+		}
+		return isHigh14ChromaCAVLCWeightedPDeblockScope(sh)
 	default:
 		return false
 	}
@@ -761,11 +767,19 @@ func isHigh12ChromaFrameDeblockScope(sh *SliceHeader) bool {
 }
 
 func isHigh12ChromaCAVLCWeightedPDeblockScope(sh *SliceHeader) bool {
+	return isHighChromaCAVLCWeightedPDeblockScope(sh, 12)
+}
+
+func isHigh14ChromaCAVLCWeightedPDeblockScope(sh *SliceHeader) bool {
+	return isHighChromaCAVLCWeightedPDeblockScope(sh, 14)
+}
+
+func isHighChromaCAVLCWeightedPDeblockScope(sh *SliceHeader, bitDepth int32) bool {
 	if sh == nil || sh.SPS == nil || sh.PPS == nil {
 		return false
 	}
 	if sh.PictureStructure != PictureFrame ||
-		sh.SPS.BitDepthLuma != 12 ||
+		sh.SPS.BitDepthLuma != bitDepth ||
 		(sh.SPS.ChromaFormatIDC != 2 && sh.SPS.ChromaFormatIDC != 3) ||
 		sh.PPS.CABAC != 0 ||
 		sh.PPS.WeightedPred == 0 {
