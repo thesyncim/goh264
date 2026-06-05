@@ -15,9 +15,17 @@ import (
 )
 
 const (
+	high12FrameMBAFFPSkipNoResidualBitstreamMD5 = "c72a2e5b5d5bcf216cf092180f5600b2"
+	high12FrameMBAFFPSkipNoResidualPFrameMD5    = "5d168280547309a62ad1066a599c4ba5"
+	high12FrameMBAFFPSkipNoResidualRawVideoMD5  = "5d1af51e10e3ea2a87b530ca462543c2"
+
 	high12FrameMBAFFP16x16NoResidualBitstreamMD5 = "1bdb8c58f3a8a6a7f2d9802921c74361"
 	high12FrameMBAFFP16x16NoResidualPFrameMD5    = "5d168280547309a62ad1066a599c4ba5"
 	high12FrameMBAFFP16x16NoResidualRawVideoMD5  = "5d1af51e10e3ea2a87b530ca462543c2"
+
+	high14FrameMBAFFPSkipNoResidualBitstreamMD5 = "446edd4f33960f9a60ab97902d081c23"
+	high14FrameMBAFFPSkipNoResidualPFrameMD5    = "7da709fea95b8767edeb8e5963b37f2a"
+	high14FrameMBAFFPSkipNoResidualRawVideoMD5  = "237561940e2f07d30cac465fcea640bb"
 
 	high14FrameMBAFFP16x16NoResidualBitstreamMD5 = "fb218b8d8ed9f2c46171ceeb150b46c0"
 	high14FrameMBAFFP16x16NoResidualPFrameMD5    = "7da709fea95b8767edeb8e5963b37f2a"
@@ -35,6 +43,21 @@ type highFrameMBAFFP16x16NoResidualCase struct {
 	rawVideoMD5  string
 }
 
+type highFrameMBAFFPSkipNoResidualCase = highFrameMBAFFP16x16NoResidualCase
+
+func TestHigh1214FrameMBAFFPSkipNoResidualFixtureSyntax(t *testing.T) {
+	for _, tt := range highFrameMBAFFPSkipNoResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFPSkipNoResidualFixture(tt.bitDepth)
+			sum := md5.Sum(data)
+			if got := hex.EncodeToString(sum[:]); got != tt.bitstreamMD5 {
+				t.Fatalf("%s frame-MBAFF P-skip bitstream md5 = %s, want %s", tt.name, got, tt.bitstreamMD5)
+			}
+			assertHighFrameMBAFFPSkipNoResidualFixtureSyntax(t, data, tt)
+		})
+	}
+}
+
 func TestHigh1214FrameMBAFFP16x16NoResidualFixtureSyntax(t *testing.T) {
 	for _, tt := range highFrameMBAFFP16x16NoResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
@@ -44,6 +67,21 @@ func TestHigh1214FrameMBAFFP16x16NoResidualFixtureSyntax(t *testing.T) {
 				t.Fatalf("%s frame-MBAFF P16x16 bitstream md5 = %s, want %s", tt.name, got, tt.bitstreamMD5)
 			}
 			assertHighFrameMBAFFP16x16NoResidualFixtureSyntax(t, data, tt)
+		})
+	}
+}
+
+func TestDecodeAnnexBHigh1214FrameMBAFFPSkipNoResidualFrames(t *testing.T) {
+	for _, tt := range highFrameMBAFFPSkipNoResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFPSkipNoResidualFixture(tt.bitDepth)
+			assertHighFrameMBAFFPSkipNoResidualFixtureSyntax(t, data, tt)
+
+			frames, err := NewDecoder().DecodeAnnexBFrames(data)
+			if err != nil {
+				t.Fatalf("decode %s frame-MBAFF P-skip Annex B: %v", tt.name, err)
+			}
+			assertHighFrameMBAFFPSkipNoResidualFrames(t, frames, tt)
 		})
 	}
 }
@@ -59,6 +97,23 @@ func TestDecodeAnnexBHigh1214FrameMBAFFP16x16NoResidualFrames(t *testing.T) {
 				t.Fatalf("decode %s frame-MBAFF P16x16 Annex B: %v", tt.name, err)
 			}
 			assertHighFrameMBAFFP16x16NoResidualFrames(t, frames, tt)
+		})
+	}
+}
+
+func TestDecodeAVCHigh1214FrameMBAFFPSkipNoResidualFrames(t *testing.T) {
+	for _, tt := range highFrameMBAFFPSkipNoResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFPSkipNoResidualFixture(tt.bitDepth)
+			assertHighFrameMBAFFPSkipNoResidualFixtureSyntax(t, data, tt)
+
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				frames, err := NewDecoder().DecodeAVCFrames(annexBToAVC(t, data, nalLengthSize), nalLengthSize)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P-skip AVC: %v", nalLengthSize, tt.name, err)
+				}
+				assertHighFrameMBAFFPSkipNoResidualFrames(t, frames, tt)
+			}
 		})
 	}
 }
@@ -80,6 +135,24 @@ func TestDecodeAVCHigh1214FrameMBAFFP16x16NoResidualFrames(t *testing.T) {
 	}
 }
 
+func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPSkipNoResidualFrames(t *testing.T) {
+	for _, tt := range highFrameMBAFFPSkipNoResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFPSkipNoResidualFixture(tt.bitDepth)
+			assertHighFrameMBAFFPSkipNoResidualFixtureSyntax(t, data, tt)
+
+			for _, nalLengthSize := range []int{2, 3, 4} {
+				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
+				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P-skip configured AVC: %v", nalLengthSize, tt.name, err)
+				}
+				assertHighFrameMBAFFPSkipNoResidualFrames(t, frames, tt)
+			}
+		})
+	}
+}
+
 func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16NoResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFP16x16NoResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
@@ -93,6 +166,67 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16NoResidualFrame
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P16x16 configured AVC: %v", nalLengthSize, tt.name, err)
 				}
 				assertHighFrameMBAFFP16x16NoResidualFrames(t, frames, tt)
+			}
+		})
+	}
+}
+
+func TestFFmpegRawVideoMD5OracleHigh1214FrameMBAFFPSkipNoResidual(t *testing.T) {
+	if os.Getenv("GOH264_ORACLE") != "1" {
+		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	for _, tt := range highFrameMBAFFPSkipNoResidualCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := highFrameMBAFFPSkipNoResidualFixture(tt.bitDepth)
+			assertHighFrameMBAFFPSkipNoResidualFixtureSyntax(t, data, tt)
+			path := writeTempH264(t, data)
+			pixFmt := fmt.Sprintf("yuv420p%dle", tt.bitDepth)
+
+			framemd5 := exec.Command(
+				"ffmpeg",
+				"-v", "error",
+				"-f", "h264",
+				"-i", path,
+				"-an", "-sn", "-dn",
+				"-pix_fmt", pixFmt,
+				"-f", "framemd5",
+				"-",
+			)
+			framemd5Out, err := framemd5.Output()
+			if err != nil {
+				t.Fatalf("ffmpeg framemd5: %v", err)
+			}
+			for i, want := range []string{tt.refFrameMD5, tt.pFrameMD5} {
+				line := []byte(fmt.Sprintf("0, %10d, %10d,        1,     1536, %s", i, i, want))
+				if !bytes.Contains(framemd5Out, line) {
+					t.Fatalf("missing %q in framemd5:\n%s", line, framemd5Out)
+				}
+			}
+
+			rawvideo := exec.Command(
+				"ffmpeg",
+				"-v", "error",
+				"-f", "h264",
+				"-i", path,
+				"-an", "-sn", "-dn",
+				"-pix_fmt", pixFmt,
+				"-f", "rawvideo",
+				"-",
+			)
+			raw, err := rawvideo.Output()
+			if err != nil {
+				t.Fatalf("ffmpeg rawvideo: %v", err)
+			}
+			if len(raw) != 3072 {
+				t.Fatalf("rawvideo size = %d, want 3072", len(raw))
+			}
+			sum := md5.Sum(raw)
+			if got := hex.EncodeToString(sum[:]); got != tt.rawVideoMD5 {
+				t.Fatalf("rawvideo md5 = %s, want %s", got, tt.rawVideoMD5)
 			}
 		})
 	}
@@ -159,6 +293,27 @@ func TestFFmpegRawVideoMD5OracleHigh1214FrameMBAFFP16x16NoResidual(t *testing.T)
 	}
 }
 
+func highFrameMBAFFPSkipNoResidualCases() []highFrameMBAFFPSkipNoResidualCase {
+	return []highFrameMBAFFPSkipNoResidualCase{
+		{
+			name:         "High12",
+			bitDepth:     12,
+			bitstreamMD5: high12FrameMBAFFPSkipNoResidualBitstreamMD5,
+			refFrameMD5:  high12FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high12FrameMBAFFPSkipNoResidualPFrameMD5,
+			rawVideoMD5:  high12FrameMBAFFPSkipNoResidualRawVideoMD5,
+		},
+		{
+			name:         "High14",
+			bitDepth:     14,
+			bitstreamMD5: high14FrameMBAFFPSkipNoResidualBitstreamMD5,
+			refFrameMD5:  high14FrameMBAFFIntraPCMFrameMD5,
+			pFrameMD5:    high14FrameMBAFFPSkipNoResidualPFrameMD5,
+			rawVideoMD5:  high14FrameMBAFFPSkipNoResidualRawVideoMD5,
+		},
+	}
+}
+
 func highFrameMBAFFP16x16NoResidualCases() []highFrameMBAFFP16x16NoResidualCase {
 	return []highFrameMBAFFP16x16NoResidualCase{
 		{
@@ -178,6 +333,15 @@ func highFrameMBAFFP16x16NoResidualCases() []highFrameMBAFFP16x16NoResidualCase 
 			rawVideoMD5:  high14FrameMBAFFP16x16NoResidualRawVideoMD5,
 		},
 	}
+}
+
+func highFrameMBAFFPSkipNoResidualFixture(bitDepth int) []byte {
+	var data []byte
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSPS), highFrameMBAFFInterSPSRBSP(bitDepth)))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALPPS), highIntraPCMPPSRBSP(bitDepth)))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALIDRSlice), highFrameMBAFFIntraPCMSliceRBSP(bitDepth)))
+	data = appendAnnexBNAL(data, highIntraPCMNAL(byte(0x60|h264.NALSlice), highFrameMBAFFPSkipNoResidualSliceRBSP()))
+	return data
 }
 
 func highFrameMBAFFP16x16NoResidualFixture(bitDepth int) []byte {
@@ -214,6 +378,22 @@ func highFrameMBAFFInterSPSRBSP(bitDepth int) []byte {
 	return b.rbsp()
 }
 
+func highFrameMBAFFPSkipNoResidualSliceRBSP() []byte {
+	var b decoderSEIBitBuilder
+	b.writeUE(0)
+	b.writeUE(0)
+	b.writeUE(0)
+	b.writeBits(1, 4)
+	b.writeBit(0)
+	b.writeBit(0)
+	b.writeBit(0)
+	b.writeBit(0)
+	b.writeSE(0)
+	b.writeUE(1)
+	b.writeUE(2)
+	return b.rbsp()
+}
+
 func highFrameMBAFFP16x16NoResidualSliceRBSP() []byte {
 	var b decoderSEIBitBuilder
 	b.writeUE(0)
@@ -228,6 +408,16 @@ func highFrameMBAFFP16x16NoResidualSliceRBSP() []byte {
 	b.writeUE(1)
 	highIntra16x16WritePayloadBits(&b, highFrameMBAFFP16x16NoResidualPayloadBits)
 	return b.rbsp()
+}
+
+func assertHighFrameMBAFFPSkipNoResidualFixtureSyntax(t *testing.T, data []byte, tt highFrameMBAFFPSkipNoResidualCase) {
+	t.Helper()
+	assertHighFrameMBAFFP16x16NoResidualFixtureSyntax(t, data, tt)
+}
+
+func assertHighFrameMBAFFPSkipNoResidualFrames(t *testing.T, frames []*Frame, tt highFrameMBAFFPSkipNoResidualCase) {
+	t.Helper()
+	assertHighFrameMBAFFP16x16NoResidualFrames(t, frames, tt)
 }
 
 func assertHighFrameMBAFFP16x16NoResidualFixtureSyntax(t *testing.T, data []byte, tt highFrameMBAFFP16x16NoResidualCase) {
