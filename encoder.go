@@ -355,6 +355,10 @@ func (e *Encoder) ParameterSets() (EncoderParameterSets, error) {
 		LevelIDC:                       e.cfg.LevelIDC,
 		Width:                          e.cfg.Width,
 		Height:                         e.cfg.Height,
+		CropLeft:                       e.cfg.Crop.Left,
+		CropRight:                      e.cfg.Crop.Right,
+		CropTop:                        e.cfg.Crop.Top,
+		CropBottom:                     e.cfg.Crop.Bottom,
 		FrameRateNum:                   e.cfg.FrameRateNum,
 		FrameRateDen:                   e.cfg.FrameRateDen,
 		MaxReferenceFrames:             uint32(e.cfg.MaxReferenceFrames),
@@ -1087,6 +1091,9 @@ func normalizeEncoderConfig(cfg EncoderConfig) (EncoderConfig, error) {
 	if cfg.Width%2 != 0 || cfg.Height%2 != 0 {
 		return cfg, encoderInvalid("I420 width and height must be even")
 	}
+	if err := validateEncoderCrop(cfg.Crop, cfg.Width, cfg.Height); err != nil {
+		return cfg, err
+	}
 	if cfg.StrideY == 0 {
 		cfg.StrideY = cfg.Width
 	}
@@ -1267,6 +1274,19 @@ func normalizeEncoderConfig(cfg EncoderConfig) (EncoderConfig, error) {
 		cfg.RTPTimestampIncrement = rtpTimestampIncrement(cfg.TimeBaseDen, cfg.FrameRateNum, cfg.FrameRateDen)
 	}
 	return cfg, nil
+}
+
+func validateEncoderCrop(crop EncoderCrop, width int, height int) error {
+	if crop.Left < 0 || crop.Right < 0 || crop.Top < 0 || crop.Bottom < 0 {
+		return encoderInvalid("crop offsets cannot be negative")
+	}
+	if crop.Left%2 != 0 || crop.Right%2 != 0 || crop.Top%2 != 0 || crop.Bottom%2 != 0 {
+		return encoderInvalid("I420 crop offsets must be even")
+	}
+	if crop.Left+crop.Right >= width || crop.Top+crop.Bottom >= height {
+		return encoderInvalid("crop offsets must leave a visible frame")
+	}
+	return nil
 }
 
 func rtpTimestampIncrement(clock, frameRateNum, frameRateDen int) uint32 {

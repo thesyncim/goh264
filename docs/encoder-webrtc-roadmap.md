@@ -47,9 +47,10 @@ defaults:
 Current safe point: the public control contract is present in `encoder.go` and
 covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
 constrained-baseline realtime/WebRTC configs can be constructed, invalid
-controls are rejected, and runtime bitrate, framerate, payload-size, SPS/PPS
-cadence, PLI/FIR, force-IDR, and partial reconfiguration controls are tested.
-`ParameterSets` generates SPS/PPS NALs, Annex B sequence headers, and avcC
+controls are rejected, including I420 crop offsets that H.264 cannot represent,
+and runtime bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR,
+force-IDR, and partial reconfiguration controls are tested. `ParameterSets`
+generates SPS/PPS NALs, crop metadata, Annex B sequence headers, and avcC
 records accepted by the decoder parsers. IDR header cadence is explicit for
 in-band keyframes, out-of-band headers, and every-IDR emission.
 `RecoveryPointSEI` generates Annex B and AVC recovery-point
@@ -69,17 +70,20 @@ bytes, and `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form, NAL type/count, FU-A start/end, and parameter-set
 packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
-from frame duration or `RTPTimestampIncrement`. Queued IDR requests still emit
-IDR, and motion-search prediction plus residual coding remain pending.
+from frame duration or `RTPTimestampIncrement`. Cropped I420 IDR output is
+proved through local decode and FFmpeg rawvideo decode of the cropped visible
+frame. Queued IDR requests still emit IDR, and motion-search prediction plus
+residual coding remain pending.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
 Exp-Golomb codes, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC
 NAL packaging, and AVC decoder configuration records. The writer round-trips
 through the existing decoder readers/parsers in `internal/h264/bitwriter_test.go`.
-`internal/h264/encoder_headers.go` adds baseline SPS/PPS syntax writers in the
-same source-shaped style and round-trips through `DecodeSPS`, `DecodePPS`,
-`SplitAnnexB`, and the avcC parser. `internal/h264/encoder_sei.go` adds the
+`internal/h264/encoder_headers.go` adds baseline SPS/PPS syntax writers,
+including 4:2:0 crop-unit emission, in the same source-shaped style and
+round-trips through `DecodeSPS`, `DecodePPS`, `SplitAnnexB`, and the avcC
+parser. `internal/h264/encoder_sei.go` adds the
 FFmpeg CBS-shaped recovery-point SEI writer, including extended SEI header
 encoding and Annex B/AVC parser round trips. `internal/h264/encoder_slice.go`
 adds the first Baseline IDR slice writer using CAVLC I_PCM macroblocks, with

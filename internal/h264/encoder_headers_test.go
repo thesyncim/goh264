@@ -102,6 +102,43 @@ func TestBuildEncoderParameterSetsRoundTripsThroughParsers(t *testing.T) {
 	}
 }
 
+func TestBuildEncoderParameterSetsWritesI420Crop(t *testing.T) {
+	cfg := EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              640,
+		Height:             480,
+		CropLeft:           2,
+		CropRight:          4,
+		CropTop:            6,
+		CropBottom:         8,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          26,
+	}
+
+	sets, err := BuildEncoderParameterSets(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nals, err := SplitAnnexB(sets.AnnexB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sps, err := DecodeSPS(nals[0].RBSP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sps.Width != 634 || sps.Height != 466 ||
+		sps.CropLeft != 2 || sps.CropRight != 4 ||
+		sps.CropTop != 6 || sps.CropBottom != 8 {
+		t.Fatalf("SPS crop = width %d height %d left/right/top/bottom %d/%d/%d/%d, want 634x466 2/4/6/8",
+			sps.Width, sps.Height, sps.CropLeft, sps.CropRight, sps.CropTop, sps.CropBottom)
+	}
+}
+
 func TestBuildEncoderParameterSetsRejectsInvalidSyntaxConfig(t *testing.T) {
 	cfg := EncoderParameterSetConfig{
 		ProfileIDC:         66,
@@ -122,6 +159,9 @@ func TestBuildEncoderParameterSetsRejectsInvalidSyntaxConfig(t *testing.T) {
 		{name: "bad sps id", mutate: func(c *EncoderParameterSetConfig) { c.SPSID = maxSPSCount }},
 		{name: "bad qp", mutate: func(c *EncoderParameterSetConfig) { c.InitialQP = 52 }},
 		{name: "bad sar", mutate: func(c *EncoderParameterSetConfig) { c.SARNum = 1 }},
+		{name: "negative crop", mutate: func(c *EncoderParameterSetConfig) { c.CropLeft = -2 }},
+		{name: "odd crop", mutate: func(c *EncoderParameterSetConfig) { c.CropTop = 1 }},
+		{name: "crop consumes height", mutate: func(c *EncoderParameterSetConfig) { c.CropTop = 8; c.CropBottom = 8 }},
 		{name: "bad nal length", mutate: func(c *EncoderParameterSetConfig) { c.NALLengthSize = 5 }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

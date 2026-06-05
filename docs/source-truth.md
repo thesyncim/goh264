@@ -110,16 +110,18 @@ raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
 Realtime/WebRTC encoder proof currently covers control admission and
 parameter-set headers: default 8-bit I420 constrained-baseline RTP config,
-invalid-control rejection, bitrate, framerate, RTP payload-size,
-SPS/PPS cadence modes, PLI/FIR/force-IDR, partial reconfiguration, public
-SPS/PPS/Annex B/avcC header generation, recovery-point SEI packaging, IDR
-IntraPCM Annex B/AVC frame generation, identical-reference CAVLC P-skip,
+invalid-control rejection including I420 crop-unit bounds, bitrate, framerate,
+RTP payload-size, SPS/PPS cadence modes, PLI/FIR/force-IDR, partial
+reconfiguration, public SPS/PPS/Annex B/avcC header generation with crop
+metadata, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
+generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
 changed-frame P IntraPCM recovery pictures, forced-keyframe IDR, FFmpeg rawvideo
 decode, RTP packetization-mode 1 FU-A reassembly, STAP-A parameter-set
 aggregation, RTP payload-type/SSRC/sequence metadata, full RTP header bytes, and
 optional RTP callback metadata. Internal writer proof covers raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
-packaging, AVC decoder configuration records, baseline SPS/PPS syntax,
+packaging, AVC decoder configuration records, baseline SPS/PPS syntax with
+4:2:0 crop-unit emission,
 recovery-point SEI syntax, and Baseline IDR plus P-skip/P IntraPCM slice syntax
 via decoder-parser and encoded-frame round trips.
 

@@ -15,6 +15,10 @@ type EncoderParameterSetConfig struct {
 
 	Width              int
 	Height             int
+	CropLeft           int
+	CropRight          int
+	CropTop            int
+	CropBottom         int
 	FrameRateNum       int
 	FrameRateDen       int
 	MaxReferenceFrames uint32
@@ -86,8 +90,10 @@ func EncodeBaselineSPSRBSP(cfg EncoderParameterSetConfig) ([]byte, error) {
 	}
 	mbWidth := (cfg.Width + 15) >> 4
 	mbHeight := (cfg.Height + 15) >> 4
-	cropRight := (mbWidth*16 - cfg.Width) >> 1
-	cropBottom := (mbHeight*16 - cfg.Height) >> 1
+	cropLeft := cfg.CropLeft
+	cropRight := cfg.CropRight + (mbWidth*16 - cfg.Width)
+	cropTop := cfg.CropTop
+	cropBottom := cfg.CropBottom + (mbHeight*16 - cfg.Height)
 
 	var bw BitWriter
 	if err := bw.WriteBits(uint32(cfg.ProfileIDC), 8); err != nil {
@@ -124,9 +130,14 @@ func EncodeBaselineSPSRBSP(cfg EncoderParameterSetConfig) ([]byte, error) {
 	}
 	bw.WriteBit(1) // frame_mbs_only_flag
 	bw.WriteBit(1) // direct_8x8_inference_flag
-	if cropRight != 0 || cropBottom != 0 {
+	if cropLeft != 0 || cropRight != 0 || cropTop != 0 || cropBottom != 0 {
 		bw.WriteBit(1)
-		for _, v := range []uint32{0, uint32(cropRight), 0, uint32(cropBottom)} {
+		for _, v := range []uint32{
+			uint32(cropLeft >> 1),
+			uint32(cropRight >> 1),
+			uint32(cropTop >> 1),
+			uint32(cropBottom >> 1),
+		} {
 			if err := bw.WriteUEGolomb(v); err != nil {
 				return nil, err
 			}
@@ -284,6 +295,11 @@ func validateEncoderParameterSetConfig(cfg EncoderParameterSetConfig) error {
 		return ErrInvalidData
 	}
 	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width&1 != 0 || cfg.Height&1 != 0 {
+		return ErrInvalidData
+	}
+	if cfg.CropLeft < 0 || cfg.CropRight < 0 || cfg.CropTop < 0 || cfg.CropBottom < 0 ||
+		cfg.CropLeft&1 != 0 || cfg.CropRight&1 != 0 || cfg.CropTop&1 != 0 || cfg.CropBottom&1 != 0 ||
+		cfg.CropLeft+cfg.CropRight >= cfg.Width || cfg.CropTop+cfg.CropBottom >= cfg.Height {
 		return ErrInvalidData
 	}
 	if cfg.FrameRateNum <= 0 || cfg.FrameRateDen <= 0 || cfg.FrameRateDen > int(^uint32(0)) || cfg.FrameRateNum > int(^uint32(0)>>1) {

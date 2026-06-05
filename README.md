@@ -20,8 +20,9 @@ behavior against oracle vectors.
 - **Pure Go decoder path** - no cgo and no Go module dependencies.
 - **Realtime/WebRTC encoder scope** - tested encoder controls cover explicit
   bitrate, latency, keyframe, packetization, profile/level, runtime
-  reconfiguration controls, out-of-band SPS/PPS/avcC headers, and
-  recovery-point SEI packaging, with first IDR IntraPCM, P-skip, and P
+  reconfiguration controls, out-of-band SPS/PPS/avcC headers, and crop-aware
+  SPS/encoded visible output plus recovery-point SEI packaging, with first IDR
+  IntraPCM, P-skip, and P
   IntraPCM Annex B/AVC/RTP output paths.
 - **Annex B and AVC input surfaces** - automatic packet splitting, explicit
   Annex B / length-prefixed AVC APIs, and AVC decoder configuration records.
@@ -78,8 +79,9 @@ bitrate/framerate/payload reconfiguration, SPS/PPS cadence modes, and the
 WebRTC control fields are public and covered by
 `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420 constrained-baseline
 realtime configs are admitted as control state; SPS/PPS parameter sets, Annex B
-sequence headers, avcC records, in-band/out-of-band/every-IDR cadence, and
-recovery-point SEI Annex B/AVC NAL surfaces are generated and parser-proved.
+sequence headers, avcC records, crop metadata,
+in-band/out-of-band/every-IDR cadence, and recovery-point SEI Annex B/AVC NAL
+surfaces are generated and parser-proved.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
 Annex B, AVC, and RTP packetization-mode 1, including FU-A fragmentation and
 STAP-A parameter-set aggregation, payload-type/SSRC/sequence metadata, full RTP
@@ -90,7 +92,8 @@ zero-PTS frames from frame duration or `RTPTimestampIncrement`. Identical frames
 after a decoded reference can use a guarded CAVLC P-skip slice when deblocking
 is disabled; changed frames can use a guarded CAVLC P IntraPCM slice in the
 same admitted path with recovery-point SEI emission when enabled, while forced
-keyframe requests still emit IDR. Internal writer primitives
+keyframe requests still emit IDR; cropped I420 input emits SPS crop metadata
+and local/FFmpeg decode sees the cropped visible frame. Internal writer primitives
 cover raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the

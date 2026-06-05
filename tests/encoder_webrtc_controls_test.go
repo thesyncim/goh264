@@ -75,6 +75,9 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 		{name: "bad bitrate", mutate: func(c *goh264.EncoderConfig) { c.TargetBitrate = 0 }, want: goh264.ErrInvalidData},
 		{name: "max bitrate below target", mutate: func(c *goh264.EncoderConfig) { c.MaxBitrate = c.TargetBitrate - 1 }, want: goh264.ErrInvalidData},
 		{name: "bad qp range", mutate: func(c *goh264.EncoderConfig) { c.MinQP = 40; c.MaxQP = 20 }, want: goh264.ErrInvalidData},
+		{name: "negative crop", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = -2 }, want: goh264.ErrInvalidData},
+		{name: "odd I420 crop", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = 1 }, want: goh264.ErrInvalidData},
+		{name: "crop consumes width", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = c.Width / 2; c.Crop.Right = c.Width / 2 }, want: goh264.ErrInvalidData},
 		{name: "deterministic multi worker", mutate: func(c *goh264.EncoderConfig) { c.Workers = 2 }, want: goh264.ErrInvalidData},
 		{name: "idr interval beyond gop", mutate: func(c *goh264.EncoderConfig) { c.IDRInterval = c.GOPSize + 1 }, want: goh264.ErrInvalidData},
 		{name: "intra refresh not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.IntraRefresh = true }, want: goh264.ErrUnsupported},
@@ -334,6 +337,40 @@ func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 	}
 }
 
+func TestEncoderParameterSetsExposeWebRTCCrop(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(640, 480)
+	cfg.Crop = goh264.EncoderCrop{Left: 2, Right: 4, Top: 6, Bottom: 8}
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets: %v", err)
+	}
+
+	wantWidth := cfg.Width - cfg.Crop.Left - cfg.Crop.Right
+	wantHeight := cfg.Height - cfg.Crop.Top - cfg.Crop.Bottom
+	info, err := goh264.NewDecoder().ParseHeadersAnnexB(headers.AnnexB)
+	if err != nil {
+		t.Fatalf("ParseHeadersAnnexB: %v", err)
+	}
+	if info.Width != wantWidth || info.Height != wantHeight {
+		t.Fatalf("cropped Annex B dimensions = %dx%d, want %dx%d",
+			info.Width, info.Height, wantWidth, wantHeight)
+	}
+
+	avcc, err := goh264.NewDecoder().ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord)
+	if err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+	if avcc.StreamInfo.Width != wantWidth || avcc.StreamInfo.Height != wantHeight {
+		t.Fatalf("cropped avcC dimensions = %dx%d, want %dx%d",
+			avcc.StreamInfo.Width, avcc.StreamInfo.Height, wantWidth, wantHeight)
+	}
+}
+
 func TestEncoderRecoveryPointSEIExposesWebRTCRecoverySignal(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {
@@ -458,6 +495,38 @@ func TestEncoderEncodeAnnexBIDRIntraPCMDecodesThroughLocalAndFFmpeg(t *testing.T
 	if enc.PendingIDR() {
 		t.Fatal("successful IDR encode left PendingIDR set")
 	}
+}
+
+func TestEncoderEncodeCroppedAnnexBIDRIntraPCMDecodesVisibleFrame(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(20, 20)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	cfg.Crop = goh264.EncoderCrop{Left: 2, Right: 2, Top: 2, Bottom: 2}
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(20, 20)
+	want := appendCroppedI420FrameBytes(nil, frame, cfg.Crop)
+
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode cropped Annex B IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+
+	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(out.Data)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames cropped IDR: %v", err)
+	}
+	if len(decoded) != 1 ||
+		decoded[0].Width != 16 || decoded[0].Height != 16 ||
+		decoded[0].CropLeft != 2 || decoded[0].CropTop != 2 {
+		t.Fatalf("decoded crop geometry = len %d frame %+v, want 16x16 crop 2,2", len(decoded), decoded[0])
+	}
+	assertDecodedEncoderFrameBytes(t, decoded, want)
+	assertFFmpegRawVideoOracle(t, out.Data, want)
 }
 
 func TestEncoderEncodeAVCIDRIntraPCMDecodesThroughConfiguredSurface(t *testing.T) {
@@ -1199,6 +1268,28 @@ func appendI420FrameBytes(dst []byte, frame goh264.EncoderFrame) []byte {
 	}
 	for y := 0; y < chromaHeight; y++ {
 		row := frame.Cr[y*frame.StrideCr : y*frame.StrideCr+chromaWidth]
+		dst = append(dst, row...)
+	}
+	return dst
+}
+
+func appendCroppedI420FrameBytes(dst []byte, frame goh264.EncoderFrame, crop goh264.EncoderCrop) []byte {
+	width := frame.Width - crop.Left - crop.Right
+	height := frame.Height - crop.Top - crop.Bottom
+	for y := 0; y < height; y++ {
+		row := frame.Y[(crop.Top+y)*frame.StrideY+crop.Left : (crop.Top+y)*frame.StrideY+crop.Left+width]
+		dst = append(dst, row...)
+	}
+	chromaWidth := width / 2
+	chromaHeight := height / 2
+	chromaLeft := crop.Left / 2
+	chromaTop := crop.Top / 2
+	for y := 0; y < chromaHeight; y++ {
+		row := frame.Cb[(chromaTop+y)*frame.StrideCb+chromaLeft : (chromaTop+y)*frame.StrideCb+chromaLeft+chromaWidth]
+		dst = append(dst, row...)
+	}
+	for y := 0; y < chromaHeight; y++ {
+		row := frame.Cr[(chromaTop+y)*frame.StrideCr+chromaLeft : (chromaTop+y)*frame.StrideCr+chromaLeft+chromaWidth]
 		dst = append(dst, row...)
 	}
 	return dst
