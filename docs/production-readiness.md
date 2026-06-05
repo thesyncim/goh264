@@ -16,6 +16,7 @@ scripts/h264-real-vector-upstream-audit.sh # pinned FFmpeg H.264 FATE coverage
 scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C vs pure Go and native C+asm vs Go+asm lanes
 scripts/h264-real-vector-release-alloc.sh # checked-in Go allocation canary budget
 scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder canary
+scripts/h264-performance-evidence.sh  # local benchstat, JSON, CPU, and heap profile bundle
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_RED_QUEUE=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorRedQueue
@@ -71,5 +72,8 @@ it runs the CANL4 public vector with defaults of 64,000,000 Go allocation
 bytes/iteration and 10,000 Go allocations/iteration.
 `scripts/h264-benchstat-canary.sh` runs the package-level decoder benchmarks
 with `-benchmem`; its output is suitable for `benchstat` trend comparisons.
-Pending: checked-in profile artifacts, larger performance corpus, and
+`scripts/h264-performance-evidence.sh` writes a local evidence bundle under
+`.artifacts/h264-performance-evidence/` containing benchstat samples, the JSON
+real-vector benchmark report, CPU and heap profiles, and run metadata. Pending:
+checked-in reviewed profile artifacts, larger performance corpus, and
 in-process libavcodec baseline.

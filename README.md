@@ -292,12 +292,23 @@ For repeated `go test -benchmem` samples suitable for `benchstat`, run:
 scripts/h264-benchstat-canary.sh
 ```
 
+To create a local release-evidence bundle with benchstat samples, the JSON
+real-vector benchmark report, CPU/heap profiles, and run metadata:
+
+```sh
+scripts/h264-performance-evidence.sh canl4
+```
+
+The bundle is written under `.artifacts/h264-performance-evidence/` by default;
+override the destination with `GOH264_PERF_DIR`.
+
 Performance status is intentionally conservative: the benchmark harness exists
 and rejects quality drift before timing, and public raw-output helpers have
 caller-buffer zero-allocation guards. A checked-in public-vector allocation
-canary, profile-output hooks, and a benchstat-compatible decoder canary now
-exist, while checked-in profile artifacts, a larger performance corpus, and an
-in-process libavcodec baseline are still pending. Treat the decoder as
+canary, profile-output hooks, a benchstat-compatible decoder canary, and a
+local performance-evidence bundle runner now exist, while checked-in reviewed
+profile artifacts, a larger performance corpus, and an in-process libavcodec
+baseline are still pending. Treat the decoder as
 pre-production for throughput-sensitive use until
 [docs/production-readiness.md](docs/production-readiness.md) has those release
 artifacts.
@@ -337,6 +348,8 @@ No tag should be treated as production until a release-evidence pass proves:
   allocation canary budget.
 - `scripts/h264-benchstat-canary.sh` runs with stable `-benchmem` output for
   trend comparison.
+- `scripts/h264-performance-evidence.sh` creates the local performance bundle
+  with JSON benchmark output plus CPU/heap profiles.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until
