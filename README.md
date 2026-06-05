@@ -286,13 +286,19 @@ Use `-cpuprofile` and `-memprofile` to write Go CPU and heap profiles around
 the oracle-checked benchmark run; `GOH264_BENCH_CPU_PROFILE` and
 `GOH264_BENCH_MEM_PROFILE` forward those paths through the real-vector
 benchmark script.
+For repeated `go test -benchmem` samples suitable for `benchstat`, run:
+
+```sh
+scripts/h264-benchstat-canary.sh
+```
 
 Performance status is intentionally conservative: the benchmark harness exists
 and rejects quality drift before timing, and public raw-output helpers have
 caller-buffer zero-allocation guards. A checked-in public-vector allocation
-canary and profile-output hooks now exist, while checked-in benchstat/profile
-artifacts, a larger performance corpus, and an in-process libavcodec baseline
-are still pending. Treat the decoder as pre-production for throughput-sensitive use until
+canary, profile-output hooks, and a benchstat-compatible decoder canary now
+exist, while checked-in profile artifacts, a larger performance corpus, and an
+in-process libavcodec baseline are still pending. Treat the decoder as
+pre-production for throughput-sensitive use until
 [docs/production-readiness.md](docs/production-readiness.md) has those release
 artifacts.
 
@@ -329,6 +335,8 @@ No tag should be treated as production until a release-evidence pass proves:
 - Known-red rows, if any, are current in `testdata/h264/realvectors/failures.jsonl`.
 - `scripts/h264-real-vector-release-alloc.sh` is green with the checked-in Go
   allocation canary budget.
+- `scripts/h264-benchstat-canary.sh` runs with stable `-benchmem` output for
+  trend comparison.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until
