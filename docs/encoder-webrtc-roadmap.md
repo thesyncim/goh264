@@ -66,8 +66,9 @@ metadata. RTP packets also carry complete 12-byte RTP headers plus payload
 bytes, and `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form, NAL type/count, FU-A start/end, and parameter-set
-packets. Queued IDR requests still emit IDR, and motion-search prediction plus
-residual coding remain pending.
+packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
+from frame duration or `RTPTimestampIncrement`. Queued IDR requests still emit
+IDR, and motion-search prediction plus residual coding remain pending.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -104,7 +105,8 @@ P-slice `mb_type=30` macroblocks.
    packet-level tests. Done for packetization-mode 1 single NAL/FU-A output and
    STAP-A parameter-set aggregation with marker-bit boundaries plus
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
-   bytes, and callback-style packet metadata.
+   bytes, callback-style packet metadata, and automatic timestamp progression
+   for frames without explicit PTS.
 6. Add realtime allocation budgets, encode timing benchmarks, and control-loop
    stress tests.
 

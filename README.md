@@ -84,11 +84,12 @@ Annex B, AVC, and RTP packetization-mode 1, including FU-A fragmentation and
 STAP-A parameter-set aggregation, payload-type/SSRC/sequence metadata, full RTP
 packet headers, marker-bit boundaries, and optional RTP packet callbacks with
 packet index/count, frame timing, payload form, NAL type/count, FU-A start/end,
-and parameter-set metadata. Identical frames after a decoded reference can use
-a guarded CAVLC P-skip slice when deblocking is disabled; changed frames can
-use a guarded CAVLC P IntraPCM slice in the same admitted path with
-recovery-point SEI emission when enabled, while forced keyframe requests still
-emit IDR. Internal writer primitives
+and parameter-set metadata. RTP timestamps honor explicit frame PTS and advance
+zero-PTS frames from frame duration or `RTPTimestampIncrement`. Identical frames
+after a decoded reference can use a guarded CAVLC P-skip slice when deblocking
+is disabled; changed frames can use a guarded CAVLC P IntraPCM slice in the
+same admitted path with recovery-point SEI emission when enabled, while forced
+keyframe requests still emit IDR. Internal writer primitives
 cover raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
@@ -273,9 +274,10 @@ out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P IntraPCM
 then emit the admitted IDR IntraPCM, identical-reference P-skip, or
 changed-frame P IntraPCM frame path. Changed-frame P IntraPCM recovery pictures
 carry recovery-point SEI when enabled. RTP output includes payloads plus
-complete RTP packet bytes and optional per-packet callback metadata. Motion-search
-inter prediction, quantized residual coding, and rate-control decisions are
-still future encoder slices.
+complete RTP packet bytes, optional per-packet callback metadata, and automatic
+timestamp progression when frames omit explicit PTS. Motion-search inter
+prediction, quantized residual coding, and rate-control decisions are still
+future encoder slices.
 
 ## Supported Inputs
 

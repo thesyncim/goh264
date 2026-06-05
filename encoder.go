@@ -264,14 +264,16 @@ type EncoderReconfigure struct {
 }
 
 type Encoder struct {
-	cfg               EncoderConfig
-	forceIDR          bool
-	frameNum          uint32
-	idrPicID          uint32
-	rtpSequenceNumber uint16
-	reference         encoderReferenceFrame
-	framesSinceIDR    int
-	rtpPacketCallback EncoderRTPPacketCallback
+	cfg                EncoderConfig
+	forceIDR           bool
+	frameNum           uint32
+	idrPicID           uint32
+	rtpSequenceNumber  uint16
+	nextRTPTime        uint32
+	rtpTimeInitialized bool
+	reference          encoderReferenceFrame
+	framesSinceIDR     int
+	rtpPacketCallback  EncoderRTPPacketCallback
 }
 
 func DefaultEncoderConfig(width, height int) EncoderConfig {
@@ -490,7 +492,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	if err != nil {
 		return EncodedFrame{}, err
 	}
-	rtpTime := uint32(frame.PTS)
+	rtpTime := e.encoderRTPTime(frame)
 	var packets []EncoderRTPPacket
 	if e.cfg.OutputFormat == EncoderOutputRTP {
 		packets, err = packetizeEncoderRTPMode1(nals, e.cfg.RTPMaxPayloadSize, rtpTime, e.cfg.STAPA)
@@ -501,6 +503,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		e.notifyRTPPacketCallback(packets, frame, rtpTime, idr, idr)
 	}
 
+	e.advanceEncoderRTPTime(frame, rtpTime)
 	e.storeReference(view)
 	e.forceIDR = false
 	e.frameNum = (e.frameNum + 1) & 0xff
@@ -1257,6 +1260,28 @@ func rtpTimestampIncrement(clock, frameRateNum, frameRateDen int) uint32 {
 		return 0
 	}
 	return uint32((clock * frameRateDen) / frameRateNum)
+}
+
+func (e *Encoder) encoderRTPTime(frame EncoderFrame) uint32 {
+	if frame.PTS != 0 || !e.rtpTimeInitialized {
+		return uint32(frame.PTS)
+	}
+	return e.nextRTPTime
+}
+
+func (e *Encoder) advanceEncoderRTPTime(frame EncoderFrame, rtpTime uint32) {
+	e.nextRTPTime = rtpTime + encoderFrameRTPDuration(e.cfg, frame)
+	e.rtpTimeInitialized = true
+}
+
+func encoderFrameRTPDuration(cfg EncoderConfig, frame EncoderFrame) uint32 {
+	if frame.Duration > 0 {
+		return uint32(frame.Duration)
+	}
+	if cfg.RTPTimestampIncrement != 0 {
+		return cfg.RTPTimestampIncrement
+	}
+	return rtpTimestampIncrement(cfg.TimeBaseDen, cfg.FrameRateNum, cfg.FrameRateDen)
 }
 
 func encoderProfileSyntax(profile EncoderProfile) (uint8, uint8, error) {

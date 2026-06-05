@@ -961,6 +961,62 @@ func TestEncoderRTPPacketCallbackCanBeClearedAndSkipsNonRTPOutput(t *testing.T) 
 	}
 }
 
+func TestEncoderRTPAutoTimestampAdvancesWithoutExplicitPTS(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 0
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first zero-PTS RTP frame: %v", err)
+	}
+	if first.RTPTime != 0 {
+		t.Fatalf("first RTP time = %d, want 0", first.RTPTime)
+	}
+	assertRTPPacketTimestamps(t, first.RTPPackets, first.RTPTime)
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.PTS = 0
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode second zero-PTS RTP frame: %v", err)
+	}
+	if second.RTPTime != cfg.RTPTimestampIncrement {
+		t.Fatalf("second RTP time = %d, want default increment %d", second.RTPTime, cfg.RTPTimestampIncrement)
+	}
+	assertRTPPacketTimestamps(t, second.RTPPackets, second.RTPTime)
+
+	thirdFrame := patternedI420EncoderFrame(16, 16)
+	thirdFrame.PTS = 90_000
+	thirdFrame.Duration = 1_500
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode explicit-PTS RTP frame: %v", err)
+	}
+	if third.RTPTime != uint32(thirdFrame.PTS) {
+		t.Fatalf("third RTP time = %d, want explicit PTS %d", third.RTPTime, thirdFrame.PTS)
+	}
+	assertRTPPacketTimestamps(t, third.RTPPackets, third.RTPTime)
+
+	fourthFrame := patternedI420EncoderFrame(16, 16)
+	fourthFrame.PTS = 0
+	fourthFrame.Duration = 1_500
+	fourth, err := enc.Encode(fourthFrame)
+	if err != nil {
+		t.Fatalf("Encode duration-advanced RTP frame: %v", err)
+	}
+	if fourth.RTPTime != uint32(thirdFrame.PTS+thirdFrame.Duration) {
+		t.Fatalf("fourth RTP time = %d, want explicit PTS plus duration %d",
+			fourth.RTPTime, thirdFrame.PTS+thirdFrame.Duration)
+	}
+	assertRTPPacketTimestamps(t, fourth.RTPPackets, fourth.RTPTime)
+}
+
 func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {
@@ -1118,6 +1174,22 @@ func assertRTPPacketMetadata(t *testing.T, packets []goh264.EncoderRTPPacket, pa
 		}
 		if pkt.SequenceNumber != firstSeq+uint16(i) {
 			t.Fatalf("packet[%d] sequence = %d, want %d", i, pkt.SequenceNumber, firstSeq+uint16(i))
+		}
+	}
+}
+
+func assertRTPPacketTimestamps(t *testing.T, packets []goh264.EncoderRTPPacket, want uint32) {
+	t.Helper()
+	if len(packets) == 0 {
+		t.Fatal("RTP packet list is empty")
+	}
+	for i, pkt := range packets {
+		if pkt.Timestamp != want {
+			t.Fatalf("packet[%d] timestamp = %d, want %d", i, pkt.Timestamp, want)
+		}
+		if len(pkt.Data) >= 8 && binary.BigEndian.Uint32(pkt.Data[4:8]) != want {
+			t.Fatalf("packet[%d] RTP header timestamp = %d, want %d",
+				i, binary.BigEndian.Uint32(pkt.Data[4:8]), want)
 		}
 	}
 }
