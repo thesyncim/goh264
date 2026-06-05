@@ -1337,11 +1337,11 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 					return nil
 				}
 				if mbType == MBTypeIntra4x4 &&
-					((cbp == 0x01 && (cbpTable == 0x01 || cbpTable == 0x1001)) ||
-						(cbp == 0x03 && (cbpTable == 0x03 || cbpTable == 0x7003)) ||
-						(cbp == 0x13 && (cbpTable == 0xd3 || cbpTable == 0xf013)) ||
-						(cbp == 0x15 && (cbpTable == 0xd5 || cbpTable == 0x1f015)) ||
-						(cbp == 0x17 && (cbpTable == 0xd7 || cbpTable == 0x7017))) {
+					((cbp == 0x01 && (cbpTable == 0x01 || (!cabac && cbpTable == 0x1001))) ||
+						(cbp == 0x03 && (cbpTable == 0x03 || (!cabac && cbpTable == 0x7003))) ||
+						(cbp == 0x13 && ((cabac && cbpTable == 0xd3) || (!cabac && cbpTable == 0xf013))) ||
+						(cbp == 0x15 && ((cabac && cbpTable == 0xd5) || (!cabac && cbpTable == 0x1f015))) ||
+						(cbp == 0x17 && ((cabac && cbpTable == 0xd7) || (!cabac && cbpTable == 0x7017)))) {
 					return nil
 				}
 				if mbType == MBTypeIntra4x4 && sh.PPS != nil && sh.PPS.CABAC != 0 {
@@ -1352,7 +1352,8 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 						return nil
 					}
 				}
-				if mbType == MBTypeIntra4x4 && cbp == 0x2f && (cbpTable == 0xef || cbpTable == 0x7f02f || cbpTable == 0xff02f) {
+				if mbType == MBTypeIntra4x4 && cbp == 0x2f &&
+					((cabac && cbpTable == 0xef) || (!cabac && (cbpTable == 0x7f02f || cbpTable == 0xff02f))) {
 					return nil
 				}
 				if cabac && mbType == MBTypeIntra16x16 && cbp == 0 && cbpTable == 0x100 {
@@ -1389,11 +1390,11 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 					return nil
 				}
 				if mbType == MBTypeIntra4x4 &&
-					((cbp == 0x01 && (cbpTable == 0x01 || cbpTable == 0x1001)) ||
-						(cbp == 0x03 && (cbpTable == 0x03 || cbpTable == 0x7003)) ||
-						(cbp == 0x13 && (cbpTable == 0xd3 || cbpTable == 0xf013)) ||
-						(cbp == 0x15 && (cbpTable == 0xd5 || cbpTable == 0x1f015)) ||
-						(cbp == 0x17 && (cbpTable == 0xd7 || cbpTable == 0x7017))) {
+					((cbp == 0x01 && (cbpTable == 0x01 || (!cabac && cbpTable == 0x1001))) ||
+						(cbp == 0x03 && (cbpTable == 0x03 || (!cabac && cbpTable == 0x7003))) ||
+						(cbp == 0x13 && ((cabac && cbpTable == 0xd3) || (!cabac && cbpTable == 0xf013))) ||
+						(cbp == 0x15 && ((cabac && cbpTable == 0xd5) || (!cabac && cbpTable == 0x1f015))) ||
+						(cbp == 0x17 && ((cabac && cbpTable == 0xd7) || (!cabac && cbpTable == 0x7017)))) {
 					return nil
 				}
 				if mbType == MBTypeIntra4x4 && sh.PPS != nil && sh.PPS.CABAC != 0 {
@@ -1404,7 +1405,8 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 						return nil
 					}
 				}
-				if mbType == MBTypeIntra4x4 && cbp == 0x2f && (cbpTable == 0xef || cbpTable == 0x7f02f || cbpTable == 0xff02f) {
+				if mbType == MBTypeIntra4x4 && cbp == 0x2f &&
+					((cabac && cbpTable == 0xef) || (!cabac && (cbpTable == 0x7f02f || cbpTable == 0xff02f))) {
 					return nil
 				}
 				if mbType == MBTypeIntra16x16 {
