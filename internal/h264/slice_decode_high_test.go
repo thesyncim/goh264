@@ -1316,7 +1316,7 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh1214ChromaFieldWeightedP(t 
 	for _, bitDepth := range []int32{12, 14} {
 		for _, chromaFormatIDC := range []int{2, 3} {
 			for _, pictureStructure := range []int32{PictureTopField, PictureBottomField} {
-				for _, deblockMode := range []int32{0, 1} {
+				for _, deblockMode := range []int32{0, 1, 2} {
 					for _, cabac := range []int32{0, 1} {
 						for _, weight := range weights {
 							t.Run(fmt.Sprintf("%s/%s/picture%d/deblock%d/cabac%d/%s", bitDepthName(bitDepth), chromaFormatName(chromaFormatIDC), pictureStructure, deblockMode, cabac, weight.name), func(t *testing.T) {
@@ -1342,26 +1342,44 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh1214ChromaFieldWeightedP(t 
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighRejectsHigh1214ChromaFieldWeightedPSliceBoundary(t *testing.T) {
+func TestValidateSimpleFrameSliceDecodeHighRejectsHigh1214ChromaFieldWeightedPStagedBoundaries(t *testing.T) {
 	for _, bitDepth := range []int32{12, 14} {
 		for _, chromaFormatIDC := range []int{2, 3} {
 			for _, pictureStructure := range []int32{PictureTopField, PictureBottomField} {
 				for _, cabac := range []int32{0, 1} {
-					t.Run(fmt.Sprintf("%s/%s/picture%d/cabac%d", bitDepthName(bitDepth), chromaFormatName(chromaFormatIDC), pictureStructure, cabac), func(t *testing.T) {
-						m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, chromaFormatIDC, 2, true, PictureTypeP)
-						sh.SPS.FrameMBSOnlyFlag = 0
-						sh.SPS.MBAFF = 1
-						sh.PictureStructure = pictureStructure
-						sh.DeblockingFilter = 2
-						sh.RefCount = [2]uint32{1, 0}
-						sh.PPS.CABAC = cabac
-						sh.PPS.WeightedPred = 1
-						sh.PredWeightTable = highWeightedPPredWeightTable()
+					for _, tt := range []struct {
+						name string
+						run  func(*SliceHeader)
+					}{
+						{name: "b-slice", run: func(sh *SliceHeader) {
+							sh.SliceType = PictureTypeB
+							sh.SliceTypeNoS = PictureTypeB
+							sh.RefCount = [2]uint32{1, 1}
+						}},
+						{name: "unequal-depth", run: func(sh *SliceHeader) {
+							sh.SPS.BitDepthChroma = bitDepth + 2
+						}},
+						{name: "frame-mbs-only", run: func(sh *SliceHeader) {
+							sh.SPS.FrameMBSOnlyFlag = 1
+						}},
+					} {
+						t.Run(fmt.Sprintf("%s/%s/picture%d/cabac%d/%s", bitDepthName(bitDepth), chromaFormatName(chromaFormatIDC), pictureStructure, cabac, tt.name), func(t *testing.T) {
+							m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, bitDepth, chromaFormatIDC, 2, true, PictureTypeP)
+							sh.SPS.FrameMBSOnlyFlag = 0
+							sh.SPS.MBAFF = 1
+							sh.PictureStructure = pictureStructure
+							sh.DeblockingFilter = 2
+							sh.RefCount = [2]uint32{1, 0}
+							sh.PPS.CABAC = cabac
+							sh.PPS.WeightedPred = 1
+							sh.PredWeightTable = highWeightedPPredWeightTable()
+							tt.run(sh)
 
-						if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
-							t.Fatalf("%s chroma field weighted P slice-boundary validation err = %v, want ErrUnsupported", bitDepthName(bitDepth), err)
-						}
-					})
+							if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+								t.Fatalf("%s chroma field weighted P staged-boundary validation err = %v, want ErrUnsupported", bitDepthName(bitDepth), err)
+							}
+						})
+					}
 				}
 			}
 		}

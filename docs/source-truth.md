@@ -54,7 +54,7 @@ explicit weighted B and 4:4:4 top/bottom field explicit/implicit weighted B
 luma/chroma deblock modes 0/1 plus internal High10 4:2:2/4:4:4 top/bottom field
 luma-only, luma+chroma, and source-normalized chroma-only weighted P deblock modes 0/1 plus
 internal High12/High14 4:2:2/4:4:4 top/bottom field luma-only, luma+chroma,
-and source-normalized chroma-only weighted P deblock modes 0/1, complete FFmpeg FRext FATE row coverage including
+and source-normalized chroma-only weighted P deblock modes 0/1/2, complete FFmpeg FRext FATE row coverage including
 monochrome-to-yuv420p output, selected compact baseline/main conformance rows
 including AUD, SVA/Sony/MW/FT/JVC/Sand/Toshiba/VTC baseline/main, CABAC,
 no-deblock, reference, field, and slice-boundary rows,
@@ -93,8 +93,8 @@ excluded rows are `h264-conformance/FM1_BT_B.h264` (CBS malformed no-frame
 stream; FFmpeg exits with decode error) and `mkv/h264_tta_undecodable.mkv` (no
 H.264 video stream).
 
-Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad slice-boundary
-high modes including High12/High14 field weighted-P slice-boundary deblock modes, public 12/14-bit
+Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad public field/MBAFF
+high modes, public 12/14-bit
 high streams beyond the current FFmpeg FATE 8-bit/10-bit set, broader
 damaged-slice error resilience, threading/SIMD, and full libavcodec
 delayed-output behavior.

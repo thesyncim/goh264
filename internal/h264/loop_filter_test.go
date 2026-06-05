@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestH264ApplyLoopFilterEdge444UsesLumaChromaPlanes(t *testing.T) {
 	const stride = 32
@@ -1255,6 +1258,50 @@ func TestMacroblockTablesFilterFrameHigh444SliceBoundaryModeSkipsCrossSliceBound
 	}
 }
 
+func TestMacroblockTablesFilterFrameHigh1214ChromaFieldSliceBoundaryModeSkipsCrossSliceBoundary(t *testing.T) {
+	for _, bitDepth := range []int{12, 14} {
+		for _, chromaFormatIDC := range []int{2, 3} {
+			t.Run(fmt.Sprintf("%s/%s", bitDepthName(int32(bitDepth)), chromaFormatName(chromaFormatIDC)), func(t *testing.T) {
+				dst := highChromaFieldSliceBoundaryFrame(t, chromaFormatIDC)
+				m, params := highChromaFieldSliceBoundaryTables(t, bitDepth, chromaFormatIDC, 2)
+				chromaBoundaryX, chromaInternalX := 8, 12
+				if chromaFormatIDC == 3 {
+					chromaBoundaryX, chromaInternalX = 16, 24
+				}
+
+				yBoundaryTop := captureHighEdgePair(dst.Y, 15)
+				yBoundaryBottom := captureHighEdgePair(dst.Y, dst.LumaStride+15)
+				yInternalTop := captureHighEdgePair(dst.Y, 23)
+				yInternalBottom := captureHighEdgePair(dst.Y, dst.LumaStride+23)
+				cbBoundaryTop := captureHighEdgePair(dst.Cb, chromaBoundaryX-1)
+				cbBoundaryBottom := captureHighEdgePair(dst.Cb, dst.ChromaStride+chromaBoundaryX-1)
+				cbInternalTop := captureHighEdgePair(dst.Cb, chromaInternalX-1)
+				cbInternalBottom := captureHighEdgePair(dst.Cb, dst.ChromaStride+chromaInternalX-1)
+				crBoundaryTop := captureHighEdgePair(dst.Cr, chromaBoundaryX-1)
+				crBoundaryBottom := captureHighEdgePair(dst.Cr, dst.ChromaStride+chromaBoundaryX-1)
+				crInternalTop := captureHighEdgePair(dst.Cr, chromaInternalX-1)
+				crInternalBottom := captureHighEdgePair(dst.Cr, dst.ChromaStride+chromaInternalX-1)
+
+				if err := m.filterFrameHigh(dst, params); err != nil {
+					t.Fatal(err)
+				}
+				requireHighEdgePairUnchanged(t, "top-field luma cross-slice", dst.Y, yBoundaryTop)
+				requireHighEdgePairUnchanged(t, "bottom-field luma cross-slice", dst.Y, yBoundaryBottom)
+				requireHighEdgePairUnchanged(t, "top-field cb cross-slice", dst.Cb, cbBoundaryTop)
+				requireHighEdgePairUnchanged(t, "bottom-field cb cross-slice", dst.Cb, cbBoundaryBottom)
+				requireHighEdgePairUnchanged(t, "top-field cr cross-slice", dst.Cr, crBoundaryTop)
+				requireHighEdgePairUnchanged(t, "bottom-field cr cross-slice", dst.Cr, crBoundaryBottom)
+				requireHighEdgePairChanged(t, "top-field luma same-slice internal", dst.Y, yInternalTop)
+				requireHighEdgePairChanged(t, "bottom-field luma same-slice internal", dst.Y, yInternalBottom)
+				requireHighEdgePairChanged(t, "top-field cb same-slice internal", dst.Cb, cbInternalTop)
+				requireHighEdgePairChanged(t, "bottom-field cb same-slice internal", dst.Cb, cbInternalBottom)
+				requireHighEdgePairChanged(t, "top-field cr same-slice internal", dst.Cr, crInternalTop)
+				requireHighEdgePairChanged(t, "bottom-field cr same-slice internal", dst.Cr, crInternalBottom)
+			})
+		}
+	}
+}
+
 func TestMacroblockTablesFilterFrameHigh422DCTHorizontalChromaOnlyEdge(t *testing.T) {
 	const (
 		stride = 16
@@ -1497,6 +1544,114 @@ func high444SliceBoundaryTables(t *testing.T, bitDepth int, deblockingFilter int
 	return m, []h264LoopFilterSliceParams{
 		{PPS: pps, ListCount: 1, DeblockingFilter: int32(deblockingFilter)},
 		{PPS: pps, ListCount: 1, DeblockingFilter: int32(deblockingFilter)},
+	}
+}
+
+func highChromaFieldSliceBoundaryFrame(t *testing.T, chromaFormatIDC int) *h264PicturePlanesHigh {
+	t.Helper()
+	switch chromaFormatIDC {
+	case 2:
+		const (
+			lumaStride   = 32
+			chromaStride = 16
+		)
+		dst := &h264PicturePlanesHigh{
+			Y:               make([]uint16, lumaStride*32),
+			Cb:              make([]uint16, chromaStride*32),
+			Cr:              make([]uint16, chromaStride*32),
+			LumaStride:      lumaStride,
+			ChromaStride:    chromaStride,
+			MBWidth:         2,
+			MBHeight:        2,
+			ChromaFormatIDC: 2,
+		}
+		fillHighLoopFilterStep(dst.Y, dst.LumaStride, 32, 32, 16, 400, 408)
+		fillHighLoopFilterStep(dst.Cb, dst.ChromaStride, 16, 32, 8, 300, 308)
+		fillHighLoopFilterStep(dst.Cr, dst.ChromaStride, 16, 32, 8, 200, 208)
+		setHighLoopFilterRightRegion(dst.Y, dst.LumaStride, 32, 24, 416)
+		setHighLoopFilterRightRegion(dst.Cb, dst.ChromaStride, 32, 12, 316)
+		setHighLoopFilterRightRegion(dst.Cr, dst.ChromaStride, 32, 12, 216)
+		return dst
+	case 3:
+		const stride = 32
+		dst := &h264PicturePlanesHigh{
+			Y:               make([]uint16, stride*32),
+			Cb:              make([]uint16, stride*32),
+			Cr:              make([]uint16, stride*32),
+			LumaStride:      stride,
+			ChromaStride:    stride,
+			MBWidth:         2,
+			MBHeight:        2,
+			ChromaFormatIDC: 3,
+		}
+		fillHighLoopFilterStep(dst.Y, dst.LumaStride, 32, 32, 16, 400, 408)
+		fillHighLoopFilterStep(dst.Cb, dst.ChromaStride, 32, 32, 16, 300, 308)
+		fillHighLoopFilterStep(dst.Cr, dst.ChromaStride, 32, 32, 16, 200, 208)
+		setHighLoopFilterRightRegion(dst.Y, dst.LumaStride, 32, 24, 416)
+		setHighLoopFilterRightRegion(dst.Cb, dst.ChromaStride, 32, 24, 316)
+		setHighLoopFilterRightRegion(dst.Cr, dst.ChromaStride, 32, 24, 216)
+		return dst
+	default:
+		t.Fatalf("unsupported chroma format %d", chromaFormatIDC)
+		return nil
+	}
+}
+
+func highChromaFieldSliceBoundaryTables(t *testing.T, bitDepth int, chromaFormatIDC int, deblockingFilter int) (*macroblockTables, []h264LoopFilterSliceParams) {
+	t.Helper()
+	m, err := newMacroblockTables(2, 2, chromaFormatIDC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for mbY := 0; mbY < 2; mbY++ {
+		for mbX := 0; mbX < 2; mbX++ {
+			mbXY := mbX + mbY*m.MBStride
+			m.MacroblockTyp[mbXY] = MBTypeIntra16x16
+			m.CBPTable[mbXY] = 1
+			m.QScaleTable[mbXY] = uint8(30 + 6*(bitDepth-8))
+			m.SliceTable[mbXY] = uint16(mbX + 2*mbY)
+		}
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.SPS = &SPS{
+		BitDepthLuma:     int32(bitDepth),
+		BitDepthChroma:   int32(bitDepth),
+		ChromaFormatIDC:  uint32(chromaFormatIDC),
+		FrameMBSOnlyFlag: 0,
+	}
+	return m, []h264LoopFilterSliceParams{
+		{PPS: pps, ListCount: 1, PictureStructure: PictureTopField, DeblockingFilter: int32(deblockingFilter)},
+		{PPS: pps, ListCount: 1, PictureStructure: PictureTopField, DeblockingFilter: int32(deblockingFilter)},
+		{PPS: pps, ListCount: 1, PictureStructure: PictureBottomField, DeblockingFilter: int32(deblockingFilter)},
+		{PPS: pps, ListCount: 1, PictureStructure: PictureBottomField, DeblockingFilter: int32(deblockingFilter)},
+	}
+}
+
+type highEdgePair struct {
+	left   int
+	right  int
+	before [2]uint16
+}
+
+func captureHighEdgePair(plane []uint16, left int) highEdgePair {
+	return highEdgePair{
+		left:   left,
+		right:  left + 1,
+		before: [2]uint16{plane[left], plane[left+1]},
+	}
+}
+
+func requireHighEdgePairUnchanged(t *testing.T, label string, plane []uint16, pair highEdgePair) {
+	t.Helper()
+	if plane[pair.left] != pair.before[0] || plane[pair.right] != pair.before[1] {
+		t.Fatalf("%s filtered: %v -> [%d %d]", label, pair.before, plane[pair.left], plane[pair.right])
+	}
+}
+
+func requireHighEdgePairChanged(t *testing.T, label string, plane []uint16, pair highEdgePair) {
+	t.Helper()
+	if plane[pair.left] == pair.before[0] || plane[pair.right] == pair.before[1] {
+		t.Fatalf("%s did not filter: %v -> [%d %d]", label, pair.before, plane[pair.left], plane[pair.right])
 	}
 }
 

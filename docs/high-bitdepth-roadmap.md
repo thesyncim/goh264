@@ -60,14 +60,14 @@ weighted B luma/chroma deblock modes 0/1, plus internal High10 4:2:2/4:4:4
 top/bottom field luma-only, luma+chroma, and source-normalized chroma-only
 weighted P deblock modes 0/1, plus internal High12/High14 4:2:2/4:4:4
 top/bottom field luma-only, luma+chroma, and source-normalized chroma-only
-weighted P deblock modes 0/1,
+weighted P deblock modes 0/1/2,
 plus public High9 4:2:0
 SPS reinit metadata from 9-bit to 8-bit output, public High444 10-bit SPS
 reinit metadata, and the XAVC High422 terminal damaged top-field row that
 FFmpeg conceals while draining already-complete delayed frames.
 
 Next: public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
-High12/High14 field weighted-P slice-boundary modes, broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
+broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
 damaged-slice error resilience beyond terminal first-field recovery.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and

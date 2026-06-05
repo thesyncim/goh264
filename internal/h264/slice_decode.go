@@ -922,7 +922,7 @@ func isHigh1214ChromaFieldWeightedPDeblockScope(sh *SliceHeader) bool {
 		sh.PPS.WeightedPred == 0 {
 		return false
 	}
-	if sh.DeblockingFilter != 0 && sh.DeblockingFilter != 1 {
+	if sh.DeblockingFilter != 0 && sh.DeblockingFilter != 1 && sh.DeblockingFilter != 2 {
 		return false
 	}
 	return sh.PredWeightTable.UseWeight == 1 &&
