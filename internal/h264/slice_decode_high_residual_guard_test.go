@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsP16x16Residual(t *testing.T) {
 	sh := &SliceHeader{SliceTypeNoS: PictureTypeP}
@@ -36,6 +39,64 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsProvedPIntra(t *tes
 		if err := validateHighFrameSliceMacroblockForReconstruct(sh, mbType, 1, 1); err != nil {
 			t.Fatalf("validate high P intra %#x err = %v, want nil", mbType, err)
 		}
+	}
+}
+
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh1214Intra4x4CBP3(t *testing.T) {
+	for _, bitDepth := range []int32{12, 14} {
+		t.Run(fmt.Sprintf("high%d", bitDepth), func(t *testing.T) {
+			sh := &SliceHeader{
+				SliceTypeNoS: PictureTypeI,
+				SPS:          &SPS{BitDepthLuma: bitDepth},
+			}
+			for _, cbpTable := range []int{0x03, 0x7003} {
+				if err := validateHighFrameSliceMacroblockForReconstruct(sh, MBTypeIntra4x4, 0x03, cbpTable); err != nil {
+					t.Fatalf("validate High%d Intra4x4 cbp=0x03 table=%#x err = %v, want nil", bitDepth, cbpTable, err)
+				}
+			}
+		})
+	}
+}
+
+func TestHigh1214Frame420ScopeAllowsImplicitWeightedBParseAndDecodeWeights(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		useWeight int32
+	}{
+		{name: "parse", useWeight: 0},
+		{name: "decode", useWeight: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, bitDepth := range []int32{12, 14} {
+				for _, cabac := range []int32{0, 1} {
+					for _, deblock := range []int32{0, 1, 2} {
+						sh := &SliceHeader{
+							SliceTypeNoS:     PictureTypeB,
+							DeblockingFilter: deblock,
+							SPS: &SPS{
+								BitDepthLuma:    bitDepth,
+								BitDepthChroma:  bitDepth,
+								ChromaFormatIDC: 1,
+							},
+							PPS: &PPS{
+								CABAC:             cabac,
+								WeightedBipredIDC: 2,
+							},
+							PredWeightTable: PredWeightTable{
+								UseWeight:       tt.useWeight,
+								UseWeightChroma: tt.useWeight,
+							},
+						}
+						if !isPublicHighFrameBitDepthScope(sh) {
+							t.Fatalf("High%d cabac=%d deblock=%d useWeight=%d not admitted", bitDepth, cabac, deblock, tt.useWeight)
+						}
+						if err := validateHighFrameSliceDeblockingScope(sh); err != nil {
+							t.Fatalf("High%d cabac=%d deblock=%d useWeight=%d deblock scope err = %v", bitDepth, cabac, deblock, tt.useWeight, err)
+						}
+					}
+				}
+			}
+		})
 	}
 }
 
