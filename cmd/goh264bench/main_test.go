@@ -163,6 +163,25 @@ func TestAnnotateBenchResultQuality(t *testing.T) {
 			wantRef:    "failure-ledger",
 			wantMetric: "rawvideo-md5",
 		},
+		{
+			name: "expected decode error",
+			result: benchResult{
+				RawOutput:    true,
+				ParityStatus: "decode-error-ok",
+			},
+			want:       "decode-error-ok",
+			wantRef:    "manifest-expected-error",
+			wantMetric: "decode-error",
+		},
+		{
+			name: "decode error without raw oracle",
+			result: benchResult{
+				RawOutput:    true,
+				ParityStatus: "decode-error",
+			},
+			want:       "decode-error",
+			wantMetric: "decode-error",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -346,6 +365,62 @@ func TestBenchManifestDiagnoseReportsKnownRedRows(t *testing.T) {
 	}
 	if report.Results[0].ErrorClass != "input-missing" || !strings.Contains(report.Results[0].Error, "missing.264") {
 		t.Fatalf("diagnostic error = class %q detail %q, want missing input", report.Results[0].ErrorClass, report.Results[0].Error)
+	}
+}
+
+func TestBenchManifestDiagnoseReportsExpectedDecodeErrorRows(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte{0x00, 0x00, 0x01, 0x01}
+	if err := os.WriteFile(filepath.Join(dir, "malformed.264"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := md5.Sum(data)
+	entry := benchCorpusEntry{
+		ID:            "negative",
+		Path:          "malformed.264",
+		Source:        "test public vectors",
+		Format:        "annexb",
+		Expect:        "decode-error",
+		ExpectedError: "invalid data",
+		BitstreamMD5:  hex.EncodeToString(sum[:]),
+		Surfaces:      []string{"annexb"},
+		FeatureTags:   []string{"malformed", "missing-pps"},
+	}
+	manifestPath := filepath.Join(dir, "manifest.jsonl")
+	writeBenchManifestRows(t, manifestPath, entry)
+
+	report, err := benchManifest(manifestPath, 0, benchOptions{
+		iters:         1,
+		repeats:       1,
+		rawOutput:     true,
+		failureLedger: "off",
+		diagnose:      true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Metadata.CorpusSelected != 1 || report.Metadata.CorpusDecodeOK != 0 || report.Metadata.CorpusGreen != 1 ||
+		report.Metadata.CorpusBench != 0 || report.Metadata.CorpusSkipped != 0 || report.Metadata.CorpusNotTimed != 1 {
+		t.Fatalf("diagnostic metadata = %+v, want one green expected decode-error oracle row", report.Metadata)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("results = %d, want 1", len(report.Results))
+	}
+	result := report.Results[0]
+	if result.Skipped || result.BaselineKind != "oracle-diagnostic" || result.ParityStatus != "decode-error-ok" {
+		t.Fatalf("diagnostic result = %+v, want green expected decode-error diagnostic", result)
+	}
+	if result.ErrorClass != "decode-error" || !strings.Contains(result.Error, "invalid data") {
+		t.Fatalf("diagnostic error = class %q detail %q, want expected invalid-data decode error", result.ErrorClass, result.Error)
+	}
+	if result.InputBytesPerIter != int64(len(data)) {
+		t.Fatalf("input bytes = %d, want %d", result.InputBytesPerIter, len(data))
+	}
+	if got := strings.Join(result.FeatureTags, ","); got != "malformed,missing-pps" {
+		t.Fatalf("feature tags = %q, want malformed,missing-pps", got)
+	}
+	if notes := strings.Join(result.Notes, "\n"); !strings.Contains(notes, `matched expected decode error containing "invalid data"`) {
+		t.Fatalf("notes = %q, want matched expected error note", notes)
 	}
 }
 
@@ -575,6 +650,31 @@ func TestBenchManifestReportsUnsupportedRowsAsSkipped(t *testing.T) {
 	}
 	if got := strings.Join(report.Results[0].Surfaces, ","); got != "annexb" {
 		t.Fatalf("skipped surfaces = %q, want annexb", got)
+	}
+}
+
+func TestBenchManifestSkipsExpectedDecodeErrorRowsForTiming(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "manifest.jsonl")
+	row := `{"id":"negative","path":"malformed.264","format":"annexb","expect":"decode-error","expected_error":"invalid data","bitstream_md5":"00112233445566778899aabbccddeeff","surfaces":["annexb"],"feature_tags":["malformed"]}`
+	if err := os.WriteFile(manifestPath, []byte(row+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report, err := benchManifest(manifestPath, 0, benchOptions{
+		iters:         1,
+		repeats:       1,
+		rawOutput:     true,
+		failureLedger: "off",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Metadata.CorpusSelected != 1 || report.Metadata.CorpusDecodeOK != 0 || report.Metadata.CorpusGreen != 0 ||
+		report.Metadata.CorpusBench != 0 || report.Metadata.CorpusSkipped != 1 || report.Metadata.CorpusNotTimed != 1 {
+		t.Fatalf("metadata = %+v, want decode-error skipped from timing", report.Metadata)
+	}
+	if len(report.Results) != 1 || !report.Results[0].Skipped || report.Results[0].ParityStatus != "decode-error" {
+		t.Fatalf("result = %+v, want skipped decode-error timing row", report.Results)
 	}
 }
 

@@ -251,7 +251,9 @@ go run ./cmd/goh264bench \
 
 The JSON report includes selected/green/known-red counts, backend kind, CPU
 flags, comparison lane, raw MD5 parity, oracle quality status, and FFmpeg-vs-Go
-peer quality status.
+peer quality status. Diagnostic mode also treats expected `decode-error` rows
+as oracle rows and marks them green only when the decoder error matches
+`expected_error`.
 
 Performance status is intentionally conservative: the benchmark harness exists
 and rejects quality drift before timing, but bulk steady-state allocation gates,

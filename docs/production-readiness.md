@@ -26,7 +26,9 @@ that execute and verify known-red rows when present.
 
 Benchmark JSON reports selected/green/known-red counts, backend kind, CPU flags,
 comparison lane, oracle `quality_status`, and FFmpeg-vs-Go
-`peer_quality_status`. Use `-fair-cpu-lanes` for both `pure-c-vs-pure-go` and
+`peer_quality_status`. Diagnostic mode includes expected decode-error rows as
+oracle rows and requires the observed decoder error to contain `expected_error`.
+Use `-fair-cpu-lanes` for both `pure-c-vs-pure-go` and
 `native-c+asm-vs-go+asm`; extracted container rows require FFmpeg on `PATH`
 when the cache does not already contain the `.h264-annexb` derived stream.
 Result `backend_kind` records the backend actually

@@ -172,24 +172,25 @@ type ffmpegBenchLane struct {
 }
 
 type benchCorpusEntry struct {
-	ID           string             `json:"id"`
-	Path         string             `json:"path"`
-	URL          string             `json:"url,omitempty"`
-	Format       string             `json:"format"`
-	Expect       string             `json:"expect"`
-	PixFmt       string             `json:"pix_fmt,omitempty"`
-	FrameCount   int                `json:"frame_count,omitempty"`
-	FrameSize    int                `json:"frame_size,omitempty"`
-	SourceMD5    string             `json:"source_md5,omitempty"`
-	BitstreamMD5 string             `json:"bitstream_md5,omitempty"`
-	RawVideoMD5  string             `json:"rawvideo_md5,omitempty"`
-	Extract      string             `json:"extract,omitempty"`
-	FrameMD5     []string           `json:"frame_md5,omitempty"`
-	Surfaces     []string           `json:"surfaces,omitempty"`
-	GuardTags    []string           `json:"guard_tags,omitempty"`
-	FeatureTags  []string           `json:"feature_tags,omitempty"`
-	Source       string             `json:"source,omitempty"`
-	KnownFailure *benchKnownFailure `json:"known_failure,omitempty"`
+	ID            string             `json:"id"`
+	Path          string             `json:"path"`
+	URL           string             `json:"url,omitempty"`
+	Format        string             `json:"format"`
+	Expect        string             `json:"expect"`
+	ExpectedError string             `json:"expected_error,omitempty"`
+	PixFmt        string             `json:"pix_fmt,omitempty"`
+	FrameCount    int                `json:"frame_count,omitempty"`
+	FrameSize     int                `json:"frame_size,omitempty"`
+	SourceMD5     string             `json:"source_md5,omitempty"`
+	BitstreamMD5  string             `json:"bitstream_md5,omitempty"`
+	RawVideoMD5   string             `json:"rawvideo_md5,omitempty"`
+	Extract       string             `json:"extract,omitempty"`
+	FrameMD5      []string           `json:"frame_md5,omitempty"`
+	Surfaces      []string           `json:"surfaces,omitempty"`
+	GuardTags     []string           `json:"guard_tags,omitempty"`
+	FeatureTags   []string           `json:"feature_tags,omitempty"`
+	Source        string             `json:"source,omitempty"`
+	KnownFailure  *benchKnownFailure `json:"known_failure,omitempty"`
 }
 
 type benchKnownFailure struct {
@@ -617,13 +618,15 @@ func diagnoseBenchManifest(path string, maxEntries int, opts benchOptions) (benc
 	var staleKnownRed int
 	var skipped int
 	for _, entry := range entries {
-		if entry.Expect != "decode-ok" {
-			results = append(results, skippedBenchResult(entry, "manifest row is not a decode-ok oracle row and is not a diagnostic oracle row"))
+		if !benchDiagnosticOracleEntry(entry) {
+			results = append(results, skippedBenchResult(entry, "manifest row is not a diagnostic oracle row"))
 			skipped++
 			continue
 		}
-		decodeOKSelected++
-		if err := validateBenchCorpusEntry(entry); err != nil {
+		if entry.Expect == "decode-ok" {
+			decodeOKSelected++
+		}
+		if err := validateBenchDiagnosticCorpusEntry(entry); err != nil {
 			return benchReport{}, err
 		}
 		if maxEntries > 0 && diagnosed >= maxEntries {
@@ -644,7 +647,7 @@ func diagnoseBenchManifest(path string, maxEntries int, opts benchOptions) (benc
 				knownRed++
 			}
 			skipped++
-		} else if result.ParityStatus != "rawvideo-md5-ok" {
+		} else if !benchDiagnosticOraclePassed(result) {
 			result.Notes = append(result.Notes, "unexpected manifest oracle failure")
 		} else {
 			green++
@@ -669,7 +672,7 @@ func diagnoseBenchManifest(path string, maxEntries int, opts benchOptions) (benc
 	meta.CorpusSkipped = skipped
 	meta.CorpusNotTimed = len(entries)
 	meta.ComparisonKind = "manifest-goh264-oracle-diagnostic"
-	meta.FairnessPolicy = "Manifest diagnostics run selected decode-ok rows once from the existing manifest/cache and compare Go raw pixel format, frame count, raw byte count, rawvideo MD5, and per-frame raw MD5s when frames decode. Known-red ledger rows remain marked known-red unless the decoder output actually matches the oracle, in which case they are reported as failure-ledger stale rather than green timing samples."
+	meta.FairnessPolicy = "Manifest diagnostics run selected decode-ok and expected decode-error rows once from the existing manifest/cache. Decode-ok rows compare Go raw pixel format, frame count, raw byte count, rawvideo MD5, and per-frame raw MD5s when frames decode; expected decode-error rows require the decoder error to contain expected_error. Known-red ledger rows remain marked known-red unless the decoder output actually matches the oracle, in which case they are reported as failure-ledger stale rather than green timing samples."
 	return benchReport{Metadata: meta, Results: results}, nil
 }
 
@@ -707,6 +710,10 @@ func diagnoseBenchEntry(baseDir string, entry benchCorpusEntry) benchResult {
 		applyBenchDiagnosticError(&result, err)
 		return result
 	}
+	if entry.Expect == "decode-error" {
+		diagnoseBenchExpectedDecodeError(&result, entry, data)
+		return result
+	}
 	run, err := decodeGoOnceForFormat(data, true, entry.Format == "annexb")
 	if err != nil {
 		applyBenchDiagnosticError(&result, fmt.Errorf("decode: %w", err))
@@ -726,6 +733,28 @@ func diagnoseBenchEntry(baseDir string, entry benchCorpusEntry) benchResult {
 	return result
 }
 
+func diagnoseBenchExpectedDecodeError(result *benchResult, entry benchCorpusEntry, data []byte) {
+	run, err := decodeGoOnceForFormat(data, true, entry.Format == "annexb")
+	if err == nil {
+		result.RawPixelFormat = run.pixFmt
+		result.FramesPerIter = run.frames
+		result.BytesPerIter = run.bytes
+		result.RawMD5 = run.md5
+		result.FrameDiagnostics = append([]benchFrameDiagnostic(nil), run.frameDiagnostics...)
+		applyBenchDiagnosticError(result, fmt.Errorf("decode succeeded with %d frames, want error containing %q", run.frames, entry.ExpectedError))
+		return
+	}
+	result.Error = err.Error()
+	result.ErrorClass = benchOracleFailureClass("decode: " + err.Error())
+	if !benchExpectedDecodeErrorMatches(entry, err) {
+		result.ParityStatus = result.ErrorClass
+		result.Notes = append(result.Notes, fmt.Sprintf("expected decode error containing %q", entry.ExpectedError))
+		return
+	}
+	result.ParityStatus = "decode-error-ok"
+	result.Notes = append(result.Notes, fmt.Sprintf("matched expected decode error containing %q", entry.ExpectedError))
+}
+
 func applyBenchDiagnosticError(result *benchResult, err error) {
 	if result == nil || err == nil {
 		return
@@ -733,6 +762,22 @@ func applyBenchDiagnosticError(result *benchResult, err error) {
 	result.Error = err.Error()
 	result.ErrorClass = benchOracleFailureClass(err.Error())
 	result.ParityStatus = result.ErrorClass
+}
+
+func benchDiagnosticOracleEntry(entry benchCorpusEntry) bool {
+	return entry.Expect == "decode-ok" || entry.Expect == "decode-error"
+}
+
+func benchDiagnosticOraclePassed(result benchResult) bool {
+	return result.ParityStatus == "rawvideo-md5-ok" || result.ParityStatus == "decode-error-ok"
+}
+
+func benchExpectedDecodeErrorMatches(entry benchCorpusEntry, err error) bool {
+	if err == nil {
+		return false
+	}
+	want := strings.ToLower(entry.ExpectedError)
+	return want == "" || strings.Contains(strings.ToLower(err.Error()), want)
 }
 
 func applyKnownRedDiagnostic(result *benchResult, failure benchCorpusEntry, ledgerPath string) {
@@ -747,7 +792,7 @@ func applyKnownRedDiagnostic(result *benchResult, failure benchCorpusEntry, ledg
 	if failure.KnownFailure != nil {
 		result.Notes = append(result.Notes, fmt.Sprintf("expected current failure: class=%s contains=%q", failure.KnownFailure.Class, failure.KnownFailure.DetailContains))
 	}
-	if result.ParityStatus == "rawvideo-md5-ok" {
+	if benchDiagnosticOraclePassed(*result) {
 		result.ParityStatus = "rawvideo-md5-ok-failure-ledger-stale"
 		result.Notes = append(result.Notes,
 			fmt.Sprintf("entry is still listed in %s but passed Go oracle diagnostics; update the failure ledger before using this as a green benchmark lane", ledgerPath),
@@ -865,6 +910,7 @@ func benchCorpusEntrySearchFields(entry benchCorpusEntry) []string {
 		entry.URL,
 		entry.Format,
 		entry.Expect,
+		entry.ExpectedError,
 		entry.PixFmt,
 		entry.SourceMD5,
 		entry.Extract,
@@ -921,6 +967,23 @@ func validateBenchCorpusEntry(entry benchCorpusEntry) error {
 	return nil
 }
 
+func validateBenchDiagnosticCorpusEntry(entry benchCorpusEntry) error {
+	if err := validateBenchCorpusCommon(entry); err != nil {
+		return err
+	}
+	switch entry.Expect {
+	case "decode-ok":
+		return validateBenchCorpusEntry(entry)
+	case "decode-error":
+		if entry.BitstreamMD5 == "" || entry.ExpectedError == "" {
+			return fmt.Errorf("%s: decode-error entries need bitstream_md5 and expected_error", entry.ID)
+		}
+	default:
+		return fmt.Errorf("%s: diagnostic manifest mode only runs decode-ok and decode-error entries, got %q", entry.ID, entry.Expect)
+	}
+	return nil
+}
+
 func validateBenchFailureLedgerEntry(entry benchCorpusEntry) error {
 	if err := validateBenchCorpusCommon(entry); err != nil {
 		return err
@@ -942,6 +1005,10 @@ func validateBenchFailureLedgerEntry(entry benchCorpusEntry) error {
 		}
 		if entry.FrameCount <= 0 {
 			return fmt.Errorf("%s: frame_count must be positive", entry.ID)
+		}
+	case "decode-error":
+		if entry.BitstreamMD5 == "" || entry.ExpectedError == "" {
+			return fmt.Errorf("%s: decode-error entries need bitstream_md5 and expected_error", entry.ID)
 		}
 	default:
 		return fmt.Errorf("%s: failure-ledger row must stay an oracle row, got %q", entry.ID, entry.Expect)
@@ -1508,6 +1575,15 @@ func annotateBenchResultQuality(result *benchResult) {
 		return
 	}
 	result.QualityStatus = result.ParityStatus
+	if result.ParityStatus == "decode-error-ok" {
+		result.QualityMetric = "decode-error"
+		result.QualityReference = "manifest-expected-error"
+		return
+	}
+	if result.ParityStatus == "decode-error" && result.RawMD5 == "" && result.ExpectedRawMD5 == "" {
+		result.QualityMetric = "decode-error"
+		return
+	}
 	if result.RawOutput || result.RawMD5 != "" || result.ExpectedRawMD5 != "" {
 		result.QualityMetric = "rawvideo-md5"
 	}
