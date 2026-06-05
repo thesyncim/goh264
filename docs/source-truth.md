@@ -84,6 +84,7 @@ public FATE vector harness,
 bounded public decode/packet no-panic fuzz smoke,
 stateful valid-damaged-valid packet recovery guards across configured AVC,
 AVC configuration-record, packet `NEW_EXTRADATA`, and auto Annex B surfaces,
+malformed AVC/Annex B `NEW_EXTRADATA` recovery guards,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest

@@ -93,6 +93,74 @@ func TestDecodePacketFramesAVCRecoversAfterDamagedSlicePacket(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketFramesAVCRecoversAfterDamagedNewExtradata(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data:     samples[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	damagedConfig := append([]byte(nil), config...)
+	damagedConfig = damagedConfig[:len(damagedConfig)-1]
+	if out, err := dec.DecodePacketFrames(Packet{
+		Data:     samples[1],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedConfig}},
+	}); err == nil {
+		t.Fatalf("damaged avcC packet decoded frames=%d, want error", len(out))
+	}
+
+	frames, err = dec.DecodePacketFrames(Packet{Data: samples[1]})
+	if err != nil {
+		t.Fatalf("decode after damaged avcC: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodePacketFramesAnnexBRecoversAfterDamagedNewExtradata(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	extradata, _ := annexBParameterSetsAndPacket(t, data)
+	_, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	first := avcSampleToAnnexB(t, samples[0], 4)
+	second := avcSampleToAnnexB(t, samples[1], 4)
+
+	dec := NewDecoder()
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data:     first,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	damagedExtradata := truncateFirstParameterSetAnnexB(t, extradata)
+	if out, err := dec.DecodePacketFrames(Packet{
+		Data:     second,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedExtradata}},
+	}); err == nil {
+		t.Fatalf("damaged Annex B extradata packet decoded frames=%d, want error", len(out))
+	}
+
+	frames, err = dec.DecodePacketFrames(Packet{Data: second})
+	if err != nil {
+		t.Fatalf("decode after damaged Annex B extradata: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeFramesAnnexBRecoversAfterDamagedSlicePacket(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -171,6 +239,31 @@ func truncateFirstVCLAnnexBPayload(t *testing.T, sample []byte) []byte {
 	}
 	if !truncated {
 		t.Fatal("no VCL NAL found")
+	}
+	return out
+}
+
+func truncateFirstParameterSetAnnexB(t *testing.T, data []byte) []byte {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []byte
+	truncated := false
+	for _, nal := range nals {
+		raw := nal.Raw
+		if !truncated && (nal.Type == h264.NALSPS || nal.Type == h264.NALPPS) {
+			if len(raw) < 2 {
+				t.Fatalf("short parameter-set NAL: %x", raw)
+			}
+			raw = raw[:1]
+			truncated = true
+		}
+		out = appendAnnexBNAL(out, raw)
+	}
+	if !truncated {
+		t.Fatal("no parameter-set NAL found")
 	}
 	return out
 }
