@@ -669,6 +669,68 @@ func TestH264HLMotionFrameHigh9ImplicitWeightedChromaBipredUsesParityWeight(t *t
 	}
 }
 
+func TestH264HLMotionFrameHigh9ExplicitWeightedChromaBipredUsesParityWeight(t *testing.T) {
+	const bitDepth = 9
+	for _, chromaFormatIDC := range []int{2, 3} {
+		t.Run(chromaFormatName(chromaFormatIDC), func(t *testing.T) {
+			dst := makeH264MotionCompPictureHigh(chromaFormatIDC, bitDepth, 53)
+			want := makeH264MotionCompPictureHigh(chromaFormatIDC, bitDepth, 53)
+			tmp := makeH264MotionCompPictureHigh(chromaFormatIDC, bitDepth, 53)
+			ref0 := makeH264MotionCompPictureHigh(chromaFormatIDC, bitDepth, 163)
+			ref1 := makeH264MotionCompPictureHigh(chromaFormatIDC, bitDepth, 197)
+			refs := [2][]*h264PicturePlanesHigh{{ref0}, {ref1}}
+			cache := makeH264MotionCompBipredCache(0, 0)
+
+			pwt := h264MotionCompTestPWT(chromaFormatIDC)
+			pwt.UseWeight = 1
+			pwt.UseWeightChroma = 1
+			pwt.LumaLog2WeightDenom = 1
+			pwt.ChromaLog2WeightDenom = 1
+			pwt.LumaWeight[0][0] = [2]int32{3, -1}
+			pwt.LumaWeight[0][1] = [2]int32{1, 2}
+			pwt.ChromaWeight[0][0][0] = [2]int32{3, 1}
+			pwt.ChromaWeight[0][1][0] = [2]int32{1, -1}
+			pwt.ChromaWeight[0][0][1] = [2]int32{1, 2}
+			pwt.ChromaWeight[0][1][1] = [2]int32{3, 0}
+
+			const mbX = 1
+			const mbY = 1
+			mbType := MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+			if err := h264HLMotionFrameWeightedHigh(dst, refs, &cache, mbType, [4]uint32{}, mbX, mbY, 2, &pwt, makeH264MotionCompScratchHigh(dst), bitDepth); err != nil {
+				t.Fatal(err)
+			}
+			if err := h264HLMotionFrameHigh(want, refs, &cache, MBType16x16|MBTypeP0L0, [4]uint32{}, mbX, mbY, 2, bitDepth); err != nil {
+				t.Fatal(err)
+			}
+			if err := h264HLMotionFrameHigh(tmp, refs, &cache, MBType16x16|MBTypeP0L1, [4]uint32{}, mbX, mbY, 2, bitDepth); err != nil {
+				t.Fatal(err)
+			}
+
+			yOff, cbOff, crOff, err := h264MBDestPartOffsetsHigh(want, mbX, mbY, 0, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			chromaHeight, chromaWidth, err := h264ChromaWeightGeometry(want.ChromaFormatIDC, 16, 8, 16)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := h264BiweightPixelsHigh(want.Y[yOff:], tmp.Y[yOff:], want.LumaStride, 16, int(pwt.LumaLog2WeightDenom), int(pwt.LumaWeight[0][0][0]), int(pwt.LumaWeight[0][1][0]), int(pwt.LumaWeight[0][0][1]+pwt.LumaWeight[0][1][1]), 16, bitDepth); err != nil {
+				t.Fatal(err)
+			}
+			if err := h264BiweightPixelsHigh(want.Cb[cbOff:], tmp.Cb[cbOff:], want.ChromaStride, chromaHeight, int(pwt.ChromaLog2WeightDenom), int(pwt.ChromaWeight[0][0][0][0]), int(pwt.ChromaWeight[0][1][0][0]), int(pwt.ChromaWeight[0][0][0][1]+pwt.ChromaWeight[0][1][0][1]), chromaWidth, bitDepth); err != nil {
+				t.Fatal(err)
+			}
+			if err := h264BiweightPixelsHigh(want.Cr[crOff:], tmp.Cr[crOff:], want.ChromaStride, chromaHeight, int(pwt.ChromaLog2WeightDenom), int(pwt.ChromaWeight[0][0][1][0]), int(pwt.ChromaWeight[0][1][1][0]), int(pwt.ChromaWeight[0][0][1][1]+pwt.ChromaWeight[0][1][1][1]), chromaWidth, bitDepth); err != nil {
+				t.Fatal(err)
+			}
+
+			requireH264BlockEqualHigh(t, dst.Y, want.Y, dst.LumaStride, yOff, yOff, 16, 16)
+			requireH264BlockEqualHigh(t, dst.Cb, want.Cb, dst.ChromaStride, cbOff, cbOff, chromaWidth, chromaHeight)
+			requireH264BlockEqualHigh(t, dst.Cr, want.Cr, dst.ChromaStride, crOff, crOff, chromaWidth, chromaHeight)
+		})
+	}
+}
+
 func TestH264HLMotionFrameWeightedImplicitRequiresScratch(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 31)
 	ref0 := makeH264MotionCompPicture(1, 61)

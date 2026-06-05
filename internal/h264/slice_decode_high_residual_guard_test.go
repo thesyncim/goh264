@@ -1086,6 +1086,59 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh9ChromaImplicit
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh9ChromaExplicitWeightedBSliceBoundaryDeblock(t *testing.T) {
+	for _, chromaFormatIDC := range []uint32{2, 3} {
+		for _, shape := range []struct {
+			name     string
+			mbType   uint32
+			cbp      int
+			cbpTable int
+		}{
+			{name: "l0", mbType: MBType16x16 | MBTypeP0L0, cbp: 0xf, cbpTable: 0xf},
+			{name: "l1", mbType: MBType16x16 | MBTypeP0L1, cbp: 0xf, cbpTable: 0xf},
+			{name: "bi", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, cbp: 0xf, cbpTable: 0xf},
+			{name: "temporal-direct", mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2, cbp: 0xf, cbpTable: 0xf},
+			{name: "spatial-direct-skip", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip},
+		} {
+			for _, cabac := range []int32{0, 1} {
+				for _, weight := range []struct {
+					name            string
+					useWeight       int32
+					useWeightChroma int32
+				}{
+					{name: "serialized-default"},
+					{name: "luma", useWeight: 1},
+					{name: "chroma", useWeightChroma: 1},
+					{name: "luma-chroma", useWeight: 1, useWeightChroma: 1},
+				} {
+					t.Run(fmt.Sprintf("%s/%s/cabac%d/%s", chromaFormatName(int(chromaFormatIDC)), shape.name, cabac, weight.name), func(t *testing.T) {
+						sh := &SliceHeader{
+							SliceTypeNoS:     PictureTypeB,
+							PictureStructure: PictureFrame,
+							DeblockingFilter: 2,
+							SPS: &SPS{
+								BitDepthLuma:    9,
+								ChromaFormatIDC: chromaFormatIDC,
+							},
+							PPS: &PPS{
+								CABAC:             cabac,
+								WeightedBipredIDC: 1,
+							},
+							PredWeightTable: PredWeightTable{
+								UseWeight:       weight.useWeight,
+								UseWeightChroma: weight.useWeightChroma,
+							},
+						}
+						if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, nil, shape.cbp, shape.cbpTable); err != nil {
+							t.Fatalf("validate high9 chroma explicit weighted-B mode-2 deblock err = %v, want nil", err)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10ChromaWeightedBSliceBoundaryDeblock(t *testing.T) {
 	for _, chromaFormatIDC := range []uint32{2, 3} {
 		for _, shape := range []struct {
