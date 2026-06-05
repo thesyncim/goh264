@@ -91,14 +91,15 @@ malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Realtime/WebRTC encoder proof currently covers control admission only: default
-8-bit I420 constrained-baseline RTP config, invalid-control rejection, bitrate,
-framerate, RTP payload-size, PLI/FIR/force-IDR, partial reconfiguration, and
-frame-shape validation before encode returns `ErrUnsupported`. Internal writer
-proof covers raw bit/Exp-Golomb writing, RBSP trailing bits, EBSP
-emulation-prevention, Annex B/AVC NAL packaging, and AVC decoder configuration
-records via decoder-parser round trips; SPS/PPS/SEI/slice syntax writers are
-still pending.
+Realtime/WebRTC encoder proof currently covers control admission and
+parameter-set headers: default 8-bit I420 constrained-baseline RTP config,
+invalid-control rejection, bitrate, framerate, RTP payload-size,
+PLI/FIR/force-IDR, partial reconfiguration, public SPS/PPS/Annex B/avcC header
+generation, and frame-shape validation before encode returns `ErrUnsupported`.
+Internal writer proof covers raw bit/Exp-Golomb writing, RBSP trailing bits,
+EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC decoder configuration
+records, and baseline SPS/PPS syntax via decoder-parser round trips; SEI/slice
+syntax writers are still pending.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder

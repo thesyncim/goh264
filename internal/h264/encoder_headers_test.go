@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+package h264
+
+import (
+	"bytes"
+	"errors"
+	"testing"
+)
+
+func TestBuildEncoderParameterSetsRoundTripsThroughParsers(t *testing.T) {
+	cfg := EncoderParameterSetConfig{
+		ProfileIDC:                     66,
+		ConstraintSetFlags:             0x03,
+		LevelIDC:                       31,
+		Width:                          638,
+		Height:                         478,
+		FrameRateNum:                   30000,
+		FrameRateDen:                   1001,
+		MaxReferenceFrames:             1,
+		InitialQP:                      24,
+		SARNum:                         1,
+		SARDen:                         1,
+		FullRange:                      true,
+		ColorPrimaries:                 1,
+		ColorTransfer:                  1,
+		ColorMatrix:                    1,
+		ChromaSampleLocTypeTopField:    2,
+		ChromaSampleLocTypeBottomField: 2,
+	}
+
+	sets, err := BuildEncoderParameterSets(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sets.SPS) == 0 || sets.SPS[0]&0x1f != byte(NALSPS) {
+		t.Fatalf("SPS NAL = %x", sets.SPS)
+	}
+	if len(sets.PPS) == 0 || sets.PPS[0]&0x1f != byte(NALPPS) {
+		t.Fatalf("PPS NAL = %x", sets.PPS)
+	}
+
+	nals, err := SplitAnnexB(sets.AnnexB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nals) != 2 || nals[0].Type != NALSPS || nals[1].Type != NALPPS {
+		t.Fatalf("Annex B NALs = %+v", nals)
+	}
+	if !bytes.Equal(nals[0].Raw, sets.SPS) || !bytes.Equal(nals[1].Raw, sets.PPS) {
+		t.Fatalf("Annex B raw NALs do not match parameter sets")
+	}
+
+	sps, err := DecodeSPS(nals[0].RBSP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sps.ProfileIDC != 66 || sps.ConstraintSetFlags != 0x03 || sps.LevelIDC != 31 ||
+		sps.Width != 638 || sps.Height != 478 || sps.ChromaFormatIDC != 1 ||
+		sps.RefFrameCount != 1 || sps.PocType != 2 || sps.Log2MaxFrameNum != 8 {
+		t.Fatalf("SPS = %+v", sps)
+	}
+	if sps.VUI.SARNum != 1 || sps.VUI.SARDen != 1 ||
+		sps.VUI.VideoFullRangeFlag != 1 ||
+		sps.VUI.ColourPrimaries != 1 ||
+		sps.VUI.TransferCharacteristics != 1 ||
+		sps.VUI.MatrixCoeffs != 1 ||
+		sps.VUI.ChromaSampleLocTypeTopField != 2 ||
+		sps.VUI.ChromaSampleLocTypeBottomField != 2 ||
+		sps.TimingInfoPresentFlag != 1 ||
+		sps.NumUnitsInTick != 1001 ||
+		sps.TimeScale != 60000 ||
+		sps.FixedFrameRateFlag != 1 ||
+		sps.NumReorderFrames != 0 ||
+		sps.MaxDecFrameBuffering != 1 {
+		t.Fatalf("SPS VUI/restriction = %+v timing=%d/%d fixed=%d reorder=%d dpb=%d",
+			sps.VUI, sps.NumUnitsInTick, sps.TimeScale, sps.FixedFrameRateFlag,
+			sps.NumReorderFrames, sps.MaxDecFrameBuffering)
+	}
+
+	var spsList [maxSPSCount]*SPS
+	spsList[sps.SPSID] = sps
+	pps, err := DecodePPS(nals[1].RBSP, &spsList)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pps.PPSID != 0 || pps.SPSID != 0 || pps.CABAC != 0 ||
+		pps.RefCount[0] != 1 || pps.RefCount[1] != 1 ||
+		pps.InitQP != 24 || pps.DeblockingFilterParametersPresent != 1 {
+		t.Fatalf("PPS = %+v", pps)
+	}
+
+	avcc, err := DecodeAVCDecoderConfigurationRecord(sets.AVCDecoderConfigurationRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sets.AVCDecoderConfigurationRecord[2]; got != 0xc0 {
+		t.Fatalf("avcC profile_compatibility = %#02x, want 0xc0", got)
+	}
+	if avcc.NALLengthSize != 4 || avcc.SPS[0] == nil || avcc.PPS[0] == nil {
+		t.Fatalf("avcC = %+v", avcc)
+	}
+}
+
+func TestBuildEncoderParameterSetsRejectsInvalidSyntaxConfig(t *testing.T) {
+	cfg := EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              16,
+		Height:             16,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          26,
+	}
+	for _, tt := range []struct {
+		name   string
+		mutate func(*EncoderParameterSetConfig)
+	}{
+		{name: "odd width", mutate: func(c *EncoderParameterSetConfig) { c.Width = 15 }},
+		{name: "bad sps id", mutate: func(c *EncoderParameterSetConfig) { c.SPSID = maxSPSCount }},
+		{name: "bad qp", mutate: func(c *EncoderParameterSetConfig) { c.InitialQP = 52 }},
+		{name: "bad sar", mutate: func(c *EncoderParameterSetConfig) { c.SARNum = 1 }},
+		{name: "bad nal length", mutate: func(c *EncoderParameterSetConfig) { c.NALLengthSize = 5 }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			next := cfg
+			tt.mutate(&next)
+			if _, err := BuildEncoderParameterSets(next); !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("BuildEncoderParameterSets error = %v, want ErrInvalidData", err)
+			}
+		})
+	}
+}

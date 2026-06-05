@@ -109,14 +109,16 @@ reference state. In-band malformed SPS/PPS NALs are also guarded as non-fatal:
 they do not replace the last good parameter sets before the next valid slice on
 configured AVC or mixed configured-AVC/Annex B public decode paths.
 
-Encoder readiness evidence currently covers controls only:
+Encoder readiness evidence currently covers controls and parameter-set headers:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 rejects invalid or not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, PLI/FIR, force-IDR, and partial
-reconfiguration paths, and verifies frame-shape validation before
-`Encode`/`EncodeInto` return `ErrUnsupported`. No encoder bitstream, RTP
-packetizer, or FFmpeg/goh264 round-trip oracle has landed yet. Internal encoder
-writer evidence now covers raw bit/Exp-Golomb writing, RBSP trailing bits, EBSP
-emulation-prevention, Annex B/AVC NAL packaging, and AVC decoder configuration
-record construction through decoder-parser round-trip tests; SPS/PPS/SEI/slice
-syntax writers remain pending.
+reconfiguration paths, proves `ParameterSets` emits SPS/PPS NALs, Annex B
+headers, and avcC records accepted by the public decoder parsers, and verifies
+frame-shape validation before `Encode`/`EncodeInto` return `ErrUnsupported`.
+No encoder frame bitstream, RTP packetizer, or FFmpeg/goh264 encoded-frame
+oracle has landed yet. Internal encoder writer evidence now covers raw
+bit/Exp-Golomb writing, RBSP trailing bits, EBSP emulation-prevention,
+Annex B/AVC NAL packaging, AVC decoder configuration records, and baseline
+SPS/PPS syntax through decoder-parser round-trip tests; SEI/slice syntax
+writers remain pending.

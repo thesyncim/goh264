@@ -48,23 +48,27 @@ Current safe point: the public control contract is present in `encoder.go` and
 covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
 constrained-baseline realtime/WebRTC configs can be constructed, invalid
 controls are rejected, and runtime bitrate, framerate, payload-size, PLI/FIR,
-force-IDR, and partial reconfiguration controls are tested. `Encode` and
-`EncodeInto` validate frame shape but still return `ErrUnsupported` for
-bitstream generation.
+force-IDR, and partial reconfiguration controls are tested. `ParameterSets`
+generates SPS/PPS NALs, Annex B sequence headers, and avcC records accepted by
+the decoder parsers. `Encode` and `EncodeInto` validate frame shape but still
+return `ErrUnsupported` for frame bitstream generation.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
 Exp-Golomb codes, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC
 NAL packaging, and AVC decoder configuration records. The writer round-trips
 through the existing decoder readers/parsers in `internal/h264/bitwriter_test.go`.
+`internal/h264/encoder_headers.go` adds baseline SPS/PPS syntax writers in the
+same source-shaped style and round-trips through `DecodeSPS`, `DecodePPS`,
+`SplitAnnexB`, and the avcC parser.
 
 ## Implementation Order
 
 1. Done: add the public encoder configuration and control contract with tests
    that reject invalid WebRTC configurations.
 2. In progress: add bitstream writer primitives. Done for raw NAL/RBSP,
-   Exp-Golomb, Annex B/AVC packaging, and AVC configuration records; next are
-   SPS, PPS, SEI, and slice-header syntax writers.
+   Exp-Golomb, Annex B/AVC packaging, AVC configuration records, and baseline
+   SPS/PPS syntax; next are SEI and slice-header syntax writers.
 3. Add an intra-only IDR path for I420 input and prove that local decode and
    FFmpeg decode produce matching raw frames.
 4. Add P-frame prediction, reference management, CAVLC residual coding, deblock

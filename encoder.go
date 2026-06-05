@@ -2,7 +2,11 @@
 
 package goh264
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/thesyncim/goh264/internal/h264"
+)
 
 type EncoderPixelFormat uint8
 
@@ -197,6 +201,13 @@ type EncodedFrame struct {
 	RTPTime    uint32
 }
 
+type EncoderParameterSets struct {
+	SPS                           []byte
+	PPS                           []byte
+	AnnexB                        []byte
+	AVCDecoderConfigurationRecord []byte
+}
+
 type EncoderReconfigure struct {
 	TargetBitrate     int
 	MaxBitrate        int
@@ -279,6 +290,46 @@ func (e *Encoder) Config() EncoderConfig {
 		return EncoderConfig{}
 	}
 	return e.cfg
+}
+
+func (e *Encoder) ParameterSets() (EncoderParameterSets, error) {
+	if e == nil {
+		return EncoderParameterSets{}, encoderInvalid("nil encoder")
+	}
+	profileIDC, constraintFlags, err := encoderProfileSyntax(e.cfg.Profile)
+	if err != nil {
+		return EncoderParameterSets{}, err
+	}
+	sets, err := h264.BuildEncoderParameterSets(h264.EncoderParameterSetConfig{
+		ProfileIDC:                     profileIDC,
+		ConstraintSetFlags:             constraintFlags,
+		LevelIDC:                       e.cfg.LevelIDC,
+		Width:                          e.cfg.Width,
+		Height:                         e.cfg.Height,
+		FrameRateNum:                   e.cfg.FrameRateNum,
+		FrameRateDen:                   e.cfg.FrameRateDen,
+		MaxReferenceFrames:             uint32(e.cfg.MaxReferenceFrames),
+		InitialQP:                      e.cfg.InitialQP,
+		SARNum:                         e.cfg.Color.SARNum,
+		SARDen:                         e.cfg.Color.SARDen,
+		VideoFormat:                    e.cfg.Color.VideoFormat,
+		FullRange:                      e.cfg.Color.FullRange,
+		ColorPrimaries:                 e.cfg.Color.ColorPrimaries,
+		ColorTransfer:                  e.cfg.Color.ColorTransfer,
+		ColorMatrix:                    e.cfg.Color.ColorMatrix,
+		ChromaSampleLocTypeTopField:    e.cfg.Color.ChromaSampleLocTypeTopField,
+		ChromaSampleLocTypeBottomField: e.cfg.Color.ChromaSampleLocTypeBottomField,
+		NALLengthSize:                  4,
+	})
+	if err != nil {
+		return EncoderParameterSets{}, err
+	}
+	return EncoderParameterSets{
+		SPS:                           append([]byte(nil), sets.SPS...),
+		PPS:                           append([]byte(nil), sets.PPS...),
+		AnnexB:                        append([]byte(nil), sets.AnnexB...),
+		AVCDecoderConfigurationRecord: append([]byte(nil), sets.AVCDecoderConfigurationRecord...),
+	}, nil
 }
 
 func (e *Encoder) Encode(frame EncoderFrame) (EncodedFrame, error) {
@@ -646,6 +697,17 @@ func rtpTimestampIncrement(clock, frameRateNum, frameRateDen int) uint32 {
 		return 0
 	}
 	return uint32((clock * frameRateDen) / frameRateNum)
+}
+
+func encoderProfileSyntax(profile EncoderProfile) (uint8, uint8, error) {
+	switch profile {
+	case EncoderProfileConstrainedBaseline:
+		return 66, 0x03, nil
+	case EncoderProfileBaseline:
+		return 66, 0x01, nil
+	default:
+		return 0, 0, encoderUnsupported("profile is not admitted for parameter-set generation")
+	}
 }
 
 func encoderInvalid(detail string) error {

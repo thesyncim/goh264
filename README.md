@@ -6,16 +6,16 @@ Pure-Go H.264 codec, decoder-first and source-shaped from FFmpeg `libavcodec`.
 decoder path, pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`. Encoder
 support is now in scope for realtime/WebRTC use, tracked in
 [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md). The encoder
-API currently exposes a tested realtime/WebRTC control contract; bitstream
-generation still returns `ErrUnsupported` until the writer, IDR path, and
-oracles land. The goal is not a loose rewrite: internal codec paths keep
+API currently exposes a tested realtime/WebRTC control contract and valid
+SPS/PPS parameter-set generation; frame bitstream generation still returns
+`ErrUnsupported` until the IDR path, RTP packetizer, and oracles land. The goal is not a loose rewrite: internal codec paths keep
 upstream state machines, syntax handling, math, and edge cases recognizable,
 then prove behavior against oracle vectors.
 
 - **Pure Go decoder path** - no cgo and no Go module dependencies.
 - **Realtime/WebRTC encoder scope** - tested encoder controls cover explicit
-  bitrate, latency, keyframe, packetization, profile/level, and runtime
-  reconfiguration controls.
+  bitrate, latency, keyframe, packetization, profile/level, runtime
+  reconfiguration controls, and out-of-band SPS/PPS/avcC headers.
 - **Annex B and AVC input surfaces** - automatic packet splitting, explicit
   Annex B / length-prefixed AVC APIs, and AVC decoder configuration records.
 - **Raw frame output** - `Frame` exposes Y/Cb/Cr planes, crop, strides, VUI
@@ -65,14 +65,16 @@ and is checked by the freshness/matrix gates when populated.
 contract that keeps the inventory, manifest, exclusions, and failure ledger in
 lockstep.
 
-Encoder status: `DefaultEncoderConfig`, `NewEncoder`, `Encode`/`EncodeInto`,
-PLI/FIR/force-IDR, bitrate/framerate/payload reconfiguration, and the WebRTC
-control fields are public and covered by `tests/encoder_webrtc_controls_test.go`.
-Valid 8-bit I420 constrained-baseline realtime configs are admitted as control
-state; actual H.264 bitstream generation is still intentionally unsupported.
-Internal writer primitives now cover raw bit/Exp-Golomb writing, RBSP trailing
-bits, EBSP escaping, Annex B/AVC NAL packaging, and AVC configuration records;
-SPS/PPS/SEI/slice syntax writers remain pending.
+Encoder status: `DefaultEncoderConfig`, `NewEncoder`, `ParameterSets`,
+`Encode`/`EncodeInto`, PLI/FIR/force-IDR, bitrate/framerate/payload
+reconfiguration, and the WebRTC control fields are public and covered by
+`tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420 constrained-baseline
+realtime configs are admitted as control state; SPS/PPS parameter sets,
+Annex B sequence headers, and avcC records are generated and parser-proved.
+Actual frame bitstream generation is still intentionally unsupported. Internal
+writer primitives now cover raw bit/Exp-Golomb writing, RBSP trailing bits,
+EBSP escaping, Annex B/AVC NAL packaging, AVC configuration records, and
+baseline SPS/PPS syntax; SEI/slice syntax writers remain pending.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
@@ -229,11 +231,12 @@ if err != nil {
 }
 enc.HandlePLI() // queues the next frame as an IDR request
 err = enc.SetRTPMaxPayloadSize(1200)
+headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 ```
 
 `Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
-then return `ErrUnsupported` until the bitstream writer and IDR encoder slices
-are implemented and oracle-proved.
+then return `ErrUnsupported` until the IDR encoder slices are implemented and
+oracle-proved.
 
 ## Supported Inputs
 

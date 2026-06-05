@@ -3,6 +3,7 @@
 package goh264_test
 
 import (
+	"bytes"
 	"errors"
 	"reflect"
 	"testing"
@@ -193,6 +194,64 @@ func TestEncoderKeyframeRequestsQueueIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(638, 478)
+	cfg.FrameRateNum = 30000
+	cfg.FrameRateDen = 1001
+	cfg.InitialQP = 24
+	cfg.Color.SARNum = 1
+	cfg.Color.SARDen = 1
+	cfg.Color.FullRange = true
+	cfg.Color.ColorPrimaries = 1
+	cfg.Color.ColorTransfer = 1
+	cfg.Color.ColorMatrix = 1
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets: %v", err)
+	}
+	if len(headers.SPS) == 0 || headers.SPS[0]&0x1f != 7 {
+		t.Fatalf("SPS NAL = %x", headers.SPS)
+	}
+	if len(headers.PPS) == 0 || headers.PPS[0]&0x1f != 8 {
+		t.Fatalf("PPS NAL = %x", headers.PPS)
+	}
+	if !bytes.Contains(headers.AnnexB, headers.SPS) || !bytes.Contains(headers.AnnexB, headers.PPS) {
+		t.Fatalf("Annex B headers do not contain SPS/PPS: %x", headers.AnnexB)
+	}
+
+	info, err := goh264.NewDecoder().ParseHeadersAnnexB(headers.AnnexB)
+	if err != nil {
+		t.Fatalf("ParseHeadersAnnexB: %v", err)
+	}
+	if info.Profile != "Constrained Baseline" || info.ProfileIDC != 66 || info.LevelIDC != 31 ||
+		info.Width != 638 || info.Height != 478 ||
+		info.SARNum != 1 || info.SARDen != 1 ||
+		info.VideoFullRangeFlag != 1 ||
+		info.ColorPrimaries != 1 ||
+		info.ColorTransfer != 1 ||
+		info.ColorMatrix != 1 ||
+		info.TimingInfoPresentFlag != 1 ||
+		info.NumUnitsInTick != 1001 ||
+		info.TimeScale != 60000 ||
+		info.FixedFrameRateFlag != 1 {
+		t.Fatalf("Annex B stream info = %+v", info)
+	}
+
+	avcc, err := goh264.NewDecoder().ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord)
+	if err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+	if avcc.NALLengthSize != 4 || avcc.StreamInfo.Width != 638 || avcc.StreamInfo.Height != 478 ||
+		avcc.StreamInfo.Profile != "Constrained Baseline" {
+		t.Fatalf("avcC = %+v", avcc)
+	}
+}
+
 func TestEncoderEncodeIntoValidatesFrameBeforeUnsupportedBitstream(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {
@@ -239,7 +298,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 
 	encType := reflect.TypeOf(&goh264.Encoder{})
 	for _, method := range []string{
-		"Config", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
+		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
 		"PendingIDR", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize", "Reconfigure",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
