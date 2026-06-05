@@ -15,6 +15,9 @@ edge cases recognizable, then proves behavior against FFmpeg oracle vectors.
 - **Harness-first parity** - public FFmpeg FATE and auxiliary H.264 vectors are
   imported as an explicit inventory, executable where decoder-facing, with a
   red ledger kept for any future known-failing rows instead of hiding them.
+  The `tests` package contains the all-at-once decoder TDD contract: every
+  imported public ref must be in the executable manifest or in the documented
+  exclusion list.
 - **Active port, not v1** - the public decoder-compliance matrix is green, with
   broader unselected codec lanes still guarded.
 - **Release evidence over claims** - no production tag is planned until the
@@ -50,6 +53,9 @@ imported ref is the documented non-H.264 MKV exclusion. No known-red
 public-vector rows currently remain. The executable ledger at
 `testdata/h264/realvectors/failures.jsonl` stays in place for future red rows
 and is checked by the freshness/matrix gates when populated.
+`TestH264DecoderTDDContractClassifiesEveryImportedPublicVector` is the always-on
+contract that keeps the inventory, manifest, exclusions, and failure ledger in
+lockstep.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
@@ -218,6 +224,9 @@ What those gates mean:
   and requires each failure class/detail to remain current.
 - `FailureMatrix` runs the full 225-row manifest, currently requiring all 225
   rows to match oracle output.
+- `TestH264DecoderTDDContractClassifiesEveryImportedPublicVector` runs in
+  normal `go test ./tests` and fails if any imported public ref is not
+  classified as executable or explicitly excluded.
 - `h264-real-vector-upstream-audit.sh` fetches the pinned FFmpeg source and
   verifies that the checked-in inventory still matches all decoder-facing
   upstream H.264 FATE sample references, except documented non-decoder rows.

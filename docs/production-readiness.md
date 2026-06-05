@@ -29,8 +29,11 @@ The checked-in public-vector inventory at
 public H.264 refs: 224 generated from pinned FFmpeg `n8.0.1` FATE makefiles and
 2 auxiliary public fate-suite H.264/LCEVC container samples. Normal
 `go test ./tests` requires every imported ref to be represented by the manifest
-or by `testdata/h264/realvectors/exclusions.jsonl`; the upstream-audit script
-also verifies the 224 generated FATE rows against the pinned FFmpeg source.
+or by `testdata/h264/realvectors/exclusions.jsonl` through
+`TestH264DecoderTDDContractClassifiesEveryImportedPublicVector`; any future
+failing decoder-facing row belongs in `failures.jsonl` with a current failure
+signature until it is fixed. The upstream-audit script also verifies the 224
+generated FATE rows against the pinned FFmpeg source.
 
 Benchmark JSON reports selected/green/known-red counts, backend kind, CPU flags,
 comparison lane, oracle `quality_status`, and FFmpeg-vs-Go
