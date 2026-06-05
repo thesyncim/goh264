@@ -52,7 +52,7 @@ frame-MBAFF deblock rows plus public derived High10 4:2:2/4:4:4 luma-only
 and luma+chroma weighted-P slice-boundary mode-2 rows plus internal High10 4:2:2/4:4:4 top/bottom field
 explicit/implicit weighted B luma/chroma deblock modes 0/1/2 plus internal High10 4:2:2/4:4:4 top/bottom field
 luma-only, luma+chroma, and source-normalized chroma-only weighted P deblock modes 0/1/2 plus
-internal High12/High14 4:2:2/4:4:4 top/bottom field luma-only, luma+chroma,
+internal High12/High14 4:2:2/4:4:4 top/bottom field explicit/implicit weighted B plus luma-only, luma+chroma,
 and source-normalized chroma-only weighted P deblock modes 0/1/2, complete FFmpeg FRext FATE row coverage including
 monochrome-to-yuv420p output, selected compact baseline/main conformance rows
 including AUD, SVA/Sony/MW/FT/JVC/Sand/Toshiba/VTC baseline/main, CABAC,

@@ -58,7 +58,7 @@ High422 field-coded frame-MBAFF deblock rows, plus internal High10 4:2:2/4:4:4
 top/bottom field explicit/implicit weighted B luma/chroma deblock modes 0/1/2, plus internal High10 4:2:2/4:4:4
 top/bottom field luma-only, luma+chroma, and source-normalized chroma-only
 weighted P deblock modes 0/1/2, plus internal High12/High14 4:2:2/4:4:4
-top/bottom field luma-only, luma+chroma, and source-normalized chroma-only
+top/bottom field explicit/implicit weighted B plus luma-only, luma+chroma, and source-normalized chroma-only
 weighted P deblock modes 0/1/2,
 plus public High9 4:2:0
 SPS reinit metadata from 9-bit to 8-bit output, public High444 10-bit SPS

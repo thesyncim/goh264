@@ -515,6 +515,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 		!isHigh10Chroma422FieldPictureScope(sh) &&
 		!isHigh10ChromaFieldWeightedPDeblockScope(sh) &&
 		!isHigh1214ChromaFieldWeightedPDeblockScope(sh) &&
+		!isHigh1214ChromaFieldWeightedBDeblockScope(sh) &&
 		!isHigh10Chroma422FieldWeightedBDeblockScope(sh) &&
 		!isHigh10Chroma444FieldWeightedBDeblockScope(sh) {
 		return ErrUnsupported
@@ -534,6 +535,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 			!isHigh10Chroma422FieldPictureScope(sh) &&
 			!isHigh10ChromaFieldWeightedPDeblockScope(sh) &&
 			!isHigh1214ChromaFieldWeightedPDeblockScope(sh) &&
+			!isHigh1214ChromaFieldWeightedBDeblockScope(sh) &&
 			!isHigh10Chroma422FieldWeightedBDeblockScope(sh) &&
 			!isHigh10Chroma444FieldWeightedBDeblockScope(sh) &&
 			!isHigh12ChromaWeightedPDeblockScope(sh) &&
@@ -554,6 +556,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 				!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) &&
 				!isHigh10ChromaFieldWeightedPDeblockScope(sh) &&
 				!isHigh1214ChromaFieldWeightedPDeblockScope(sh) &&
+				!isHigh1214ChromaFieldWeightedBDeblockScope(sh) &&
 				!isHigh10Chroma422FieldImplicitWeightedBDeblockScope(sh) &&
 				!isHigh10Chroma422FieldExplicitWeightedBDeblockScope(sh) &&
 				!isHigh10Chroma444FieldWeightedBDeblockScope(sh) {
@@ -613,14 +616,16 @@ func isPublicHighFrameBitDepthScope(sh *SliceHeader) bool {
 		}
 		return isHigh12ChromaFrameDeblockScope(sh) ||
 			isHigh12ChromaWeightedPDeblockScope(sh) ||
-			isHigh1214ChromaFieldWeightedPDeblockScope(sh)
+			isHigh1214ChromaFieldWeightedPDeblockScope(sh) ||
+			isHigh1214ChromaFieldWeightedBDeblockScope(sh)
 	case 14:
 		if sh.SPS.ChromaFormatIDC == 1 {
 			return isHigh14Frame420Scope(sh)
 		}
 		return isHigh14ChromaUnweightedDeblockScope(sh) ||
 			isHigh14ChromaWeightedPDeblockScope(sh) ||
-			isHigh1214ChromaFieldWeightedPDeblockScope(sh)
+			isHigh1214ChromaFieldWeightedPDeblockScope(sh) ||
+			isHigh1214ChromaFieldWeightedBDeblockScope(sh)
 	default:
 		return false
 	}
@@ -939,6 +944,32 @@ func isHigh1214ChromaFieldWeightedPDeblockScope(sh *SliceHeader) bool {
 		(sh.PredWeightTable.UseWeightChroma == 0 || sh.PredWeightTable.UseWeightChroma == 1)
 }
 
+func isHigh1214ChromaFieldWeightedBDeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil {
+		return false
+	}
+	if sh.PictureStructure != PictureTopField && sh.PictureStructure != PictureBottomField {
+		return false
+	}
+	if sh.SPS.FrameMBSOnlyFlag != 0 ||
+		(sh.SPS.BitDepthLuma != 12 && sh.SPS.BitDepthLuma != 14) ||
+		(sh.SPS.ChromaFormatIDC != 2 && sh.SPS.ChromaFormatIDC != 3) ||
+		sh.SliceTypeNoS != PictureTypeB {
+		return false
+	}
+	if sh.DeblockingFilter != 0 && sh.DeblockingFilter != 1 && sh.DeblockingFilter != 2 {
+		return false
+	}
+	switch sh.PPS.WeightedBipredIDC {
+	case 1:
+		return sh.PredWeightTable.UseWeight == 1 || sh.PredWeightTable.UseWeightChroma == 1
+	case 2:
+		return sh.PredWeightTable.UseWeight == 2 && sh.PredWeightTable.UseWeightChroma == 2
+	default:
+		return false
+	}
+}
+
 func isHigh10ChromaWeightedPDeblockScope(sh *SliceHeader) bool {
 	if sh == nil || sh.SPS == nil || sh.PPS == nil {
 		return false
@@ -1115,6 +1146,7 @@ func validateHighFrameSliceDeblockingScope(sh *SliceHeader) error {
 	if sh.DeblockingFilter == 2 {
 		if sh.SliceTypeNoS == PictureTypeB &&
 			!isHigh12Or14Frame420BSliceBoundaryDeblockScope(sh) &&
+			!isHigh1214ChromaFieldWeightedBDeblockScope(sh) &&
 			!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) &&
 			!isHigh10Chroma422FieldWeightedBDeblockScope(sh) &&
 			!isHigh10Chroma444FieldWeightedBDeblockScope(sh) {
@@ -1153,6 +1185,7 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32,
 	}
 	if sh.DeblockingFilter == 1 ||
 		isHigh12Or14Frame420BSliceBoundaryDeblockScope(sh) ||
+		isHigh1214ChromaFieldWeightedBDeblockScope(sh) ||
 		isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) ||
 		isHigh10Chroma422FieldWeightedBDeblockScope(sh) ||
 		isHigh10Chroma444FieldWeightedBDeblockScope(sh) {

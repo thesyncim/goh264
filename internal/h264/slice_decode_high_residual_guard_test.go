@@ -286,6 +286,73 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma444Fiel
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh1214ChromaFieldWeightedB(t *testing.T) {
+	weights := []struct {
+		name             string
+		weightedBipredID uint32
+		useWeight        int32
+		useWeightChroma  int32
+	}{
+		{name: "explicit-luma", weightedBipredID: 1, useWeight: 1},
+		{name: "explicit-chroma", weightedBipredID: 1, useWeightChroma: 1},
+		{name: "explicit-luma-chroma", weightedBipredID: 1, useWeight: 1, useWeightChroma: 1},
+		{name: "implicit", weightedBipredID: 2, useWeight: 2, useWeightChroma: 2},
+	}
+	shapes := []struct {
+		name     string
+		mbType   uint32
+		sub      *[4]uint32
+		cbp      int
+		cbpTable int
+	}{
+		{name: "b16x16-l0", mbType: MBType16x16 | MBTypeP0L0 | MBTypeInterlaced},
+		{name: "b16x16-l1", mbType: MBType16x16 | MBTypeP0L1 | MBTypeInterlaced},
+		{name: "b16x16-bi", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeInterlaced},
+		{name: "b16x8-bi-residual", mbType: MBType16x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1 | MBTypeInterlaced, cbp: 1, cbpTable: 1},
+		{name: "b8x16-l0-l1", mbType: MBType8x16 | MBTypeP0L0 | MBTypeP1L1 | MBTypeInterlaced},
+		{name: "b8x8-explicit-sub", mbType: MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1 | MBTypeInterlaced, sub: &([4]uint32{
+			MBType16x16 | MBTypeP0L0,
+			MBType16x16 | MBTypeP0L1,
+			MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+			MBType16x16 | MBTypeP0L1,
+		})},
+	}
+	for _, bitDepth := range []int32{12, 14} {
+		for _, chromaFormatIDC := range []uint32{2, 3} {
+			for _, picture := range []int32{PictureTopField, PictureBottomField} {
+				for _, deblock := range []int32{0, 1, 2} {
+					for _, weight := range weights {
+						for _, shape := range shapes {
+							t.Run(fmt.Sprintf("%s/chroma%d/picture%d/mode%d/%s/%s", bitDepthName(bitDepth), chromaFormatIDC, picture, deblock, weight.name, shape.name), func(t *testing.T) {
+								sh := &SliceHeader{
+									SliceTypeNoS:     PictureTypeB,
+									PictureStructure: picture,
+									DeblockingFilter: deblock,
+									SPS: &SPS{
+										BitDepthLuma:     bitDepth,
+										BitDepthChroma:   bitDepth,
+										ChromaFormatIDC:  chromaFormatIDC,
+										FrameMBSOnlyFlag: 0,
+										MBAFF:            1,
+									},
+									PPS: &PPS{WeightedBipredIDC: weight.weightedBipredID},
+									PredWeightTable: PredWeightTable{
+										UseWeight:       weight.useWeight,
+										UseWeightChroma: weight.useWeightChroma,
+									},
+								}
+								if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, shape.sub, shape.cbp, shape.cbpTable); err != nil {
+									t.Fatalf("validate %s chroma field weighted B reconstruct err = %v, want nil", bitDepthName(bitDepth), err)
+								}
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsBDirectSkip(t *testing.T) {
 	sh := &SliceHeader{SliceTypeNoS: PictureTypeB}
 	directSub := [4]uint32{
