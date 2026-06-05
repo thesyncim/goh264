@@ -348,10 +348,13 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14UnprovedDeblockingVarian
 				},
 			},
 			{
-				name:      "CABAC-B",
+				name:      "weighted-CABAC-B",
 				sliceType: PictureTypeB,
 				run: func(sh *SliceHeader) {
 					sh.PPS.CABAC = 1
+					sh.PPS.WeightedBipredIDC = 1
+					sh.PredWeightTable.UseWeight = 1
+					sh.PredWeightTable.UseWeightChroma = 1
 					sh.RefCount = [2]uint32{1, 1}
 				},
 			},
@@ -369,8 +372,8 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14UnprovedDeblockingVarian
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CABACBNoDeblockAndMode1(t *testing.T) {
-	for _, deblockMode := range []int32{0, 1} {
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CABACBNoDeblockAndDeblocking(t *testing.T) {
+	for _, deblockMode := range []int32{0, 1, 2} {
 		t.Run(fmt.Sprintf("mode%d/B", deblockMode), func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, deblockMode != 0, PictureTypeB)
 			sh.PPS.CABAC = 1
@@ -384,8 +387,8 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CABACBNoDeblockAndMode1(t
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12CABACBNoDeblockAndMode1(t *testing.T) {
-	for _, deblockMode := range []int32{0, 1} {
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12CABACBNoDeblockAndDeblocking(t *testing.T) {
+	for _, deblockMode := range []int32{0, 1, 2} {
 		t.Run(fmt.Sprintf("mode%d/B", deblockMode), func(t *testing.T) {
 			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, 1, 1, deblockMode != 0, PictureTypeB)
 			sh.PPS.CABAC = 1
@@ -738,7 +741,7 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedDeblockingModes(t *tes
 			},
 		},
 		{
-			name:     "12-bit/b-slice-boundary-mode",
+			name:     "12-bit/cavlc-b-slice-boundary-mode",
 			bitDepth: 12,
 			run: func(sh *SliceHeader) {
 				sh.SliceType = PictureTypeB

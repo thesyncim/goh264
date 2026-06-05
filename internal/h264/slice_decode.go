@@ -627,7 +627,7 @@ func isHigh14CABACFrame420DeblockScope(sh *SliceHeader) bool {
 		return true
 	}
 	if sh.SliceTypeNoS == PictureTypeB {
-		return sh.DeblockingFilter == 1 && isHigh14CABACFrame420BScope(sh)
+		return (sh.DeblockingFilter == 1 || sh.DeblockingFilter == 2) && isHigh14CABACFrame420BScope(sh)
 	}
 	if sh.SliceTypeNoS != PictureTypeP {
 		return false
@@ -659,7 +659,8 @@ func isHigh12Frame420Scope(sh *SliceHeader) bool {
 			isHigh12CABACFrame420BScope(sh)
 	case 2:
 		return sh.SliceTypeNoS == PictureTypeI ||
-			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh))
+			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)) ||
+			isHigh12CABACFrame420BScope(sh)
 	default:
 		return false
 	}
@@ -811,11 +812,25 @@ func validateHighFrameSliceDeblockingScope(sh *SliceHeader) error {
 		return ErrInvalidData
 	}
 	if sh.DeblockingFilter == 2 {
-		if sh.SliceTypeNoS == PictureTypeB {
+		if sh.SliceTypeNoS == PictureTypeB && !isHigh12Or14CABACFrame420BSliceBoundaryDeblockScope(sh) {
 			return ErrUnsupported
 		}
 	}
 	return nil
+}
+
+func isHigh12Or14CABACFrame420BSliceBoundaryDeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil || sh.SPS.ChromaFormatIDC != 1 || sh.DeblockingFilter != 2 {
+		return false
+	}
+	switch sh.SPS.BitDepthLuma {
+	case 12:
+		return isHigh12CABACFrame420BScope(sh)
+	case 14:
+		return isHigh14CABACFrame420BScope(sh)
+	default:
+		return false
+	}
 }
 
 func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32, subMBType *[4]uint32, cbp int, cbpTable int) error {
@@ -825,7 +840,7 @@ func validateHighFrameSliceBDeblockingMacroblock(sh *SliceHeader, mbType uint32,
 	if sh.PPS == nil {
 		return ErrInvalidData
 	}
-	if sh.DeblockingFilter == 1 {
+	if sh.DeblockingFilter == 1 || isHigh12Or14CABACFrame420BSliceBoundaryDeblockScope(sh) {
 		if !isHighBImplicitWeighted(sh) {
 			if isHighB16x16ExplicitMacroblockForReconstruct(mbType, cbp) || isHighB16x16DirectMacroblockForReconstruct(mbType, cbp) {
 				return nil

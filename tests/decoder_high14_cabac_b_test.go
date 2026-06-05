@@ -22,6 +22,7 @@ type high14CABACBCase struct {
 	idrDeblock   int32
 	deblockMode  int32
 	direct       int32
+	mode2Deblock bool
 	width        int
 	height       int
 	rawFrameSize int
@@ -159,6 +160,22 @@ func high14CABACBCases() []high14CABACBCase {
 			rawVideoMD5: "79d578dca54599b0254cf34c59ab67a7",
 		},
 		{
+			name:         "nondirect-mode2-deblock",
+			sourceFile:   "high10_b_deblock_cabac.h264",
+			deblockMode:  2,
+			mode2Deblock: true,
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "0a69f542fcb6285b752b910f386c506d",
+			frameMD5: []string{
+				"f0f5acdbc113a3796b55c4eea300919e",
+				"3b0ba0657277bee91a93e1f3831ce586",
+				"0d18bafec419f0364e4742c57e261e7e",
+			},
+			rawVideoMD5: "79d578dca54599b0254cf34c59ab67a7",
+		},
+		{
 			name:         "temporal-direct-mode1-deblock",
 			sourceFile:   "high10_direct_b_deblock_temporal_cabac.h264",
 			idrDeblock:   1,
@@ -167,6 +184,23 @@ func high14CABACBCases() []high14CABACBCase {
 			height:       16,
 			rawFrameSize: 1536,
 			bitstreamMD5: "9e9e99e24e6d9aeb5dc8e7ad3ba8bf70",
+			frameMD5: []string{
+				"4135c86c2c49ff515cd47c8fda7bd346",
+				"8c071eddc38468b305f03a50124a669b",
+				"1e8f8515a4867af7b44578c01fa04914",
+			},
+			rawVideoMD5: "320b1242759143fe62c86e5bdb48f949",
+		},
+		{
+			name:         "temporal-direct-mode2-deblock",
+			sourceFile:   "high10_direct_b_deblock_temporal_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  2,
+			mode2Deblock: true,
+			width:        32,
+			height:       16,
+			rawFrameSize: 1536,
+			bitstreamMD5: "054936caa7916a84f77317c6c6358384",
 			frameMD5: []string{
 				"4135c86c2c49ff515cd47c8fda7bd346",
 				"8c071eddc38468b305f03a50124a669b",
@@ -183,7 +217,7 @@ func high14CABACBFixture(t *testing.T, tt high14CABACBCase) []byte {
 	if err != nil {
 		t.Fatalf("read %s: %v", tt.sourceFile, err)
 	}
-	out := highCABACBRewriteAnnexB(t, data, 14)
+	out := highCABACBRewriteAnnexB(t, data, 14, tt.mode2Deblock)
 	sum := md5.Sum(out)
 	if got := hex.EncodeToString(sum[:]); got != tt.bitstreamMD5 {
 		t.Fatalf("High14 CABAC B generated bitstream md5 = %s, want %s", got, tt.bitstreamMD5)
@@ -193,16 +227,18 @@ func high14CABACBFixture(t *testing.T, tt high14CABACBCase) []byte {
 
 func high14CABACBRewriteAnnexB(t *testing.T, data []byte) []byte {
 	t.Helper()
-	return highCABACBRewriteAnnexB(t, data, 14)
+	return highCABACBRewriteAnnexB(t, data, 14, false)
 }
 
-func highCABACBRewriteAnnexB(t *testing.T, data []byte, bitDepth int) []byte {
+func highCABACBRewriteAnnexB(t *testing.T, data []byte, bitDepth int, mode2Deblock bool) []byte {
 	t.Helper()
 	start, prefixLen, ok := high14CABACBFindStartCode(data, 0)
 	if !ok {
 		t.Fatal("source fixture has no Annex B start code")
 	}
 	var out []byte
+	var spsList [32]*h264.SPS
+	var ppsList [256]*h264.PPS
 	for ok {
 		nalStart := start + prefixLen
 		nextStart, nextPrefixLen, nextOK := high14CABACBFindStartCode(data, nalStart)
@@ -213,8 +249,46 @@ func highCABACBRewriteAnnexB(t *testing.T, data []byte, bitDepth int) []byte {
 		if nalEnd > nalStart {
 			out = append(out, data[start:nalStart]...)
 			raw := append([]byte(nil), data[nalStart:nalEnd]...)
-			if raw[0]&0x1f == byte(h264.NALSPS) {
+			nalType := h264.NALUnitType(raw[0] & 0x1f)
+			rbsp := high14CABACBEBSPToRBSP(raw[1:])
+			switch nalType {
+			case h264.NALSPS:
+				sps, err := h264.DecodeSPS(rbsp)
+				if err != nil {
+					t.Fatalf("decode source SPS: %v", err)
+				}
+				spsList[sps.SPSID] = sps
 				raw = highCABACBRewriteSPSRaw(t, raw, bitDepth)
+			case h264.NALPPS:
+				pps, err := h264.DecodePPS(rbsp, &spsList)
+				if err != nil {
+					t.Fatalf("decode source PPS: %v", err)
+				}
+				ppsList[pps.PPSID] = pps
+			case h264.NALSlice, h264.NALIDRSlice:
+				nal := h264.NALUnit{
+					RefIDC: raw[0] >> 5 & 0x03,
+					Type:   nalType,
+					Raw:    raw,
+					RBSP:   rbsp,
+				}
+				sh, err := h264.ParseSliceHeader(nal, &ppsList)
+				if err != nil {
+					t.Fatalf("parse source slice: %v", err)
+				}
+				if mode2Deblock && nalType == h264.NALSlice && sh.PPS.CABAC != 0 && sh.DeblockingFilter == 1 {
+					raw = highCABACBRewriteSliceDeblockMode(t, raw, sh, 2)
+					rbsp = high14CABACBEBSPToRBSP(raw[1:])
+					nal.RBSP = rbsp
+					nal.Raw = raw
+					got, err := h264.ParseSliceHeader(nal, &ppsList)
+					if err != nil {
+						t.Fatalf("parse mode-2 rewritten slice: %v", err)
+					}
+					if got.DeblockingFilter != 2 {
+						t.Fatalf("rewritten slice deblock = %d, want mode-2", got.DeblockingFilter)
+					}
+				}
 			}
 			out = append(out, raw...)
 		}
@@ -275,6 +349,203 @@ func highCABACBRewriteSPSRaw(t *testing.T, raw []byte, bitDepth int) []byte {
 	_ = constraintsBits
 	_ = levelBits
 	return append([]byte{raw[0]}, high14CABACBRBSPToEBSP(rbsp)...)
+}
+
+func highCABACBRewriteSliceDeblockMode(t *testing.T, raw []byte, sh *h264.SliceHeader, deblockMode int32) []byte {
+	t.Helper()
+	if len(raw) < 2 || sh == nil || sh.PPS == nil || sh.SPS == nil {
+		t.Fatal("invalid slice rewrite input")
+	}
+	if deblockMode != 2 {
+		t.Fatalf("unsupported rewritten deblock mode %d", deblockMode)
+	}
+	rbsp := high14CABACBEBSPToRBSP(raw[1:])
+	bits := high14CABACBBits(rbsp)
+	disableStart, disableEnd, headerEnd := highCABACBSliceDeblockRange(t, bits, sh)
+	origTailStart := (headerEnd + 7) &^ 7
+	for _, ch := range bits[headerEnd:origTailStart] {
+		if ch != '1' {
+			t.Fatalf("CABAC alignment bit = %q, want '1'", ch)
+		}
+	}
+
+	header := bits[:disableStart] + high14CABACBUEBits(2) + bits[disableEnd:headerEnd]
+	if mod := len(header) % 8; mod != 0 {
+		header += strings.Repeat("1", 8-mod)
+	}
+	rewrittenBits := header + bits[origTailStart:]
+	rewrittenRBSP := high14CABACBPackWholeBits(t, rewrittenBits)
+	return append([]byte{raw[0]}, high14CABACBRBSPToEBSP(rewrittenRBSP)...)
+}
+
+func highCABACBSliceDeblockRange(t *testing.T, bits string, sh *h264.SliceHeader) (int, int, int) {
+	t.Helper()
+	pos := 0
+	high14CABACBReadUEBits(t, bits, &pos)
+	sliceTypeCode, _ := high14CABACBReadUEBits(t, bits, &pos)
+	if sliceTypeCode > 9 {
+		t.Fatalf("slice_type = %d, want <= 9", sliceTypeCode)
+	}
+	high14CABACBReadUEBits(t, bits, &pos)
+	high14CABACBReadFixedBits(t, bits, &pos, int(sh.SPS.Log2MaxFrameNum))
+
+	if sh.SPS.FrameMBSOnlyFlag == 0 {
+		fieldPicFlag, _ := high14CABACBReadFixedBits(t, bits, &pos, 1)
+		if fieldPicFlag != 0 {
+			high14CABACBReadFixedBits(t, bits, &pos, 1)
+		}
+	}
+	if sh.NALType == h264.NALIDRSlice {
+		high14CABACBReadUEBits(t, bits, &pos)
+	}
+	if sh.SPS.PocType == 0 {
+		high14CABACBReadFixedBits(t, bits, &pos, int(sh.SPS.Log2MaxPocLSB))
+		if sh.PPS.PicOrderPresent == 1 && sh.PictureStructure == h264.PictureFrame {
+			high14CABACBReadSEBits(t, bits, &pos)
+		}
+	}
+	if sh.SPS.PocType == 1 && sh.SPS.DeltaPicOrderAlwaysZeroFlag == 0 {
+		high14CABACBReadSEBits(t, bits, &pos)
+		if sh.PPS.PicOrderPresent == 1 && sh.PictureStructure == h264.PictureFrame {
+			high14CABACBReadSEBits(t, bits, &pos)
+		}
+	}
+	if sh.PPS.RedundantPicCntPresent != 0 {
+		high14CABACBReadUEBits(t, bits, &pos)
+	}
+	if sh.SliceTypeNoS == h264.PictureTypeB {
+		high14CABACBReadFixedBits(t, bits, &pos, 1)
+	}
+	if sh.SliceTypeNoS != h264.PictureTypeI {
+		override, _ := high14CABACBReadFixedBits(t, bits, &pos, 1)
+		if override != 0 {
+			high14CABACBReadUEBits(t, bits, &pos)
+			if sh.SliceTypeNoS == h264.PictureTypeB {
+				high14CABACBReadUEBits(t, bits, &pos)
+			}
+		}
+		highCABACBSkipRefPicListReordering(t, bits, &pos, sh)
+	}
+	if (sh.PPS.WeightedPred != 0 && sh.SliceTypeNoS == h264.PictureTypeP) ||
+		(sh.PPS.WeightedBipredIDC == 1 && sh.SliceTypeNoS == h264.PictureTypeB) {
+		highCABACBSkipPredWeightTable(t, bits, &pos, sh)
+	}
+	if sh.NALRefIDC != 0 {
+		highCABACBSkipDecRefPicMarking(t, bits, &pos, sh)
+	}
+	if sh.SliceTypeNoS != h264.PictureTypeI && sh.PPS.CABAC != 0 {
+		high14CABACBReadUEBits(t, bits, &pos)
+	}
+	high14CABACBReadSEBits(t, bits, &pos)
+	if sh.SliceType == h264.PictureTypeSP {
+		high14CABACBReadFixedBits(t, bits, &pos, 1)
+	}
+	if sh.SliceType == h264.PictureTypeSP || sh.SliceType == h264.PictureTypeSI {
+		high14CABACBReadSEBits(t, bits, &pos)
+	}
+	if sh.PPS.DeblockingFilterParametersPresent == 0 {
+		t.Fatal("source PPS does not carry slice deblock parameters")
+	}
+	disableStart := pos
+	disableIDC, _ := high14CABACBReadUEBits(t, bits, &pos)
+	disableEnd := pos
+	if highCABACBDeblockModeFromDisableIDC(t, disableIDC) != sh.DeblockingFilter {
+		t.Fatalf("disable_deblocking_filter_idc %d maps to mode %d, parsed mode %d",
+			disableIDC, highCABACBDeblockModeFromDisableIDC(t, disableIDC), sh.DeblockingFilter)
+	}
+	if sh.DeblockingFilter != 0 {
+		high14CABACBReadSEBits(t, bits, &pos)
+		high14CABACBReadSEBits(t, bits, &pos)
+	}
+	return disableStart, disableEnd, pos
+}
+
+func highCABACBSkipRefPicListReordering(t *testing.T, bits string, pos *int, sh *h264.SliceHeader) {
+	t.Helper()
+	for list := int32(0); list < sh.ListCount; list++ {
+		flag, _ := high14CABACBReadFixedBits(t, bits, pos, 1)
+		if flag == 0 {
+			continue
+		}
+		for {
+			op, _ := high14CABACBReadUEBits(t, bits, pos)
+			if op == 3 {
+				break
+			}
+			if op > 2 {
+				t.Fatalf("ref_pic_list_reordering op = %d, want <= 3", op)
+			}
+			high14CABACBReadUEBits(t, bits, pos)
+		}
+	}
+}
+
+func highCABACBSkipPredWeightTable(t *testing.T, bits string, pos *int, sh *h264.SliceHeader) {
+	t.Helper()
+	high14CABACBReadUEBits(t, bits, pos)
+	if sh.SPS.ChromaFormatIDC != 0 {
+		high14CABACBReadUEBits(t, bits, pos)
+	}
+	for list := int32(0); list < sh.ListCount; list++ {
+		for ref := uint32(0); ref < sh.RefCount[list]; ref++ {
+			lumaFlag, _ := high14CABACBReadFixedBits(t, bits, pos, 1)
+			if lumaFlag != 0 {
+				high14CABACBReadSEBits(t, bits, pos)
+				high14CABACBReadSEBits(t, bits, pos)
+			}
+			if sh.SPS.ChromaFormatIDC != 0 {
+				chromaFlag, _ := high14CABACBReadFixedBits(t, bits, pos, 1)
+				if chromaFlag != 0 {
+					for i := 0; i < 2; i++ {
+						high14CABACBReadSEBits(t, bits, pos)
+						high14CABACBReadSEBits(t, bits, pos)
+					}
+				}
+			}
+		}
+	}
+}
+
+func highCABACBSkipDecRefPicMarking(t *testing.T, bits string, pos *int, sh *h264.SliceHeader) {
+	t.Helper()
+	if sh.NALType == h264.NALIDRSlice {
+		high14CABACBReadFixedBits(t, bits, pos, 1)
+		high14CABACBReadFixedBits(t, bits, pos, 1)
+		return
+	}
+	explicit, _ := high14CABACBReadFixedBits(t, bits, pos, 1)
+	if explicit == 0 {
+		return
+	}
+	for {
+		op, _ := high14CABACBReadUEBits(t, bits, pos)
+		if op == 0 {
+			return
+		}
+		switch op {
+		case 1, 3:
+			high14CABACBReadUEBits(t, bits, pos)
+		}
+		switch op {
+		case 2, 3, 4, 6:
+			high14CABACBReadUEBits(t, bits, pos)
+		}
+		if op > 6 {
+			t.Fatalf("memory_management_control_operation = %d, want <= 6", op)
+		}
+	}
+}
+
+func highCABACBDeblockModeFromDisableIDC(t *testing.T, disableIDC uint32) int32 {
+	t.Helper()
+	if disableIDC > 2 {
+		t.Fatalf("disable_deblocking_filter_idc = %d, want <= 2", disableIDC)
+	}
+	mode := int32(disableIDC)
+	if mode < 2 {
+		mode ^= 1
+	}
+	return mode
 }
 
 func high14CABACBEBSPToRBSP(data []byte) []byte {
@@ -361,6 +632,15 @@ func high14CABACBReadUEBits(t *testing.T, bits string, pos *int) (uint32, string
 	return (1<<uint(zeros) - 1) + suffix, bits[start:*pos]
 }
 
+func high14CABACBReadSEBits(t *testing.T, bits string, pos *int) (int32, string) {
+	t.Helper()
+	v, raw := high14CABACBReadUEBits(t, bits, pos)
+	if v&1 == 0 {
+		return -int32(v >> 1), raw
+	}
+	return int32((v + 1) >> 1), raw
+}
+
 func high14CABACBUEBits(v uint32) string {
 	codeNum := v + 1
 	width := 0
@@ -368,6 +648,29 @@ func high14CABACBUEBits(v uint32) string {
 		width++
 	}
 	return strings.Repeat("0", width) + fmt.Sprintf("%0*b", width+1, codeNum)
+}
+
+func high14CABACBPackWholeBits(t *testing.T, bits string) []byte {
+	t.Helper()
+	if len(bits)%8 != 0 {
+		t.Fatalf("whole-bit pack length = %d, want byte-aligned", len(bits))
+	}
+	out := make([]byte, len(bits)/8)
+	for i := range out {
+		var v byte
+		for _, ch := range bits[i*8 : (i+1)*8] {
+			v <<= 1
+			switch ch {
+			case '0':
+			case '1':
+				v |= 1
+			default:
+				t.Fatalf("invalid bit %q", ch)
+			}
+		}
+		out[i] = v
+	}
+	return out
 }
 
 func high14CABACBPackRBSP(payload string) []byte {

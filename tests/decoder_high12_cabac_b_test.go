@@ -21,6 +21,7 @@ type high12CABACBCase struct {
 	idrDeblock   int32
 	deblockMode  int32
 	direct       int32
+	mode2Deblock bool
 	width        int
 	height       int
 	rawFrameSize int
@@ -158,6 +159,22 @@ func high12CABACBCases() []high12CABACBCase {
 			rawVideoMD5: "02d1f4b20d4023077dcccfaf12a6efd1",
 		},
 		{
+			name:         "nondirect-mode2-deblock",
+			sourceFile:   "high10_b_deblock_cabac.h264",
+			deblockMode:  2,
+			mode2Deblock: true,
+			width:        16,
+			height:       16,
+			rawFrameSize: 768,
+			bitstreamMD5: "9bffc86baa5ac13bea4e917213e442ea",
+			frameMD5: []string{
+				"c207163647e7a87cd41197f503d9aede",
+				"92df8c8e6faca62e23650977978c7c28",
+				"fadaa6dd57e157ac14f56c52ddaf0c87",
+			},
+			rawVideoMD5: "02d1f4b20d4023077dcccfaf12a6efd1",
+		},
+		{
 			name:         "temporal-direct-mode1-deblock",
 			sourceFile:   "high10_direct_b_deblock_temporal_cabac.h264",
 			idrDeblock:   1,
@@ -166,6 +183,23 @@ func high12CABACBCases() []high12CABACBCase {
 			height:       16,
 			rawFrameSize: 1536,
 			bitstreamMD5: "919bc4f3fbdc7b24fda77e49cbe51468",
+			frameMD5: []string{
+				"9ff9de409c69b282d462098d0f40c362",
+				"e75d2316e3dff3d98c57cd60840937d1",
+				"b04f667682af8213cb3771ace7bae593",
+			},
+			rawVideoMD5: "e54e8d3555e1d31a007e5dae98eb693e",
+		},
+		{
+			name:         "temporal-direct-mode2-deblock",
+			sourceFile:   "high10_direct_b_deblock_temporal_cabac.h264",
+			idrDeblock:   1,
+			deblockMode:  2,
+			mode2Deblock: true,
+			width:        32,
+			height:       16,
+			rawFrameSize: 1536,
+			bitstreamMD5: "11d0c04231016780c62be4887e602c23",
 			frameMD5: []string{
 				"9ff9de409c69b282d462098d0f40c362",
 				"e75d2316e3dff3d98c57cd60840937d1",
@@ -182,7 +216,7 @@ func high12CABACBFixture(t *testing.T, tt high12CABACBCase) []byte {
 	if err != nil {
 		t.Fatalf("read %s: %v", tt.sourceFile, err)
 	}
-	out := highCABACBRewriteAnnexB(t, data, 12)
+	out := highCABACBRewriteAnnexB(t, data, 12, tt.mode2Deblock)
 	sum := md5.Sum(out)
 	got := hex.EncodeToString(sum[:])
 	if got != tt.bitstreamMD5 {
