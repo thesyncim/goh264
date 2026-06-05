@@ -16,6 +16,9 @@ edge cases recognizable, then proves behavior against FFmpeg oracle vectors.
   red ledger kept for any future known-failing rows instead of hiding them.
 - **Active port, not v1** - the public decoder-compliance matrix is green, with
   broader unselected codec lanes still guarded.
+- **Release evidence over claims** - no production tag is planned until the
+  public vector gates, upstream audit, allocation/performance evidence, and
+  translation ledger all agree.
 
 ## Install
 
@@ -49,7 +52,8 @@ rows including implicit and explicit weighted B, High12/High14 CAVLC/CABAC 4:2:2
 unweighted I/P plus CAVLC/CABAC luma-only/luma+chroma weighted-P no-deblock, frame-deblock,
 and slice-boundary rows, High10 4:2:2/4:4:4
 CAVLC/CABAC implicit and explicit weighted B frame and slice-boundary deblock plus weighted-P frame and slice-boundary rows, I/P/B slices, CAVLC and
-CABAC, weighted and direct motion paths, deblock modes, selected field/PAFF/MBAFF rows
+CABAC, weighted and direct motion paths including High12/High14 CAVLC/CABAC
+direct-sub residual, deblock modes, selected field/PAFF/MBAFF rows
 including High10 4:2:2/4:4:4 weighted-B and weighted-P top/bottom field guards for deblock modes 0/1/2,
 internal High12/High14 4:2:2/4:4:4 weighted-B plus luma-weighted, luma+chroma-weighted, and source-normalized chroma-only weighted-P top/bottom field guards for deblock modes 0/1/2,
 public High12/High14 4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows,
@@ -225,7 +229,7 @@ GOH264_REAL_VECTOR_FRAMEMD5=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 g
 `GOH264_CORPUS_FILTER` accepts feature tags or id fragments such as `field`,
 `direct`, `high10`, `container`, `reinit`, or `mbaff`.
 
-## Benchmarks
+## Performance
 
 `cmd/goh264bench` validates oracle parity before timing selected manifest rows
 and can compare Go against FFmpeg lanes:
@@ -248,6 +252,13 @@ The JSON report includes selected/green/known-red counts, backend kind, CPU
 flags, comparison lane, raw MD5 parity, oracle quality status, and FFmpeg-vs-Go
 peer quality status.
 
+Performance status is intentionally conservative: the benchmark harness exists
+and rejects quality drift before timing, but bulk steady-state allocation gates,
+benchstat/profile evidence, a larger performance corpus, and an in-process
+libavcodec baseline are still pending. Treat the decoder as pre-production for
+throughput-sensitive use until [docs/production-readiness.md](docs/production-readiness.md)
+has those release artifacts.
+
 ## Project Layout
 
 | Path | Purpose |
@@ -263,6 +274,23 @@ peer quality status.
 | `docs/translation-ledger.md` | Upstream-to-Go translation ledger |
 | `docs/production-readiness.md` | Current verification and performance gates |
 | `docs/high-bitdepth-roadmap.md` | High-bit-depth parity plan |
+
+## Trust And Verification
+
+Released version: none yet.
+
+No tag should be treated as production until a release-evidence pass proves:
+
+- `go test ./...` is green.
+- `scripts/h264-real-vector-strict.sh` is green.
+- `GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v` is green.
+- `scripts/h264-real-vector-upstream-audit.sh` still represents all pinned
+  decoder-facing FFmpeg H.264 FATE sample references, except documented
+  non-decoder exclusions.
+- Known-red rows, if any, are current in `testdata/h264/realvectors/failures.jsonl`.
+- Allocation and performance evidence is recorded in
+  [docs/production-readiness.md](docs/production-readiness.md).
+- The source-truth and translation-ledger docs match the committed tests.
 
 ## Contributing
 
