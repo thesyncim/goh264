@@ -1013,6 +1013,31 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHighChromaCAVLCWeightedPDeblock
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14ChromaCAVLCUnweightedDeblock(t *testing.T) {
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, deblockMode := range []int32{0, 1, 2} {
+			t.Run(fmt.Sprintf("%s/deblock%d/i", chromaFormatName(chromaFormatIDC), deblockMode), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, chromaFormatIDC, 2, deblockMode != 0, PictureTypeI)
+				sh.DeblockingFilter = deblockMode
+
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high14 chroma CAVLC unweighted I validation err = %v, want nil", err)
+				}
+			})
+
+			t.Run(fmt.Sprintf("%s/deblock%d/p", chromaFormatName(chromaFormatIDC), deblockMode), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, chromaFormatIDC, 2, deblockMode != 0, PictureTypeP)
+				sh.DeblockingFilter = deblockMode
+				sh.RefCount = [2]uint32{1, 0}
+
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+					t.Fatalf("high14 chroma CAVLC unweighted P validation err = %v, want nil", err)
+				}
+			})
+		}
+	}
+}
+
 func TestPredWeightTableCollapsesChromaOnlyPWeightToUseWeight(t *testing.T) {
 	gb := bitReaderFromBits(t, "011 010 0 1 00110 011 00100 010")
 	sh := &SliceHeader{
@@ -1270,6 +1295,23 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHighChromaCABACWeightedP(t *te
 					}
 				})
 			}
+		}
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14ChromaCABACUnweightedP(t *testing.T) {
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, deblockMode := range []int32{0, 1, 2} {
+			t.Run(fmt.Sprintf("%s/deblock%d", chromaFormatName(chromaFormatIDC), deblockMode), func(t *testing.T) {
+				m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, chromaFormatIDC, 2, deblockMode != 0, PictureTypeP)
+				sh.DeblockingFilter = deblockMode
+				sh.RefCount = [2]uint32{1, 0}
+				sh.PPS.CABAC = 1
+
+				if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+					t.Fatalf("high14 chroma CABAC unweighted P validation err = %v, want ErrUnsupported", err)
+				}
+			})
 		}
 	}
 }
