@@ -296,7 +296,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 		{name: "8-bit", bitDepth: 8, chroma: 8, format: 1, slice: PictureTypeI},
 		{name: "9-bit-422-slice-boundary-deblock", bitDepth: 9, chroma: 9, format: 2, deblockMode: 2, slice: PictureTypeI},
 		{name: "12-bit-b-slice-boundary-deblock", bitDepth: 12, chroma: 12, format: 1, deblockMode: 2, slice: PictureTypeB},
-		{name: "14-bit-b", bitDepth: 14, chroma: 14, format: 1, slice: PictureTypeB},
 		{name: "14-bit-b-slice-boundary-deblock", bitDepth: 14, chroma: 14, format: 1, deblockMode: 2, slice: PictureTypeB},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeI},
 		{name: "monochrome", bitDepth: 10, chroma: 10, format: 0, slice: PictureTypeI},
@@ -335,7 +334,7 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CAVLCDeblocking(t *testin
 }
 
 func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14UnprovedDeblockingVariants(t *testing.T) {
-	for _, deblockMode := range []int32{1, 2} {
+	for _, deblockMode := range []int32{2} {
 		for _, tt := range []struct {
 			name      string
 			sliceType int32
@@ -345,6 +344,14 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14UnprovedDeblockingVarian
 				name:      "B",
 				sliceType: PictureTypeB,
 				run: func(sh *SliceHeader) {
+					sh.RefCount = [2]uint32{1, 1}
+				},
+			},
+			{
+				name:      "CABAC-B",
+				sliceType: PictureTypeB,
+				run: func(sh *SliceHeader) {
+					sh.PPS.CABAC = 1
 					sh.RefCount = [2]uint32{1, 1}
 				},
 			},
@@ -359,6 +366,21 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHigh14UnprovedDeblockingVarian
 				}
 			})
 		}
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CABACBNoDeblockAndMode1(t *testing.T) {
+	for _, deblockMode := range []int32{0, 1} {
+		t.Run(fmt.Sprintf("mode%d/B", deblockMode), func(t *testing.T) {
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 14, 1, 1, deblockMode != 0, PictureTypeB)
+			sh.PPS.CABAC = 1
+			sh.DeblockingFilter = deblockMode
+			sh.RefCount = [2]uint32{1, 1}
+
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("high14 CABAC B mode-%d validation err = %v, want nil", deblockMode, err)
+			}
+		})
 	}
 }
 
@@ -1010,10 +1032,12 @@ func TestValidateHighFrameSliceReconstructAllowsHigh14CABACIntraResidual(t *test
 	}{
 		{name: "intra-pcm", mbType: MBTypeIntraPCM},
 		{name: "intra4x4-no-residual", mbType: MBTypeIntra4x4},
+		{name: "intra4x4-luma-chroma-x264", mbType: MBTypeIntra4x4, cbp: 0x2f, cbpTable: 0xef},
 		{name: "intra16x16-no-residual", mbType: MBTypeIntra16x16},
 		{name: "intra16x16-luma-dc", mbType: MBTypeIntra16x16, cbp: 0, cbpTable: 0x100},
 		{name: "intra16x16-chroma-dc", mbType: MBTypeIntra16x16, cbp: 0x10, cbpTable: 0x50},
 		{name: "intra16x16-chroma-ac", mbType: MBTypeIntra16x16, cbp: 0x20, cbpTable: 0x60},
+		{name: "intra16x16-luma-chroma-x264", mbType: MBTypeIntra16x16, cbp: 0x2f, cbpTable: 0xef},
 		{name: "intra16x16-luma-chroma", mbType: MBTypeIntra16x16, cbp: 0x2f, cbpTable: 0x16f},
 		{name: "intra16x16-luma-ac", mbType: MBTypeIntra16x16, cbp: 0x0f, cbpTable: 0x0f},
 		{name: "intra16x16-luma-dc-ac", mbType: MBTypeIntra16x16, cbp: 0x0f, cbpTable: 0x10f},

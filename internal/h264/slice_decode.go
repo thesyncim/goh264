@@ -604,7 +604,8 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 	switch sh.DeblockingFilter {
 	case 0:
 		return sh.SliceTypeNoS == PictureTypeI ||
-			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh))
+			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)) ||
+			isHigh14CABACFrame420BScope(sh)
 	case 1, 2:
 		if sh.PPS.CABAC != 0 {
 			return isHigh14CABACFrame420DeblockScope(sh)
@@ -625,6 +626,9 @@ func isHigh14CABACFrame420DeblockScope(sh *SliceHeader) bool {
 	if sh.SliceTypeNoS == PictureTypeI {
 		return true
 	}
+	if sh.SliceTypeNoS == PictureTypeB {
+		return sh.DeblockingFilter == 1 && isHigh14CABACFrame420BScope(sh)
+	}
 	if sh.SliceTypeNoS != PictureTypeP {
 		return false
 	}
@@ -632,6 +636,16 @@ func isHigh14CABACFrame420DeblockScope(sh *SliceHeader) bool {
 		return sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0
 	}
 	return sh.PredWeightTable.UseWeight != 0 || sh.PredWeightTable.UseWeightChroma != 0
+}
+
+func isHigh14CABACFrame420BScope(sh *SliceHeader) bool {
+	if sh == nil || sh.PPS == nil || sh.PPS.CABAC == 0 || sh.SliceTypeNoS != PictureTypeB {
+		return false
+	}
+	if sh.PPS.WeightedBipredIDC != 0 {
+		return false
+	}
+	return sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0
 }
 
 func isHigh12Frame420Scope(sh *SliceHeader) bool {
@@ -964,6 +978,9 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 					cbp == 0 && cbpTable == 0 {
 					return nil
 				}
+				if mbType == MBTypeIntra4x4 && cbp == 0x2f && cbpTable == 0xef {
+					return nil
+				}
 				if mbType == MBTypeIntra16x16 {
 					if cbp == 0 && cbpTable == 0x100 {
 						return nil
@@ -977,7 +994,7 @@ func validateHighFrameSliceMacroblockForReconstructWithSubMB(sh *SliceHeader, mb
 					if cbp == 0x20 && cbpTable == 0x60 {
 						return nil
 					}
-					if cbp == 0x2f && (cbpTable == 0x16f || cbpTable == 0xf02f) {
+					if cbp == 0x2f && (cbpTable == 0xef || cbpTable == 0x16f || cbpTable == 0xf02f) {
 						return nil
 					}
 					if cbp == 0x0f && (cbpTable == 0x0f || cbpTable == 0xf00f) {

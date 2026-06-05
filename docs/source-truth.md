@@ -26,8 +26,8 @@ P16x8/P8x16/P8x8 luma+chroma residual Annex B/AVC/configuration-record
 fixtures, mixed no-residual
 intra, separate and combined Intra16x16 luma/chroma residual plus
 CAVLC/CABAC unweighted and weighted P-skip/P16x16 plus CAVLC mode-1/mode-2
-I/P and weighted-P deblock and CABAC mode-1/mode-2 I/P and weighted-P
-deblock, High10 frame-MBAFF field-coded CAVLC IntraPCM
+I/P and weighted-P deblock and CABAC unweighted B no-deblock/mode-1 deblock
+plus mode-1/mode-2 I/P and weighted-P deblock, High10 frame-MBAFF field-coded CAVLC IntraPCM
 entropy/reconstruct pairing plus public High10/High422 field-coded
 frame-MBAFF deblock rows, complete FFmpeg FRext FATE row coverage including
 monochrome-to-yuv420p output, selected compact baseline/main conformance rows
@@ -69,7 +69,7 @@ stream; FFmpeg exits with decode error) and `mkv/h264_tta_undecodable.mkv` (no
 H.264 video stream).
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad slice-boundary
-high modes including High14 CABAC B/chroma deblock, public 12/14-bit
+high modes including High14 CABAC B mode-2/chroma deblock, public 12/14-bit
 high streams beyond the current FFmpeg FATE 8-bit/10-bit set, broader
 damaged-slice error resilience, threading/SIMD, and full libavcodec
 delayed-output behavior.
