@@ -486,7 +486,7 @@ func TestEncoderEncodeChangedSecondFrameUsesPIntraPCM(t *testing.T) {
 	if second.KeyFrame || second.IDR {
 		t.Fatalf("changed second frame key=%v idr=%v, want non-IDR P IntraPCM", second.KeyFrame, second.IDR)
 	}
-	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
 
 	dec := goh264.NewDecoder()
 	decodedFirst, err := dec.DecodeFrames(first.Data)
@@ -499,11 +499,136 @@ func TestEncoderEncodeChangedSecondFrameUsesPIntraPCM(t *testing.T) {
 		t.Fatalf("Decode changed P IntraPCM: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+	if !decodedSecond[0].KeyFrame ||
+		decodedSecond[0].SideData.RecoveryPoint == nil ||
+		decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("changed P recovery side data key=%v recovery=%+v, want immediate recovery point",
+			decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+	}
 
 	stream := append(append([]byte(nil), first.Data...), second.Data...)
 	wantStream := appendI420FrameBytes(nil, firstFrame)
 	wantStream = appendI420FrameBytes(wantStream, secondFrame)
 	assertFFmpegRawVideoOracle(t, stream, wantStream)
+}
+
+func TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		format goh264.EncoderOutputFormat
+	}{
+		{name: "avc", format: goh264.EncoderOutputAVC},
+		{name: "rtp", format: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.format
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.format != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.Y[0] ^= 0x31
+			secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode changed P IntraPCM: %v", err)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+
+			dec := goh264.NewDecoder()
+			var decodedFirst, decodedSecond []*goh264.Frame
+			switch tt.format {
+			case goh264.EncoderOutputAVC:
+				headers, err := enc.ParameterSets()
+				if err != nil {
+					t.Fatalf("ParameterSets: %v", err)
+				}
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+				}
+				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
+				}
+				decodedSecond, err = dec.DecodeConfiguredAVCFrames(second.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
+				}
+			case goh264.EncoderOutputRTP:
+				if len(second.RTPPackets) < 2 || second.RTPPackets[0].Payload[0]&0x1f != 6 || second.RTPPackets[0].Marker {
+					t.Fatalf("second RTP packets do not lead with non-marker SEI: %+v", second.RTPPackets)
+				}
+				decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames reassembled first RTP: %v", err)
+				}
+				decodedSecond, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames reassembled second RTP: %v", err)
+				}
+			default:
+				t.Fatalf("unexpected format %v", tt.format)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			if !decodedSecond[0].KeyFrame ||
+				decodedSecond[0].SideData.RecoveryPoint == nil ||
+				decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+				t.Fatalf("decoded recovery side data key=%v recovery=%+v, want immediate recovery point",
+					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+			}
+		})
+	}
+}
+
+func TestEncoderEncodeRecoveryPointSEICanBeDisabled(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RecoveryPointSEI = false
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y[0] ^= 0x55
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode changed P IntraPCM: %v", err)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+	dec := goh264.NewDecoder()
+	if _, err := dec.DecodeFrames(first.Data); err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode changed P IntraPCM: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+	if decodedSecond[0].SideData.RecoveryPoint != nil {
+		t.Fatalf("disabled recovery-point SEI still surfaced side data: %+v", decodedSecond[0].SideData.RecoveryPoint)
+	}
 }
 
 func TestEncoderEncodeForceIDRBypassesPSkipReference(t *testing.T) {

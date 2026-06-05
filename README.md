@@ -9,9 +9,10 @@ support is now in scope for realtime/WebRTC use, tracked in
 API currently exposes a tested realtime/WebRTC control contract and valid
 SPS/PPS parameter-set plus recovery-point SEI generation. The first admitted
 bitstream paths cover 8-bit I420 Constrained Baseline IDR IntraPCM, P-skip for
-identical references, and changed-frame P IntraPCM pictures with Annex B, AVC,
-and RTP packetization-mode 1 output, proved by local decode, FFmpeg rawvideo
-decode, RTP FU-A reassembly, and STAP-A parameter-set aggregation tests.
+identical references, and changed-frame P IntraPCM recovery pictures with
+Annex B, AVC, and RTP packetization-mode 1 output, proved by local decode,
+FFmpeg rawvideo decode, recovery-point side data, RTP FU-A reassembly, and
+STAP-A parameter-set aggregation tests.
 The goal is not a loose rewrite: internal codec paths keep upstream state
 machines, syntax handling, math, and edge cases recognizable, then prove
 behavior against oracle vectors.
@@ -84,7 +85,8 @@ STAP-A parameter-set aggregation, payload-type/SSRC/sequence metadata, full RTP
 packet headers, and marker-bit boundaries. Identical frames after a decoded
 reference can use a guarded CAVLC P-skip slice when deblocking is disabled;
 changed frames can use a guarded CAVLC P IntraPCM slice in the same admitted
-path, while forced keyframe requests still emit IDR. Internal writer primitives
+path with recovery-point SEI emission when enabled, while forced keyframe
+requests still emit IDR. Internal writer primitives
 cover raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
@@ -264,10 +266,11 @@ out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P IntraPCM
 
 `Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
 then emit the admitted IDR IntraPCM, identical-reference P-skip, or
-changed-frame P IntraPCM frame path. RTP output includes payloads plus complete
-RTP packet bytes. Motion-search inter prediction, quantized residual coding,
-rate-control decisions, and RTP callback metadata are still future encoder
-slices.
+changed-frame P IntraPCM frame path. Changed-frame P IntraPCM recovery pictures
+carry recovery-point SEI when enabled. RTP output includes payloads plus
+complete RTP packet bytes. Motion-search inter prediction, quantized residual
+coding, rate-control decisions, and RTP callback metadata are still future
+encoder slices.
 
 ## Supported Inputs
 

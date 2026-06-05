@@ -447,6 +447,13 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		if err != nil {
 			return EncodedFrame{}, err
 		}
+		if e.cfg.RecoveryPointSEI {
+			sei, err := e.RecoveryPointSEI(0)
+			if err != nil {
+				return EncodedFrame{}, err
+			}
+			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSEI), raw: sei.NAL})
+		}
 		nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: slice.NAL})
 	}
 

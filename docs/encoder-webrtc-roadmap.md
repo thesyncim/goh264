@@ -57,10 +57,13 @@ now validate frame shape and emit the first admitted frame bitstream paths:
 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B, AVC,
 and RTP packetization-mode 1 output, plus guarded CAVLC P-skip slices for
 identical frames and guarded CAVLC P IntraPCM slices for changed frames after a
-reference when deblocking is disabled. Tests prove local raw-frame decode,
-FFmpeg rawvideo decode, RTP FU-A reassembly, STAP-A parameter-set aggregation,
-payload-type, SSRC, and sequence-number packet metadata. RTP packets also carry
-complete 12-byte RTP headers plus payload bytes. Queued IDR requests still emit
+reference when deblocking is disabled. Changed-frame P IntraPCM recovery
+pictures carry recovery-point SEI when enabled, across Annex B, configured AVC,
+and RTP packetization-mode 1 reassembly. Tests prove local raw-frame decode,
+FFmpeg rawvideo decode, recovery-point side data, RTP FU-A reassembly, STAP-A
+parameter-set aggregation, payload-type, SSRC, and sequence-number packet
+metadata. RTP packets also carry complete 12-byte RTP headers plus payload
+bytes. Queued IDR requests still emit
 IDR, and motion-search prediction plus residual coding remain pending.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
@@ -92,7 +95,8 @@ P-slice `mb_type=30` macroblocks.
 4. In progress: add P-frame prediction, reference management, CAVLC residual
    coding, deblock policy, and rate-control feedback in small oracle-backed
    slices. Done for identical-reference P-skip and changed-frame P IntraPCM
-   with deblock disabled; forced keyframes still emit IDR.
+   with deblock disabled plus recovery-point SEI emission on changed-frame
+   P IntraPCM recovery pictures; forced keyframes still emit IDR.
 5. In progress: add RTP packetization and WebRTC control handling with
    packet-level tests. Done for packetization-mode 1 single NAL/FU-A output and
    STAP-A parameter-set aggregation with marker-bit boundaries plus
