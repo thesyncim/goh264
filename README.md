@@ -70,6 +70,9 @@ PLI/FIR/force-IDR, bitrate/framerate/payload reconfiguration, and the WebRTC
 control fields are public and covered by `tests/encoder_webrtc_controls_test.go`.
 Valid 8-bit I420 constrained-baseline realtime configs are admitted as control
 state; actual H.264 bitstream generation is still intentionally unsupported.
+Internal writer primitives now cover raw bit/Exp-Golomb writing, RBSP trailing
+bits, EBSP escaping, Annex B/AVC NAL packaging, and AVC configuration records;
+SPS/PPS/SEI/slice syntax writers remain pending.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock

@@ -113,4 +113,8 @@ rejects invalid or not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, PLI/FIR, force-IDR, and partial
 reconfiguration paths, and verifies frame-shape validation before
 `Encode`/`EncodeInto` return `ErrUnsupported`. No encoder bitstream, RTP
-packetizer, or FFmpeg/goh264 round-trip oracle has landed yet.
+packetizer, or FFmpeg/goh264 round-trip oracle has landed yet. Internal encoder
+writer evidence now covers raw bit/Exp-Golomb writing, RBSP trailing bits, EBSP
+emulation-prevention, Annex B/AVC NAL packaging, and AVC decoder configuration
+record construction through decoder-parser round-trip tests; SPS/PPS/SEI/slice
+syntax writers remain pending.

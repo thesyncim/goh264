@@ -52,12 +52,19 @@ force-IDR, and partial reconfiguration controls are tested. `Encode` and
 `EncodeInto` validate frame shape but still return `ErrUnsupported` for
 bitstream generation.
 
+Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
+source-shaped MSB-first writer primitives for raw bits, unsigned/signed
+Exp-Golomb codes, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC
+NAL packaging, and AVC decoder configuration records. The writer round-trips
+through the existing decoder readers/parsers in `internal/h264/bitwriter_test.go`.
+
 ## Implementation Order
 
 1. Done: add the public encoder configuration and control contract with tests
    that reject invalid WebRTC configurations.
-2. Next: add bitstream writer primitives for NAL/RBSP, Exp-Golomb, SPS, PPS, SEI,
-   slice headers, and AVC configuration records.
+2. In progress: add bitstream writer primitives. Done for raw NAL/RBSP,
+   Exp-Golomb, Annex B/AVC packaging, and AVC configuration records; next are
+   SPS, PPS, SEI, and slice-header syntax writers.
 3. Add an intra-only IDR path for I420 input and prove that local decode and
    FFmpeg decode produce matching raw frames.
 4. Add P-frame prediction, reference management, CAVLC residual coding, deblock
