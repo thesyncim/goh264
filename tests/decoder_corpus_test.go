@@ -24,6 +24,8 @@ const defaultH264CorpusManifest = "testdata/h264/corpus/manifest.jsonl"
 const defaultH264RealVectorManifest = "testdata/h264/realvectors/manifest.jsonl"
 const defaultH264RealVectorFailureManifest = "testdata/h264/realvectors/failures.jsonl"
 const defaultH264RealVectorExclusionManifest = "testdata/h264/realvectors/exclusions.jsonl"
+const defaultH264RealVectorUpstreamInventory = "testdata/h264/realvectors/upstream-inventory.jsonl"
+const h264RealVectorFFmpegFATEInventorySource = "FFmpeg FATE n8.0.1"
 
 func h264CorpusManifestPaths() []string {
 	if manifests := os.Getenv("GOH264_CORPUS_MANIFESTS"); manifests != "" {
@@ -85,6 +87,12 @@ type h264RealVectorExclusion struct {
 	Source      string   `json:"source"`
 	Reason      string   `json:"reason"`
 	FeatureTags []string `json:"feature_tags,omitempty"`
+}
+
+type h264RealVectorUpstreamInventoryRef struct {
+	Ref       string   `json:"ref"`
+	Source    string   `json:"source"`
+	Locations []string `json:"locations"`
 }
 
 func TestH264CorpusManifest(t *testing.T) {
@@ -312,6 +320,8 @@ func TestH264RealVectorUpstreamFATECoverage(t *testing.T) {
 	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
 	manifestPaths := h264RealVectorManifestFATESamplePaths(manifest)
 	upstreamRefs := h264UpstreamFATEH264SampleRefs(t, fateDir)
+	inventoryRefs := h264RealVectorUpstreamFATEInventoryByRef(t, readH264RealVectorUpstreamInventory(t, defaultH264RealVectorUpstreamInventory))
+	assertH264UpstreamInventoryMatchesGeneratedRefs(t, inventoryRefs, upstreamRefs)
 	excludedRefs := h264RealVectorExclusionsByRef(t, readH264RealVectorExclusions(t, defaultH264RealVectorExclusionManifest))
 
 	var missing []string
@@ -341,18 +351,74 @@ func TestH264RealVectorUpstreamFATECoverage(t *testing.T) {
 		len(upstreamRefs), represented, excluded, len(manifest))
 }
 
+func TestH264RealVectorImportedUpstreamInventory(t *testing.T) {
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	manifestRefs := h264RealVectorManifestFATESamplePaths(manifest)
+	excludedRefs := h264RealVectorExclusionsByRef(t, readH264RealVectorExclusions(t, defaultH264RealVectorExclusionManifest))
+	inventoryRefs := h264RealVectorUpstreamInventoryByRef(t, readH264RealVectorUpstreamInventory(t, defaultH264RealVectorUpstreamInventory))
+
+	var missing, extraManifest, staleExclusions []string
+	var represented, excluded int
+	for ref := range inventoryRefs {
+		if _, ok := manifestRefs[ref]; ok {
+			represented++
+			continue
+		}
+		if _, ok := excludedRefs[ref]; ok {
+			excluded++
+			continue
+		}
+		missing = append(missing, ref)
+	}
+	for ref := range manifestRefs {
+		if _, ok := inventoryRefs[ref]; !ok {
+			extraManifest = append(extraManifest, ref)
+		}
+	}
+	for ref := range excludedRefs {
+		if _, ok := inventoryRefs[ref]; !ok {
+			staleExclusions = append(staleExclusions, ref)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(extraManifest)
+	sort.Strings(staleExclusions)
+	if len(missing) != 0 {
+		t.Fatalf("real-vector manifest/exclusions are missing imported public refs:\n%s", strings.Join(missing, "\n"))
+	}
+	if len(extraManifest) != 0 {
+		t.Fatalf("real-vector manifest has refs outside imported public inventory:\n%s", strings.Join(extraManifest, "\n"))
+	}
+	if len(staleExclusions) != 0 {
+		t.Fatalf("real-vector exclusions have refs outside imported public inventory:\n%s", strings.Join(staleExclusions, "\n"))
+	}
+	t.Logf("imported public H.264 inventory refs=%d represented=%d excluded=%d manifest_entries=%d",
+		len(inventoryRefs), represented, excluded, len(manifest))
+}
+
 func TestH264RealVectorPinnedFATEInventory(t *testing.T) {
 	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
 	represented := h264RealVectorManifestFATESamplePaths(manifest)
 	excluded := h264RealVectorExclusionsByRef(t, readH264RealVectorExclusions(t, defaultH264RealVectorExclusionManifest))
+	importedEntries := readH264RealVectorUpstreamInventory(t, defaultH264RealVectorUpstreamInventory)
+	imported := h264RealVectorUpstreamInventoryByRef(t, importedEntries)
+	importedFATE := h264RealVectorUpstreamFATEInventoryByRef(t, importedEntries)
 
 	const wantManifestRows = 225
 	const wantExcludedRefs = 1
+	const wantImportedRefs = 226
+	const wantImportedFATERefs = 224
 	if len(manifest) != wantManifestRows {
 		t.Fatalf("real-vector manifest rows = %d, want %d", len(manifest), wantManifestRows)
 	}
 	if len(excluded) != wantExcludedRefs {
 		t.Fatalf("excluded pinned FFmpeg FATE refs = %d, want %d", len(excluded), wantExcludedRefs)
+	}
+	if len(imported) != wantImportedRefs {
+		t.Fatalf("imported public H.264 refs = %d, want %d", len(imported), wantImportedRefs)
+	}
+	if len(importedFATE) != wantImportedFATERefs {
+		t.Fatalf("imported pinned FFmpeg FATE refs = %d, want %d", len(importedFATE), wantImportedFATERefs)
 	}
 	if _, ok := represented["h264-conformance/FM1_BT_B.h264"]; !ok {
 		t.Fatal("malformed H.264 conformance vector FM1_BT_B.h264 must be represented as a negative decoder row")
@@ -891,6 +957,33 @@ func h264MakeVariableWords(t *testing.T, path string, name string) []string {
 	return nil
 }
 
+func assertH264UpstreamInventoryMatchesGeneratedRefs(t *testing.T, imported map[string]h264RealVectorUpstreamInventoryRef, generated map[string][]string) {
+	t.Helper()
+	var missing, stale, locationDrift []string
+	for ref, locations := range generated {
+		entry, ok := imported[ref]
+		if !ok {
+			missing = append(missing, ref)
+			continue
+		}
+		if !reflect.DeepEqual(entry.Locations, locations) {
+			locationDrift = append(locationDrift, fmt.Sprintf("%s imported=%v generated=%v", ref, entry.Locations, locations))
+		}
+	}
+	for ref := range imported {
+		if _, ok := generated[ref]; !ok {
+			stale = append(stale, ref)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(stale)
+	sort.Strings(locationDrift)
+	if len(missing) != 0 || len(stale) != 0 || len(locationDrift) != 0 {
+		t.Fatalf("checked-in upstream FATE inventory drifted from pinned FFmpeg scan\nmissing:\n%s\nstale:\n%s\nlocation drift:\n%s",
+			strings.Join(missing, "\n"), strings.Join(stale, "\n"), strings.Join(locationDrift, "\n"))
+	}
+}
+
 func h264CorpusFailureFilterSummary(entries []h264CorpusEntry) string {
 	values := make(map[string]struct{})
 	for _, entry := range entries {
@@ -1102,6 +1195,34 @@ func readH264RealVectorExclusions(t *testing.T, path string) []h264RealVectorExc
 	return entries
 }
 
+func readH264RealVectorUpstreamInventory(t *testing.T, path string) []h264RealVectorUpstreamInventoryRef {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open real-vector upstream inventory %s: %v", path, err)
+	}
+	defer f.Close()
+
+	var entries []h264RealVectorUpstreamInventoryRef
+	scanner := bufio.NewScanner(f)
+	for line := 1; scanner.Scan(); line++ {
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		var entry h264RealVectorUpstreamInventoryRef
+		if err := json.Unmarshal([]byte(text), &entry); err != nil {
+			t.Fatalf("%s:%d: %v", path, line, err)
+		}
+		validateH264RealVectorUpstreamInventoryRef(t, entry)
+		entries = append(entries, entry)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("read real-vector upstream inventory %s: %v", path, err)
+	}
+	return entries
+}
+
 func validateH264RealVectorExclusion(t *testing.T, entry h264RealVectorExclusion) {
 	t.Helper()
 	if entry.Ref == "" || entry.Source == "" || entry.Reason == "" {
@@ -1112,6 +1233,21 @@ func validateH264RealVectorExclusion(t *testing.T, entry h264RealVectorExclusion
 	}
 	if len(entry.FeatureTags) == 0 {
 		t.Fatalf("%s: real-vector exclusion needs feature_tags", entry.Ref)
+	}
+}
+
+func validateH264RealVectorUpstreamInventoryRef(t *testing.T, entry h264RealVectorUpstreamInventoryRef) {
+	t.Helper()
+	if entry.Ref == "" || entry.Source == "" || len(entry.Locations) == 0 {
+		t.Fatalf("real-vector upstream inventory row needs ref, source, and locations: %+v", entry)
+	}
+	if clean := h264CleanFATESamplePath(entry.Ref); clean != entry.Ref {
+		t.Fatalf("%s: upstream inventory ref must be source-normalized, got %q", entry.Ref, clean)
+	}
+	for _, location := range entry.Locations {
+		if location == "" {
+			t.Fatalf("%s: upstream inventory location must be non-empty: %+v", entry.Ref, entry)
+		}
 	}
 }
 
@@ -1126,6 +1262,35 @@ func h264RealVectorExclusionsByRef(t *testing.T, entries []h264RealVectorExclusi
 		byRef[ref] = entry
 	}
 	return byRef
+}
+
+func h264RealVectorUpstreamInventoryByRef(t *testing.T, entries []h264RealVectorUpstreamInventoryRef) map[string]h264RealVectorUpstreamInventoryRef {
+	t.Helper()
+	byRef := make(map[string]h264RealVectorUpstreamInventoryRef, len(entries))
+	var previousRef string
+	for _, entry := range entries {
+		ref := h264CleanFATESamplePath(entry.Ref)
+		if previous, ok := byRef[ref]; ok {
+			t.Fatalf("%s: duplicate real-vector upstream inventory ref: previous=%+v current=%+v", ref, previous, entry)
+		}
+		if previousRef != "" && ref <= previousRef {
+			t.Fatalf("%s: real-vector upstream inventory must stay sorted after %s", ref, previousRef)
+		}
+		previousRef = ref
+		byRef[ref] = entry
+	}
+	return byRef
+}
+
+func h264RealVectorUpstreamFATEInventoryByRef(t *testing.T, entries []h264RealVectorUpstreamInventoryRef) map[string]h264RealVectorUpstreamInventoryRef {
+	t.Helper()
+	var fateEntries []h264RealVectorUpstreamInventoryRef
+	for _, entry := range entries {
+		if entry.Source == h264RealVectorFFmpegFATEInventorySource {
+			fateEntries = append(fateEntries, entry)
+		}
+	}
+	return h264RealVectorUpstreamInventoryByRef(t, fateEntries)
 }
 
 func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {

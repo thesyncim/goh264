@@ -24,6 +24,14 @@ in the failure ledger. Use
 `GOH264_REAL_VECTOR_FAILURES=1` or `GOH264_REAL_VECTOR_MATRIX=1` for the gates
 that execute and verify known-red rows when present.
 
+The checked-in public-vector inventory at
+`testdata/h264/realvectors/upstream-inventory.jsonl` currently imports 226
+public H.264 refs: 224 generated from pinned FFmpeg `n8.0.1` FATE makefiles and
+2 auxiliary public fate-suite H.264/LCEVC container samples. Normal
+`go test ./tests` requires every imported ref to be represented by the manifest
+or by `testdata/h264/realvectors/exclusions.jsonl`; the upstream-audit script
+also verifies the 224 generated FATE rows against the pinned FFmpeg source.
+
 Benchmark JSON reports selected/green/known-red counts, backend kind, CPU flags,
 comparison lane, oracle `quality_status`, and FFmpeg-vs-Go
 `peer_quality_status`. Diagnostic mode includes expected decode-error rows as

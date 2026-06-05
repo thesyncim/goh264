@@ -77,9 +77,11 @@ with both source and extracted bitstream MD5s, auxiliary API/MOV/MPEG-TS/MKV/CBS
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 225 selected, 225 green oracle rows, 0 known-red. Matrix mode is the
-safe-point gate. Green oracle rows include decode-ok, metadata-ok, and expected
-decode-error rows. The strict script excludes only rows in
+Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
+rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder
+exclusion. Matrix mode is the safe-point gate. Green oracle rows include
+decode-ok, metadata-ok, and expected decode-error rows. The strict script
+excludes only rows in
 `testdata/h264/realvectors/failures.jsonl`, which is currently empty; the
 failure-ledger freshness and matrix gates execute known-red rows when present
 and require them to remain current. The red-queue script intentionally exits
@@ -90,11 +92,13 @@ single-lane script exits at the first divergent raw byte for raw-MD5 rows.
 Use `scripts/h264-real-vector-red-each.sh` for per-known-red logs plus a TSV
 summary of first-divergence evidence.
 
-Pinned FFmpeg `n8.0.1` FATE audit: the H.264 FATE/CBS scan has 224 sample
-references, with 223 represented in the public-vector manifest and one
-explicitly excluded non-decoder row. `h264-conformance/FM1_BT_B.h264` is now a
-negative decode-error manifest row; `mkv/h264_tta_undecodable.mkv` remains
-excluded because it has no H.264 video stream.
+Imported public-vector inventory: 224 refs are generated from the pinned FFmpeg
+`n8.0.1` FATE/CBS scan and 2 additional public fate-suite H.264/LCEVC auxiliary
+container refs are represented in the manifest. The FATE-derived subset has 223
+refs represented in the public-vector manifest and one explicitly excluded
+non-decoder row. `h264-conformance/FM1_BT_B.h264` is a negative decode-error
+manifest row; `mkv/h264_tta_undecodable.mkv` remains excluded because it has no
+H.264 video stream.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad public field/MBAFF
 high modes, public 12/14-bit
