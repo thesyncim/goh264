@@ -48,7 +48,7 @@ plus 4:2:0 explicit weighted B no-deblock/mode-1/mode-2 deblock including
 direct-sub and partitioned B16x8/B8x16/B8x8 shapes
 plus mode-1/mode-2 I/P and weighted-P deblock, High10 frame-MBAFF field-coded CAVLC IntraPCM
 entropy/reconstruct pairing plus public High12/High14 4:2:0 frame-MBAFF CAVLC
-IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows plus explicit weighted-P field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows across no-deblock/mode-1/mode-2 plus temporal/spatial direct B-skip no-deblock/mode-1/mode-2 rows plus field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus implicit weighted temporal/spatial direct B-skip and field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus explicit weighted temporal/spatial direct B-skip and field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus public High10/High422 field-coded
+IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows plus explicit weighted-P field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows across no-deblock/mode-1/mode-2 plus temporal/spatial direct B-skip no-deblock/mode-1/mode-2 rows plus temporal/spatial direct-sub B8x8 field-coded/frame-coded no-deblock/mode-1/mode-2 rows plus field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus implicit weighted temporal/spatial direct B-skip and field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus explicit weighted temporal/spatial direct B-skip and field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus public High10/High422 field-coded
 frame-MBAFF deblock rows plus public derived High10 4:2:2/4:4:4 luma-only
 and luma+chroma weighted-P slice-boundary mode-2 rows plus internal High10 4:2:2/4:4:4 top/bottom field
 explicit/implicit weighted B luma/chroma deblock modes 0/1/2 plus internal High10 4:2:2/4:4:4 top/bottom field
@@ -108,5 +108,9 @@ PATCHWELCOME as soon as `num_slice_groups_minus1 > 0` or `bit_depth_luma` is
 `ff_h264_decode_seq_parameter_set` also fails SPS admission for unsupported
 chroma formats, separate color planes, and different chroma/luma bit depths;
 local SPS parsing mirrors those with `ErrUnsupported`.
+
+Frame-MBAFF direct-sub B4x4 rows are not listed as missing proof: non-frame-only
+SPS syntax must set `direct_8x8_inference_flag`, so the valid generated
+frame-MBAFF direct-sub B surface is B8x8-only.
 
 Canonical detail lives in manifests and tests, not Markdown.

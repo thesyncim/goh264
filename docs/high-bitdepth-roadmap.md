@@ -54,7 +54,7 @@ no-deblock, mode-1/mode-2 deblock, direct-sub deblock, and partitioned B
 deblock plus 4:2:0 explicit weighted B no-deblock, mode-1/mode-2 deblock,
 direct-sub deblock, and partitioned B deblock, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, public High12/High14
-4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows plus explicit weighted-P field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows across no-deblock/mode-1/mode-2 plus temporal/spatial direct B-skip no-deblock/mode-1/mode-2 rows plus field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus implicit weighted temporal/spatial direct B-skip and field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus explicit weighted temporal/spatial direct B-skip and field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows, and public High10/
+4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows plus explicit weighted-P field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows across no-deblock/mode-1/mode-2 plus temporal/spatial direct B-skip no-deblock/mode-1/mode-2 rows plus temporal/spatial direct-sub B8x8 field-coded/frame-coded no-deblock/mode-1/mode-2 rows plus field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus implicit weighted temporal/spatial direct B-skip and field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows plus explicit weighted temporal/spatial direct B-skip and field-coded/frame-coded partitioned B16x8/B8x16/B8x8 no-deblock/mode-1/mode-2 rows, and public High10/
 High422 field-coded frame-MBAFF deblock rows, plus internal High10 4:2:2/4:4:4
 top/bottom field explicit/implicit weighted B luma/chroma deblock modes 0/1/2, plus internal High10 4:2:2/4:4:4
 top/bottom field luma-only, luma+chroma, and source-normalized chroma-only
@@ -69,6 +69,8 @@ FFmpeg conceals while draining already-complete delayed frames.
 Next: public 12/14-bit streams beyond the current FFmpeg FATE 8-bit/10-bit set,
 broader high-bit-depth field/MBAFF motion, PIC-AFF/PAFF, and broader
 damaged-slice error resilience beyond terminal first-field recovery.
+Direct-sub B4x4 is intentionally absent from frame-MBAFF public rows because
+non-frame-only SPS syntax must set `direct_8x8_inference_flag`.
 
 Hashes live in `testdata/h264/corpus/manifest.jsonl` and
 `testdata/h264/realvectors/manifest.jsonl`.
