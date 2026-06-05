@@ -288,7 +288,8 @@ Use `-cpuprofile` and `-memprofile` to write Go CPU and heap profiles around
 the oracle-checked benchmark run; `GOH264_BENCH_CPU_PROFILE` and
 `GOH264_BENCH_MEM_PROFILE` forward those paths through the real-vector
 benchmark script.
-For repeated `go test -benchmem` samples suitable for `benchstat`, run:
+For repeated `go test -benchmem` samples covering one-shot Annex B decode and
+stateful Annex B access-unit streaming, suitable for `benchstat`, run:
 
 ```sh
 scripts/h264-benchstat-canary.sh
