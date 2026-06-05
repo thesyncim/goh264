@@ -90,6 +90,75 @@ func TestAnnotateBenchRatesReportsInputAndRawByteCosts(t *testing.T) {
 	}
 }
 
+func TestEnforceBenchAllocationBudgetsChecksOnlyMeasuredGoLanes(t *testing.T) {
+	report := benchReport{Results: []benchResult{
+		{
+			Name:              "goh264",
+			Iterations:        1,
+			Repeats:           1,
+			BaselineKind:      "in-process-go",
+			AllocBytesPerIter: 64,
+			AllocsPerIter:     4,
+		},
+		{
+			Name:              "ffmpeg-native",
+			Iterations:        1,
+			Repeats:           1,
+			BaselineKind:      "ffmpeg-cli",
+			ProcessPerIter:    true,
+			AllocBytesPerIter: 1_000_000,
+			AllocsPerIter:     1_000,
+		},
+		{
+			Name:              "goh264",
+			Skipped:           true,
+			Iterations:        1,
+			Repeats:           1,
+			BaselineKind:      "in-process-go",
+			AllocBytesPerIter: 1_000_000,
+			AllocsPerIter:     1_000,
+		},
+	}}
+	if err := enforceBenchAllocationBudgets(report, benchOptions{maxGoAllocBytesPerIter: 128, maxGoAllocsPerIter: 8}); err != nil {
+		t.Fatalf("budget err = %v, want pass for Go result while ignoring FFmpeg/skipped rows", err)
+	}
+	if err := enforceBenchAllocationBudgets(report, benchOptions{maxGoAllocBytesPerIter: 63}); err == nil || !strings.Contains(err.Error(), "alloc_bytes_per_iter") {
+		t.Fatalf("bytes budget err = %v, want alloc_bytes_per_iter failure", err)
+	}
+	if err := enforceBenchAllocationBudgets(report, benchOptions{maxGoAllocsPerIter: 3}); err == nil || !strings.Contains(err.Error(), "allocs_per_iter") {
+		t.Fatalf("allocs budget err = %v, want allocs_per_iter failure", err)
+	}
+}
+
+func TestBuildBenchReportRejectsGoAllocationBudget(t *testing.T) {
+	path := filepath.Join("..", "..", "testdata", "h264", "high10_inter_cavlc_idrp.h264")
+	if _, err := buildBenchReport(path, "", 0, benchOptions{
+		iters:                  1,
+		repeats:                1,
+		rawOutput:              true,
+		maxGoAllocsPerIter:     1,
+		maxGoAllocBytesPerIter: 1,
+	}); err == nil || !strings.Contains(err.Error(), "Go allocation budget exceeded") {
+		t.Fatalf("budget err = %v, want Go allocation budget failure", err)
+	}
+}
+
+func TestBuildBenchReportRejectsManifestGoAllocationBudget(t *testing.T) {
+	dir := t.TempDir()
+	entry := writeBenchFixtureEntry(t, dir, "budget-red", "budget.264")
+	manifestPath := filepath.Join(dir, "manifest.jsonl")
+	writeBenchManifestRows(t, manifestPath, entry)
+	if _, err := buildBenchReport("", manifestPath, 0, benchOptions{
+		iters:              1,
+		repeats:            1,
+		rawOutput:          true,
+		failureLedger:      "off",
+		maxGoAllocsPerIter: 1,
+	}); err == nil || !strings.Contains(err.Error(), "budget-red") || !strings.Contains(err.Error(), "allocs_per_iter") {
+		t.Fatalf("manifest budget err = %v, want entry-specific allocs_per_iter failure", err)
+	}
+}
+
 func TestFFmpegBenchLanesExposeFairCPUComparisons(t *testing.T) {
 	lanes := ffmpegBenchLanes(benchOptions{runFFmpeg: true, fairCPULanes: true})
 	if len(lanes) != 2 {

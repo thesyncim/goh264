@@ -20,6 +20,14 @@ repeats="${GOH264_BENCH_REPEATS:-5}"
 warmup="${GOH264_BENCH_WARMUP:-2}"
 max_entries="${GOH264_BENCH_MAX_ENTRIES:-0}"
 
+alloc_args=()
+if [[ -n "${GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER:-}" ]]; then
+    alloc_args+=(-max-go-alloc-bytes-per-iter "${GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER}")
+fi
+if [[ -n "${GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER:-}" ]]; then
+    alloc_args+=(-max-go-allocs-per-iter "${GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER}")
+fi
+
 ffmpeg_args=()
 if [[ "${GOH264_BENCH_FFMPEG:-0}" == "1" ]]; then
     ffmpeg_args=(
@@ -42,6 +50,14 @@ if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
     printf ' filter=%s' "$GOH264_CORPUS_FILTER" >&2
 fi
 printf ' iters=%s repeats=%s warmup=%s max_entries=%s' "$iters" "$repeats" "$warmup" "$max_entries" >&2
+if [[ "${#alloc_args[@]}" -ne 0 ]]; then
+    if [[ -n "${GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER:-}" ]]; then
+        printf ' max_go_alloc_bytes_per_iter=%s' "$GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER" >&2
+    fi
+    if [[ -n "${GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER:-}" ]]; then
+        printf ' max_go_allocs_per_iter=%s' "$GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER" >&2
+    fi
+fi
 if [[ "${#ffmpeg_args[@]}" -ne 0 ]]; then
     printf ' ffmpeg=1' >&2
     if [[ "${GOH264_BENCH_FAIR_CPU_LANES:-0}" == "1" ]]; then
@@ -64,6 +80,9 @@ cmd=(go run ./cmd/goh264bench \
     -warmup "$warmup" \
     -max-entries "$max_entries" \
     -json)
+if [[ "${#alloc_args[@]}" -ne 0 ]]; then
+    cmd+=("${alloc_args[@]}")
+fi
 if [[ "${#ffmpeg_args[@]}" -ne 0 ]]; then
     cmd+=("${ffmpeg_args[@]}")
 fi

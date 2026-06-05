@@ -272,9 +272,14 @@ peer quality status. Diagnostic mode also treats expected `decode-error` rows
 as oracle rows and marks them green only when the decoder error matches
 `expected_error`.
 
+Use `-max-go-alloc-bytes-per-iter` and `-max-go-allocs-per-iter` to turn those
+Go allocation rates into failing benchmark budgets. The real-vector benchmark
+script exposes the same gate through `GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER`
+and `GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER`.
+
 Performance status is intentionally conservative: the benchmark harness exists
 and rejects quality drift before timing, and public raw-output helpers have
-caller-buffer zero-allocation guards. Bulk decode steady-state allocation gates,
+caller-buffer zero-allocation guards. Checked-in release allocation budgets,
 benchstat/profile evidence, a larger performance corpus, and an in-process
 libavcodec baseline are still pending. Treat the decoder as pre-production for
 throughput-sensitive use until [docs/production-readiness.md](docs/production-readiness.md)

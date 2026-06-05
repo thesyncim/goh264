@@ -34,34 +34,36 @@ type benchReport struct {
 }
 
 type benchMetadata struct {
-	Input          string `json:"input"`
-	InputBytes     int64  `json:"input_bytes"`
-	InputMD5       string `json:"input_md5"`
-	CorpusManifest string `json:"corpus_manifest,omitempty"`
-	FailureLedger  string `json:"failure_ledger,omitempty"`
-	CorpusFilter   string `json:"corpus_filter,omitempty"`
-	CorpusEntries  int    `json:"corpus_entries,omitempty"`
-	CorpusSelected int    `json:"corpus_selected_entries,omitempty"`
-	CorpusDecodeOK int    `json:"corpus_decode_ok_entries,omitempty"`
-	CorpusGreen    int    `json:"corpus_green_entries,omitempty"`
-	CorpusBench    int    `json:"corpus_benchmarked_entries,omitempty"`
-	CorpusKnownRed int    `json:"corpus_known_red_entries,omitempty"`
-	CorpusStaleRed int    `json:"corpus_stale_known_red_entries,omitempty"`
-	CorpusSkipped  int    `json:"corpus_skipped_entries,omitempty"`
-	CorpusNotTimed int    `json:"corpus_not_timed_entries,omitempty"`
-	FairnessPolicy string `json:"fairness_policy,omitempty"`
-	GoVersion      string `json:"go_version"`
-	GOOS           string `json:"goos"`
-	GOARCH         string `json:"goarch"`
-	NumCPU         int    `json:"num_cpu"`
-	GOMAXPROCS     int    `json:"gomaxprocs"`
-	ModulePath     string `json:"module_path,omitempty"`
-	ModuleVersion  string `json:"module_version,omitempty"`
-	VCSRevision    string `json:"vcs_revision,omitempty"`
-	VCSDirty       bool   `json:"vcs_dirty"`
-	FFmpegVersion  string `json:"ffmpeg_version,omitempty"`
-	FFmpegCPUFlags string `json:"ffmpeg_cpuflags,omitempty"`
-	ComparisonKind string `json:"comparison_kind"`
+	Input                  string  `json:"input"`
+	InputBytes             int64   `json:"input_bytes"`
+	InputMD5               string  `json:"input_md5"`
+	CorpusManifest         string  `json:"corpus_manifest,omitempty"`
+	FailureLedger          string  `json:"failure_ledger,omitempty"`
+	CorpusFilter           string  `json:"corpus_filter,omitempty"`
+	CorpusEntries          int     `json:"corpus_entries,omitempty"`
+	CorpusSelected         int     `json:"corpus_selected_entries,omitempty"`
+	CorpusDecodeOK         int     `json:"corpus_decode_ok_entries,omitempty"`
+	CorpusGreen            int     `json:"corpus_green_entries,omitempty"`
+	CorpusBench            int     `json:"corpus_benchmarked_entries,omitempty"`
+	CorpusKnownRed         int     `json:"corpus_known_red_entries,omitempty"`
+	CorpusStaleRed         int     `json:"corpus_stale_known_red_entries,omitempty"`
+	CorpusSkipped          int     `json:"corpus_skipped_entries,omitempty"`
+	CorpusNotTimed         int     `json:"corpus_not_timed_entries,omitempty"`
+	FairnessPolicy         string  `json:"fairness_policy,omitempty"`
+	GoVersion              string  `json:"go_version"`
+	GOOS                   string  `json:"goos"`
+	GOARCH                 string  `json:"goarch"`
+	NumCPU                 int     `json:"num_cpu"`
+	GOMAXPROCS             int     `json:"gomaxprocs"`
+	ModulePath             string  `json:"module_path,omitempty"`
+	ModuleVersion          string  `json:"module_version,omitempty"`
+	VCSRevision            string  `json:"vcs_revision,omitempty"`
+	VCSDirty               bool    `json:"vcs_dirty"`
+	FFmpegVersion          string  `json:"ffmpeg_version,omitempty"`
+	FFmpegCPUFlags         string  `json:"ffmpeg_cpuflags,omitempty"`
+	ComparisonKind         string  `json:"comparison_kind"`
+	MaxGoAllocBytesPerIter float64 `json:"max_go_alloc_bytes_per_iter,omitempty"`
+	MaxGoAllocsPerIter     float64 `json:"max_go_allocs_per_iter,omitempty"`
 }
 
 type benchResult struct {
@@ -153,21 +155,23 @@ type benchFrameDiagnostic struct {
 }
 
 type benchOptions struct {
-	iters          int
-	repeats        int
-	warmup         int
-	rawOutput      bool
-	runFFmpeg      bool
-	ffmpegBin      string
-	ffmpegThreads  string
-	ffmpegCPUFlags string
-	ffmpegPixFmt   string
-	fairCPULanes   bool
-	strictPixFmt   bool
-	corpusFilter   string
-	failureLedger  string
-	annexBInput    bool
-	diagnose       bool
+	iters                  int
+	repeats                int
+	warmup                 int
+	rawOutput              bool
+	runFFmpeg              bool
+	ffmpegBin              string
+	ffmpegThreads          string
+	ffmpegCPUFlags         string
+	ffmpegPixFmt           string
+	fairCPULanes           bool
+	strictPixFmt           bool
+	corpusFilter           string
+	failureLedger          string
+	annexBInput            bool
+	diagnose               bool
+	maxGoAllocBytesPerIter float64
+	maxGoAllocsPerIter     float64
 }
 
 type ffmpegBenchLane struct {
@@ -223,10 +227,13 @@ func main() {
 	fairCPULanes := flag.Bool("fair-cpu-lanes", false, "with -ffmpeg, emit explicit pure-C-vs-pure-Go and native-C+asm-vs-Go+asm backend lanes")
 	ffmpegPixFmt := flag.String("ffmpeg-pix-fmt", "", "FFmpeg output pixel format for -raw mode; defaults to Go raw pixel format when available")
 	strictPixFmt := flag.Bool("strict-pix-fmt", false, "reject a user-supplied -ffmpeg-pix-fmt that differs from Go raw pixel format")
+	maxGoAllocBytesPerIter := flag.Float64("max-go-alloc-bytes-per-iter", 0, "fail if a timed Go result exceeds this alloc_bytes_per_iter budget; 0 disables")
+	maxGoAllocsPerIter := flag.Float64("max-go-allocs-per-iter", 0, "fail if a timed Go result exceeds this allocs_per_iter budget; 0 disables")
 	jsonOut := flag.Bool("json", false, "print JSON")
 	flag.Parse()
 
-	if (*input == "") == (*manifest == "") || *iters <= 0 || *repeats <= 0 || *warmup < 0 || *maxEntries < 0 {
+	if (*input == "") == (*manifest == "") || *iters <= 0 || *repeats <= 0 || *warmup < 0 || *maxEntries < 0 ||
+		*maxGoAllocBytesPerIter < 0 || *maxGoAllocsPerIter < 0 {
 		fmt.Fprintln(os.Stderr, "usage: goh264bench (-input file.h264 | -manifest corpus.jsonl) [-iters 5] [-repeats 1] [-warmup 1] [-ffmpeg] [-json]")
 		os.Exit(2)
 	}
@@ -238,20 +245,22 @@ func main() {
 		*ffmpegCPUFlags = "0"
 	}
 	opts := benchOptions{
-		iters:          *iters,
-		repeats:        *repeats,
-		warmup:         *warmup,
-		rawOutput:      *rawOutput,
-		runFFmpeg:      *runFFmpeg,
-		ffmpegBin:      *ffmpegBin,
-		ffmpegThreads:  *ffmpegThreads,
-		ffmpegCPUFlags: *ffmpegCPUFlags,
-		ffmpegPixFmt:   *ffmpegPixFmt,
-		fairCPULanes:   *fairCPULanes,
-		strictPixFmt:   *strictPixFmt,
-		corpusFilter:   *corpusFilter,
-		failureLedger:  *failureLedger,
-		diagnose:       *diagnose,
+		iters:                  *iters,
+		repeats:                *repeats,
+		warmup:                 *warmup,
+		rawOutput:              *rawOutput,
+		runFFmpeg:              *runFFmpeg,
+		ffmpegBin:              *ffmpegBin,
+		ffmpegThreads:          *ffmpegThreads,
+		ffmpegCPUFlags:         *ffmpegCPUFlags,
+		ffmpegPixFmt:           *ffmpegPixFmt,
+		fairCPULanes:           *fairCPULanes,
+		strictPixFmt:           *strictPixFmt,
+		corpusFilter:           *corpusFilter,
+		failureLedger:          *failureLedger,
+		diagnose:               *diagnose,
+		maxGoAllocBytesPerIter: *maxGoAllocBytesPerIter,
+		maxGoAllocsPerIter:     *maxGoAllocsPerIter,
 	}
 	report, err := buildBenchReport(*input, *manifest, *maxEntries, opts)
 	if err != nil {
@@ -415,6 +424,9 @@ func buildBenchReport(input string, manifest string, maxEntries int, opts benchO
 			return benchReport{}, err
 		}
 		annotateBenchReportQuality(&report)
+		if err := enforceBenchAllocationBudgets(report, opts); err != nil {
+			return benchReport{}, err
+		}
 		return report, nil
 	}
 	data, err := os.ReadFile(input)
@@ -430,7 +442,47 @@ func buildBenchReport(input string, manifest string, maxEntries int, opts benchO
 		Results:  results,
 	}
 	annotateBenchReportQuality(&report)
+	if err := enforceBenchAllocationBudgets(report, opts); err != nil {
+		return benchReport{}, err
+	}
 	return report, nil
+}
+
+func enforceBenchAllocationBudgets(report benchReport, opts benchOptions) error {
+	if opts.maxGoAllocBytesPerIter <= 0 && opts.maxGoAllocsPerIter <= 0 {
+		return nil
+	}
+	var failures []string
+	for _, result := range report.Results {
+		if !benchResultHasGoAllocationMetrics(result) {
+			continue
+		}
+		prefix := result.Name
+		if result.EntryID != "" {
+			prefix += " " + result.EntryID
+		}
+		if opts.maxGoAllocBytesPerIter > 0 && result.AllocBytesPerIter > opts.maxGoAllocBytesPerIter {
+			failures = append(failures, fmt.Sprintf("%s: alloc_bytes_per_iter %.2f exceeds budget %.2f",
+				prefix, result.AllocBytesPerIter, opts.maxGoAllocBytesPerIter))
+		}
+		if opts.maxGoAllocsPerIter > 0 && result.AllocsPerIter > opts.maxGoAllocsPerIter {
+			failures = append(failures, fmt.Sprintf("%s: allocs_per_iter %.2f exceeds budget %.2f",
+				prefix, result.AllocsPerIter, opts.maxGoAllocsPerIter))
+		}
+	}
+	if len(failures) != 0 {
+		return fmt.Errorf("Go allocation budget exceeded:\n%s", strings.Join(failures, "\n"))
+	}
+	return nil
+}
+
+func benchResultHasGoAllocationMetrics(result benchResult) bool {
+	return !result.Skipped &&
+		result.Name == "goh264" &&
+		result.BaselineKind == "in-process-go" &&
+		!result.ProcessPerIter &&
+		result.Iterations > 0 &&
+		result.Repeats > 0
 }
 
 func benchOneInput(input string, data []byte, opts benchOptions) ([]benchResult, error) {
@@ -2051,19 +2103,21 @@ func benchmarkMetadata(input string, data []byte, opts benchOptions) benchMetada
 	revision, dirty := gitMetadata()
 	modulePath, moduleVersion := moduleMetadata()
 	meta := benchMetadata{
-		Input:          input,
-		InputBytes:     int64(len(data)),
-		InputMD5:       hex.EncodeToString(sum[:]),
-		GoVersion:      runtime.Version(),
-		GOOS:           runtime.GOOS,
-		GOARCH:         runtime.GOARCH,
-		NumCPU:         runtime.NumCPU(),
-		GOMAXPROCS:     runtime.GOMAXPROCS(0),
-		ModulePath:     modulePath,
-		ModuleVersion:  moduleVersion,
-		VCSRevision:    revision,
-		VCSDirty:       dirty,
-		ComparisonKind: "goh264-in-process",
+		Input:                  input,
+		InputBytes:             int64(len(data)),
+		InputMD5:               hex.EncodeToString(sum[:]),
+		GoVersion:              runtime.Version(),
+		GOOS:                   runtime.GOOS,
+		GOARCH:                 runtime.GOARCH,
+		NumCPU:                 runtime.NumCPU(),
+		GOMAXPROCS:             runtime.GOMAXPROCS(0),
+		ModulePath:             modulePath,
+		ModuleVersion:          moduleVersion,
+		VCSRevision:            revision,
+		VCSDirty:               dirty,
+		ComparisonKind:         "goh264-in-process",
+		MaxGoAllocBytesPerIter: opts.maxGoAllocBytesPerIter,
+		MaxGoAllocsPerIter:     opts.maxGoAllocsPerIter,
 	}
 	if opts.runFFmpeg {
 		meta.ComparisonKind = "goh264-in-process-vs-ffmpeg-cli"

@@ -52,6 +52,10 @@ with exact-capacity caller-owned buffers and requires zero steady-state
 allocations for 8-bit and high-bit-depth output paths. `cmd/goh264bench`
 records Go benchmark allocation totals and reports `alloc_bytes_per_iter`,
 `allocs_per_iter`, `alloc_bytes_per_frame`, and `allocs_per_frame` for each
-timed Go lane. Pending: bulk decode allocation budget gates,
-benchstat/profile output, larger performance corpus, and in-process libavcodec
-baseline.
+timed Go lane; `-max-go-alloc-bytes-per-iter` and
+`-max-go-allocs-per-iter` turn those rates into failing budget gates. The
+real-vector benchmark script forwards
+`GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER` and
+`GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER` to those flags. Pending: checked-in
+release budget values, benchstat/profile output, larger performance corpus,
+and in-process libavcodec baseline.
