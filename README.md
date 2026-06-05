@@ -10,8 +10,9 @@ API currently exposes a tested realtime/WebRTC control contract and valid
 SPS/PPS parameter-set plus recovery-point SEI generation. The first admitted
 bitstream paths cover 8-bit I420 Constrained Baseline IDR IntraPCM, P-skip for
 identical references, and changed-frame P IntraPCM recovery pictures with
-Annex B, AVC, and RTP packetization-mode 1 output, proved by local decode,
-FFmpeg rawvideo decode, recovery-point side data, RTP FU-A reassembly, and
+Annex B, AVC, RTP packetization-mode 0 single-NAL output, and RTP
+packetization-mode 1 output, proved by local decode, FFmpeg rawvideo decode,
+recovery-point side data, RTP mode-0 reassembly, RTP FU-A reassembly, and
 STAP-A parameter-set aggregation tests.
 The goal is not a loose rewrite: internal codec paths keep upstream state
 machines, syntax handling, math, and edge cases recognizable, then prove
@@ -83,18 +84,19 @@ sequence headers, avcC records, crop metadata,
 in-band/out-of-band/every-IDR cadence, and recovery-point SEI Annex B/AVC NAL
 surfaces are generated and parser-proved.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
-Annex B, AVC, and RTP packetization-mode 1, including FU-A fragmentation and
-STAP-A parameter-set aggregation, payload-type/SSRC/sequence metadata, full RTP
-packet headers, marker-bit boundaries, and optional RTP packet callbacks with
-packet index/count, frame timing, payload form, NAL type/count, FU-A start/end,
-and parameter-set metadata. RTP timestamps honor explicit frame PTS and advance
-zero-PTS frames from frame duration or `RTPTimestampIncrement`. Identical frames
-after a decoded reference can use a guarded CAVLC P-skip slice when deblocking
-is disabled; changed frames can use a guarded CAVLC P IntraPCM slice in the
-same admitted path with recovery-point SEI emission when enabled, while forced
-keyframe requests still emit IDR; cropped I420 input emits SPS crop metadata
-and local/FFmpeg decode sees the cropped visible frame. Internal writer primitives
-cover raw bit/Exp-Golomb
+Annex B, AVC, RTP packetization-mode 0 single-NAL packets, and RTP
+packetization-mode 1, including FU-A fragmentation and STAP-A parameter-set
+aggregation, payload-type/SSRC/sequence metadata, full RTP packet headers,
+marker-bit boundaries, oversize mode-0 rejection, and optional RTP packet
+callbacks with packet index/count, frame timing, payload form, NAL type/count,
+FU-A start/end, and parameter-set metadata. RTP timestamps honor explicit frame
+PTS and advance zero-PTS frames from frame duration or `RTPTimestampIncrement`.
+Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
+when deblocking is disabled; changed frames can use a guarded CAVLC P IntraPCM
+slice in the same admitted path with recovery-point SEI emission when enabled,
+while forced keyframe requests still emit IDR; cropped I420 input emits SPS
+crop metadata and local/FFmpeg decode sees the cropped visible frame. Internal
+writer primitives cover raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR, P-skip, and P IntraPCM slice payloads. Motion-search P
@@ -279,9 +281,11 @@ out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P IntraPCM
 then emit the admitted IDR IntraPCM, identical-reference P-skip, or
 changed-frame P IntraPCM frame path. Changed-frame P IntraPCM recovery pictures
 carry recovery-point SEI when enabled. RTP output includes payloads plus
-complete RTP packet bytes, optional per-packet callback metadata, and automatic
-timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
-separate in-band keyframe headers, out-of-band headers, and every-IDR emission.
+complete RTP packet bytes, packetization-mode 0 single-NAL output,
+packetization-mode 1 FU-A/STAP-A output, optional per-packet callback metadata,
+and automatic timestamp progression when frames omit explicit PTS. SPS/PPS
+cadence modes now separate in-band keyframe headers, out-of-band headers, and
+every-IDR emission.
 Motion-search inter prediction, quantized residual coding, and rate-control
 decisions are still future encoder slices.
 
@@ -458,7 +462,7 @@ No tag should be treated as production until a release-evidence pass proves:
 - Encoder support remains non-production until
   [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md) has matching
   motion-search P prediction, residual bitstream implementation, rate-control
-  behavior, packetizer breadth, controls, and oracle evidence.
+  behavior, remaining packetizer breadth, controls, and oracle evidence.
 - The source-truth and translation-ledger docs match the committed tests.
 
 The release-evidence runner writes logs under

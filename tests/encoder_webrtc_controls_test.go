@@ -83,7 +83,10 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 		{name: "intra refresh not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.IntraRefresh = true }, want: goh264.ErrUnsupported},
 		{name: "rtp payload too small", mutate: func(c *goh264.EncoderConfig) { c.RTPMaxPayloadSize = 2 }, want: goh264.ErrInvalidData},
 		{name: "rtp payload type too large", mutate: func(c *goh264.EncoderConfig) { c.RTPPayloadType = 128 }, want: goh264.ErrInvalidData},
-		{name: "rtp packetization mode 0 not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL }, want: goh264.ErrUnsupported},
+		{name: "stap-a requires packetization mode 1", mutate: func(c *goh264.EncoderConfig) {
+			c.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+			c.STAPA = true
+		}, want: goh264.ErrUnsupported},
 		{name: "don enabled not admitted", mutate: func(c *goh264.EncoderConfig) { c.DONDisabled = false }, want: goh264.ErrUnsupported},
 	}
 
@@ -901,6 +904,66 @@ func TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets(t *testing.T) {
 		t.Fatalf("DecodeAnnexBFrames reassembled STAP-A RTP: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
+}
+
+func TestEncoderEncodeRTPMode0EmitsSingleNALPackets(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder mode 0: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 24680
+
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode RTP mode 0 IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+	if len(out.RTPPackets) != len(out.NALUnits) {
+		t.Fatalf("mode 0 RTP packets = %d, want one packet per NAL %d", len(out.RTPPackets), len(out.NALUnits))
+	}
+	for i, pkt := range out.RTPPackets {
+		unit := out.NALUnits[i]
+		wantPayload := out.Data[unit.Offset : unit.Offset+unit.Size]
+		if !bytes.Equal(pkt.Payload, wantPayload) {
+			t.Fatalf("packet[%d] payload does not match raw NAL", i)
+		}
+		if typ := pkt.Payload[0] & 0x1f; typ == 24 || typ == 28 {
+			t.Fatalf("packet[%d] payload type = %d, want single raw NAL", i, typ)
+		}
+		if pkt.Marker != (i == len(out.RTPPackets)-1) {
+			t.Fatalf("packet[%d] marker = %v, want only final marker", i, pkt.Marker)
+		}
+		if pkt.Timestamp != uint32(frame.PTS) {
+			t.Fatalf("packet[%d] timestamp = %d, want %d", i, pkt.Timestamp, frame.PTS)
+		}
+	}
+
+	annexB := annexBFromEncoderRTPPackets(t, out.RTPPackets)
+	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames reassembled mode 0 RTP: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
+}
+
+func TestEncoderRTPMode0RejectsOversizeNAL(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 64
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder mode 0: %v", err)
+	}
+
+	if _, err := enc.Encode(patternedI420EncoderFrame(16, 16)); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Encode oversize mode 0 error = %v, want ErrInvalidData", err)
+	}
 }
 
 func TestEncoderEncodeRTPPacketsCarryWebRTCMetadata(t *testing.T) {

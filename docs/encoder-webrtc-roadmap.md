@@ -15,9 +15,10 @@ Initial encoder support should prioritize 8-bit 4:2:0 realtime video for WebRTC:
 - Constrained Baseline/Baseline first, then Main/High only after WebRTC-safe
   behavior is proved.
 - Annex B and AVC output surfaces, with SPS/PPS emission controls.
-- RTP/WebRTC packetization support for packetization-mode 1, FU-A fragmentation,
-  optional STAP-A aggregation, MTU/max-payload sizing, marker-bit boundaries,
-  and timestamp/keyframe metadata.
+- RTP/WebRTC packetization support for packetization-mode 0 single-NAL output,
+  packetization-mode 1 FU-A fragmentation, optional STAP-A aggregation,
+  MTU/max-payload sizing, marker-bit boundaries, and timestamp/keyframe
+  metadata.
 - No cgo and no mandatory external codec dependency.
 
 ## Controls
@@ -58,14 +59,16 @@ SEI NAL surfaces and is proved by injecting the encoder output before a P-frame
 and checking the public decoder recovery side data. `Encode` and `EncodeInto`
 now validate frame shape and emit the first admitted frame bitstream paths:
 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B, AVC,
-and RTP packetization-mode 1 output, plus guarded CAVLC P-skip slices for
-identical frames and guarded CAVLC P IntraPCM slices for changed frames after a
-reference when deblocking is disabled. Changed-frame P IntraPCM recovery
-pictures carry recovery-point SEI when enabled, across Annex B, configured AVC,
-and RTP packetization-mode 1 reassembly. Tests prove local raw-frame decode,
-FFmpeg rawvideo decode, recovery-point side data, RTP FU-A reassembly, STAP-A
-parameter-set aggregation, payload-type, SSRC, and sequence-number packet
-metadata. RTP packets also carry complete 12-byte RTP headers plus payload
+RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
+output, plus guarded CAVLC P-skip slices for identical frames and guarded CAVLC
+P IntraPCM slices for changed frames after a reference when deblocking is
+disabled. Changed-frame P IntraPCM recovery pictures carry recovery-point SEI
+when enabled, across Annex B, configured AVC, and RTP packetization-mode 1
+reassembly. Tests prove local raw-frame decode, FFmpeg rawvideo decode,
+recovery-point side data, RTP packetization-mode 0 single-NAL reassembly and
+oversize rejection, RTP FU-A reassembly, STAP-A parameter-set aggregation,
+payload-type, SSRC, and sequence-number packet metadata. RTP packets also carry
+complete 12-byte RTP headers plus payload
 bytes, and `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form, NAL type/count, FU-A start/end, and parameter-set
@@ -108,7 +111,8 @@ P-slice `mb_type=30` macroblocks.
    with deblock disabled plus recovery-point SEI emission on changed-frame
    P IntraPCM recovery pictures; forced keyframes still emit IDR.
 5. In progress: add RTP packetization and WebRTC control handling with
-   packet-level tests. Done for packetization-mode 1 single NAL/FU-A output and
+   packet-level tests. Done for packetization-mode 0 single-NAL output with
+   oversize rejection, packetization-mode 1 single NAL/FU-A output, and
    STAP-A parameter-set aggregation with marker-bit boundaries plus
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
    bytes, callback-style packet metadata, and automatic timestamp progression
@@ -124,8 +128,8 @@ Encoder tests need independent evidence, not only local decode:
 - Round-trip decode through `goh264` and FFmpeg CLI for every encoded fixture.
 - Bitstream admission through FFmpeg/ffprobe for SPS/PPS/profile/level and
   packetized AVC output.
-- WebRTC packetization tests for FU-A, STAP-A, MTU boundaries, marker bits, and
-  keyframe parameter-set behavior.
+- WebRTC packetization tests for mode-0 single NAL, FU-A, STAP-A, MTU
+  boundaries, marker bits, and keyframe parameter-set behavior.
 - Rate-control tests that verify bitrate and frame-size envelopes across a
   deterministic source corpus.
 - Reconfiguration tests for bitrate, framerate, force-IDR, resolution reset, and

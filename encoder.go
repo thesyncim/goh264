@@ -499,7 +499,14 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	rtpTime := e.encoderRTPTime(frame)
 	var packets []EncoderRTPPacket
 	if e.cfg.OutputFormat == EncoderOutputRTP {
-		packets, err = packetizeEncoderRTPMode1(nals, e.cfg.RTPMaxPayloadSize, rtpTime, e.cfg.STAPA)
+		switch e.cfg.RTPPacketizationMode {
+		case EncoderRTPPacketizationSingleNAL:
+			packets, err = packetizeEncoderRTPSingleNAL(nals, e.cfg.RTPMaxPayloadSize, rtpTime)
+		case EncoderRTPPacketizationNonInterleaved:
+			packets, err = packetizeEncoderRTPMode1(nals, e.cfg.RTPMaxPayloadSize, rtpTime, e.cfg.STAPA)
+		default:
+			err = encoderInvalid("unknown RTP packetization mode")
+		}
 		if err != nil {
 			return EncodedFrame{}, err
 		}
@@ -862,6 +869,27 @@ func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []enco
 		}
 	}
 	return dst, units, nil
+}
+
+func packetizeEncoderRTPSingleNAL(nals []encoderRawNAL, maxPayloadSize int, timestamp uint32) ([]EncoderRTPPacket, error) {
+	if maxPayloadSize < 1 {
+		return nil, encoderInvalid("RTP max payload size must fit a NAL header")
+	}
+	var packets []EncoderRTPPacket
+	for _, nal := range nals {
+		if len(nal.raw) == 0 {
+			return nil, encoderInvalid("empty encoder NAL")
+		}
+		if len(nal.raw) > maxPayloadSize {
+			return nil, encoderInvalid("encoder NAL exceeds RTP packetization-mode 0 payload size")
+		}
+		payload := append([]byte(nil), nal.raw...)
+		packets = append(packets, EncoderRTPPacket{Payload: payload, Timestamp: timestamp})
+	}
+	if len(packets) != 0 {
+		packets[len(packets)-1].Marker = true
+	}
+	return packets, nil
 }
 
 func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestamp uint32, stapa bool) ([]EncoderRTPPacket, error) {
@@ -1249,19 +1277,23 @@ func normalizeEncoderConfig(cfg EncoderConfig) (EncoderConfig, error) {
 		if cfg.RTPMaxPayloadSize == 0 {
 			cfg.RTPMaxPayloadSize = 1200
 		}
-		if cfg.RTPMaxPayloadSize < 3 {
-			return cfg, encoderInvalid("RTP max payload size must leave room for FU-A headers")
-		}
 		switch cfg.RTPPacketizationMode {
-		case EncoderRTPPacketizationSingleNAL, EncoderRTPPacketizationNonInterleaved:
+		case EncoderRTPPacketizationSingleNAL:
+			if cfg.RTPMaxPayloadSize < 1 {
+				return cfg, encoderInvalid("RTP max payload size must fit a NAL header")
+			}
+			if cfg.STAPA {
+				return cfg, encoderUnsupported("STAP-A aggregation requires RTP packetization-mode 1")
+			}
+		case EncoderRTPPacketizationNonInterleaved:
+			if cfg.RTPMaxPayloadSize < 3 {
+				return cfg, encoderInvalid("RTP max payload size must leave room for FU-A headers")
+			}
 		default:
 			return cfg, encoderInvalid("unknown RTP packetization mode")
 		}
-		if cfg.RTPPacketizationMode != EncoderRTPPacketizationNonInterleaved {
-			return cfg, encoderUnsupported("WebRTC encoder RTP output currently admits packetization-mode 1")
-		}
 		if !cfg.DONDisabled {
-			return cfg, encoderUnsupported("interleaved DON mode is not part of WebRTC packetization-mode 1")
+			return cfg, encoderUnsupported("interleaved DON mode is not part of WebRTC RTP packetization")
 		}
 		if cfg.RTPPayloadType == 0 {
 			cfg.RTPPayloadType = 96

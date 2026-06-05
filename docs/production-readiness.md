@@ -3,11 +3,12 @@
 The decoder is the current implemented path. Realtime/WebRTC encoder support is
 now in scope, with a tested public control contract in `encoder.go`. Encoder
 bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
-IDR/IntraPCM path with Annex B, AVC, and RTP packetization-mode 1 output, plus
-guarded identical-reference CAVLC P-skip when deblocking is disabled. Encoder
+IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
+output, and RTP packetization-mode 1 output, plus guarded identical-reference
+CAVLC P-skip when deblocking is disabled. Encoder
 production gates live in `docs/encoder-webrtc-roadmap.md` until changed-frame
-P prediction, residual coding, rate control, RTP callback metadata, allocation
-budgets, and oracle evidence land.
+P prediction, residual coding, rate control, remaining packetizer breadth,
+allocation budgets, and oracle evidence land.
 
 Harness-first status:
 
@@ -134,8 +135,9 @@ proves in-band keyframe, out-of-band, and every-IDR header modes, proves
 surfaces accepted by public decode paths, verifies frame-shape validation, and
 proves `Encode`/`EncodeInto` emit IDR IntraPCM access units that round-trip
 through local Annex B/AVC decode, FFmpeg rawvideo decode, RTP FU-A reassembly,
-STAP-A parameter-set aggregation, and RTP packet payload-type/SSRC/sequence
-metadata plus full RTP header bytes and optional RTP callback metadata. It also
+RTP packetization-mode 0 single-NAL reassembly and oversize rejection, STAP-A
+parameter-set aggregation, and RTP packet payload-type/SSRC/sequence metadata
+plus full RTP header bytes and optional RTP callback metadata. It also
 proves identical second frames can emit CAVLC P-skip slices through stateful
 local decode and FFmpeg rawvideo decode, changed second frames can emit
 P IntraPCM recovery pictures, and queued IDR requests emit IDR.
