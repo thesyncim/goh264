@@ -13,6 +13,7 @@ scripts/h264-real-vector-strict.sh      # strict green public-vector oracle
 scripts/h264-real-vector-red-queue.sh   # exits non-zero only while known-red rows remain
 scripts/h264-real-vector-red-each.sh    # per-row red queue report when the ledger is populated
 scripts/h264-real-vector-upstream-audit.sh # pinned FFmpeg H.264 FATE coverage
+scripts/h264-decoder-fuzz-smoke.sh # bounded public decode/packet no-panic fuzz smoke
 scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C vs pure Go and native C+asm vs Go+asm lanes
 scripts/h264-real-vector-release-alloc.sh # checked-in Go allocation canary budget
 scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder canary
@@ -87,3 +88,9 @@ failure ledger is non-empty or the worktree is dirty.
 Public API delayed-output coverage includes AVC configured samples and Annex B
 access-unit streaming through `DecodeFrames`, with end-of-stream flush via an
 empty packet and an empty second flush.
+
+Malformed-input safety evidence now includes deterministic public-surface
+corruption rows plus `FuzzDecodePublicSurfacesNoPanic`, a bounded fuzz target
+for Annex B, AVC, configured AVC, auto-detect, and packet side-data decode
+surfaces. `scripts/h264-decoder-fuzz-smoke.sh` runs that target for a short
+smoke window and is part of the release-evidence gate.

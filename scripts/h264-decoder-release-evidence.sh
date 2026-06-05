@@ -79,6 +79,7 @@ run_env_gate real-vector-matrix \
 
 run_gate real-vector-strict scripts/h264-real-vector-strict.sh
 run_gate real-vector-upstream-audit scripts/h264-real-vector-upstream-audit.sh
+run_gate decoder-fuzz-smoke scripts/h264-decoder-fuzz-smoke.sh
 run_gate release-allocation-canary scripts/h264-real-vector-release-alloc.sh
 run_gate benchstat-canary scripts/h264-benchstat-canary.sh
 

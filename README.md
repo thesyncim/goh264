@@ -77,6 +77,9 @@ public High12/High14 4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, and field-coded/f
 reinit metadata rows, lossless High444
 transform-bypass rows, configured AVC surfaces, container-extracted Annex B
 vectors, and SEI side-data surfaces.
+Public malformed-input safety coverage includes deterministic corrupt packet
+rows plus a bounded no-panic fuzz target over Annex B, AVC, configured AVC,
+auto-detect, and packet side-data decode surfaces.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
 field/inter streams beyond the public High12/High14 frame-MBAFF IntraPCM/P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, luma+chroma-residual, and P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows plus internal High10/High12/High14 field weighted-B/weighted-P guard matrices,
@@ -348,6 +351,8 @@ No tag should be treated as production until a release-evidence pass proves:
   decoder-facing FFmpeg H.264 FATE sample references in
   `testdata/h264/realvectors/upstream-inventory.jsonl`, except documented
   non-decoder exclusions.
+- `scripts/h264-decoder-fuzz-smoke.sh` is green for the bounded public decoder
+  no-panic fuzz target.
 - Known-red rows, if any, are current in `testdata/h264/realvectors/failures.jsonl`.
 - `scripts/h264-real-vector-release-alloc.sh` is green with the checked-in Go
   allocation canary budget.
