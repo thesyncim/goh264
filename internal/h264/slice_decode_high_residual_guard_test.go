@@ -1044,6 +1044,48 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsImplicitWeightedB16
 	}
 }
 
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh9ChromaImplicitWeightedBSliceBoundaryDeblock(t *testing.T) {
+	for _, chromaFormatIDC := range []uint32{2, 3} {
+		for _, shape := range []struct {
+			name     string
+			mbType   uint32
+			cbp      int
+			cbpTable int
+		}{
+			{name: "l0", mbType: MBType16x16 | MBTypeP0L0, cbp: 0xf, cbpTable: 0xf},
+			{name: "l1", mbType: MBType16x16 | MBTypeP0L1, cbp: 0xf, cbpTable: 0xf},
+			{name: "bi", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, cbp: 0xf, cbpTable: 0xf},
+			{name: "temporal-direct", mbType: MBType16x16 | MBTypeL0L1 | MBTypeDirect2, cbp: 0xf, cbpTable: 0xf},
+			{name: "spatial-direct-skip", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeDirect2 | MBTypeSkip},
+		} {
+			for _, cabac := range []int32{0, 1} {
+				t.Run(fmt.Sprintf("%s/%s/cabac%d", chromaFormatName(int(chromaFormatIDC)), shape.name, cabac), func(t *testing.T) {
+					sh := &SliceHeader{
+						SliceTypeNoS:     PictureTypeB,
+						PictureStructure: PictureFrame,
+						DeblockingFilter: 2,
+						SPS: &SPS{
+							BitDepthLuma:    9,
+							ChromaFormatIDC: chromaFormatIDC,
+						},
+						PPS: &PPS{
+							CABAC:             cabac,
+							WeightedBipredIDC: 2,
+						},
+						PredWeightTable: PredWeightTable{
+							UseWeight:       2,
+							UseWeightChroma: 2,
+						},
+					}
+					if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, nil, shape.cbp, shape.cbpTable); err != nil {
+						t.Fatalf("validate high9 chroma implicit weighted-B mode-2 deblock err = %v, want nil", err)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10ChromaWeightedBSliceBoundaryDeblock(t *testing.T) {
 	for _, chromaFormatIDC := range []uint32{2, 3} {
 		for _, shape := range []struct {

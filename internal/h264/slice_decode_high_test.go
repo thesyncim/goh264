@@ -466,8 +466,6 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsStagedBoundaries(t *testing.T)
 		slice       int32
 	}{
 		{name: "8-bit", bitDepth: 8, chroma: 8, format: 1, slice: PictureTypeI},
-		{name: "9-bit-422-slice-boundary-B", bitDepth: 9, chroma: 9, format: 2, deblockMode: 2, slice: PictureTypeB},
-		{name: "9-bit-444-slice-boundary-B", bitDepth: 9, chroma: 9, format: 3, deblockMode: 2, slice: PictureTypeB},
 		{name: "unequal-depth", bitDepth: 10, chroma: 12, format: 1, slice: PictureTypeI},
 		{name: "monochrome", bitDepth: 10, chroma: 10, format: 0, slice: PictureTypeI},
 	}
@@ -728,6 +726,35 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh9ChromaWeightedPSliceBounda
 
 					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
 						t.Fatalf("high9 chroma weighted P slice-boundary validation err = %v, want nil", err)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh9ChromaImplicitWeightedBSliceBoundaryDeblock(t *testing.T) {
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, cabac := range []int32{0, 1} {
+			for _, tt := range []struct {
+				name            string
+				useWeight       int32
+				useWeightChroma int32
+			}{
+				{name: "serialized"},
+				{name: "initialized", useWeight: 2, useWeightChroma: 2},
+			} {
+				t.Run(fmt.Sprintf("%s/cabac%d/%s", chromaFormatName(chromaFormatIDC), cabac, tt.name), func(t *testing.T) {
+					m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 9, chromaFormatIDC, 2, true, PictureTypeB)
+					sh.DeblockingFilter = 2
+					sh.RefCount = [2]uint32{1, 1}
+					sh.PPS.CABAC = cabac
+					sh.PPS.WeightedBipredIDC = 2
+					sh.PredWeightTable.UseWeight = tt.useWeight
+					sh.PredWeightTable.UseWeightChroma = tt.useWeightChroma
+
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high9 chroma implicit weighted B slice-boundary validation err = %v, want nil", err)
 					}
 				})
 			}
