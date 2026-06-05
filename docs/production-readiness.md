@@ -2,9 +2,11 @@
 
 The decoder is the current implemented path. Realtime/WebRTC encoder support is
 now in scope, with a tested public control contract in `encoder.go`. Encoder
-bitstream generation is still intentionally unsupported; encoder production
-gates live in `docs/encoder-webrtc-roadmap.md` until implementation and oracle
-evidence land.
+bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
+IDR/IntraPCM path with Annex B, AVC, and RTP packetization-mode 1 output.
+Encoder production gates live in `docs/encoder-webrtc-roadmap.md` until
+P-frames, residual coding, rate control, packetization breadth, allocation
+budgets, and oracle evidence land.
 
 Harness-first status:
 
@@ -113,18 +115,19 @@ they do not replace the last good parameter sets before the next valid slice on
 configured AVC or mixed configured-AVC/Annex B public decode paths.
 
 Encoder readiness evidence currently covers controls, parameter-set headers,
-and recovery-point SEI packaging:
+recovery-point SEI packaging, and the first IDR frame writer:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 rejects invalid or not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, PLI/FIR, force-IDR, and partial
 reconfiguration paths, proves `ParameterSets` emits SPS/PPS NALs, Annex B
 headers, and avcC records accepted by the public decoder parsers, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL
-surfaces accepted by public decode paths, and verifies frame-shape validation
-before `Encode`/`EncodeInto` return `ErrUnsupported`.
-No encoder frame bitstream, RTP packetizer, or FFmpeg/goh264 encoded-frame
-oracle has landed yet. Internal encoder writer evidence now covers raw
-bit/Exp-Golomb writing, RBSP trailing bits, EBSP emulation-prevention,
-Annex B/AVC NAL packaging, AVC decoder configuration records, and baseline
-SPS/PPS plus recovery-point SEI syntax through decoder-parser round-trip tests;
-slice syntax and broader SEI families remain pending.
+surfaces accepted by public decode paths, verifies frame-shape validation, and
+proves `Encode`/`EncodeInto` emit IDR IntraPCM access units that round-trip
+through local Annex B/AVC decode, FFmpeg rawvideo decode, and RTP FU-A
+reassembly. Internal encoder writer evidence now covers raw bit/Exp-Golomb
+writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
+packaging, AVC decoder configuration records, baseline SPS/PPS, recovery-point
+SEI syntax, and Baseline IDR slice syntax. P-frame prediction, residual CAVLC
+coding, rate-control feedback, STAP-A aggregation, and realtime
+allocation/performance gates remain pending.

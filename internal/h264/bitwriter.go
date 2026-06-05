@@ -38,6 +38,21 @@ func (bw *BitWriter) ByteAligned() bool {
 	return bw == nil || bw.bitPos&7 == 0
 }
 
+func (bw *BitWriter) WriteZeroAlign() {
+	for bw.bitPos&7 != 0 {
+		bw.WriteBit(0)
+	}
+}
+
+func (bw *BitWriter) WriteAlignedBytes(src []byte) error {
+	if bw == nil || !bw.ByteAligned() {
+		return ErrInvalidData
+	}
+	bw.buf = append(bw.buf, src...)
+	bw.bitPos += uint32(len(src)) * 8
+	return nil
+}
+
 func (bw *BitWriter) WriteBit(v uint32) {
 	if bw.bitPos&7 == 0 {
 		bw.buf = append(bw.buf, 0)

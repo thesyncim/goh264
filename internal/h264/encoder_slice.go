@@ -1,0 +1,191 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Source-shaped writer subset for the first H.264 realtime encoder picture
+// path. Slice-header syntax order follows FFmpeg n8.0.1
+// libavcodec/cbs_h264_syntax_template.c slice_header()/dec_ref_pic_marking().
+// The payload is deliberately limited to Baseline CAVLC I_PCM macroblocks so
+// the first IDR path is exact and oracle-friendly before quantized coding lands.
+
+package h264
+
+type EncoderI420IntraPCMIDRConfig struct {
+	Width    int
+	Height   int
+	StrideY  int
+	StrideCb int
+	StrideCr int
+	Y        []byte
+	Cb       []byte
+	Cr       []byte
+
+	FrameNum                   uint32
+	IDRPicID                   uint32
+	InitialQP                  int
+	DisableDeblockingFilterIDC uint32
+	NALLengthSize              int
+}
+
+type EncoderIDRSlice struct {
+	RBSP   []byte
+	NAL    []byte
+	AnnexB []byte
+	AVC    []byte
+}
+
+func BuildEncoderI420IntraPCMIDRSlice(cfg EncoderI420IntraPCMIDRConfig) (EncoderIDRSlice, error) {
+	if cfg.NALLengthSize == 0 {
+		cfg.NALLengthSize = 4
+	}
+	rbsp, err := EncodeI420IntraPCMIDRSliceRBSP(cfg)
+	if err != nil {
+		return EncoderIDRSlice{}, err
+	}
+	nal, err := AppendNAL(nil, 3, NALIDRSlice, rbsp)
+	if err != nil {
+		return EncoderIDRSlice{}, err
+	}
+	annexB, err := AppendAnnexBNAL(nil, 3, NALIDRSlice, rbsp)
+	if err != nil {
+		return EncoderIDRSlice{}, err
+	}
+	avc, err := AppendAVCNAL(nil, cfg.NALLengthSize, 3, NALIDRSlice, rbsp)
+	if err != nil {
+		return EncoderIDRSlice{}, err
+	}
+	return EncoderIDRSlice{
+		RBSP:   rbsp,
+		NAL:    nal,
+		AnnexB: annexB,
+		AVC:    avc,
+	}, nil
+}
+
+func EncodeI420IntraPCMIDRSliceRBSP(cfg EncoderI420IntraPCMIDRConfig) ([]byte, error) {
+	if err := validateEncoderI420IntraPCMIDRConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	var bw BitWriter
+	if err := writeEncoderI420IDRSliceHeader(&bw, cfg); err != nil {
+		return nil, err
+	}
+
+	mbWidth := (cfg.Width + 15) >> 4
+	mbHeight := (cfg.Height + 15) >> 4
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		for mbX := 0; mbX < mbWidth; mbX++ {
+			if err := bw.WriteUEGolomb(25); err != nil { // I_PCM
+				return nil, err
+			}
+			bw.WriteZeroAlign()
+			if err := writeEncoderI420IntraPCMMacroblock(&bw, cfg, mbX, mbY); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	bw.WriteRBSPTrailingBits()
+	return bw.Bytes(), nil
+}
+
+func writeEncoderI420IDRSliceHeader(bw *BitWriter, cfg EncoderI420IntraPCMIDRConfig) error {
+	if err := bw.WriteUEGolomb(0); err != nil { // first_mb_in_slice
+		return err
+	}
+	if err := bw.WriteUEGolomb(2); err != nil { // slice_type I
+		return err
+	}
+	if err := bw.WriteUEGolomb(0); err != nil { // pic_parameter_set_id
+		return err
+	}
+	if err := bw.WriteBits(cfg.FrameNum, 8); err != nil {
+		return err
+	}
+	if err := bw.WriteUEGolomb(cfg.IDRPicID); err != nil {
+		return err
+	}
+	bw.WriteBit(0)                              // no_output_of_prior_pics_flag
+	bw.WriteBit(0)                              // long_term_reference_flag
+	if err := bw.WriteSEGolomb(0); err != nil { // slice_qp_delta
+		return err
+	}
+	if err := bw.WriteUEGolomb(cfg.DisableDeblockingFilterIDC); err != nil {
+		return err
+	}
+	if cfg.DisableDeblockingFilterIDC != 1 {
+		if err := bw.WriteSEGolomb(0); err != nil { // slice_alpha_c0_offset_div2
+			return err
+		}
+		if err := bw.WriteSEGolomb(0); err != nil { // slice_beta_offset_div2
+			return err
+		}
+	}
+	return nil
+}
+
+func writeEncoderI420IntraPCMMacroblock(bw *BitWriter, cfg EncoderI420IntraPCMIDRConfig, mbX int, mbY int) error {
+	var pcm [384]byte
+	i := 0
+	baseX := mbX << 4
+	baseY := mbY << 4
+	for y := 0; y < 16; y++ {
+		srcY := clampEncoderCoord(baseY+y, cfg.Height)
+		for x := 0; x < 16; x++ {
+			srcX := clampEncoderCoord(baseX+x, cfg.Width)
+			pcm[i] = cfg.Y[srcY*cfg.StrideY+srcX]
+			i++
+		}
+	}
+
+	chromaWidth := cfg.Width >> 1
+	chromaHeight := cfg.Height >> 1
+	baseCX := mbX << 3
+	baseCY := mbY << 3
+	for y := 0; y < 8; y++ {
+		srcY := clampEncoderCoord(baseCY+y, chromaHeight)
+		for x := 0; x < 8; x++ {
+			srcX := clampEncoderCoord(baseCX+x, chromaWidth)
+			pcm[i] = cfg.Cb[srcY*cfg.StrideCb+srcX]
+			i++
+		}
+	}
+	for y := 0; y < 8; y++ {
+		srcY := clampEncoderCoord(baseCY+y, chromaHeight)
+		for x := 0; x < 8; x++ {
+			srcX := clampEncoderCoord(baseCX+x, chromaWidth)
+			pcm[i] = cfg.Cr[srcY*cfg.StrideCr+srcX]
+			i++
+		}
+	}
+	return bw.WriteAlignedBytes(pcm[:])
+}
+
+func validateEncoderI420IntraPCMIDRConfig(cfg EncoderI420IntraPCMIDRConfig) error {
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width&1 != 0 || cfg.Height&1 != 0 {
+		return ErrInvalidData
+	}
+	if cfg.StrideY < cfg.Width || cfg.StrideCb < cfg.Width/2 || cfg.StrideCr < cfg.Width/2 {
+		return ErrInvalidData
+	}
+	if len(cfg.Y) < cfg.StrideY*cfg.Height {
+		return ErrInvalidData
+	}
+	chromaHeight := cfg.Height >> 1
+	if len(cfg.Cb) < cfg.StrideCb*chromaHeight || len(cfg.Cr) < cfg.StrideCr*chromaHeight {
+		return ErrInvalidData
+	}
+	if cfg.FrameNum >= 1<<8 || cfg.IDRPicID > 65535 ||
+		cfg.InitialQP < 0 || cfg.InitialQP > 51 ||
+		cfg.DisableDeblockingFilterIDC > 2 ||
+		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+func clampEncoderCoord(v int, limit int) int {
+	if v >= limit {
+		return limit - 1
+	}
+	return v
+}

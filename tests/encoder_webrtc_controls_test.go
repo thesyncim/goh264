@@ -4,7 +4,11 @@ package goh264_test
 
 import (
 	"bytes"
+	"crypto/md5"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -349,15 +353,114 @@ func TestEncoderRecoveryPointSEIRejectsInvalidFrameCount(t *testing.T) {
 	}
 }
 
-func TestEncoderEncodeIntoValidatesFrameBeforeUnsupportedBitstream(t *testing.T) {
+func TestEncoderEncodeAnnexBIDRIntraPCMDecodesThroughLocalAndFFmpeg(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(18, 18)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(18, 18)
+	want := appendI420FrameBytes(nil, frame)
+
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode Annex B IDR: %v", err)
+	}
+	if !out.KeyFrame || !out.IDR || out.PTS != frame.PTS || out.DTS != frame.PTS {
+		t.Fatalf("encoded frame metadata key=%v idr=%v pts=%d dts=%d", out.KeyFrame, out.IDR, out.PTS, out.DTS)
+	}
+	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+	if len(out.RTPPackets) != 0 {
+		t.Fatalf("Annex B output unexpectedly has RTP packets: %d", len(out.RTPPackets))
+	}
+
+	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(out.Data)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames encoded IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decoded, want)
+	assertFFmpegRawVideoOracle(t, out.Data, want)
+	if enc.PendingIDR() {
+		t.Fatal("successful IDR encode left PendingIDR set")
+	}
+}
+
+func TestEncoderEncodeAVCIDRIntraPCMDecodesThroughConfiguredSurface(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAVC
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode AVC IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+	decoded, err := goh264.NewDecoder().DecodeAVCFrames(out.Data, 4)
+	if err != nil {
+		t.Fatalf("DecodeAVCFrames encoded IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
+}
+
+func TestEncoderEncodeRTPMode1FragmentsIDRAccessUnit(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPMaxPayloadSize = 32
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 12345
+
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode RTP IDR: %v", err)
+	}
+	if len(out.RTPPackets) < 3 {
+		t.Fatalf("RTP packets = %d, want fragmented access unit", len(out.RTPPackets))
+	}
+	if out.RTPTime != uint32(frame.PTS) {
+		t.Fatalf("RTP time = %d, want frame PTS %d", out.RTPTime, frame.PTS)
+	}
+	for i, pkt := range out.RTPPackets {
+		if len(pkt.Payload) > cfg.RTPMaxPayloadSize {
+			t.Fatalf("packet[%d] payload size = %d, max %d", i, len(pkt.Payload), cfg.RTPMaxPayloadSize)
+		}
+		if pkt.Timestamp != out.RTPTime {
+			t.Fatalf("packet[%d] timestamp = %d, want %d", i, pkt.Timestamp, out.RTPTime)
+		}
+		if pkt.Marker != (i == len(out.RTPPackets)-1) {
+			t.Fatalf("packet[%d] marker = %v, want only final marker", i, pkt.Marker)
+		}
+	}
+
+	annexB := annexBFromEncoderRTPPackets(t, out.RTPPackets)
+	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames reassembled RTP: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
+}
+
+func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
 
 	frame := validI420EncoderFrame(16, 16)
-	if _, err := enc.EncodeInto(make([]byte, 0, 1024), frame); !errors.Is(err, goh264.ErrUnsupported) {
-		t.Fatalf("EncodeInto valid-frame error = %v, want ErrUnsupported until bitstream generation lands", err)
+	if out, err := enc.EncodeInto(make([]byte, 0, 1024), frame); err != nil || !out.IDR {
+		t.Fatalf("EncodeInto valid-frame out.IDR=%v error=%v, want successful IDR", out.IDR, err)
 	}
 
 	bad := frame
@@ -426,4 +529,138 @@ func validI420EncoderFrame(width, height int) goh264.EncoderFrame {
 		Height:   height,
 		Duration: 3000,
 	}
+}
+
+func patternedI420EncoderFrame(width, height int) goh264.EncoderFrame {
+	frame := validI420EncoderFrame(width, height)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			frame.Y[y*frame.StrideY+x] = byte((x*11 + y*17 + 3) & 0xff)
+		}
+	}
+	chromaWidth := width / 2
+	chromaHeight := height / 2
+	for y := 0; y < chromaHeight; y++ {
+		for x := 0; x < chromaWidth; x++ {
+			frame.Cb[y*frame.StrideCb+x] = byte((x*19 + y*7 + 41) & 0xff)
+			frame.Cr[y*frame.StrideCr+x] = byte((x*5 + y*23 + 109) & 0xff)
+		}
+	}
+	frame.PTS = 3000
+	return frame
+}
+
+func appendI420FrameBytes(dst []byte, frame goh264.EncoderFrame) []byte {
+	for y := 0; y < frame.Height; y++ {
+		row := frame.Y[y*frame.StrideY : y*frame.StrideY+frame.Width]
+		dst = append(dst, row...)
+	}
+	chromaWidth := frame.Width / 2
+	chromaHeight := frame.Height / 2
+	for y := 0; y < chromaHeight; y++ {
+		row := frame.Cb[y*frame.StrideCb : y*frame.StrideCb+chromaWidth]
+		dst = append(dst, row...)
+	}
+	for y := 0; y < chromaHeight; y++ {
+		row := frame.Cr[y*frame.StrideCr : y*frame.StrideCr+chromaWidth]
+		dst = append(dst, row...)
+	}
+	return dst
+}
+
+func assertEncoderNALTypes(t *testing.T, nals []goh264.EncoderNALUnit, want []uint8) {
+	t.Helper()
+	if len(nals) != len(want) {
+		t.Fatalf("NAL count = %d, want %d (%+v)", len(nals), len(want), nals)
+	}
+	for i, typ := range want {
+		if nals[i].Type != typ {
+			t.Fatalf("NAL[%d] type = %d, want %d (%+v)", i, nals[i].Type, typ, nals)
+		}
+	}
+}
+
+func assertDecodedEncoderFrameBytes(t *testing.T, frames []*goh264.Frame, want []byte) {
+	t.Helper()
+	if len(frames) != 1 {
+		t.Fatalf("decoded frames = %d, want 1", len(frames))
+	}
+	raw, err := frames[0].AppendRawYUV(nil)
+	if err != nil {
+		t.Fatalf("AppendRawYUV: %v", err)
+	}
+	if !bytes.Equal(raw, want) {
+		t.Fatalf("decoded raw md5 = %x, want %x", md5.Sum(raw), md5.Sum(want))
+	}
+}
+
+func assertFFmpegRawVideoOracle(t *testing.T, annexB []byte, want []byte) {
+	t.Helper()
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not available")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "encoded.h264")
+	if err := os.WriteFile(path, annexB, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(ffmpeg,
+		"-hide_banner", "-loglevel", "error",
+		"-i", path,
+		"-f", "rawvideo", "-pix_fmt", "yuv420p", "-",
+	)
+	raw, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg rawvideo decode: %v", err)
+	}
+	if !bytes.Equal(raw, want) {
+		t.Fatalf("ffmpeg raw md5 = %x, want %x", md5.Sum(raw), md5.Sum(want))
+	}
+}
+
+func annexBFromEncoderRTPPackets(t *testing.T, packets []goh264.EncoderRTPPacket) []byte {
+	t.Helper()
+	var out []byte
+	var fu []byte
+	var inFU bool
+	for i, pkt := range packets {
+		payload := pkt.Payload
+		if len(payload) == 0 {
+			t.Fatalf("packet[%d] empty payload", i)
+		}
+		typ := payload[0] & 0x1f
+		if typ != 28 {
+			if inFU {
+				t.Fatalf("packet[%d] single NAL while FU-A is open", i)
+			}
+			out = append(out, 0, 0, 0, 1)
+			out = append(out, payload...)
+			continue
+		}
+		if len(payload) < 3 {
+			t.Fatalf("packet[%d] FU-A payload too small: %x", i, payload)
+		}
+		start := payload[1]&0x80 != 0
+		end := payload[1]&0x40 != 0
+		if start {
+			if inFU {
+				t.Fatalf("packet[%d] starts FU-A while previous is open", i)
+			}
+			fu = append(fu[:0], (payload[0]&0xe0)|(payload[1]&0x1f))
+			inFU = true
+		} else if !inFU {
+			t.Fatalf("packet[%d] FU-A continuation without start", i)
+		}
+		fu = append(fu, payload[2:]...)
+		if end {
+			out = append(out, 0, 0, 0, 1)
+			out = append(out, fu...)
+			inFU = false
+		}
+	}
+	if inFU {
+		t.Fatal("unterminated FU-A sequence")
+	}
+	return out
 }

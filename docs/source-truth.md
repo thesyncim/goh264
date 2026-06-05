@@ -9,9 +9,12 @@ parameter-set and recovery-point SEI writers follow FFmpeg `n8.0.1`
 `libavcodec/cbs_h264_syntax_template.c` syntax order; recovery-point SEI
 defaults mirror the FFmpeg VAAPI/Vulkan encoder shape for I-picture recovery
 points (`recovery_frame_cnt=0`, exact-match set, broken-link only when B-frame
-chains exist). No encoder frame bitstream parity or production claim exists
-yet; encoder work must land behind its own controls, oracles, and release
-evidence while the decoder production bar stays green.
+chains exist). The first encoder frame bitstream path is an 8-bit I420
+Constrained Baseline IDR IntraPCM slice writer following FFmpeg CBS H.264 slice
+header and reference-marking syntax order; no P-frame, rate-control, or
+production encoder claim exists yet. Encoder work must land behind its own
+controls, oracles, and release evidence while the decoder production bar stays
+green.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
@@ -102,11 +105,13 @@ Realtime/WebRTC encoder proof currently covers control admission and
 parameter-set headers: default 8-bit I420 constrained-baseline RTP config,
 invalid-control rejection, bitrate, framerate, RTP payload-size,
 PLI/FIR/force-IDR, partial reconfiguration, public SPS/PPS/Annex B/avcC header
-generation, and frame-shape validation before encode returns `ErrUnsupported`.
+generation, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
+generation, FFmpeg rawvideo decode, and RTP packetization-mode 1 FU-A
+reassembly.
 Internal writer proof covers raw bit/Exp-Golomb writing, RBSP trailing bits,
 EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC decoder configuration
-records, and baseline SPS/PPS syntax via decoder-parser round trips; SEI/slice
-syntax writers are still pending.
+records, baseline SPS/PPS syntax, recovery-point SEI syntax, and Baseline IDR
+slice syntax via decoder-parser and encoded-frame round trips.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder

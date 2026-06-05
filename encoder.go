@@ -233,6 +233,8 @@ type EncoderReconfigure struct {
 type Encoder struct {
 	cfg      EncoderConfig
 	forceIDR bool
+	frameNum uint32
+	idrPicID uint32
 }
 
 func DefaultEncoderConfig(width, height int) EncoderConfig {
@@ -369,11 +371,72 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	if e == nil {
 		return EncodedFrame{}, encoderInvalid("nil encoder")
 	}
-	if err := e.validateFrame(frame); err != nil {
+	view, err := e.validatedFrameView(frame)
+	if err != nil {
 		return EncodedFrame{}, err
 	}
-	_ = dst
-	return EncodedFrame{}, fmt.Errorf("h264: encoder bitstream generation is not implemented yet: %w", ErrUnsupported)
+	if e.cfg.OutputFormat == EncoderOutputRTP && e.cfg.STAPA {
+		return EncodedFrame{}, encoderUnsupported("STAP-A aggregation is planned but not admitted for generated frames yet")
+	}
+
+	var nals []encoderRawNAL
+	if e.cfg.SPSPPSBeforeIDR && e.cfg.SPSPPSMode != EncoderSPSPPSOutOfBand {
+		sets, err := e.ParameterSets()
+		if err != nil {
+			return EncodedFrame{}, err
+		}
+		nals = append(nals,
+			encoderRawNAL{typ: uint8(h264.NALSPS), raw: sets.SPS, keyFrame: true, parameterSet: true},
+			encoderRawNAL{typ: uint8(h264.NALPPS), raw: sets.PPS, keyFrame: true, parameterSet: true},
+		)
+	}
+
+	slice, err := h264.BuildEncoderI420IntraPCMIDRSlice(h264.EncoderI420IntraPCMIDRConfig{
+		Width:                      view.width,
+		Height:                     view.height,
+		StrideY:                    view.strideY,
+		StrideCb:                   view.strideCb,
+		StrideCr:                   view.strideCr,
+		Y:                          view.y,
+		Cb:                         view.cb,
+		Cr:                         view.cr,
+		FrameNum:                   e.frameNum & 0xff,
+		IDRPicID:                   e.idrPicID & 0xffff,
+		InitialQP:                  e.cfg.InitialQP,
+		DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		return EncodedFrame{}, err
+	}
+	nals = append(nals, encoderRawNAL{typ: uint8(h264.NALIDRSlice), raw: slice.NAL, keyFrame: true})
+
+	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
+	if err != nil {
+		return EncodedFrame{}, err
+	}
+	rtpTime := uint32(frame.PTS)
+	var packets []EncoderRTPPacket
+	if e.cfg.OutputFormat == EncoderOutputRTP {
+		packets, err = packetizeEncoderRTPMode1(nals, e.cfg.RTPMaxPayloadSize, rtpTime)
+		if err != nil {
+			return EncodedFrame{}, err
+		}
+	}
+
+	e.forceIDR = false
+	e.frameNum = (e.frameNum + 1) & 0xff
+	e.idrPicID = (e.idrPicID + 1) & 0xffff
+	return EncodedFrame{
+		Data:       data,
+		NALUnits:   units,
+		RTPPackets: packets,
+		KeyFrame:   true,
+		IDR:        true,
+		PTS:        frame.PTS,
+		DTS:        frame.PTS,
+		RTPTime:    rtpTime,
+	}, nil
 }
 
 func (e *Encoder) ForceIDR() {
@@ -491,7 +554,30 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	return nil
 }
 
+type encoderFrameView struct {
+	y        []byte
+	cb       []byte
+	cr       []byte
+	width    int
+	height   int
+	strideY  int
+	strideCb int
+	strideCr int
+}
+
+type encoderRawNAL struct {
+	typ          uint8
+	raw          []byte
+	keyFrame     bool
+	parameterSet bool
+}
+
 func (e *Encoder) validateFrame(frame EncoderFrame) error {
+	_, err := e.validatedFrameView(frame)
+	return err
+}
+
+func (e *Encoder) validatedFrameView(frame EncoderFrame) (encoderFrameView, error) {
 	width := frame.Width
 	if width == 0 {
 		width = e.cfg.Width
@@ -501,7 +587,7 @@ func (e *Encoder) validateFrame(frame EncoderFrame) error {
 		height = e.cfg.Height
 	}
 	if width != e.cfg.Width || height != e.cfg.Height {
-		return encoderInvalid("frame dimensions do not match encoder configuration")
+		return encoderFrameView{}, encoderInvalid("frame dimensions do not match encoder configuration")
 	}
 	strideY := frame.StrideY
 	if strideY == 0 {
@@ -516,20 +602,125 @@ func (e *Encoder) validateFrame(frame EncoderFrame) error {
 		strideCr = e.cfg.StrideCr
 	}
 	if strideY < width {
-		return encoderInvalid("frame luma stride is smaller than width")
+		return encoderFrameView{}, encoderInvalid("frame luma stride is smaller than width")
 	}
 	chromaWidth := (width + 1) / 2
 	chromaHeight := (height + 1) / 2
 	if strideCb < chromaWidth || strideCr < chromaWidth {
-		return encoderInvalid("frame chroma stride is smaller than chroma width")
+		return encoderFrameView{}, encoderInvalid("frame chroma stride is smaller than chroma width")
 	}
 	if len(frame.Y) < strideY*height {
-		return encoderInvalid("frame luma plane is too small")
+		return encoderFrameView{}, encoderInvalid("frame luma plane is too small")
 	}
 	if len(frame.Cb) < strideCb*chromaHeight || len(frame.Cr) < strideCr*chromaHeight {
-		return encoderInvalid("frame chroma plane is too small")
+		return encoderFrameView{}, encoderInvalid("frame chroma plane is too small")
 	}
-	return nil
+	return encoderFrameView{
+		y:        frame.Y,
+		cb:       frame.Cb,
+		cr:       frame.Cr,
+		width:    width,
+		height:   height,
+		strideY:  strideY,
+		strideCb: strideCb,
+		strideCr: strideCr,
+	}, nil
+}
+
+func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []encoderRawNAL) ([]byte, []EncoderNALUnit, error) {
+	units := make([]EncoderNALUnit, 0, len(nals))
+	for _, nal := range nals {
+		if len(nal.raw) == 0 {
+			return dst, nil, encoderInvalid("empty encoder NAL")
+		}
+		switch format {
+		case EncoderOutputAVC:
+			if uint64(len(nal.raw)) > uint64(^uint32(0)) {
+				return dst, nil, encoderInvalid("encoder NAL is too large for AVC output")
+			}
+			n := len(nal.raw)
+			dst = append(dst, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
+			offset := len(dst)
+			dst = append(dst, nal.raw...)
+			units = append(units, EncoderNALUnit{
+				Type:         nal.typ,
+				Offset:       offset,
+				Size:         len(nal.raw),
+				KeyFrame:     nal.keyFrame,
+				ParameterSet: nal.parameterSet,
+			})
+		case EncoderOutputAnnexB, EncoderOutputRTP:
+			dst = append(dst, 0, 0, 0, 1)
+			offset := len(dst)
+			dst = append(dst, nal.raw...)
+			units = append(units, EncoderNALUnit{
+				Type:         nal.typ,
+				Offset:       offset,
+				Size:         len(nal.raw),
+				KeyFrame:     nal.keyFrame,
+				ParameterSet: nal.parameterSet,
+			})
+		default:
+			return dst, nil, encoderInvalid("unknown encoder output format")
+		}
+	}
+	return dst, units, nil
+}
+
+func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestamp uint32) ([]EncoderRTPPacket, error) {
+	if maxPayloadSize < 3 {
+		return nil, encoderInvalid("RTP max payload size must leave room for FU-A headers")
+	}
+	var packets []EncoderRTPPacket
+	for _, nal := range nals {
+		if len(nal.raw) == 0 {
+			return nil, encoderInvalid("empty encoder NAL")
+		}
+		if len(nal.raw) <= maxPayloadSize {
+			payload := append([]byte(nil), nal.raw...)
+			packets = append(packets, EncoderRTPPacket{Payload: payload, Timestamp: timestamp})
+			continue
+		}
+		header := nal.raw[0]
+		payload := nal.raw[1:]
+		maxFragment := maxPayloadSize - 2
+		first := true
+		for len(payload) != 0 {
+			n := maxFragment
+			if n > len(payload) {
+				n = len(payload)
+			}
+			fu := make([]byte, 0, n+2)
+			fu = append(fu, (header&0xe0)|28)
+			fuHeader := header & 0x1f
+			if first {
+				fuHeader |= 0x80
+			}
+			if n == len(payload) {
+				fuHeader |= 0x40
+			}
+			fu = append(fu, fuHeader)
+			fu = append(fu, payload[:n]...)
+			packets = append(packets, EncoderRTPPacket{Payload: fu, Timestamp: timestamp})
+			payload = payload[n:]
+			first = false
+		}
+	}
+	if len(packets) != 0 {
+		packets[len(packets)-1].Marker = true
+	}
+	return packets, nil
+}
+
+func encoderDeblockingFilterIDC(mode EncoderDeblockMode) uint32 {
+	switch mode {
+	case EncoderDeblockDisabled:
+		return 1
+	case EncoderDeblockSliceBoundary:
+		return 2
+	default:
+		return 0
+	}
 }
 
 func normalizeEncoderConfig(cfg EncoderConfig) (EncoderConfig, error) {
