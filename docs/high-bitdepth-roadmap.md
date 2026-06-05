@@ -24,6 +24,8 @@ B-skip/direct-sub no-deblock and mode-1/mode-2 deblock, partitioned
 B16x8/B8x16/B8x8 no-deblock, and partitioned B16x8/B8x16/B8x8
 mode-1/mode-2 deblock, plus 4:2:0 implicit weighted B no-deblock,
 mode-1/mode-2 deblock, direct-sub deblock, and partitioned B deblock,
+plus 4:2:0 explicit weighted B no-deblock, mode-1/mode-2 deblock,
+direct-sub deblock, and partitioned B deblock,
 mode-1 I/P deblock, 4:2:0 I/P
 slice-boundary mode-2 deblock, including unweighted 4:2:2/4:4:4
 I/P chroma no-deblock/mode-1 deblock plus unweighted 4:2:2/4:4:4 I/P chroma
@@ -42,7 +44,8 @@ weighted-P deblock, B-skip/direct-sub no-deblock and mode-1/mode-2 deblock,
 partitioned B16x8/B8x16/B8x8 no-deblock, and partitioned
 B16x8/B8x16/B8x8 mode-1/mode-2 deblock plus 4:2:0 implicit weighted B
 no-deblock, mode-1/mode-2 deblock, direct-sub deblock, and partitioned B
-deblock, High10 frame-MBAFF
+deblock plus 4:2:0 explicit weighted B no-deblock, mode-1/mode-2 deblock,
+direct-sub deblock, and partitioned B deblock, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, and public High10/
 High422 field-coded frame-MBAFF deblock rows, plus public High9 4:2:0
 SPS reinit metadata from 9-bit to 8-bit output, public High444 10-bit SPS

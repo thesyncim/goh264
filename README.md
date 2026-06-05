@@ -45,8 +45,8 @@ and is checked by the freshness/matrix gates when populated.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
-rows including implicit weighted B, I/P/B slices, CAVLC and CABAC, weighted
-and direct motion paths, deblock modes, selected field/PAFF/MBAFF rows,
+rows including implicit and explicit weighted B, I/P/B slices, CAVLC and
+CABAC, weighted and direct motion paths, deblock modes, selected field/PAFF/MBAFF rows,
 reinit metadata rows, lossless High444
 transform-bypass rows, configured AVC surfaces, container-extracted Annex B
 vectors, and SEI side-data surfaces.

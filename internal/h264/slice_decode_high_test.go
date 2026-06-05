@@ -331,7 +331,7 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh14CAVLCDeblocking(t *testin
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighRejectsHigh12High14WeightedBDeblockingVariants(t *testing.T) {
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh12High14ExplicitWeightedBMode2Deblock(t *testing.T) {
 	for _, bitDepth := range []int32{12, 14} {
 		for _, deblockMode := range []int32{2} {
 			for _, tt := range []struct {
@@ -366,8 +366,8 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsHigh12High14WeightedBDeblockin
 					sh.DeblockingFilter = deblockMode
 					tt.run(sh)
 
-					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
-						t.Fatalf("high%d weighted B mode-%d deblock validation err = %v, want ErrUnsupported", bitDepth, deblockMode, err)
+					if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+						t.Fatalf("high%d weighted B mode-%d deblock validation err = %v, want nil", bitDepth, deblockMode, err)
 					}
 				})
 			}
@@ -787,36 +787,42 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsImplicitWeightedB(t *testing.T)
 	}
 }
 
-func TestValidateSimpleFrameSliceDecodeHighRejectsUnsupportedWeightedB(t *testing.T) {
+func TestValidateSimpleFrameSliceDecodeHighAllowsExplicitWeightedB(t *testing.T) {
 	for _, tt := range []struct {
-		name string
-		run  func(*SliceHeader)
+		name            string
+		useWeight       int32
+		useWeightChroma int32
 	}{
-		{
-			name: "explicit table",
-			run: func(sh *SliceHeader) {
-				sh.PPS.WeightedBipredIDC = 1
-				sh.PredWeightTable.UseWeight = 1
-			},
-		},
-		{
-			name: "mismatched implicit flags",
-			run: func(sh *SliceHeader) {
-				sh.PPS.WeightedBipredIDC = 2
-				sh.PredWeightTable.UseWeight = 2
-				sh.PredWeightTable.UseWeightChroma = 0
-			},
-		},
+		{name: "luma", useWeight: 1},
+		{name: "luma-chroma", useWeight: 1, useWeightChroma: 1},
+		{name: "default-table", useWeight: 0, useWeightChroma: 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+			m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 12, 1, 1, false, PictureTypeB)
 			sh.RefCount = [2]uint32{1, 1}
-			tt.run(sh)
+			sh.PPS.WeightedBipredIDC = 1
+			sh.PredWeightTable.UseWeight = tt.useWeight
+			sh.PredWeightTable.UseWeightChroma = tt.useWeightChroma
 
-			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
-				t.Fatalf("weighted high B validation err = %v, want ErrUnsupported", err)
+			if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+				t.Fatalf("explicit weighted high B validation err = %v, want nil", err)
+			}
+			if err := validateSimpleFrameSliceDecodeInputHighRefs(sh, h264FrameSliceDecodeInputHigh{PredWeight: &sh.PredWeightTable}); err != nil {
+				t.Fatalf("explicit weighted high B ref validation err = %v, want nil", err)
 			}
 		})
+	}
+}
+
+func TestValidateSimpleFrameSliceDecodeHighRejectsUnsupportedWeightedB(t *testing.T) {
+	m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, 1, 1, false, PictureTypeB)
+	sh.RefCount = [2]uint32{1, 1}
+	sh.PPS.WeightedBipredIDC = 2
+	sh.PredWeightTable.UseWeight = 2
+	sh.PredWeightTable.UseWeightChroma = 0
+
+	if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != ErrUnsupported {
+		t.Fatalf("weighted high B validation err = %v, want ErrUnsupported", err)
 	}
 }
 

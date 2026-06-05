@@ -607,7 +607,8 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)) ||
 			isHigh14CABACFrame420BScope(sh) ||
 			isHighCAVLCFrame420BScope(sh) ||
-			isHighFrame420ImplicitWeightedBScope(sh)
+			isHighFrame420ImplicitWeightedBScope(sh) ||
+			isHighFrame420ExplicitWeightedBScope(sh)
 	case 1, 2:
 		if sh.PPS.CABAC != 0 {
 			return isHigh14CABACFrame420DeblockScope(sh)
@@ -617,7 +618,8 @@ func isHigh14Frame420Scope(sh *SliceHeader) bool {
 		}
 		return (sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)) ||
 			isHighCAVLCFrame420BScope(sh) ||
-			isHighFrame420ImplicitWeightedBScope(sh)
+			isHighFrame420ImplicitWeightedBScope(sh) ||
+			isHighFrame420ExplicitWeightedBScope(sh)
 	default:
 		return false
 	}
@@ -632,7 +634,9 @@ func isHigh14CABACFrame420DeblockScope(sh *SliceHeader) bool {
 	}
 	if sh.SliceTypeNoS == PictureTypeB {
 		return (sh.DeblockingFilter == 1 || sh.DeblockingFilter == 2) &&
-			(isHigh14CABACFrame420BScope(sh) || isHighFrame420ImplicitWeightedBScope(sh))
+			(isHigh14CABACFrame420BScope(sh) ||
+				isHighFrame420ImplicitWeightedBScope(sh) ||
+				isHighFrame420ExplicitWeightedBScope(sh))
 	}
 	if sh.SliceTypeNoS != PictureTypeP {
 		return false
@@ -673,13 +677,15 @@ func isHigh12Frame420Scope(sh *SliceHeader) bool {
 			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)) ||
 			isHigh12CABACFrame420BScope(sh) ||
 			isHighCAVLCFrame420BScope(sh) ||
-			isHighFrame420ImplicitWeightedBScope(sh)
+			isHighFrame420ImplicitWeightedBScope(sh) ||
+			isHighFrame420ExplicitWeightedBScope(sh)
 	case 2:
 		return sh.SliceTypeNoS == PictureTypeI ||
 			(sh.SliceTypeNoS == PictureTypeP && isHighFramePScope(sh)) ||
 			isHigh12CABACFrame420BScope(sh) ||
 			isHighCAVLCFrame420BScope(sh) ||
-			isHighFrame420ImplicitWeightedBScope(sh)
+			isHighFrame420ImplicitWeightedBScope(sh) ||
+			isHighFrame420ExplicitWeightedBScope(sh)
 	default:
 		return false
 	}
@@ -704,6 +710,18 @@ func isHighFrame420ImplicitWeightedBScope(sh *SliceHeader) bool {
 	}
 	return (sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0) ||
 		(sh.PredWeightTable.UseWeight == 2 && sh.PredWeightTable.UseWeightChroma == 2)
+}
+
+func isHighFrame420ExplicitWeightedBScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil || sh.SliceTypeNoS != PictureTypeB {
+		return false
+	}
+	if sh.SPS.ChromaFormatIDC != 1 || sh.PPS.WeightedBipredIDC != 1 {
+		return false
+	}
+	return (sh.PredWeightTable.UseWeight == 0 && sh.PredWeightTable.UseWeightChroma == 0) ||
+		sh.PredWeightTable.UseWeight == 1 ||
+		sh.PredWeightTable.UseWeightChroma == 1
 }
 
 func isHigh12ChromaFrameDeblockScope(sh *SliceHeader) bool {
@@ -857,11 +875,13 @@ func isHigh12Or14Frame420BSliceBoundaryDeblockScope(sh *SliceHeader) bool {
 	case 12:
 		return isHigh12CABACFrame420BScope(sh) ||
 			isHighCAVLCFrame420BScope(sh) ||
-			isHighFrame420ImplicitWeightedBScope(sh)
+			isHighFrame420ImplicitWeightedBScope(sh) ||
+			isHighFrame420ExplicitWeightedBScope(sh)
 	case 14:
 		return isHigh14CABACFrame420BScope(sh) ||
 			isHighCAVLCFrame420BScope(sh) ||
-			isHighFrame420ImplicitWeightedBScope(sh)
+			isHighFrame420ImplicitWeightedBScope(sh) ||
+			isHighFrame420ExplicitWeightedBScope(sh)
 	default:
 		return false
 	}
@@ -961,6 +981,13 @@ func validateHighFrameSliceBPredWeight(sh *SliceHeader, pwt *PredWeightTable) er
 	switch sh.PPS.WeightedBipredIDC {
 	case 0:
 		if pwt.UseWeight == 0 && pwt.UseWeightChroma == 0 {
+			return nil
+		}
+	case 1:
+		if pwt.UseWeight == 0 && pwt.UseWeightChroma == 0 {
+			return nil
+		}
+		if pwt.UseWeight == 1 || pwt.UseWeightChroma == 1 {
 			return nil
 		}
 	case 2:
