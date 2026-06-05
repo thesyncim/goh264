@@ -160,15 +160,17 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsFieldBShapes(t *tes
 	}
 }
 
-func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma422FieldExplicitWeightedB(t *testing.T) {
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma422FieldWeightedB(t *testing.T) {
 	weights := []struct {
-		name            string
-		useWeight       int32
-		useWeightChroma int32
+		name             string
+		weightedBipredID uint32
+		useWeight        int32
+		useWeightChroma  int32
 	}{
-		{name: "luma", useWeight: 1},
-		{name: "chroma", useWeightChroma: 1},
-		{name: "luma-chroma", useWeight: 1, useWeightChroma: 1},
+		{name: "explicit-luma", weightedBipredID: 1, useWeight: 1},
+		{name: "explicit-chroma", weightedBipredID: 1, useWeightChroma: 1},
+		{name: "explicit-luma-chroma", weightedBipredID: 1, useWeight: 1, useWeightChroma: 1},
+		{name: "implicit", weightedBipredID: 2, useWeight: 2, useWeightChroma: 2},
 	}
 	shapes := []struct {
 		name     string
@@ -190,7 +192,7 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma422Fiel
 		})},
 	}
 	for _, picture := range []int32{PictureTopField, PictureBottomField} {
-		for _, deblock := range []int32{0, 1} {
+		for _, deblock := range []int32{0, 1, 2} {
 			for _, weight := range weights {
 				for _, shape := range shapes {
 					t.Run(fmt.Sprintf("picture%d/mode%d/%s/%s", picture, deblock, weight.name, shape.name), func(t *testing.T) {
@@ -205,14 +207,14 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma422Fiel
 								FrameMBSOnlyFlag: 0,
 								MBAFF:            1,
 							},
-							PPS: &PPS{WeightedBipredIDC: 1},
+							PPS: &PPS{WeightedBipredIDC: weight.weightedBipredID},
 							PredWeightTable: PredWeightTable{
 								UseWeight:       weight.useWeight,
 								UseWeightChroma: weight.useWeightChroma,
 							},
 						}
 						if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, shape.sub, shape.cbp, shape.cbpTable); err != nil {
-							t.Fatalf("validate high10 422 field explicit weighted B reconstruct err = %v, want nil", err)
+							t.Fatalf("validate high10 422 field weighted B reconstruct err = %v, want nil", err)
 						}
 					})
 				}
@@ -253,7 +255,7 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10Chroma444Fiel
 		})},
 	}
 	for _, picture := range []int32{PictureTopField, PictureBottomField} {
-		for _, deblock := range []int32{0, 1} {
+		for _, deblock := range []int32{0, 1, 2} {
 			for _, weight := range weights {
 				for _, shape := range shapes {
 					t.Run(fmt.Sprintf("picture%d/mode%d/%s/%s", picture, deblock, weight.name, shape.name), func(t *testing.T) {
