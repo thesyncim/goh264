@@ -925,6 +925,33 @@ func TestSimpleFrameDPBOutputsLeadingMMCOResetBeforeLowerPOC(t *testing.T) {
 	}
 }
 
+func TestSimpleFrameDPBStopsOutputScanAtIDRBoundary(t *testing.T) {
+	sps := simpleDPBTestSPS(3)
+	beforeIDR := simpleDPBTestFrame(sps, 0)
+	beforeIDR.poc = 8
+	idr := simpleDPBTestFrame(sps, 1)
+	idr.poc = 12
+	idr.idrKeyFrame = true
+	afterIDRLowerPOC := simpleDPBTestFrame(sps, 2)
+	afterIDRLowerPOC.poc = 2
+	recoverSimpleDPBTestFrames(beforeIDR, idr, afterIDRLowerPOC)
+	dpb := simpleFrameDPB{
+		delayed:    []*DecodedFrame{beforeIDR, idr, afterIDRLowerPOC},
+		hasBFrames: 1,
+	}
+
+	out, err := dpb.drainOutputFrames(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != beforeIDR {
+		t.Fatalf("output = %v, want frame before delayed IDR boundary", out)
+	}
+	if len(dpb.delayed) != 2 || dpb.delayed[0] != idr || dpb.delayed[1] != afterIDRLowerPOC {
+		t.Fatalf("delayed after output = %v, want IDR boundary followed by lower POC", dpb.delayed)
+	}
+}
+
 func TestSimpleFrameDPBDropsUnrecoveredOutputUntilSEIRecovery(t *testing.T) {
 	sps := simpleDPBTestSPS(4)
 	sps.BitstreamRestrictionFlag = 1

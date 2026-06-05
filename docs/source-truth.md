@@ -69,6 +69,7 @@ CABAC delayed-output reorder plus weighted/field compact rows, CAVLC
 field/QP/crop/weighted/no-deblock compact rows, compact
 long-slice/multiple-reference rows, frame-num-gap multiple-reference rows, and
 MMCO-reset multiple-reference reorder rows,
+internal DPB delayed-output boundary guards for IDR and MMCO reset pictures,
 non-conformance Annex B FATE rows covering extreme plane prediction,
 reference-list-mod overflow recovery, missing-frame recovery, and
 large-to-small SPS reinit metadata, with
