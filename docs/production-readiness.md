@@ -18,8 +18,9 @@ scripts/h264-red-vector.sh mbaff        # exits non-zero at first divergent raw 
 go run ./cmd/goh264bench -manifest testdata/h264/realvectors/manifest.jsonl -filter canl4 -iters 10 -repeats 5 -warmup 2 -ffmpeg -fair-cpu-lanes -ffmpeg-threads 1 -strict-pix-fmt -json
 ```
 
-`scripts/h264-real-vector-strict.sh` runs the green public-vector set and
-excludes only rows currently listed in the failure ledger. Use
+`scripts/h264-real-vector-strict.sh` runs the green public-vector oracle set,
+including expected decode-error rows, and excludes only rows currently listed
+in the failure ledger. Use
 `GOH264_REAL_VECTOR_FAILURES=1` or `GOH264_REAL_VECTOR_MATRIX=1` for the gates
 that execute and verify known-red rows when present.
 

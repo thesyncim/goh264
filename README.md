@@ -37,10 +37,10 @@ Current public-vector matrix:
 
 | Set | Count |
 | --- | ---: |
-| Selected public FFmpeg H.264 vectors | 224 |
-| Green oracle rows | 224 |
+| Selected public FFmpeg H.264 vectors | 225 |
+| Green oracle rows | 225 |
 | Known-red rows in `failures.jsonl` | 0 |
-| Explicitly excluded upstream H.264-ish rows | 2 |
+| Explicitly excluded upstream H.264-ish rows | 1 |
 
 No known-red public-vector rows currently remain. The executable ledger at
 `testdata/h264/realvectors/failures.jsonl` stays in place for future red rows
@@ -206,11 +206,12 @@ scripts/h264-real-vector-upstream-audit.sh
 
 What those gates mean:
 
-- `h264-real-vector-strict.sh` runs the green public-vector set and excludes
-  only rows currently listed in the failure ledger.
+- `h264-real-vector-strict.sh` runs the green public-vector oracle set,
+  including expected decode-error rows, and excludes only rows currently listed
+  in the failure ledger.
 - `FailureLedgerFreshness` runs only known-red rows when the ledger is populated
   and requires each failure class/detail to remain current.
-- `FailureMatrix` runs the full 224-row manifest, currently requiring all 224
+- `FailureMatrix` runs the full 225-row manifest, currently requiring all 225
   rows to match oracle output.
 - `h264-real-vector-upstream-audit.sh` fetches the pinned FFmpeg source and
   verifies that the public-vector manifest represents all decoder-facing
@@ -267,7 +268,7 @@ has those release artifacts.
 | `internal/h264/` | Source-shaped parser, syntax, prediction, transform, DPB, reconstruct, and loop-filter code |
 | `tests/decoder_*_test.go` | Public and package-level fixture/oracle coverage |
 | `testdata/h264/corpus/` | Small local corpus manifest |
-| `testdata/h264/realvectors/` | Public FFmpeg FATE manifest and known-red ledger |
+| `testdata/h264/realvectors/` | Public FFmpeg FATE manifest, exclusions, and known-red ledger |
 | `scripts/` | Upstream fetch, oracle probes, public-vector gates, diagnostics, benchmarks |
 | `cmd/goh264bench/` | JSON benchmark and FFmpeg comparison CLI |
 | `docs/source-truth.md` | Compact current parity snapshot |

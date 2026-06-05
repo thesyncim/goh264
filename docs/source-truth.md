@@ -77,8 +77,9 @@ with both source and extracted bitstream MD5s, auxiliary API/MOV/MPEG-TS/MKV/CBS
 public FATE vector harness,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
-Public vectors: 224 selected, 224 green, 0 known-red. Matrix mode is the
-safe-point gate. The strict script excludes only rows in
+Public vectors: 225 selected, 225 green oracle rows, 0 known-red. Matrix mode is the
+safe-point gate. Green oracle rows include decode-ok, metadata-ok, and expected
+decode-error rows. The strict script excludes only rows in
 `testdata/h264/realvectors/failures.jsonl`, which is currently empty; the
 failure-ledger freshness and matrix gates execute known-red rows when present
 and require them to remain current. The red-queue script intentionally exits
@@ -90,10 +91,10 @@ Use `scripts/h264-real-vector-red-each.sh` for per-known-red logs plus a TSV
 summary of first-divergence evidence.
 
 Pinned FFmpeg `n8.0.1` FATE audit: the H.264 FATE/CBS scan has 224 sample
-references, with 222 represented in the public-vector manifest. The two
-excluded rows are `h264-conformance/FM1_BT_B.h264` (CBS malformed no-frame
-stream; FFmpeg exits with decode error) and `mkv/h264_tta_undecodable.mkv` (no
-H.264 video stream).
+references, with 223 represented in the public-vector manifest and one
+explicitly excluded non-decoder row. `h264-conformance/FM1_BT_B.h264` is now a
+negative decode-error manifest row; `mkv/h264_tta_undecodable.mkv` remains
+excluded because it has no H.264 video stream.
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad public field/MBAFF
 high modes, public 12/14-bit

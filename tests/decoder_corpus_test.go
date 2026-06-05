@@ -23,6 +23,7 @@ import (
 const defaultH264CorpusManifest = "testdata/h264/corpus/manifest.jsonl"
 const defaultH264RealVectorManifest = "testdata/h264/realvectors/manifest.jsonl"
 const defaultH264RealVectorFailureManifest = "testdata/h264/realvectors/failures.jsonl"
+const defaultH264RealVectorExclusionManifest = "testdata/h264/realvectors/exclusions.jsonl"
 
 func h264CorpusManifestPaths() []string {
 	if manifests := os.Getenv("GOH264_CORPUS_MANIFESTS"); manifests != "" {
@@ -77,6 +78,13 @@ type h264CorpusFrameGroup struct {
 type h264CorpusKnownFailure struct {
 	Class          string `json:"class"`
 	DetailContains string `json:"detail_contains"`
+}
+
+type h264RealVectorExclusion struct {
+	Ref         string   `json:"ref"`
+	Source      string   `json:"source"`
+	Reason      string   `json:"reason"`
+	FeatureTags []string `json:"feature_tags,omitempty"`
 }
 
 func TestH264CorpusManifest(t *testing.T) {
@@ -304,10 +312,7 @@ func TestH264RealVectorUpstreamFATECoverage(t *testing.T) {
 	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
 	manifestPaths := h264RealVectorManifestFATESamplePaths(manifest)
 	upstreamRefs := h264UpstreamFATEH264SampleRefs(t, fateDir)
-	excludedRefs := map[string]string{
-		"h264-conformance/FM1_BT_B.h264": "CBS malformed no-frame stream; FFmpeg exits with decode error",
-		"mkv/h264_tta_undecodable.mkv":   "container has no H.264 video stream",
-	}
+	excludedRefs := h264RealVectorExclusionsByRef(t, readH264RealVectorExclusions(t, defaultH264RealVectorExclusionManifest))
 
 	var missing []string
 	var represented, excluded int
@@ -316,9 +321,9 @@ func TestH264RealVectorUpstreamFATECoverage(t *testing.T) {
 			represented++
 			continue
 		}
-		if reason, ok := excludedRefs[ref]; ok {
+		if exclusion, ok := excludedRefs[ref]; ok {
 			excluded++
-			t.Logf("excluded upstream H.264-ish ref %s: %s", ref, reason)
+			t.Logf("excluded upstream H.264-ish ref %s: %s", ref, exclusion.Reason)
 			continue
 		}
 		missing = append(missing, fmt.Sprintf("%s (%s)", ref, strings.Join(locations, ",")))
@@ -334,6 +339,27 @@ func TestH264RealVectorUpstreamFATECoverage(t *testing.T) {
 	}
 	t.Logf("upstream H.264 FATE sample refs=%d represented=%d excluded=%d manifest_entries=%d",
 		len(upstreamRefs), represented, excluded, len(manifest))
+}
+
+func TestH264RealVectorPinnedFATEInventory(t *testing.T) {
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	represented := h264RealVectorManifestFATESamplePaths(manifest)
+	excluded := h264RealVectorExclusionsByRef(t, readH264RealVectorExclusions(t, defaultH264RealVectorExclusionManifest))
+
+	const wantManifestRows = 225
+	const wantExcludedRefs = 1
+	if len(manifest) != wantManifestRows {
+		t.Fatalf("real-vector manifest rows = %d, want %d", len(manifest), wantManifestRows)
+	}
+	if len(excluded) != wantExcludedRefs {
+		t.Fatalf("excluded pinned FFmpeg FATE refs = %d, want %d", len(excluded), wantExcludedRefs)
+	}
+	if _, ok := represented["h264-conformance/FM1_BT_B.h264"]; !ok {
+		t.Fatal("malformed H.264 conformance vector FM1_BT_B.h264 must be represented as a negative decoder row")
+	}
+	if _, ok := excluded["mkv/h264_tta_undecodable.mkv"]; !ok {
+		t.Fatal("non-H.264 mkv/h264_tta_undecodable.mkv must stay explicitly excluded")
+	}
 }
 
 func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
@@ -390,8 +416,8 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 		entry := entry
 		t.Run(entry.ID, func(t *testing.T) {
 			validateH264CorpusEntry(t, entry)
-			if entry.Expect != "decode-ok" && entry.Expect != "metadata-ok" {
-				t.Fatalf("%s: real-vector matrix only supports decode-ok and metadata-ok oracle rows, got %q", entry.ID, entry.Expect)
+			if entry.Expect != "decode-ok" && entry.Expect != "metadata-ok" && entry.Expect != "decode-error" {
+				t.Fatalf("%s: real-vector matrix only supports decode-ok, metadata-ok, and decode-error oracle rows, got %q", entry.ID, entry.Expect)
 			}
 			path := materializeH264CorpusEntry(t, defaultH264RealVectorManifest, entry)
 			data, err := os.ReadFile(path)
@@ -533,7 +559,11 @@ func testH264CorpusEntries(t *testing.T, manifest string, entries []h264CorpusEn
 				surface := surface
 				t.Run(surface, func(t *testing.T) {
 					frames, err := decodeH264CorpusSurface(t, entry, surface, data)
-					if entry.Expect == "unsupported" {
+					switch entry.Expect {
+					case "decode-error":
+						assertH264CorpusExpectedDecodeError(t, entry, err)
+						return
+					case "unsupported":
 						assertH264CorpusUnsupported(t, entry, err)
 						return
 					}
@@ -991,6 +1021,20 @@ func TestValidateH264CorpusEntryAllowsMetadataOracle(t *testing.T) {
 	})
 }
 
+func TestValidateH264CorpusEntryAllowsExpectedDecodeError(t *testing.T) {
+	validateH264CorpusEntry(t, h264CorpusEntry{
+		ID:            "negative",
+		URL:           "https://example.invalid/malformed.264",
+		Format:        "annexb",
+		Expect:        "decode-error",
+		ExpectedError: "invalid data",
+		BitstreamMD5:  "00112233445566778899aabbccddeeff",
+		Surfaces:      []string{"annexb"},
+		FeatureTags:   []string{"malformed"},
+		Source:        "test",
+	})
+}
+
 func TestValidateH264CorpusEntryRequiresUnsupportedGuards(t *testing.T) {
 	validateH264CorpusEntry(t, h264CorpusEntry{
 		ID:            "future",
@@ -1028,6 +1072,60 @@ func readH264CorpusManifest(t *testing.T, path string) []h264CorpusEntry {
 		t.Fatalf("read corpus manifest %s: %v", path, err)
 	}
 	return entries
+}
+
+func readH264RealVectorExclusions(t *testing.T, path string) []h264RealVectorExclusion {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open real-vector exclusions %s: %v", path, err)
+	}
+	defer f.Close()
+
+	var entries []h264RealVectorExclusion
+	scanner := bufio.NewScanner(f)
+	for line := 1; scanner.Scan(); line++ {
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		var entry h264RealVectorExclusion
+		if err := json.Unmarshal([]byte(text), &entry); err != nil {
+			t.Fatalf("%s:%d: %v", path, line, err)
+		}
+		validateH264RealVectorExclusion(t, entry)
+		entries = append(entries, entry)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("read real-vector exclusions %s: %v", path, err)
+	}
+	return entries
+}
+
+func validateH264RealVectorExclusion(t *testing.T, entry h264RealVectorExclusion) {
+	t.Helper()
+	if entry.Ref == "" || entry.Source == "" || entry.Reason == "" {
+		t.Fatalf("real-vector exclusion needs ref, source, and reason: %+v", entry)
+	}
+	if clean := h264CleanFATESamplePath(entry.Ref); clean != entry.Ref {
+		t.Fatalf("%s: exclusion ref must be source-normalized, got %q", entry.Ref, clean)
+	}
+	if len(entry.FeatureTags) == 0 {
+		t.Fatalf("%s: real-vector exclusion needs feature_tags", entry.Ref)
+	}
+}
+
+func h264RealVectorExclusionsByRef(t *testing.T, entries []h264RealVectorExclusion) map[string]h264RealVectorExclusion {
+	t.Helper()
+	byRef := make(map[string]h264RealVectorExclusion, len(entries))
+	for _, entry := range entries {
+		ref := h264CleanFATESamplePath(entry.Ref)
+		if previous, ok := byRef[ref]; ok {
+			t.Fatalf("%s: duplicate real-vector exclusion: previous=%+v current=%+v", ref, previous, entry)
+		}
+		byRef[ref] = entry
+	}
+	return byRef
 }
 
 func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
@@ -1075,6 +1173,10 @@ func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 			t.Fatalf("%s: frame_count must be positive", entry.ID)
 		}
 		validateH264CorpusFrameGroups(t, entry)
+	case "decode-error":
+		if entry.BitstreamMD5 == "" || entry.ExpectedError == "" {
+			t.Fatalf("%s: decode-error entries need bitstream_md5 and expected_error", entry.ID)
+		}
 	case "unsupported":
 		if len(entry.GuardTags) == 0 {
 			t.Fatalf("%s: unsupported entries must name guard_tags", entry.ID)
@@ -1083,7 +1185,7 @@ func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 			t.Fatalf("%s: expected_error = %q, want ErrUnsupported", entry.ID, entry.ExpectedError)
 		}
 	default:
-		t.Fatalf("%s: expect = %q, want decode-ok, metadata-ok, or unsupported", entry.ID, entry.Expect)
+		t.Fatalf("%s: expect = %q, want decode-ok, metadata-ok, decode-error, or unsupported", entry.ID, entry.Expect)
 	}
 }
 
@@ -1446,9 +1548,23 @@ func h264CorpusAnnexBMatchesExpectedOracle(t *testing.T, entry h264CorpusEntry, 
 		return h264CorpusAnnexBMatchesOracle(t, entry, data)
 	case "metadata-ok":
 		return h264CorpusAnnexBMatchesMetadata(t, entry, data)
+	case "decode-error":
+		return h264CorpusAnnexBMatchesDecodeError(t, entry, data)
 	default:
-		return false, fmt.Sprintf("expect = %q, want decode-ok or metadata-ok", entry.Expect)
+		return false, fmt.Sprintf("expect = %q, want decode-ok, metadata-ok, or decode-error", entry.Expect)
 	}
+}
+
+func h264CorpusAnnexBMatchesDecodeError(t *testing.T, entry h264CorpusEntry, data []byte) (bool, string) {
+	t.Helper()
+	frames, err := NewDecoder().DecodeAnnexBFrames(data)
+	if err == nil {
+		return false, fmt.Sprintf("decode succeeded with %d frames, want error containing %q", len(frames), entry.ExpectedError)
+	}
+	if !h264CorpusDecodeErrorMatches(entry, err) {
+		return false, fmt.Sprintf("decode error: %v, want containing %q", err, entry.ExpectedError)
+	}
+	return true, fmt.Sprintf("matched expected decode error: %v", err)
 }
 
 func h264CorpusAnnexBMatchesOracle(t *testing.T, entry h264CorpusEntry, data []byte) (bool, string) {
@@ -1591,4 +1707,22 @@ func assertH264CorpusUnsupported(t *testing.T, entry h264CorpusEntry, err error)
 	if !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("%s: err = %v, want ErrUnsupported for guard tags %v", entry.ID, err, entry.GuardTags)
 	}
+}
+
+func assertH264CorpusExpectedDecodeError(t *testing.T, entry h264CorpusEntry, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s: decode succeeded, want error containing %q", entry.ID, entry.ExpectedError)
+	}
+	if !h264CorpusDecodeErrorMatches(entry, err) {
+		t.Fatalf("%s: err = %v, want error containing %q", entry.ID, err, entry.ExpectedError)
+	}
+}
+
+func h264CorpusDecodeErrorMatches(entry h264CorpusEntry, err error) bool {
+	if err == nil {
+		return false
+	}
+	want := strings.ToLower(entry.ExpectedError)
+	return want == "" || strings.Contains(strings.ToLower(err.Error()), want)
 }
