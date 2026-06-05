@@ -26,7 +26,7 @@ no-deblock/mode-1/mode-2 deblock plus CAVLC/CABAC luma-only and luma+chroma weig
 no-deblock/mode-1/mode-2 deblock plus CAVLC/CABAC unweighted B no-deblock/mode-1/mode-2 deblock,
 B-skip/direct-sub no-deblock and mode-1/mode-2 deblock, partitioned
 B16x8/B8x16/B8x8 no-deblock, and partitioned B16x8/B8x16/B8x8
-mode-1/mode-2 deblock, plus 4:2:0 implicit weighted B no-deblock,
+mode-1/mode-2 deblock, plus CAVLC/CABAC direct-sub residual, plus 4:2:0 implicit weighted B no-deblock,
 mode-1/mode-2 deblock, direct-sub deblock, and partitioned B deblock,
 plus 4:2:0 explicit weighted B no-deblock, mode-1/mode-2 deblock,
 direct-sub deblock, and partitioned B deblock,
@@ -49,7 +49,7 @@ no-deblock/mode-1/mode-2 deblock plus
 CAVLC/CABAC unweighted B no-deblock/mode-1/mode-2 deblock and mode-1/mode-2 I/P and
 weighted-P deblock, B-skip/direct-sub no-deblock and mode-1/mode-2 deblock,
 partitioned B16x8/B8x16/B8x8 no-deblock, and partitioned
-B16x8/B8x16/B8x8 mode-1/mode-2 deblock plus 4:2:0 implicit weighted B
+B16x8/B8x16/B8x8 mode-1/mode-2 deblock plus CAVLC/CABAC direct-sub residual plus 4:2:0 implicit weighted B
 no-deblock, mode-1/mode-2 deblock, direct-sub deblock, and partitioned B
 deblock plus 4:2:0 explicit weighted B no-deblock, mode-1/mode-2 deblock,
 direct-sub deblock, and partitioned B deblock, High10 frame-MBAFF

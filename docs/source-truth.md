@@ -20,7 +20,8 @@ public CAVLC/CABAC 4:2:2/4:4:4 unweighted I/P no-deblock/mode-1/mode-2
 deblock and CAVLC/CABAC luma-only and luma+chroma weighted-P no-deblock/mode-1/mode-2 deblock,
 CAVLC/CABAC unweighted B no-deblock/mode-1/mode-2 deblock including
 B-skip/direct-sub no-deblock and mode-1/mode-2 deblock plus partitioned
-B16x8/B8x16/B8x8 no-deblock and mode-1/mode-2 deblock,
+B16x8/B8x16/B8x8 no-deblock and mode-1/mode-2 deblock plus CAVLC/CABAC
+direct-sub residual,
 4:2:0 implicit weighted B no-deblock/mode-1/mode-2 deblock including
 direct-sub and partitioned B16x8/B8x16/B8x8 shapes,
 4:2:0 explicit weighted B no-deblock/mode-1/mode-2 deblock including
@@ -41,7 +42,8 @@ no-deblock/mode-1/mode-2 deblock and CAVLC/CABAC luma-only and luma+chroma weigh
 no-deblock/mode-1/mode-2 deblock
 and CAVLC/CABAC unweighted B no-deblock/mode-1/mode-2 deblock
 including B-skip/direct-sub no-deblock and mode-1/mode-2 deblock plus partitioned
-B16x8/B8x16/B8x8 no-deblock and mode-1/mode-2 deblock
+B16x8/B8x16/B8x8 no-deblock and mode-1/mode-2 deblock plus CAVLC/CABAC
+direct-sub residual
 plus 4:2:0 implicit weighted B no-deblock/mode-1/mode-2 deblock including
 direct-sub and partitioned B16x8/B8x16/B8x8 shapes
 plus 4:2:0 explicit weighted B no-deblock/mode-1/mode-2 deblock including
