@@ -14,8 +14,8 @@ Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
 single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
 FFmpeg rawvideo decode, recovery-point side data, RTP mode-0 reassembly, RTP
 FU-A reassembly, STAP-A parameter-set aggregation tests, and encode-time
-`MaxFrameSize`/`SliceMaxBytes` budget guards plus runtime RTP/output
-reconfiguration gates.
+`MaxFrameSize`/`SliceMaxBytes` budget guards plus runtime RTP/output,
+rate-control, QP, GOP/IDR, and deblock reconfiguration gates.
 The goal is not a loose rewrite: internal codec paths keep upstream state
 machines, syntax handling, math, and edge cases recognizable, then prove
 behavior against oracle vectors.
@@ -23,8 +23,9 @@ behavior against oracle vectors.
 - **Pure Go decoder path** - no cgo and no Go module dependencies.
 - **Realtime/WebRTC encoder scope** - tested encoder controls cover explicit
   bitrate, latency, keyframe, packetization, profile/level, runtime
-  reconfiguration controls, out-of-band SPS/PPS/avcC headers, and crop-aware
-  SPS/encoded visible output plus recovery-point SEI packaging and
+  reconfiguration controls including rate-control/QP/GOP/deblock updates,
+  out-of-band SPS/PPS/avcC headers, and crop-aware SPS/encoded visible output
+  plus recovery-point SEI packaging and
   `SliceCount`-backed multi-slice output plus frame/slice byte-budget guards,
   with first IDR IntraPCM, P-skip, and P IntraPCM Annex B/AVC/RTP output paths.
 - **Annex B and AVC input surfaces** - automatic packet splitting, explicit
@@ -78,9 +79,10 @@ lockstep.
 
 Encoder status: `DefaultEncoderConfig`, `NewEncoder`, `ParameterSets`,
 `RecoveryPointSEI`, `Encode`/`EncodeInto`, PLI/FIR/force-IDR,
-bitrate/framerate/payload/slice reconfiguration, SPS/PPS cadence modes,
-runtime output-format and RTP packetization reconfiguration, and the WebRTC
-control fields are public and covered by
+bitrate/framerate/payload/slice reconfiguration, runtime rate-control, QP,
+frame-drop, GOP/IDR, deblock, SPS/PPS cadence modes, runtime output-format and
+RTP packetization reconfiguration, and the WebRTC control fields are public and
+covered by
 `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420 constrained-baseline
 realtime configs are admitted as control state; SPS/PPS parameter sets, Annex B
 sequence headers, avcC records, crop metadata,
@@ -98,7 +100,10 @@ zero-PTS frames from frame duration or `RTPTimestampIncrement`. `MaxFrameSize`
 and `SliceMaxBytes` are enforced before frame/reference/RTP state advances.
 Runtime reconfiguration now covers SPS/PPS cadence, Annex B/AVC/RTP output
 format, RTP packetization mode 0/1, STAP-A aggregation, payload type, SSRC, and
-custom RTP timestamp increments without mutating state on invalid updates.
+custom RTP timestamp increments plus rate-control mode, VBV size,
+initial/min/max QP, frame-drop mode, GOP/IDR cadence, and deblock mode without
+mutating state on invalid updates. QP updates queue an IDR/PPS refresh so the
+emitted parameter sets match the active slice QP.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
 when deblocking is disabled; changed frames can use a guarded CAVLC P IntraPCM
 slice in the same admitted path with recovery-point SEI emission when enabled,
@@ -304,7 +309,8 @@ FU-A/STAP-A output, optional per-packet callback metadata, and automatic
 timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
 separate in-band keyframe headers, out-of-band headers, and every-IDR emission,
 and runtime reconfiguration can switch output format and RTP packetization
-controls while preserving state on rejected updates.
+controls plus rate-control/QP/GOP/deblock controls while preserving state on
+rejected updates.
 Motion-search inter prediction, quantized residual coding, and rate-control
 decisions are still future encoder slices.
 

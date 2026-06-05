@@ -320,6 +320,212 @@ func TestEncoderReconfigureSwitchesOutputFormatForForcedIDR(t *testing.T) {
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, secondFrame))
 }
 
+func TestEncoderReconfigureUpdatesRateControlQPDropAndGOPControls(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	vbv := 222_000
+	initialQP := 30
+	minQP := 12
+	maxQP := 40
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		RateControl:   goh264.EncoderRateControlVBR,
+		VBVBufferSize: &vbv,
+		InitialQP:     &initialQP,
+		MinQP:         &minQP,
+		MaxQP:         &maxQP,
+		FrameDrop:     goh264.EncoderFrameDropLate,
+		GOPSize:       4,
+		IDRInterval:   2,
+	}); err != nil {
+		t.Fatalf("Reconfigure runtime rate controls: %v", err)
+	}
+	got := enc.Config()
+	if got.RateControl != goh264.EncoderRateControlVBR ||
+		got.VBVBufferSize != vbv ||
+		got.InitialQP != initialQP ||
+		got.MinQP != minQP ||
+		got.MaxQP != maxQP ||
+		got.FrameDrop != goh264.EncoderFrameDropLate ||
+		got.GOPSize != 4 ||
+		got.IDRInterval != 2 {
+		t.Fatalf("reconfigured runtime controls = %+v", got)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("QP/PPS reconfigure did not queue an IDR refresh")
+	}
+
+	secondFrame := frame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode QP refreshed IDR: %v", err)
+	}
+	if !second.IDR || enc.PendingIDR() {
+		t.Fatalf("QP refreshed frame idr=%v pending=%v, want completed IDR", second.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLQScales(t, second.Data, []uint8{5}, []uint32{30})
+
+	thirdFrame := frame
+	thirdFrame.PTS = secondFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode post-reconfigure P-skip: %v", err)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{1})
+
+	fourthFrame := frame
+	fourthFrame.PTS = thirdFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	fourth, err := enc.Encode(fourthFrame)
+	if err != nil {
+		t.Fatalf("Encode IDR interval refresh: %v", err)
+	}
+	if !fourth.IDR {
+		t.Fatalf("fourth frame idr=%v, want IDR after updated interval", fourth.IDR)
+	}
+	assertEncoderNALTypes(t, fourth.NALUnits, []uint8{7, 8, 5})
+}
+
+func TestEncoderReconfigureAcceptsExplicitZeroQP(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+	if _, err := enc.Encode(frame); err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+
+	initialQP := 0
+	minQP := 0
+	maxQP := 51
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		InitialQP: &initialQP,
+		MinQP:     &minQP,
+		MaxQP:     &maxQP,
+	}); err != nil {
+		t.Fatalf("Reconfigure explicit zero QP: %v", err)
+	}
+	if got := enc.Config(); got.InitialQP != 0 || got.MinQP != 0 || got.MaxQP != 51 {
+		t.Fatalf("explicit zero QP config = %+v, want initial/min/max 0/0/51", got)
+	}
+
+	secondFrame := frame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode zero-QP refreshed IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLQScales(t, second.Data, []uint8{5}, []uint32{0})
+}
+
+func TestEncoderReconfigureDeblockModeControlsPFrameAdmission(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	frame := patternedI420EncoderFrame(16, 16)
+	if _, err := enc.Encode(frame); err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	secondFrame := frame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode admitted P-skip: %v", err)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		DeblockMode: goh264.EncoderDeblockEnabled,
+	}); err != nil {
+		t.Fatalf("Reconfigure deblock enabled: %v", err)
+	}
+	thirdFrame := frame
+	thirdFrame.PTS = secondFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode deblock-enabled guard IDR: %v", err)
+	}
+	if !third.IDR {
+		t.Fatalf("deblock-enabled frame idr=%v, want guarded IDR until P deblock lands", third.IDR)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{7, 8, 5})
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		DeblockMode: goh264.EncoderDeblockDisabled,
+	}); err != nil {
+		t.Fatalf("Reconfigure deblock disabled: %v", err)
+	}
+	fourthFrame := frame
+	fourthFrame.PTS = thirdFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	fourth, err := enc.Encode(fourthFrame)
+	if err != nil {
+		t.Fatalf("Encode deblock-disabled P-skip: %v", err)
+	}
+	assertEncoderNALTypes(t, fourth.NALUnits, []uint8{1})
+}
+
+func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	before := enc.Config()
+
+	badVBV := -1
+	badInitialQP := 41
+	minQP := 12
+	maxQP := 40
+	tests := []struct {
+		name   string
+		update goh264.EncoderReconfigure
+	}{
+		{name: "bad rate-control mode", update: goh264.EncoderReconfigure{RateControl: goh264.EncoderRateControlMode(99)}},
+		{name: "bad vbv", update: goh264.EncoderReconfigure{VBVBufferSize: &badVBV}},
+		{name: "bad qp range", update: goh264.EncoderReconfigure{InitialQP: &badInitialQP, MinQP: &minQP, MaxQP: &maxQP}},
+		{name: "bad frame-drop mode", update: goh264.EncoderReconfigure{FrameDrop: goh264.EncoderFrameDropMode(99)}},
+		{name: "bad gop interval", update: goh264.EncoderReconfigure{GOPSize: 2, IDRInterval: 3}},
+		{name: "bad deblock mode", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockMode(99)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := enc.Reconfigure(tt.update); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Reconfigure invalid runtime controls error = %v, want ErrInvalidData", err)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("invalid runtime controls mutated config = %+v, want %+v", got, before)
+			}
+			if enc.PendingIDR() {
+				t.Fatal("invalid runtime controls queued an IDR")
+			}
+		})
+	}
+}
+
 func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutation(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	enc, err := goh264.NewEncoder(cfg)
@@ -1638,7 +1844,8 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 		"RTPMaxPayloadSize", "MaxFrameSize", "MaxEncodeTimeUS", "SliceCount", "SliceMaxBytes",
 		"Preset", "ForceIDR", "SPSPPSMode", "SPSPPSBeforeIDR", "RecoveryPointSEI",
 		"OutputFormat", "RTPPacketizationMode", "STAPA", "RTPPayloadType", "RTPSSRC",
-		"RTPTimestampIncrement",
+		"RTPTimestampIncrement", "RateControl", "VBVBufferSize", "InitialQP", "MinQP",
+		"MaxQP", "FrameDrop", "GOPSize", "IDRInterval", "DeblockMode",
 	} {
 		if _, ok := reconfigType.FieldByName(field); !ok {
 			t.Fatalf("EncoderReconfigure missing roadmap control field %s", field)
@@ -1816,6 +2023,45 @@ func assertEncoderVCLFrameNums(t *testing.T, annexB []byte, wantTypes []uint8, w
 	if !reflect.DeepEqual(gotTypes, wantTypes) || !reflect.DeepEqual(gotFrameNums, wantFrameNums) {
 		t.Fatalf("VCL types/frame nums = %v/%v, want %v/%v",
 			gotTypes, gotFrameNums, wantTypes, wantFrameNums)
+	}
+}
+
+func assertEncoderVCLQScales(t *testing.T, annexB []byte, wantTypes []uint8, wantQScales []uint32) {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(annexB)
+	if err != nil {
+		t.Fatalf("SplitAnnexB: %v", err)
+	}
+	var spsList [32]*h264.SPS
+	var ppsList [256]*h264.PPS
+	var gotTypes []uint8
+	var gotQScales []uint32
+	for _, nal := range nals {
+		switch nal.Type {
+		case h264.NALSPS:
+			sps, err := h264.DecodeSPS(nal.RBSP)
+			if err != nil {
+				t.Fatalf("DecodeSPS: %v", err)
+			}
+			spsList[sps.SPSID] = sps
+		case h264.NALPPS:
+			pps, err := h264.DecodePPS(nal.RBSP, &spsList)
+			if err != nil {
+				t.Fatalf("DecodePPS: %v", err)
+			}
+			ppsList[pps.PPSID] = pps
+		case h264.NALIDRSlice, h264.NALSlice:
+			sh, err := h264.ParseSliceHeader(nal, &ppsList)
+			if err != nil {
+				t.Fatalf("ParseSliceHeader nal=%d: %v", nal.Type, err)
+			}
+			gotTypes = append(gotTypes, uint8(nal.Type))
+			gotQScales = append(gotQScales, sh.QScale)
+		}
+	}
+	if !reflect.DeepEqual(gotTypes, wantTypes) || !reflect.DeepEqual(gotQScales, wantQScales) {
+		t.Fatalf("VCL types/QScales = %v/%v, want %v/%v",
+			gotTypes, gotQScales, wantTypes, wantQScales)
 	}
 }
 

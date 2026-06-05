@@ -250,10 +250,17 @@ type EncoderSEI struct {
 type EncoderReconfigure struct {
 	TargetBitrate         int
 	MaxBitrate            int
+	RateControl           EncoderRateControlMode
+	VBVBufferSize         *int
+	InitialQP             *int
+	MinQP                 *int
+	MaxQP                 *int
+	FrameDrop             EncoderFrameDropMode
 	FrameRateNum          int
 	FrameRateDen          int
 	Width                 int
 	Height                int
+	DeblockMode           EncoderDeblockMode
 	RTPMaxPayloadSize     int
 	MaxFrameSize          int
 	MaxEncodeTimeUS       int
@@ -261,6 +268,8 @@ type EncoderReconfigure struct {
 	SliceMaxBytes         int
 	Preset                EncoderPreset
 	ForceIDR              bool
+	GOPSize               int
+	IDRInterval           int
 	SPSPPSMode            EncoderSPSPPSMode
 	SPSPPSBeforeIDR       *bool
 	RecoveryPointSEI      *bool
@@ -641,11 +650,30 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	cfg := e.cfg
 	oldWidth := cfg.Width
 	oldHeight := cfg.Height
+	qpRefresh := update.InitialQP != nil || update.MinQP != nil || update.MaxQP != nil
 	if update.TargetBitrate != 0 {
 		cfg.TargetBitrate = update.TargetBitrate
 	}
 	if update.MaxBitrate != 0 {
 		cfg.MaxBitrate = update.MaxBitrate
+	}
+	if update.RateControl != 0 {
+		cfg.RateControl = update.RateControl
+	}
+	if update.VBVBufferSize != nil {
+		cfg.VBVBufferSize = *update.VBVBufferSize
+	}
+	if update.InitialQP != nil {
+		cfg.InitialQP = *update.InitialQP
+	}
+	if update.MinQP != nil {
+		cfg.MinQP = *update.MinQP
+	}
+	if update.MaxQP != nil {
+		cfg.MaxQP = *update.MaxQP
+	}
+	if update.FrameDrop != 0 {
+		cfg.FrameDrop = update.FrameDrop
 	}
 	if update.FrameRateNum != 0 || update.FrameRateDen != 0 {
 		cfg.FrameRateNum = update.FrameRateNum
@@ -658,6 +686,9 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 		cfg.StrideY = update.Width
 		cfg.StrideCb = (update.Width + 1) / 2
 		cfg.StrideCr = (update.Width + 1) / 2
+	}
+	if update.DeblockMode != 0 {
+		cfg.DeblockMode = update.DeblockMode
 	}
 	if update.RTPMaxPayloadSize != 0 {
 		cfg.RTPMaxPayloadSize = update.RTPMaxPayloadSize
@@ -676,6 +707,12 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	}
 	if update.Preset != 0 {
 		cfg.Preset = update.Preset
+	}
+	if update.GOPSize != 0 {
+		cfg.GOPSize = update.GOPSize
+	}
+	if update.IDRInterval != 0 {
+		cfg.IDRInterval = update.IDRInterval
 	}
 	if update.SPSPPSMode != 0 {
 		cfg.SPSPPSMode = update.SPSPPSMode
@@ -704,7 +741,7 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if update.RTPTimestampIncrement != 0 {
 		cfg.RTPTimestampIncrement = update.RTPTimestampIncrement
 	}
-	normalized, err := normalizeEncoderConfig(cfg)
+	normalized, err := normalizeEncoderConfigWithExplicitQP(cfg, update.InitialQP != nil, update.MinQP != nil, update.MaxQP != nil)
 	if err != nil {
 		return err
 	}
@@ -712,6 +749,9 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if normalized.Width != oldWidth || normalized.Height != oldHeight {
 		e.reference = encoderReferenceFrame{}
 		e.framesSinceIDR = 0
+		e.forceIDR = true
+	}
+	if qpRefresh {
 		e.forceIDR = true
 	}
 	if update.ForceIDR {
@@ -1234,6 +1274,10 @@ func encoderDeblockingFilterIDC(mode EncoderDeblockMode) uint32 {
 }
 
 func normalizeEncoderConfig(cfg EncoderConfig) (EncoderConfig, error) {
+	return normalizeEncoderConfigWithExplicitQP(cfg, false, false, false)
+}
+
+func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, explicitMinQP, explicitMaxQP bool) (EncoderConfig, error) {
 	if cfg.Width <= 0 || cfg.Height <= 0 {
 		return cfg, encoderInvalid("width and height must be positive")
 	}
@@ -1340,13 +1384,13 @@ func normalizeEncoderConfig(cfg EncoderConfig) (EncoderConfig, error) {
 	if cfg.VBVBufferSize < 0 || cfg.MaxFrameSize < 0 {
 		return cfg, encoderInvalid("VBV buffer size and max frame size cannot be negative")
 	}
-	if cfg.InitialQP == 0 {
+	if cfg.InitialQP == 0 && !explicitInitialQP {
 		cfg.InitialQP = 26
 	}
-	if cfg.MinQP == 0 {
+	if cfg.MinQP == 0 && !explicitMinQP {
 		cfg.MinQP = 10
 	}
-	if cfg.MaxQP == 0 {
+	if cfg.MaxQP == 0 && !explicitMaxQP {
 		cfg.MaxQP = 42
 	}
 	if cfg.MinQP < 0 || cfg.MinQP > 51 || cfg.MaxQP < 0 || cfg.MaxQP > 51 || cfg.InitialQP < cfg.MinQP || cfg.InitialQP > cfg.MaxQP {
