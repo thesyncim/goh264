@@ -1,5 +1,9 @@
 # Production Readiness
 
+The decoder is the current implemented path. Realtime/WebRTC encoder support is
+now in scope, but encoder production gates live in
+`docs/encoder-webrtc-roadmap.md` until implementation and oracle evidence land.
+
 Harness-first status:
 
 ```sh
