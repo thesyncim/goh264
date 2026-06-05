@@ -54,7 +54,7 @@ no-deblock, mode-1/mode-2 deblock, direct-sub deblock, and partitioned B
 deblock plus 4:2:0 explicit weighted B no-deblock, mode-1/mode-2 deblock,
 direct-sub deblock, and partitioned B deblock, High10 frame-MBAFF
 field-coded CAVLC IntraPCM entropy/reconstruct pairing, public High12/High14
-4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus P-skip and field-coded/frame-coded P16x16 mode-1/mode-2 deblock rows, and public High10/
+4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows, and public High10/
 High422 field-coded frame-MBAFF deblock rows, plus internal High10 4:2:2/4:4:4
 top/bottom field explicit/implicit weighted B luma/chroma deblock modes 0/1/2, plus internal High10 4:2:2/4:4:4
 top/bottom field luma-only, luma+chroma, and source-normalized chroma-only
