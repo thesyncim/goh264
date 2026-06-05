@@ -14,7 +14,8 @@ Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
 single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
 FFmpeg rawvideo decode, recovery-point side data, RTP mode-0 reassembly, RTP
 FU-A reassembly, STAP-A parameter-set aggregation tests, and encode-time
-`MaxFrameSize`/`SliceMaxBytes` budget guards.
+`MaxFrameSize`/`SliceMaxBytes` budget guards plus runtime RTP/output
+reconfiguration gates.
 The goal is not a loose rewrite: internal codec paths keep upstream state
 machines, syntax handling, math, and edge cases recognizable, then prove
 behavior against oracle vectors.
@@ -77,8 +78,9 @@ lockstep.
 
 Encoder status: `DefaultEncoderConfig`, `NewEncoder`, `ParameterSets`,
 `RecoveryPointSEI`, `Encode`/`EncodeInto`, PLI/FIR/force-IDR,
-bitrate/framerate/payload/slice reconfiguration, SPS/PPS cadence modes, and
-the WebRTC control fields are public and covered by
+bitrate/framerate/payload/slice reconfiguration, SPS/PPS cadence modes,
+runtime output-format and RTP packetization reconfiguration, and the WebRTC
+control fields are public and covered by
 `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420 constrained-baseline
 realtime configs are admitted as control state; SPS/PPS parameter sets, Annex B
 sequence headers, avcC records, crop metadata,
@@ -94,6 +96,9 @@ packet index/count, frame timing, payload form, NAL type/count, FU-A start/end,
 and parameter-set metadata. RTP timestamps honor explicit frame PTS and advance
 zero-PTS frames from frame duration or `RTPTimestampIncrement`. `MaxFrameSize`
 and `SliceMaxBytes` are enforced before frame/reference/RTP state advances.
+Runtime reconfiguration now covers SPS/PPS cadence, Annex B/AVC/RTP output
+format, RTP packetization mode 0/1, STAP-A aggregation, payload type, SSRC, and
+custom RTP timestamp increments without mutating state on invalid updates.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
 when deblocking is disabled; changed frames can use a guarded CAVLC P IntraPCM
 slice in the same admitted path with recovery-point SEI emission when enabled,
@@ -273,6 +278,13 @@ if err != nil {
 }
 enc.HandlePLI() // queues the next frame as an IDR request
 err = enc.SetRTPMaxPayloadSize(1200)
+mode0 := goh264.EncoderRTPPacketizationSingleNAL
+stapa := false
+err = enc.Reconfigure(goh264.EncoderReconfigure{
+	RTPPacketizationMode: &mode0,
+	STAPA:                &stapa,
+	ForceIDR:             true,
+})
 enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
 	// Optional per-packet WebRTC metadata hook.
 })
@@ -289,7 +301,9 @@ recovery-point SEI when enabled. RTP output includes payloads plus complete RTP
 packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1
 FU-A/STAP-A output, optional per-packet callback metadata, and automatic
 timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
-separate in-band keyframe headers, out-of-band headers, and every-IDR emission.
+separate in-band keyframe headers, out-of-band headers, and every-IDR emission,
+and runtime reconfiguration can switch output format and RTP packetization
+controls while preserving state on rejected updates.
 Motion-search inter prediction, quantized residual coding, and rate-control
 decisions are still future encoder slices.
 

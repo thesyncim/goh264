@@ -248,21 +248,28 @@ type EncoderSEI struct {
 }
 
 type EncoderReconfigure struct {
-	TargetBitrate     int
-	MaxBitrate        int
-	FrameRateNum      int
-	FrameRateDen      int
-	Width             int
-	Height            int
-	RTPMaxPayloadSize int
-	MaxFrameSize      int
-	MaxEncodeTimeUS   int
-	SliceCount        int
-	SliceMaxBytes     int
-	Preset            EncoderPreset
-	ForceIDR          bool
-	SPSPPSBeforeIDR   *bool
-	RecoveryPointSEI  *bool
+	TargetBitrate         int
+	MaxBitrate            int
+	FrameRateNum          int
+	FrameRateDen          int
+	Width                 int
+	Height                int
+	RTPMaxPayloadSize     int
+	MaxFrameSize          int
+	MaxEncodeTimeUS       int
+	SliceCount            int
+	SliceMaxBytes         int
+	Preset                EncoderPreset
+	ForceIDR              bool
+	SPSPPSMode            EncoderSPSPPSMode
+	SPSPPSBeforeIDR       *bool
+	RecoveryPointSEI      *bool
+	OutputFormat          EncoderOutputFormat
+	RTPPacketizationMode  *EncoderRTPPacketizationMode
+	STAPA                 *bool
+	RTPPayloadType        *uint8
+	RTPSSRC               *uint32
+	RTPTimestampIncrement uint32
 }
 
 type Encoder struct {
@@ -670,11 +677,32 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if update.Preset != 0 {
 		cfg.Preset = update.Preset
 	}
+	if update.SPSPPSMode != 0 {
+		cfg.SPSPPSMode = update.SPSPPSMode
+	}
 	if update.SPSPPSBeforeIDR != nil {
 		cfg.SPSPPSBeforeIDR = *update.SPSPPSBeforeIDR
 	}
 	if update.RecoveryPointSEI != nil {
 		cfg.RecoveryPointSEI = *update.RecoveryPointSEI
+	}
+	if update.OutputFormat != 0 {
+		cfg.OutputFormat = update.OutputFormat
+	}
+	if update.RTPPacketizationMode != nil {
+		cfg.RTPPacketizationMode = *update.RTPPacketizationMode
+	}
+	if update.STAPA != nil {
+		cfg.STAPA = *update.STAPA
+	}
+	if update.RTPPayloadType != nil {
+		cfg.RTPPayloadType = *update.RTPPayloadType
+	}
+	if update.RTPSSRC != nil {
+		cfg.RTPSSRC = *update.RTPSSRC
+	}
+	if update.RTPTimestampIncrement != 0 {
+		cfg.RTPTimestampIncrement = update.RTPTimestampIncrement
 	}
 	normalized, err := normalizeEncoderConfig(cfg)
 	if err != nil {

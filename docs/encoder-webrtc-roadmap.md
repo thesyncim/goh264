@@ -43,16 +43,21 @@ defaults:
   out-of-band versus in-band, aggregation policy, DON-disabled mode, and
   per-packet metadata callbacks.
 - Runtime reconfiguration: bitrate, frame rate, resolution reset, keyframe
-  request, packetization limits, and latency/quality preset changes.
+  request, SPS/PPS cadence, output format, packetization mode, packetization
+  limits, RTP payload metadata, timestamp increment, and latency/quality preset
+  changes.
 
 Current safe point: the public control contract is present in `encoder.go` and
 covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
 constrained-baseline realtime/WebRTC configs can be constructed, invalid
 controls are rejected, including I420 crop offsets that H.264 cannot represent,
 and runtime bitrate, framerate, payload-size, slice-count/byte-target,
-SPS/PPS cadence, PLI/FIR, force-IDR, and partial reconfiguration controls are
-tested. `MaxFrameSize` and `SliceMaxBytes` are now enforced as encode-time
-guards before frame/reference/RTP state advances. `ParameterSets`
+SPS/PPS cadence, RTP output format, packetization-mode 0/1, STAP-A, payload
+type, SSRC, timestamp increment, PLI/FIR, force-IDR, and partial
+reconfiguration controls are tested, including rejected packetization updates
+that leave the prior config intact. `MaxFrameSize` and `SliceMaxBytes` are now
+enforced as encode-time guards before frame/reference/RTP state advances.
+`ParameterSets`
 generates SPS/PPS NALs, crop metadata, Annex B sequence headers, and avcC
 records accepted by the decoder parsers. IDR header cadence is explicit for
 in-band keyframes, out-of-band headers, and every-IDR emission.
@@ -76,7 +81,8 @@ packets also carry complete 12-byte RTP headers plus payload bytes, and
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form, NAL type/count, FU-A start/end, and parameter-set
 packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
-from frame duration or `RTPTimestampIncrement`. Cropped I420 IDR output is
+from frame duration or `RTPTimestampIncrement`, including after runtime
+timestamp-increment reconfiguration. Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
 residual coding, and rate-control feedback remain pending.
@@ -123,10 +129,13 @@ can emit multiple VCL NALs in one access unit.
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
    bytes, callback-style packet metadata, and automatic timestamp progression
    for frames without explicit PTS, plus explicit SPS/PPS in-band,
-   out-of-band, and every-IDR cadence semantics. Configured `SliceCount`
-   output now feeds RTP mode 1 as separate VCL NAL packets when each slice fits
-   the payload limit, and configured `MaxFrameSize`/`SliceMaxBytes` budgets now
-   reject oversized encoded output without advancing encoder state.
+   out-of-band, and every-IDR cadence semantics. Runtime reconfiguration now
+   switches output format, RTP mode 0/1, STAP-A, payload type, SSRC, SPS/PPS
+   mode, and RTP timestamp increments with rollback on invalid updates.
+   Configured `SliceCount` output now feeds RTP mode 1 as separate VCL NAL
+   packets when each slice fits the payload limit, and configured
+   `MaxFrameSize`/`SliceMaxBytes` budgets now reject oversized encoded output
+   without advancing encoder state.
 6. Add realtime allocation budgets, encode timing benchmarks, and control-loop
    stress tests.
 

@@ -197,6 +197,160 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 	}
 }
 
+func TestEncoderReconfigureSwitchesWebRTCPacketizationControls(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPMaxPayloadSize = 32
+	cfg.STAPA = true
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 0
+	firstFrame.Duration = 0
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first mode-1 RTP frame: %v", err)
+	}
+	var sawSTAPA, sawFUA bool
+	for _, pkt := range first.RTPPackets {
+		switch pkt.Payload[0] & 0x1f {
+		case 24:
+			sawSTAPA = true
+		case 28:
+			sawFUA = true
+		}
+	}
+	if !sawSTAPA || !sawFUA {
+		t.Fatalf("first RTP payload forms STAP-A/FU-A = %v/%v, want both before reconfigure", sawSTAPA, sawFUA)
+	}
+
+	mode0 := goh264.EncoderRTPPacketizationSingleNAL
+	stapa := false
+	payloadType := uint8(110)
+	ssrc := uint32(0x11223344)
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		RTPMaxPayloadSize:     1200,
+		RTPPacketizationMode:  &mode0,
+		STAPA:                 &stapa,
+		RTPPayloadType:        &payloadType,
+		RTPSSRC:               &ssrc,
+		RTPTimestampIncrement: 9000,
+		ForceIDR:              true,
+	}); err != nil {
+		t.Fatalf("Reconfigure RTP mode 0: %v", err)
+	}
+	got := enc.Config()
+	if got.RTPPacketizationMode != goh264.EncoderRTPPacketizationSingleNAL ||
+		got.STAPA ||
+		got.RTPPayloadType != payloadType ||
+		got.RTPSSRC != ssrc ||
+		got.RTPTimestampIncrement != 9000 ||
+		got.RTPMaxPayloadSize != 1200 {
+		t.Fatalf("reconfigured RTP controls = %+v", got)
+	}
+
+	secondFrame := firstFrame
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode forced mode-0 IDR: %v", err)
+	}
+	if second.RTPTime != cfg.RTPTimestampIncrement {
+		t.Fatalf("second RTP time = %d, want prior next timestamp %d", second.RTPTime, cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, second.RTPPackets, payloadType, ssrc, uint16(len(first.RTPPackets)))
+	for i, pkt := range second.RTPPackets {
+		if typ := pkt.Payload[0] & 0x1f; typ == 24 || typ == 28 {
+			t.Fatalf("second packet[%d] payload type = %d, want mode-0 single raw NAL", i, typ)
+		}
+		if pkt.Marker != (i == len(second.RTPPackets)-1) {
+			t.Fatalf("second packet[%d] marker = %v, want only final marker", i, pkt.Marker)
+		}
+	}
+
+	thirdFrame := firstFrame
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode post-reconfigure P-skip: %v", err)
+	}
+	if third.RTPTime != second.RTPTime+9000 {
+		t.Fatalf("third RTP time = %d, want updated increment from second %d", third.RTPTime, second.RTPTime+9000)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{1})
+	assertRTPPacketMetadata(t, third.RTPPackets, payloadType, ssrc, uint16(len(first.RTPPackets)+len(second.RTPPackets)))
+}
+
+func TestEncoderReconfigureSwitchesOutputFormatForForcedIDR(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	if _, err := enc.Encode(firstFrame); err != nil {
+		t.Fatalf("Encode first RTP frame: %v", err)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		OutputFormat: goh264.EncoderOutputAnnexB,
+		SPSPPSMode:   goh264.EncoderSPSPPSEveryIDR,
+		ForceIDR:     true,
+	}); err != nil {
+		t.Fatalf("Reconfigure Annex B output: %v", err)
+	}
+	secondFrame := firstFrame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode forced Annex B IDR: %v", err)
+	}
+	if len(second.RTPPackets) != 0 {
+		t.Fatalf("Annex B output returned RTP packets: %d", len(second.RTPPackets))
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(second.Data)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames reconfigured IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, secondFrame))
+}
+
+func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutation(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	before := enc.Config()
+	mode0 := goh264.EncoderRTPPacketizationSingleNAL
+	stapa := true
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		RTPPacketizationMode: &mode0,
+		STAPA:                &stapa,
+	}); !errors.Is(err, goh264.ErrUnsupported) {
+		t.Fatalf("Reconfigure mode-0 STAP-A error = %v, want ErrUnsupported", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("invalid packetization reconfigure mutated config = %+v, want %+v", got, before)
+	}
+
+	badPayloadType := uint8(128)
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		RTPPayloadType: &badPayloadType,
+	}); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Reconfigure bad payload type error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("invalid payload type reconfigure mutated config = %+v, want %+v", got, before)
+	}
+}
+
 func TestEncoderKeyframeRequestsQueueIDR(t *testing.T) {
 	for _, tt := range []struct {
 		name string
@@ -1475,6 +1629,19 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
 			t.Fatalf("Encoder missing runtime control method %s", method)
+		}
+	}
+
+	reconfigType := reflect.TypeOf(goh264.EncoderReconfigure{})
+	for _, field := range []string{
+		"TargetBitrate", "MaxBitrate", "FrameRateNum", "FrameRateDen", "Width", "Height",
+		"RTPMaxPayloadSize", "MaxFrameSize", "MaxEncodeTimeUS", "SliceCount", "SliceMaxBytes",
+		"Preset", "ForceIDR", "SPSPPSMode", "SPSPPSBeforeIDR", "RecoveryPointSEI",
+		"OutputFormat", "RTPPacketizationMode", "STAPA", "RTPPayloadType", "RTPSSRC",
+		"RTPTimestampIncrement",
+	} {
+		if _, ok := reconfigType.FieldByName(field); !ok {
+			t.Fatalf("EncoderReconfigure missing roadmap control field %s", field)
 		}
 	}
 }
