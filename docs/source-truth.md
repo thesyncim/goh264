@@ -108,7 +108,7 @@ invalid-control rejection, bitrate, framerate, RTP payload-size,
 PLI/FIR/force-IDR, partial reconfiguration, public SPS/PPS/Annex B/avcC header
 generation, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
 generation, FFmpeg rawvideo decode, RTP packetization-mode 1 FU-A reassembly,
-and STAP-A parameter-set aggregation.
+STAP-A parameter-set aggregation, and RTP payload-type/SSRC/sequence metadata.
 Internal writer proof covers raw bit/Exp-Golomb writing, RBSP trailing bits,
 EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC decoder configuration
 records, baseline SPS/PPS syntax, recovery-point SEI syntax, and Baseline IDR

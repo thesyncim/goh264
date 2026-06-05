@@ -502,6 +502,32 @@ func TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets(t *testing.T) {
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
 }
 
+func TestEncoderEncodeRTPPacketsCarryWebRTCMetadata(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPayloadType = 102
+	cfg.RTPSSRC = 0xdecafbad
+	cfg.RTPMaxPayloadSize = 32
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode first RTP frame: %v", err)
+	}
+	assertRTPPacketMetadata(t, first.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode second RTP frame: %v", err)
+	}
+	assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)))
+}
+
 func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {
@@ -641,6 +667,24 @@ func assertDecodedEncoderFrameBytes(t *testing.T, frames []*goh264.Frame, want [
 	}
 	if !bytes.Equal(raw, want) {
 		t.Fatalf("decoded raw md5 = %x, want %x", md5.Sum(raw), md5.Sum(want))
+	}
+}
+
+func assertRTPPacketMetadata(t *testing.T, packets []goh264.EncoderRTPPacket, payloadType uint8, ssrc uint32, firstSeq uint16) {
+	t.Helper()
+	if len(packets) == 0 {
+		t.Fatal("RTP packet list is empty")
+	}
+	for i, pkt := range packets {
+		if pkt.PayloadType != payloadType {
+			t.Fatalf("packet[%d] payload type = %d, want %d", i, pkt.PayloadType, payloadType)
+		}
+		if pkt.SSRC != ssrc {
+			t.Fatalf("packet[%d] SSRC = %#x, want %#x", i, pkt.SSRC, ssrc)
+		}
+		if pkt.SequenceNumber != firstSeq+uint16(i) {
+			t.Fatalf("packet[%d] sequence = %d, want %d", i, pkt.SequenceNumber, firstSeq+uint16(i))
+		}
 	}
 }
 

@@ -185,9 +185,12 @@ type EncoderNALUnit struct {
 }
 
 type EncoderRTPPacket struct {
-	Payload   []byte
-	Timestamp uint32
-	Marker    bool
+	Payload        []byte
+	PayloadType    uint8
+	SequenceNumber uint16
+	Timestamp      uint32
+	SSRC           uint32
+	Marker         bool
 }
 
 type EncodedFrame struct {
@@ -231,10 +234,11 @@ type EncoderReconfigure struct {
 }
 
 type Encoder struct {
-	cfg      EncoderConfig
-	forceIDR bool
-	frameNum uint32
-	idrPicID uint32
+	cfg               EncoderConfig
+	forceIDR          bool
+	frameNum          uint32
+	idrPicID          uint32
+	rtpSequenceNumber uint16
 }
 
 func DefaultEncoderConfig(width, height int) EncoderConfig {
@@ -418,6 +422,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		if err != nil {
 			return EncodedFrame{}, err
 		}
+		e.stampRTPPackets(packets)
 	}
 
 	e.forceIDR = false
@@ -720,6 +725,15 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 		packets[len(packets)-1].Marker = true
 	}
 	return packets, nil
+}
+
+func (e *Encoder) stampRTPPackets(packets []EncoderRTPPacket) {
+	for i := range packets {
+		packets[i].PayloadType = e.cfg.RTPPayloadType
+		packets[i].SequenceNumber = e.rtpSequenceNumber
+		packets[i].SSRC = e.cfg.RTPSSRC
+		e.rtpSequenceNumber++
+	}
 }
 
 func buildEncoderSTAPA(nals []encoderRawNAL, maxPayloadSize int) ([]byte, int, error) {
