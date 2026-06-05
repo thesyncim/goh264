@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestValidateHighFrameSliceMacroblockForReconstructAllowsPartitionedP(t *testing.T) {
 	pSlice := &SliceHeader{SliceTypeNoS: PictureTypeP}
@@ -87,6 +90,67 @@ func TestValidateHighFrameSliceMacroblockForReconstructAllowsFieldPShapes(t *tes
 				t.Fatalf("validate high field P shape err = %v, want nil", err)
 			}
 		})
+	}
+}
+
+func TestValidateHighFrameSliceMacroblockForReconstructAllowsHigh10ChromaFieldWeightedP(t *testing.T) {
+	weights := []struct {
+		name            string
+		useWeightChroma int32
+	}{
+		{name: "luma-only"},
+		{name: "luma-chroma", useWeightChroma: 1},
+	}
+	sub := [4]uint32{
+		MBType16x16 | MBTypeP0L0,
+		MBType16x8 | MBTypeP0L0,
+		MBType8x16 | MBTypeP0L0,
+		MBType8x8 | MBTypeP0L0,
+	}
+	shapes := []struct {
+		name     string
+		mbType   uint32
+		sub      *[4]uint32
+		cbp      int
+		cbpTable int
+	}{
+		{name: "pskip", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip | MBTypeInterlaced},
+		{name: "p16x16 residual", mbType: MBType16x16 | MBTypeP0L0 | MBTypeInterlaced, cbp: 1, cbpTable: 1},
+		{name: "p16x8 residual", mbType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced, cbp: 1, cbpTable: 1},
+		{name: "p8x16 residual", mbType: MBType8x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced, cbp: 2, cbpTable: 2},
+		{name: "p8x8 explicit sub", mbType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0 | MBTypeInterlaced, sub: &sub, cbp: 4, cbpTable: 4},
+	}
+	for _, chromaFormatIDC := range []uint32{2, 3} {
+		for _, picture := range []int32{PictureTopField, PictureBottomField} {
+			for _, deblock := range []int32{0, 1} {
+				for _, weight := range weights {
+					for _, shape := range shapes {
+						t.Run(fmt.Sprintf("chroma%d/picture%d/mode%d/%s/%s", chromaFormatIDC, picture, deblock, weight.name, shape.name), func(t *testing.T) {
+							sh := &SliceHeader{
+								SliceTypeNoS:     PictureTypeP,
+								PictureStructure: picture,
+								DeblockingFilter: deblock,
+								SPS: &SPS{
+									BitDepthLuma:     10,
+									BitDepthChroma:   10,
+									ChromaFormatIDC:  chromaFormatIDC,
+									FrameMBSOnlyFlag: 0,
+									MBAFF:            1,
+								},
+								PPS: &PPS{WeightedPred: 1},
+								PredWeightTable: PredWeightTable{
+									UseWeight:       1,
+									UseWeightChroma: weight.useWeightChroma,
+								},
+							}
+							if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, shape.mbType, shape.sub, shape.cbp, shape.cbpTable); err != nil {
+								t.Fatalf("validate high10 chroma field weighted P reconstruct err = %v, want nil", err)
+							}
+						})
+					}
+				}
+			}
+		}
 	}
 }
 

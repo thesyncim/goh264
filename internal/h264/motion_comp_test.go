@@ -214,6 +214,50 @@ func TestH264HLMotionFrameHigh10ExplicitWeightedField444List0(t *testing.T) {
 	requireH264BlockEqualHigh(t, dst.Cr, want.Cr, dst.ChromaStride, crOff, crOff, chromaWidth, chromaHeight)
 }
 
+func TestH264HLMotionFrameHigh10ExplicitLumaOnlyWeightedField444List0(t *testing.T) {
+	const bitDepth = 10
+	dst := makeH264MotionCompPictureHigh(3, bitDepth, 33)
+	want := makeH264MotionCompPictureHigh(3, bitDepth, 33)
+	ref0 := makeH264MotionCompPictureHigh(3, bitDepth, 107)
+	applySimpleFieldRefPlaneHigh(dst, PictureBottomField)
+	applySimpleFieldRefPlaneHigh(want, PictureBottomField)
+	applySimpleFieldRefPlaneHigh(ref0, PictureBottomField)
+	refs := [2][]*h264PicturePlanesHigh{{ref0}}
+	var cache macroblockMotionCache
+	cache.Ref[0][h264Scan8[0]] = 0
+
+	pwt := h264MotionCompTestPWT(3)
+	pwt.UseWeight = 1
+	pwt.LumaLog2WeightDenom = 2
+	pwt.LumaWeight[0][0] = [2]int32{3, -2}
+
+	const mbX = 1
+	const mbY = 1
+	mbType := MBType16x16 | MBTypeP0L0 | MBTypeInterlaced
+	if err := h264HLMotionFrameWeightedHigh(dst, refs, &cache, mbType, [4]uint32{}, mbX, mbY, 1, &pwt, nil, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+	if err := h264HLMotionFrameHigh(want, refs, &cache, mbType, [4]uint32{}, mbX, mbY, 1, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+	yOff := mbY*16*want.LumaStride + mbX*16
+	if err := h264WeightPixelsHigh(want.Y[yOff:], want.LumaStride, 16, 2, 3, -2, 16, bitDepth); err != nil {
+		t.Fatal(err)
+	}
+	_, cbOff, crOff, err := h264MBDestPartOffsetsHigh(want, mbX, mbY, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chromaHeight, chromaWidth, err := h264ChromaWeightGeometry(want.ChromaFormatIDC, 16, 8, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	requireH264BlockEqualHigh(t, dst.Y, want.Y, dst.LumaStride, yOff, yOff, 16, 16)
+	requireH264BlockEqualHigh(t, dst.Cb, want.Cb, dst.ChromaStride, cbOff, cbOff, chromaWidth, chromaHeight)
+	requireH264BlockEqualHigh(t, dst.Cr, want.Cr, dst.ChromaStride, crOff, crOff, chromaWidth, chromaHeight)
+}
+
 func TestH264HLMotionFrameHigh10ImplicitWeightedField444BipredUsesParityWeight(t *testing.T) {
 	const bitDepth = 10
 	dst := makeH264MotionCompPictureHigh(3, bitDepth, 31)

@@ -295,6 +295,54 @@ func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10Chroma444FieldWeightedB(t
 	}
 }
 
+func TestValidateSimpleFrameSliceDecodeHighAllowsHigh10ChromaFieldWeightedP(t *testing.T) {
+	weights := []struct {
+		name            string
+		useWeightChroma int32
+	}{
+		{name: "luma-only"},
+		{name: "luma-chroma", useWeightChroma: 1},
+	}
+	for _, chromaFormatIDC := range []int{2, 3} {
+		for _, picture := range []struct {
+			name      string
+			structure int32
+		}{
+			{name: "top", structure: PictureTopField},
+			{name: "bottom", structure: PictureBottomField},
+		} {
+			for _, cabac := range []bool{false, true} {
+				for _, deblockMode := range []int32{0, 1} {
+					for _, weight := range weights {
+						entropy := "cavlc"
+						if cabac {
+							entropy = "cabac"
+						}
+						name := fmt.Sprintf("%s/%s/%s/mode%d/%s", chromaFormatName(chromaFormatIDC), picture.name, entropy, deblockMode, weight.name)
+						t.Run(name, func(t *testing.T) {
+							m, dst, sh := highFrameSliceDecodeFixtureWithMBWidth(t, 10, chromaFormatIDC, 2, deblockMode != 0, PictureTypeP)
+							sh.SPS.FrameMBSOnlyFlag = 0
+							sh.SPS.MBAFF = 1
+							sh.PictureStructure = picture.structure
+							sh.RefCount = [2]uint32{1, 0}
+							if cabac {
+								sh.PPS.CABAC = 1
+							}
+							sh.PPS.WeightedPred = 1
+							sh.PredWeightTable = highWeightedPPredWeightTable()
+							sh.PredWeightTable.UseWeightChroma = weight.useWeightChroma
+
+							if err := validateSimpleFrameSliceDecodeInputsHigh(m, dst, sh, 4); err != nil {
+								t.Fatalf("high10 chroma weighted P field validation err = %v, want nil", err)
+							}
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedHigh10FieldPictures(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
@@ -306,6 +354,13 @@ func TestValidateSimpleFrameSliceDecodeHighRejectsUnprovedHigh10FieldPictures(t 
 		{name: "420/I", chroma: 1, sliceType: PictureTypeI},
 		{name: "422/slice-boundary", chroma: 2, sliceType: PictureTypeI, deblockMode: 2},
 		{name: "444/unweighted-B", chroma: 3, sliceType: PictureTypeB},
+		{name: "444/unweighted-P", chroma: 3, sliceType: PictureTypeP},
+		{name: "444/chroma-only-weighted-P", chroma: 3, sliceType: PictureTypeP, run: func(sh *SliceHeader) {
+			sh.PPS.WeightedPred = 1
+			sh.PredWeightTable = highWeightedPPredWeightTable()
+			sh.PredWeightTable.UseWeight = 0
+			sh.PredWeightTable.UseWeightChroma = 1
+		}},
 		{name: "444/I", chroma: 3, sliceType: PictureTypeI},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

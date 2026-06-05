@@ -513,6 +513,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 	}
 	if sh.PictureStructure != PictureFrame &&
 		!isHigh10Chroma422FieldPictureScope(sh) &&
+		!isHigh10ChromaFieldWeightedPDeblockScope(sh) &&
 		!isHigh10Chroma444FieldWeightedBDeblockScope(sh) {
 		return ErrUnsupported
 	}
@@ -529,6 +530,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 		if !isHighChromaFrameDeblockScope(sh) &&
 			!isHighChromaSliceBoundaryDeblockScope(sh) &&
 			!isHigh10Chroma422FieldPictureScope(sh) &&
+			!isHigh10ChromaFieldWeightedPDeblockScope(sh) &&
 			!isHigh10Chroma444FieldWeightedBDeblockScope(sh) &&
 			!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) {
 			return ErrUnsupported
@@ -539,6 +541,7 @@ func validateSimpleFrameSliceDecodeInputsHigh(m *macroblockTables, dst *h264Pict
 				!isHigh10ChromaFrameImplicitWeightedBDeblockScope(sh) &&
 				!isHigh10ChromaFrameExplicitWeightedBDeblockScope(sh) &&
 				!isHigh10ChromaWeightedBSliceBoundaryDeblockScope(sh) &&
+				!isHigh10ChromaFieldWeightedPDeblockScope(sh) &&
 				!isHigh10Chroma422FieldImplicitWeightedBDeblockScope(sh) &&
 				!isHigh10Chroma422FieldExplicitWeightedBDeblockScope(sh) &&
 				!isHigh10Chroma444FieldWeightedBDeblockScope(sh) {
@@ -804,12 +807,36 @@ func isHigh10ChromaWeightedPFrameDeblockScope(sh *SliceHeader) bool {
 	if sh == nil || sh.SPS == nil || sh.PPS == nil {
 		return false
 	}
-	return sh.SPS.BitDepthLuma == 10 &&
-		(sh.SPS.ChromaFormatIDC == 2 || sh.SPS.ChromaFormatIDC == 3) &&
-		sh.SliceTypeNoS == PictureTypeP &&
-		(sh.DeblockingFilter == 0 || sh.DeblockingFilter == 1) &&
-		sh.PPS.WeightedPred != 0 &&
-		sh.PredWeightTable.UseWeight != 0
+	return sh.PictureStructure == PictureFrame &&
+		isHigh10ChromaWeightedPDeblockScope(sh)
+}
+
+func isHigh10ChromaFieldWeightedPDeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil {
+		return false
+	}
+	if sh.PictureStructure != PictureTopField && sh.PictureStructure != PictureBottomField {
+		return false
+	}
+	if sh.SPS.FrameMBSOnlyFlag != 0 {
+		return false
+	}
+	return isHigh10ChromaWeightedPDeblockScope(sh)
+}
+
+func isHigh10ChromaWeightedPDeblockScope(sh *SliceHeader) bool {
+	if sh == nil || sh.SPS == nil || sh.PPS == nil {
+		return false
+	}
+	if sh.SPS.BitDepthLuma != 10 ||
+		(sh.SPS.ChromaFormatIDC != 2 && sh.SPS.ChromaFormatIDC != 3) ||
+		sh.SliceTypeNoS != PictureTypeP ||
+		(sh.DeblockingFilter != 0 && sh.DeblockingFilter != 1) ||
+		sh.PPS.WeightedPred == 0 {
+		return false
+	}
+	return sh.PredWeightTable.UseWeight == 1 &&
+		(sh.PredWeightTable.UseWeightChroma == 0 || sh.PredWeightTable.UseWeightChroma == 1)
 }
 
 func isHigh10ChromaFrameImplicitWeightedBDeblockScope(sh *SliceHeader) bool {

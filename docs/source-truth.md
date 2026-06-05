@@ -4,7 +4,7 @@ Scope: FFmpeg `n8.0.1` H.264 decoder path only.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
-no-deblock plus weighted 4:2:2/4:4:4 luma-only/chroma P frame deblock modes 0/1 and
+no-deblock plus weighted 4:2:2/4:4:4 luma-only and luma+chroma P frame deblock modes 0/1 and
 slice-boundary mode-2 deblock plus CAVLC/CABAC 4:2:2/4:4:4 implicit and
 explicit weighted B frame deblock mode 1 and slice-boundary mode-2 deblock, High12 CAVLC IntraPCM, public CAVLC
 Intra16x16 no-residual and luma-DC/luma-AC/luma-DC+AC/chroma-DC/chroma-AC/
@@ -45,7 +45,8 @@ plus mode-1/mode-2 I/P and weighted-P deblock, High10 frame-MBAFF field-coded CA
 entropy/reconstruct pairing plus public High10/High422 field-coded
 frame-MBAFF deblock rows plus internal High10 4:2:2 top/bottom field
 explicit weighted B and 4:4:4 top/bottom field explicit/implicit weighted B
-luma/chroma deblock modes 0/1, complete FFmpeg FRext FATE row coverage including
+luma/chroma deblock modes 0/1 plus internal High10 4:2:2/4:4:4 top/bottom field
+luma-only and luma+chroma weighted P deblock modes 0/1, complete FFmpeg FRext FATE row coverage including
 monochrome-to-yuv420p output, selected compact baseline/main conformance rows
 including AUD, SVA/Sony/MW/FT/JVC/Sand/Toshiba/VTC baseline/main, CABAC,
 no-deblock, reference, field, and slice-boundary rows,
@@ -85,7 +86,7 @@ stream; FFmpeg exits with decode error) and `mkv/h264_tta_undecodable.mkv` (no
 H.264 video stream).
 
 Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broad slice-boundary
-high modes including remaining weighted-P field variants and broader slice-boundary deblock modes, public 12/14-bit
+high modes including chroma-only weighted-P field variants and broader slice-boundary deblock modes, public 12/14-bit
 high streams beyond the current FFmpeg FATE 8-bit/10-bit set, broader
 damaged-slice error resilience, threading/SIMD, and full libavcodec
 delayed-output behavior.
