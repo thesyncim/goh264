@@ -7040,6 +7040,57 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			t.Fatalf("rtp max-frame-size drop EncodeInto allocations/run = %.0f, want <= 7", allocs)
 		}
 	})
+
+	t.Run("rtp late drop", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(128, 128)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.FrameDrop = goh264.EncoderFrameDropLate
+		cfg.MaxEncodeTimeUS = 10_000_000
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		var callbackCalls int
+		enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+			callbackCalls++
+		})
+		a := patternedI420EncoderFrame(128, 128)
+		a.PTS = 0
+		first, err := enc.EncodeInto(make([]byte, 0, 65536), a)
+		if err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		firstPacketCount := len(first.RTPPackets)
+		if !first.IDR || firstPacketCount == 0 || callbackCalls != firstPacketCount {
+			t.Fatalf("prime output idr=%v packets/callbacks=%d/%d, want RTP IDR callbacks",
+				first.IDR, firstPacketCount, callbackCalls)
+		}
+		if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxEncodeTimeUS: 1}); err != nil {
+			t.Fatalf("lower MaxEncodeTimeUS: %v", err)
+		}
+		b := patternedI420EncoderFrame(128, 128)
+		b.PTS = 0
+		b.Y[0] ^= 0x40
+		dst := make([]byte, 0, 65536)
+		allocs := testing.AllocsPerRun(100, func() {
+			out, err := enc.EncodeInto(dst[:0], b)
+			if err != nil {
+				t.Fatalf("EncodeInto RTP late drop: %v", err)
+			}
+			if !out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+				t.Fatalf("RTP late drop output = %+v, want empty dropped metadata", out)
+			}
+			if callbackCalls != firstPacketCount {
+				t.Fatalf("RTP late drop invoked callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+			}
+		})
+		t.Logf("rtp late drop EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 8 {
+			t.Fatalf("rtp late drop EncodeInto allocations/run = %.0f, want <= 8", allocs)
+		}
+	})
 }
 
 func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
