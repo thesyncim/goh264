@@ -196,7 +196,8 @@ IDR/P-frame reassembly and oversize rejection, STAP-A parameter-set aggregation,
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
 clipped packet payload views over packet data, packet storage isolated from
 `EncodedFrame.Data`, and optional RTP callback metadata including mode 0/1
-IDR/P-frame single-NAL packets with callback packet storage isolated from
+IDR/P-frame single-NAL packets for P-skip, exact P16x16, odd-pixel constant
+chroma, and P IntraPCM fallback rows with callback packet storage isolated from
 returned RTP packets. It also proves identical
 second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,

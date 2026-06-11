@@ -5159,9 +5159,10 @@ func TestEncoderRTPPacketCallbackReceivesMode0IDRSingleNALMetadata(t *testing.T)
 
 func TestEncoderRTPPacketCallbackReceivesMode1SingleNALMetadata(t *testing.T) {
 	for _, tt := range []struct {
-		name      string
-		nextFrame func(goh264.EncoderFrame) goh264.EncoderFrame
-		wantNALs  []uint8
+		name         string
+		prepareFirst func(*goh264.EncoderFrame)
+		nextFrame    func(goh264.EncoderFrame) goh264.EncoderFrame
+		wantNALs     []uint8
 	}{
 		{
 			name: "idr",
@@ -5183,6 +5184,23 @@ func TestEncoderRTPPacketCallbackReceivesMode1SingleNALMetadata(t *testing.T) {
 				return integerMotionI420EncoderFrame(first, 2, 0)
 			},
 			wantNALs: []uint8{1},
+		},
+		{
+			name: "odd-exact-p16x16-constant-chroma",
+			prepareFirst: func(first *goh264.EncoderFrame) {
+				setConstantI420Chroma(first, 128, 64)
+			},
+			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return integerMotionI420EncoderFrame(first, 1, 0)
+			},
+			wantNALs: []uint8{1},
+		},
+		{
+			name: "odd-exact-p16x16-patterned-chroma-fallback",
+			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return integerMotionI420EncoderFrame(first, 1, 0)
+			},
+			wantNALs: []uint8{6, 1},
 		},
 		{
 			name: "changed-p-intrapcm",
@@ -5213,6 +5231,9 @@ func TestEncoderRTPPacketCallbackReceivesMode1SingleNALMetadata(t *testing.T) {
 			})
 
 			firstFrame := patternedI420EncoderFrame(16, 16)
+			if tt.prepareFirst != nil {
+				tt.prepareFirst(&firstFrame)
+			}
 			firstFrame.PTS = 24_000
 			first, err := enc.Encode(firstFrame)
 			if err != nil {
@@ -5242,9 +5263,10 @@ func TestEncoderRTPPacketCallbackReceivesMode1SingleNALMetadata(t *testing.T) {
 
 func TestEncoderRTPPacketCallbackReceivesPFrameSingleNALMetadata(t *testing.T) {
 	for _, tt := range []struct {
-		name      string
-		nextFrame func(goh264.EncoderFrame) goh264.EncoderFrame
-		wantNALs  []uint8
+		name         string
+		prepareFirst func(*goh264.EncoderFrame)
+		nextFrame    func(goh264.EncoderFrame) goh264.EncoderFrame
+		wantNALs     []uint8
 	}{
 		{
 			name: "p-skip",
@@ -5259,6 +5281,23 @@ func TestEncoderRTPPacketCallbackReceivesPFrameSingleNALMetadata(t *testing.T) {
 				return integerMotionI420EncoderFrame(first, 2, 0)
 			},
 			wantNALs: []uint8{1},
+		},
+		{
+			name: "odd-exact-p16x16-constant-chroma",
+			prepareFirst: func(first *goh264.EncoderFrame) {
+				setConstantI420Chroma(first, 128, 64)
+			},
+			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return integerMotionI420EncoderFrame(first, 1, 0)
+			},
+			wantNALs: []uint8{1},
+		},
+		{
+			name: "odd-exact-p16x16-patterned-chroma-fallback",
+			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return integerMotionI420EncoderFrame(first, 1, 0)
+			},
+			wantNALs: []uint8{6, 1},
 		},
 		{
 			name: "changed-p-intrapcm",
@@ -5290,6 +5329,9 @@ func TestEncoderRTPPacketCallbackReceivesPFrameSingleNALMetadata(t *testing.T) {
 			})
 
 			firstFrame := patternedI420EncoderFrame(16, 16)
+			if tt.prepareFirst != nil {
+				tt.prepareFirst(&firstFrame)
+			}
 			firstFrame.PTS = 12_000
 			first, err := enc.Encode(firstFrame)
 			if err != nil {
