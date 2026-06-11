@@ -427,7 +427,9 @@ What those gates mean:
   classified as executable or explicitly excluded.
 - `h264-real-vector-upstream-audit.sh` fetches the pinned FFmpeg source and
   verifies that the checked-in inventory still matches all decoder-facing
-  upstream H.264 FATE sample references, except documented non-decoder rows.
+  upstream H.264 FATE sample references, except documented non-decoder rows,
+  and that public-vector count claims in the release docs match the checked-in
+  manifests.
   Normal `go test ./tests` also checks that every imported public ref is either
   represented by the manifest or listed in the exclusion file.
 
@@ -542,7 +544,8 @@ No tag should be treated as production until a release-evidence pass proves:
 - `scripts/h264-real-vector-upstream-audit.sh` still represents all pinned
   decoder-facing FFmpeg H.264 FATE sample references in
   `testdata/h264/realvectors/upstream-inventory.jsonl`, except documented
-  non-decoder exclusions.
+  non-decoder exclusions, and release-doc public-vector counts match the
+  checked-in manifests.
 - `scripts/h264-decoder-fuzz-smoke.sh` is green for the bounded public decoder
   no-panic fuzz target.
 - Known-red rows, if any, are current in `testdata/h264/realvectors/failures.jsonl`.

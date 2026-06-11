@@ -7,4 +7,4 @@ cd "$ROOT"
 scripts/fetch-upstream.sh
 
 export GOH264_REAL_VECTOR_UPSTREAM_AUDIT=1
-exec go test ./tests -run '^TestH264RealVector(ImportedUpstreamInventory|PinnedFATEInventory|UpstreamFATECoverage)$' -count=1 -v "$@"
+exec go test ./tests -run '^TestH264RealVector(ImportedUpstreamInventory|PinnedFATEInventory|DocumentationCounts|UpstreamFATECoverage)$' -count=1 -v "$@"

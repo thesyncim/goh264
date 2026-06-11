@@ -54,7 +54,8 @@ or by `testdata/h264/realvectors/exclusions.jsonl` through
 `TestH264DecoderTDDContractClassifiesEveryImportedPublicVector`; any future
 failing decoder-facing row belongs in `failures.jsonl` with a current failure
 signature until it is fixed. The upstream-audit script also verifies the 224
-generated FATE rows against the pinned FFmpeg source.
+generated FATE rows against the pinned FFmpeg source and checks that the
+release-doc public-vector counts match the checked-in manifests.
 
 Benchmark JSON reports selected/green/known-red counts, backend kind, CPU flags,
 comparison lane, oracle `quality_status`, Go allocation totals plus
