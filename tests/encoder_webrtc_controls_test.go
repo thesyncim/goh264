@@ -2047,8 +2047,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("annexb steady p-skip EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 8 {
-			t.Fatalf("annexb steady P-skip EncodeInto allocations/run = %.0f, want <= 8", allocs)
+		if allocs > 4 {
+			t.Fatalf("annexb steady P-skip EncodeInto allocations/run = %.0f, want <= 4", allocs)
 		}
 	})
 
@@ -2087,8 +2087,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("annexb changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 56 {
-			t.Fatalf("annexb changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 56", allocs)
+		if allocs > 44 {
+			t.Fatalf("annexb changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 44", allocs)
 		}
 	})
 
@@ -2119,8 +2119,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp steady p-skip EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 10 {
-			t.Fatalf("rtp steady P-skip EncodeInto allocations/run = %.0f, want <= 10", allocs)
+		if allocs > 7 {
+			t.Fatalf("rtp steady P-skip EncodeInto allocations/run = %.0f, want <= 7", allocs)
 		}
 	})
 }

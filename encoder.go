@@ -438,7 +438,8 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		return EncodedFrame{}, err
 	}
 	idr := e.shouldEncodeIDR(view, frame)
-	var nals []encoderRawNAL
+	var nalsBuf [4]encoderRawNAL
+	nals := nalsBuf[:0]
 	if e.shouldEmitParameterSets(idr) {
 		sets, err := e.ParameterSets()
 		if err != nil {
@@ -450,7 +451,8 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		)
 	}
 
-	sliceRanges := encoderSliceRanges(view.width, view.height, e.cfg.SliceCount)
+	var sliceRangeBuf [4]encoderSliceRange
+	sliceRanges := appendEncoderSliceRanges(sliceRangeBuf[:0], view.width, view.height, e.cfg.SliceCount)
 	if idr {
 		for _, r := range sliceRanges {
 			nal, err := buildEncoderI420IntraPCMIDRNAL(h264.EncoderI420IntraPCMIDRConfig{
@@ -963,7 +965,8 @@ func resizeEncoderReferencePlane(buf []byte, size int) []byte {
 	return buf[:size]
 }
 
-func encoderSliceRanges(width int, height int, sliceCount int) []encoderSliceRange {
+func appendEncoderSliceRanges(dst []encoderSliceRange, width int, height int, sliceCount int) []encoderSliceRange {
+	dst = dst[:0]
 	total := encoderMacroblockCount(width, height)
 	if sliceCount <= 0 {
 		sliceCount = 1
@@ -971,7 +974,6 @@ func encoderSliceRanges(width int, height int, sliceCount int) []encoderSliceRan
 	if sliceCount > total {
 		sliceCount = total
 	}
-	ranges := make([]encoderSliceRange, 0, sliceCount)
 	base := total / sliceCount
 	extra := total % sliceCount
 	first := 0
@@ -980,10 +982,10 @@ func encoderSliceRanges(width int, height int, sliceCount int) []encoderSliceRan
 		if i < extra {
 			count++
 		}
-		ranges = append(ranges, encoderSliceRange{firstMB: first, macroblockCount: count})
+		dst = append(dst, encoderSliceRange{firstMB: first, macroblockCount: count})
 		first += count
 	}
-	return ranges
+	return dst
 }
 
 func encoderMacroblockCount(width int, height int) int {

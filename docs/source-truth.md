@@ -122,11 +122,12 @@ STAP-A parameter-set aggregation, RTP payload-type/SSRC/sequence metadata, full
 RTP header bytes, optional RTP callback metadata, initial `EncodeInto`
 allocation canaries for caller-buffer Annex B and RTP P-frame paths, and a live
 encode path that avoids discarded Annex B/AVC copies when only raw NAL output is
-needed. Package-level benchmark canaries cover admitted Annex B/RTP IDR and
-P-frame encode paths with `-benchmem`. Internal writer proof covers raw
-bit/Exp-Golomb writing, RBSP trailing bits, EBSP emulation-prevention,
-Annex B/AVC NAL packaging, AVC decoder configuration records, baseline SPS/PPS
-syntax with 4:2:0 crop-unit emission,
+needed plus stack-backed common one-slice NAL and slice-range planning.
+Package-level benchmark canaries cover admitted Annex B/RTP IDR and P-frame
+encode paths with `-benchmem`. Internal writer proof covers raw bit/Exp-Golomb
+writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
+packaging, AVC decoder configuration records, baseline SPS/PPS syntax with
+4:2:0 crop-unit emission,
 recovery-point SEI syntax, and Baseline IDR plus P-skip/P IntraPCM slice syntax
 via decoder-parser and encoded-frame round trips.
 
