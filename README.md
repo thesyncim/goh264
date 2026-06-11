@@ -9,7 +9,8 @@ support is now in scope for realtime/WebRTC use, tracked in
 API currently exposes a tested realtime/WebRTC control contract and valid
 SPS/PPS parameter-set plus recovery-point SEI generation. The first admitted
 bitstream paths cover 8-bit I420 Constrained Baseline IDR IntraPCM, P-skip for
-identical references, and changed-frame P IntraPCM recovery pictures with
+identical references, exact one-macroblock P16x16 no-residual prediction for a
+16x16 shifted reference, and changed-frame P IntraPCM recovery pictures with
 Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
 single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
 FFmpeg rawvideo decode, recovery-point side data, RTP mode-0 reassembly, RTP
@@ -28,8 +29,8 @@ behavior against oracle vectors.
   out-of-band SPS/PPS/avcC headers, and crop-aware SPS/encoded visible output
   plus recovery-point SEI packaging and
   `SliceCount`-backed multi-slice output plus frame/slice byte-budget reject
-  and realtime drop guards, with first IDR IntraPCM, P-skip, and P IntraPCM
-  Annex B/AVC/RTP output paths.
+  and realtime drop guards, with first IDR IntraPCM, P-skip, exact P16x16
+  no-residual, and P IntraPCM output paths.
 - **Annex B and AVC input surfaces** - automatic packet splitting, explicit
   Annex B / length-prefixed AVC APIs, and AVC decoder configuration records.
 - **Raw frame output** - `Frame` exposes Y/Cb/Cr planes, crop, strides, VUI
@@ -113,9 +114,11 @@ A combined RTP/Annex B/RTP control-loop stress test now proves QP refresh, late
 drop recovery, packet metadata retargeting, paused RTP sequence/callback state
 while no RTP packets are emitted, and local decode after RTP re-entry.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
-across disabled, enabled, and slice-boundary deblock controls; changed frames
-can use a guarded CAVLC P IntraPCM slice in the same admitted deblock scope
-with recovery-point SEI emission when enabled,
+across disabled, enabled, and slice-boundary deblock controls; a 16x16 frame
+that exactly matches a small even integer-pel shift of the stored reference can
+use a guarded CAVLC P16x16 no-residual slice with local and FFmpeg rawvideo
+decode proof; changed frames can use a guarded CAVLC P IntraPCM slice in the
+same admitted deblock scope with recovery-point SEI emission when enabled,
 while forced keyframe requests still emit IDR; cropped I420 input emits SPS
 crop metadata and local/FFmpeg decode sees the cropped visible frame. Internal
 writer primitives cover raw bit/Exp-Golomb
@@ -305,17 +308,18 @@ enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRT
 })
 headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
-out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P IntraPCM
+out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if out.Dropped {
 	// Realtime budget drop: no bytes or RTP packets were emitted.
 }
 ```
 
 `Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
-then emit the admitted IDR IntraPCM, identical-reference P-skip, or
-changed-frame P IntraPCM frame path, optionally split into configured
-multi-slice VCL NALs. Changed-frame P IntraPCM recovery pictures carry
-recovery-point SEI when enabled. RTP output includes payloads plus complete RTP
+then emit the admitted IDR IntraPCM, identical-reference P-skip, exact 16x16
+P16x16 no-residual, or changed-frame P IntraPCM frame path, optionally split
+into configured multi-slice VCL NALs. Changed-frame P IntraPCM recovery
+pictures carry recovery-point SEI when enabled. RTP output includes payloads
+plus complete RTP
 packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1
 FU-A/STAP-A output, optional per-packet callback metadata, and automatic
 timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
@@ -324,8 +328,8 @@ and runtime reconfiguration can switch output format and RTP packetization
 controls plus rate-control/QP/GOP/deblock controls while preserving state on
 rejected updates. Bitrate-budget drops surface through `EncodedFrame.Dropped`
 when `FrameDropToBitrate` is active.
-Motion-search inter prediction, quantized residual coding, and rate-control
-decisions are still future encoder slices.
+Motion search beyond the exact single-macroblock inter path, quantized
+residual coding, and rate-control decisions are still future encoder slices.
 
 ## Supported Inputs
 
@@ -500,8 +504,9 @@ No tag should be treated as production until a release-evidence pass proves:
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until
   [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md) has matching
-  motion-search P prediction, residual bitstream implementation, rate-control
-  behavior, remaining packetizer breadth, controls, and oracle evidence.
+  broader motion-search P prediction, residual bitstream implementation,
+  rate-control behavior, remaining packetizer breadth, controls, and oracle
+  evidence.
 - The source-truth and translation-ledger docs match the committed tests.
 
 The release-evidence runner writes logs under

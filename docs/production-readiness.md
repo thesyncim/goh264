@@ -5,9 +5,10 @@ now in scope, with a tested public control contract in `encoder.go`. Encoder
 bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
 IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
 output, and RTP packetization-mode 1 output, plus guarded identical-reference
-CAVLC P-skip and changed-frame P IntraPCM across disabled, enabled, and
-slice-boundary deblock controls. Encoder
-production gates live in `docs/encoder-webrtc-roadmap.md` until changed-frame
+CAVLC P-skip, exact 16x16 P16x16 no-residual prediction, and changed-frame
+P IntraPCM across disabled, enabled, and slice-boundary deblock controls.
+Encoder
+production gates live in `docs/encoder-webrtc-roadmap.md` until broader
 P prediction, residual coding, rate control, remaining packetizer breadth,
 allocation budgets, and oracle evidence land.
 
@@ -150,6 +151,8 @@ reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes and
 optional RTP callback metadata. It also proves identical second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
+exact 16x16 shifted second frames can emit predictive P16x16 no-residual slices
+through stateful local decode and FFmpeg rawvideo decode,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
@@ -164,7 +167,7 @@ Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and
 Baseline IDR, P-skip, and P16x16 no-residual slice syntax, with the P16x16
-writer proved through local Annex B decode and FFmpeg rawvideo decode after an
-IDR reference frame. Motion-search P prediction, residual CAVLC coding,
-rate-control feedback, broader allocation budgets, and realtime performance
-gates remain pending.
+writer and public exact-motion encoder path proved through local Annex B decode
+and FFmpeg rawvideo decode after an IDR reference frame. Broader motion-search
+P prediction, residual CAVLC coding, rate-control feedback, broader allocation
+budgets, and realtime performance gates remain pending.

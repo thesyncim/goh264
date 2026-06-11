@@ -1193,6 +1193,55 @@ func TestEncoderEncodeIdenticalSecondFrameUsesPSkipReference(t *testing.T) {
 	assertFFmpegRawVideoOracle(t, stream, wantStream)
 }
 
+func TestEncoderEncodeExactP16x16NoResidualMotion(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	secondFrame := integerMotionI420EncoderFrame(firstFrame, 2, 0)
+	secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode exact P16x16 no-residual motion: %v", err)
+	}
+	if second.KeyFrame || second.IDR {
+		t.Fatalf("exact-motion second frame key=%v idr=%v, want non-IDR P16x16", second.KeyFrame, second.IDR)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode exact P16x16 no-residual motion: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+	if decodedSecond[0].KeyFrame || decodedSecond[0].SideData.RecoveryPoint != nil {
+		t.Fatalf("decoded exact-motion P frame key=%v recovery=%+v, want predictive non-recovery frame",
+			decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+	}
+
+	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	wantStream := appendI420FrameBytes(nil, firstFrame)
+	wantStream = appendI420FrameBytes(wantStream, secondFrame)
+	assertFFmpegRawVideoOracle(t, stream, wantStream)
+}
+
 func TestEncoderEncodeChangedSecondFrameUsesPIntraPCM(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
@@ -2596,6 +2645,42 @@ func patternedI420EncoderFrame(width, height int) goh264.EncoderFrame {
 	}
 	frame.PTS = 3000
 	return frame
+}
+
+func integerMotionI420EncoderFrame(reference goh264.EncoderFrame, dx int, dy int) goh264.EncoderFrame {
+	frame := validI420EncoderFrame(reference.Width, reference.Height)
+	frame.PTS = reference.PTS
+	frame.Duration = reference.Duration
+	for y := 0; y < frame.Height; y++ {
+		refY := clampEncoderTestCoord(y+dy, frame.Height)
+		for x := 0; x < frame.Width; x++ {
+			refX := clampEncoderTestCoord(x+dx, frame.Width)
+			frame.Y[y*frame.StrideY+x] = reference.Y[refY*reference.StrideY+refX]
+		}
+	}
+	chromaWidth := frame.Width / 2
+	chromaHeight := frame.Height / 2
+	chromaDX := dx / 2
+	chromaDY := dy / 2
+	for y := 0; y < chromaHeight; y++ {
+		refY := clampEncoderTestCoord(y+chromaDY, chromaHeight)
+		for x := 0; x < chromaWidth; x++ {
+			refX := clampEncoderTestCoord(x+chromaDX, chromaWidth)
+			frame.Cb[y*frame.StrideCb+x] = reference.Cb[refY*reference.StrideCb+refX]
+			frame.Cr[y*frame.StrideCr+x] = reference.Cr[refY*reference.StrideCr+refX]
+		}
+	}
+	return frame
+}
+
+func clampEncoderTestCoord(v int, limit int) int {
+	if v < 0 {
+		return 0
+	}
+	if v >= limit {
+		return limit - 1
+	}
+	return v
 }
 
 func appendI420FrameBytes(dst []byte, frame goh264.EncoderFrame) []byte {

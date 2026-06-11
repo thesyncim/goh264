@@ -496,6 +496,25 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			}
 			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
 		}
+	} else if mvdX, mvdY, ok := e.p16x16NoResidualMotion(view); ok {
+		for _, r := range sliceRanges {
+			nal, err := buildEncoderI420P16x16NoResidualNAL(h264.EncoderI420P16x16NoResidualConfig{
+				Width:                      view.width,
+				Height:                     view.height,
+				FrameNum:                   e.frameNum & 0xff,
+				InitialQP:                  e.cfg.InitialQP,
+				DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+				FirstMBAddr:                uint32(r.firstMB),
+				MacroblockCount:            uint32(r.macroblockCount),
+				MVDX:                       mvdX,
+				MVDY:                       mvdY,
+				NALLengthSize:              4,
+			})
+			if err != nil {
+				return EncodedFrame{}, err
+			}
+			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
+		}
 	} else {
 		if e.cfg.RecoveryPointSEI {
 			sei, err := e.RecoveryPointSEI(0)
@@ -850,6 +869,14 @@ func buildEncoderI420PSkipNAL(cfg h264.EncoderI420PSkipConfig) ([]byte, error) {
 	return h264.AppendNAL(nil, 2, h264.NALSlice, rbsp)
 }
 
+func buildEncoderI420P16x16NoResidualNAL(cfg h264.EncoderI420P16x16NoResidualConfig) ([]byte, error) {
+	rbsp, err := h264.EncodeI420P16x16NoResidualSliceRBSP(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return h264.AppendNAL(nil, 2, h264.NALSlice, rbsp)
+}
+
 func buildEncoderI420IntraPCMPNAL(cfg h264.EncoderI420IntraPCMPConfig) ([]byte, error) {
 	rbsp, err := h264.EncodeI420IntraPCMPSliceRBSP(cfg)
 	if err != nil {
@@ -967,6 +994,76 @@ func (e *Encoder) referenceMatches(view encoderFrameView) bool {
 		}
 	}
 	return true
+}
+
+func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, bool) {
+	if e.cfg.DeblockMode != EncoderDeblockDisabled || view.width != 16 || view.height != 16 {
+		return 0, 0, false
+	}
+	ref := &e.reference
+	if !ref.valid || ref.width != view.width || ref.height != view.height {
+		return 0, 0, false
+	}
+	if len(ref.y) != view.width*view.height {
+		return 0, 0, false
+	}
+	chromaWidth := view.width / 2
+	chromaHeight := view.height / 2
+	if len(ref.cb) != chromaWidth*chromaHeight || len(ref.cr) != chromaWidth*chromaHeight {
+		return 0, 0, false
+	}
+
+	candidates := [...]struct {
+		dx int
+		dy int
+	}{
+		{dx: 2, dy: 0},
+		{dx: -2, dy: 0},
+		{dx: 0, dy: 2},
+		{dx: 0, dy: -2},
+	}
+	for _, candidate := range candidates {
+		if encoderI420MatchesIntegerMotion(ref, view, candidate.dx, candidate.dy) {
+			return int32(candidate.dx * 4), int32(candidate.dy * 4), true
+		}
+	}
+	return 0, 0, false
+}
+
+func encoderI420MatchesIntegerMotion(ref *encoderReferenceFrame, view encoderFrameView, dx int, dy int) bool {
+	if !encoderPlaneMatchesIntegerMotion(view.y, view.strideY, view.width, view.height, ref.y, view.width, dx, dy) {
+		return false
+	}
+	chromaWidth := view.width / 2
+	chromaHeight := view.height / 2
+	chromaDX := dx / 2
+	chromaDY := dy / 2
+	return encoderPlaneMatchesIntegerMotion(view.cb, view.strideCb, chromaWidth, chromaHeight, ref.cb, chromaWidth, chromaDX, chromaDY) &&
+		encoderPlaneMatchesIntegerMotion(view.cr, view.strideCr, chromaWidth, chromaHeight, ref.cr, chromaWidth, chromaDX, chromaDY)
+}
+
+func encoderPlaneMatchesIntegerMotion(cur []byte, curStride int, width int, height int, ref []byte, refStride int, dx int, dy int) bool {
+	for y := 0; y < height; y++ {
+		curRow := cur[y*curStride : y*curStride+width]
+		refY := clampEncoderReferenceCoord(y+dy, height)
+		for x := 0; x < width; x++ {
+			refX := clampEncoderReferenceCoord(x+dx, width)
+			if curRow[x] != ref[refY*refStride+refX] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func clampEncoderReferenceCoord(v int, limit int) int {
+	if v < 0 {
+		return 0
+	}
+	if v >= limit {
+		return limit - 1
+	}
+	return v
 }
 
 func (e *Encoder) storeReference(view encoderFrameView) {

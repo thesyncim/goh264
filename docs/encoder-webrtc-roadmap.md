@@ -81,11 +81,12 @@ now validate frame shape and emit the first admitted frame bitstream paths:
 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B, AVC,
 RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
 output, plus configured `SliceCount` multi-slice VCL output, guarded CAVLC
-P-skip slices for identical frames, and guarded CAVLC P IntraPCM slices for
-changed frames after a reference across disabled, enabled, and slice-boundary
-deblock controls. Changed-frame P IntraPCM recovery pictures carry
-recovery-point SEI when enabled, across Annex B, configured AVC, and RTP
-packetization-mode 1 reassembly. Tests prove
+P-skip slices for identical frames, a guarded exact 16x16 CAVLC P16x16
+no-residual path for a small even integer-pel shifted reference, and guarded
+CAVLC P IntraPCM slices for changed frames after a reference across disabled,
+enabled, and slice-boundary deblock controls. Changed-frame P IntraPCM recovery
+pictures carry recovery-point SEI when enabled, across Annex B, configured AVC,
+and RTP packetization-mode 1 reassembly. Tests prove
 local raw-frame decode, FFmpeg rawvideo decode, recovery-point side data,
 multi-slice `first_mb_in_slice` ordering, RTP packetization-mode 0 single-NAL
 reassembly and oversize rejection, RTP FU-A reassembly, STAP-A parameter-set
@@ -108,7 +109,8 @@ cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B changed P IntraPCM,
 RTP FU-A IDR IntraPCM, and RTP steady P-skip. Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
-residual coding, and rate-control decisions remain pending.
+residual coding, and rate-control decisions remain pending beyond the exact
+single-macroblock P16x16 admission.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -145,10 +147,11 @@ in one access unit.
    frames.
 4. In progress: add P-frame prediction, reference management, CAVLC residual
    coding, deblock policy, and rate-control feedback in small oracle-backed
-   slices. Done for identical-reference P-skip and changed-frame P IntraPCM
-   across disabled, enabled, and slice-boundary deblock controls, configured
-   multi-slice ranges, and recovery-point SEI emission on changed-frame
-   P IntraPCM recovery pictures; forced keyframes still emit IDR.
+   slices. Done for identical-reference P-skip, exact single-macroblock
+   P16x16 no-residual prediction, and changed-frame P IntraPCM across disabled,
+   enabled, and slice-boundary deblock controls, configured multi-slice ranges,
+   and recovery-point SEI emission on changed-frame P IntraPCM recovery
+   pictures; forced keyframes still emit IDR.
 5. In progress: add RTP packetization and WebRTC control handling with
    packet-level tests. Done for packetization-mode 0 single-NAL output with
    oversize rejection, packetization-mode 1 single NAL/FU-A output, and
