@@ -199,6 +199,36 @@ func BenchmarkEncodeRTPI420IDRIntraPCMFUA(b *testing.B) {
 	benchmarkEncodePacketsSink = len(out.RTPPackets)
 }
 
+func BenchmarkEncodeRTPMode0I420IDRIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	frame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	dst := make([]byte, 0, 4096)
+
+	b.ReportAllocs()
+	b.SetBytes(int64(benchmarkEncoderInputBytes()))
+	b.ResetTimer()
+
+	var out EncodedFrame
+	for i := 0; i < b.N; i++ {
+		enc, err := NewEncoder(cfg)
+		if err != nil {
+			b.Fatal(err)
+		}
+		out, err = enc.EncodeInto(dst[:0], frame)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !out.IDR || len(out.RTPPackets) != 3 || len(out.Data) == 0 {
+			b.Fatalf("output idr=%v rtp=%d data=%d, want RTP mode0 IDR", out.IDR, len(out.RTPPackets), len(out.Data))
+		}
+	}
+	benchmarkEncodeFrameSink = out
+	benchmarkEncodeBytesSink = len(out.Data)
+	benchmarkEncodePacketsSink = len(out.RTPPackets)
+}
+
 func BenchmarkEncodeRTPI420PSkip(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
 	frame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)

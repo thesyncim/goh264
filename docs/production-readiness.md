@@ -164,14 +164,14 @@ forced IDR, Annex B steady P-skip, Annex B exact P16x16 including
 single-macroblock deblock controls, Annex B macroblock-aligned exact P16x16,
 Annex B changed P IntraPCM, RTP forced IDR/FU-A,
 RTP exact P16x16, RTP steady P-skip, RTP changed P IntraPCM, and RTP
-packetization-mode 0 P-frame paths;
+packetization-mode 0 IDR/P-frame paths;
 the live encode path writes RBSP plus raw NAL output directly instead of building
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage. Package-level benchmark canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
 Annex B changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16, RTP steady
 P-skip, and RTP changed P IntraPCM plus RTP packetization-mode 0
-P-skip/exact-P16x16/P-IntraPCM with `-benchmem`.
+IDR/P-skip/exact-P16x16/P-IntraPCM with `-benchmem`.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and

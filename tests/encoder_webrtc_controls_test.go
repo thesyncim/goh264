@@ -3304,6 +3304,42 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("rtp mode0 forced idr", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+		cfg.RTPMaxPayloadSize = 1200
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		frame := patternedI420EncoderFrame(16, 16)
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), frame); err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		dst := make([]byte, 0, 4096)
+		allocs := testing.AllocsPerRun(100, func() {
+			enc.ForceIDR()
+			out, err := enc.EncodeInto(dst[:0], frame)
+			if err != nil {
+				t.Fatalf("EncodeInto RTP mode0 forced IDR: %v", err)
+			}
+			if !out.IDR || len(out.RTPPackets) != 3 || len(out.Data) == 0 {
+				t.Fatalf("forced RTP mode0 IDR output idr=%v rtp=%d data=%d", out.IDR, len(out.RTPPackets), len(out.Data))
+			}
+			assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("rtp mode0 forced IDR EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 40 {
+			t.Fatalf("rtp mode0 forced IDR EncodeInto allocations/run = %.0f, want <= 40", allocs)
+		}
+	})
+
 	t.Run("rtp exact p16x16", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.DeblockMode = goh264.EncoderDeblockDisabled
