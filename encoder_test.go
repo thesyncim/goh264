@@ -54,3 +54,33 @@ func TestAppendEncoderP16x16NoResidualMVDsUsesSliceLocalPrediction(t *testing.T)
 		})
 	}
 }
+
+func TestEncoderBitrateFrameBudgetBytes(t *testing.T) {
+	cfg := DefaultEncoderConfig(16, 16)
+	cfg.MaxBitrate = 1_000_000
+	cfg.FrameRateNum = 30
+	cfg.FrameRateDen = 1
+	if got := encoderBitrateFrameBudgetBytes(cfg); got != 4167 {
+		t.Fatalf("30fps 1Mbps budget = %d, want 4167", got)
+	}
+
+	cfg.FrameRateNum = 30000
+	cfg.FrameRateDen = 1001
+	if got := encoderBitrateFrameBudgetBytes(cfg); got != 4171 {
+		t.Fatalf("29.97fps 1Mbps budget = %d, want 4171", got)
+	}
+
+	cfg.FrameRateNum = 0
+	if got := encoderBitrateFrameBudgetBytes(cfg); got != 0 {
+		t.Fatalf("invalid framerate budget = %d, want 0", got)
+	}
+
+	cfg.VBVBufferSize = 1_000_000
+	if got := encoderVBVBufferBudgetBytes(cfg); got != 125000 {
+		t.Fatalf("1Mbit VBV budget = %d, want 125000", got)
+	}
+	cfg.VBVBufferSize = 65
+	if got := encoderVBVBufferBudgetBytes(cfg); got != 9 {
+		t.Fatalf("65-bit VBV budget = %d, want 9", got)
+	}
+}

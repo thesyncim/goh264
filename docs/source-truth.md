@@ -118,7 +118,8 @@ generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
 exact macroblock-aligned P16x16 no-residual prediction, changed-frame P IntraPCM
 recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
-dropped-frame budget behavior, `FrameDropLate` `MaxEncodeTimeUS` budget drops
+dropped-frame budget behavior including VBV-backed `MaxBitrate` bucket misses,
+`FrameDropLate` `MaxEncodeTimeUS` budget drops
 without reference/frame/packet/callback advancement before and after an existing
 reference, RTP/Annex B/RTP control-loop stress across QP refresh, late drop
 recovery, packet metadata retargeting, paused RTP sequence/callback state, and

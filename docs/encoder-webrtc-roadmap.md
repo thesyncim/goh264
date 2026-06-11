@@ -60,8 +60,9 @@ rate-control and packetization updates that leave the prior config intact.
 QP updates queue an IDR/PPS refresh. `MaxFrameSize` and `SliceMaxBytes` are now
 enforced as encode-time guards before frame/reference/packet state advances:
 `FrameDropDisabled` keeps the hard-error path, while `FrameDropToBitrate`
-returns `EncodedFrame.Dropped` without emitted bytes or RTP packets and advances
-the RTP timestamp timeline. `FrameDropLate` now uses `MaxEncodeTimeUS` as an
+returns `EncodedFrame.Dropped` without emitted bytes or RTP packets for explicit
+byte-budget misses or VBV-backed `MaxBitrate` bucket misses, and advances the RTP
+timestamp timeline. `FrameDropLate` now uses `MaxEncodeTimeUS` as an
 encode-time budget only when that mode is selected; late frames return dropped
 metadata, advance the RTP timestamp timeline, and leave reference, frame-number,
 packet-sequence, and callback state untouched, including after an existing
@@ -111,7 +112,7 @@ cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B changed P IntraPCM,
 RTP FU-A IDR IntraPCM, and RTP steady P-skip. Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
-residual coding, and rate-control decisions remain pending beyond the exact
+residual coding, and adaptive rate-control feedback remain pending beyond the exact
 macroblock-aligned P16x16 admission.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
@@ -172,7 +173,8 @@ in one access unit.
    `MaxFrameSize`/`SliceMaxBytes` budgets now reject oversized encoded output
    without advancing encoder state when frame dropping is disabled, or return
    dropped-frame metadata without emitted packets when `FrameDropToBitrate` is
-   active. `FrameDropLate` now drops frames that exceed `MaxEncodeTimeUS`
+   active; low VBV-backed `MaxBitrate` budgets now use the same dropped-frame
+   state path. `FrameDropLate` now drops frames that exceed `MaxEncodeTimeUS`
    without advancing reference/frame/packet state, including after a transmitted
    reference frame.
 6. In progress: add realtime allocation budgets, encode timing benchmarks, and

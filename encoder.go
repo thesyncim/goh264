@@ -293,6 +293,8 @@ type Encoder struct {
 	rtpTimeInitialized bool
 	reference          encoderReferenceFrame
 	p16MVDs            []h264.EncoderMotionVectorDelta
+	bitrateCreditBytes int
+	bitrateCreditInit  bool
 	framesSinceIDR     int
 	rtpPacketCallback  EncoderRTPPacketCallback
 }
@@ -565,6 +567,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	if miss, err := encoderOutputBudgetMiss(e.cfg, nals, outputSize); err != nil {
 		if e.cfg.FrameDrop == EncoderFrameDropToBitrate && miss != encoderOutputBudgetNone {
 			e.advanceEncoderRTPTime(frame, rtpTime)
+			e.advanceEncoderBitrateBudget(0)
 			return EncodedFrame{
 				PTS:     frame.PTS,
 				DTS:     frame.PTS,
@@ -573,6 +576,16 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			}, nil
 		}
 		return EncodedFrame{}, err
+	}
+	if e.encoderBitrateBudgetMiss(outputSize) {
+		e.advanceEncoderRTPTime(frame, rtpTime)
+		e.advanceEncoderBitrateBudget(0)
+		return EncodedFrame{
+			PTS:     frame.PTS,
+			DTS:     frame.PTS,
+			RTPTime: rtpTime,
+			Dropped: true,
+		}, nil
 	}
 	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
 	if err != nil {
@@ -613,6 +626,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	}
 
 	e.advanceEncoderRTPTime(frame, rtpTime)
+	e.advanceEncoderBitrateBudget(outputSize)
 	e.storeReference(view)
 	e.forceIDR = false
 	e.frameNum = (e.frameNum + 1) & 0xff
@@ -664,6 +678,7 @@ func (e *Encoder) SetBitrate(targetBitrate, maxBitrate int) error {
 		return err
 	}
 	e.cfg = normalized
+	e.resetEncoderBitrateBudget()
 	return nil
 }
 
@@ -680,6 +695,7 @@ func (e *Encoder) SetFrameRate(num, den int) error {
 		return err
 	}
 	e.cfg = normalized
+	e.resetEncoderBitrateBudget()
 	return nil
 }
 
@@ -805,7 +821,17 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if err != nil {
 		return err
 	}
+	bitrateBudgetRefresh := normalized.TargetBitrate != e.cfg.TargetBitrate ||
+		normalized.MaxBitrate != e.cfg.MaxBitrate ||
+		normalized.VBVBufferSize != e.cfg.VBVBufferSize ||
+		normalized.FrameRateNum != e.cfg.FrameRateNum ||
+		normalized.FrameRateDen != e.cfg.FrameRateDen ||
+		normalized.RateControl != e.cfg.RateControl ||
+		normalized.FrameDrop != e.cfg.FrameDrop
 	e.cfg = normalized
+	if bitrateBudgetRefresh {
+		e.resetEncoderBitrateBudget()
+	}
 	if normalized.Width != oldWidth || normalized.Height != oldHeight {
 		e.reference = encoderReferenceFrame{}
 		e.framesSinceIDR = 0
@@ -1268,6 +1294,82 @@ func encoderOutputBudgetMiss(cfg EncoderConfig, nals []encoderRawNAL, outputSize
 		return encoderOutputBudgetFrame, encoderInvalid("encoded access unit exceeds max frame size")
 	}
 	return encoderOutputBudgetNone, nil
+}
+
+func (e *Encoder) encoderBitrateBudgetMiss(outputSize int) bool {
+	if e == nil || !encoderBitrateBudgetEnabled(e.cfg) {
+		return false
+	}
+	e.ensureEncoderBitrateBudget()
+	return outputSize > e.bitrateCreditBytes
+}
+
+func (e *Encoder) advanceEncoderBitrateBudget(outputSize int) {
+	if e == nil || !encoderBitrateBudgetEnabled(e.cfg) {
+		if e != nil {
+			e.resetEncoderBitrateBudget()
+		}
+		return
+	}
+	e.ensureEncoderBitrateBudget()
+	if outputSize >= e.bitrateCreditBytes {
+		e.bitrateCreditBytes = 0
+	} else {
+		e.bitrateCreditBytes -= outputSize
+	}
+	e.bitrateCreditBytes += encoderBitrateFrameBudgetBytes(e.cfg)
+	if capBytes := encoderVBVBufferBudgetBytes(e.cfg); capBytes > 0 && e.bitrateCreditBytes > capBytes {
+		e.bitrateCreditBytes = capBytes
+	}
+}
+
+func (e *Encoder) ensureEncoderBitrateBudget() {
+	if e == nil || e.bitrateCreditInit {
+		return
+	}
+	e.bitrateCreditBytes = encoderVBVBufferBudgetBytes(e.cfg)
+	if e.bitrateCreditBytes == 0 {
+		e.bitrateCreditBytes = encoderBitrateFrameBudgetBytes(e.cfg)
+	}
+	e.bitrateCreditInit = true
+}
+
+func (e *Encoder) resetEncoderBitrateBudget() {
+	if e == nil {
+		return
+	}
+	e.bitrateCreditBytes = 0
+	e.bitrateCreditInit = false
+}
+
+func encoderBitrateBudgetEnabled(cfg EncoderConfig) bool {
+	return cfg.FrameDrop == EncoderFrameDropToBitrate && cfg.RateControl != EncoderRateControlConstantQP
+}
+
+func encoderBitrateFrameBudgetBytes(cfg EncoderConfig) int {
+	if cfg.MaxBitrate <= 0 || cfg.FrameRateNum <= 0 || cfg.FrameRateDen <= 0 {
+		return 0
+	}
+	bitsNumerator := uint64(cfg.MaxBitrate) * uint64(cfg.FrameRateDen)
+	bitsPerFrame := (bitsNumerator + uint64(cfg.FrameRateNum) - 1) / uint64(cfg.FrameRateNum)
+	bytesPerFrame := (bitsPerFrame + 7) / 8
+	maxInt := uint64(int(^uint(0) >> 1))
+	if bytesPerFrame > maxInt {
+		return int(maxInt)
+	}
+	return int(bytesPerFrame)
+}
+
+func encoderVBVBufferBudgetBytes(cfg EncoderConfig) int {
+	if cfg.VBVBufferSize <= 0 {
+		return 0
+	}
+	bytes := (uint64(cfg.VBVBufferSize) + 7) / 8
+	maxInt := uint64(int(^uint(0) >> 1))
+	if bytes > maxInt {
+		return int(maxInt)
+	}
+	return int(bytes)
 }
 
 func encoderRawNALIsVCL(nal encoderRawNAL) bool {

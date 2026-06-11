@@ -103,7 +103,8 @@ zero-PTS frames from frame duration or `RTPTimestampIncrement`. `MaxFrameSize`
 and `SliceMaxBytes` are enforced before frame/reference/packet state advances:
 `FrameDropDisabled` preserves the hard-error path, while
 `FrameDropToBitrate` returns `EncodedFrame.Dropped` without emitted bytes or RTP
-packets and advances the RTP timestamp timeline.
+packets for explicit byte-budget misses or VBV-backed `MaxBitrate` bucket
+misses, and advances the RTP timestamp timeline.
 Runtime reconfiguration now covers SPS/PPS cadence, Annex B/AVC/RTP output
 format, RTP packetization mode 0/1, STAP-A aggregation, payload type, SSRC, and
 custom RTP timestamp increments plus rate-control mode, VBV size,
@@ -327,10 +328,11 @@ timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
 separate in-band keyframe headers, out-of-band headers, and every-IDR emission,
 and runtime reconfiguration can switch output format and RTP packetization
 controls plus rate-control/QP/GOP/deblock controls while preserving state on
-rejected updates. Bitrate-budget drops surface through `EncodedFrame.Dropped`
-when `FrameDropToBitrate` is active.
+rejected updates. Bitrate-budget drops use the configured `MaxBitrate` refill
+rate and `VBVBufferSize` burst capacity, then surface through
+`EncodedFrame.Dropped` when `FrameDropToBitrate` is active.
 Motion search beyond the exact macroblock-aligned inter path, quantized
-residual coding, and rate-control decisions are still future encoder slices.
+residual coding, and adaptive rate-control feedback are still future encoder slices.
 
 ## Supported Inputs
 
