@@ -151,8 +151,9 @@ emit IDR IntraPCM access units that round-trip through local Annex B/AVC decode,
 FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL
 IDR/P-frame reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
-clipped packet data slices and optional RTP callback metadata including mode 0/1
-IDR/P-frame single-NAL packets. It also proves identical second frames can emit
+clipped packet payload and data slices and optional RTP callback metadata
+including mode 0/1 IDR/P-frame single-NAL packets. It also proves identical
+second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
 exact shifted macroblock-aligned frames can emit predictive P16x16 no-residual
 slices through stateful local decode, FFmpeg rawvideo decode, configured AVC
@@ -168,9 +169,9 @@ RTP exact P16x16, RTP steady P-skip, RTP changed P IntraPCM, and RTP
 packetization-mode 0 IDR/P-frame paths;
 the live encode path writes RBSP plus raw NAL output directly instead of building
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
-planning backed by stack storage, and stamps full RTP packet data from one
-access-unit buffer while preserving append isolation for each public packet
-slice. Package-level benchmark canary rows now
+planning backed by stack storage, and stamps RTP payloads plus full RTP packet
+data from access-unit buffers while preserving append isolation for each public
+packet slice. Package-level benchmark canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
 Annex B changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16, RTP steady
 P-skip, and RTP changed P IntraPCM plus RTP packetization-mode 0

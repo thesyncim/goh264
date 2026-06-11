@@ -1412,6 +1412,7 @@ func packetizeEncoderRTPSingleNAL(nals []encoderRawNAL, maxPayloadSize int, time
 		return nil, encoderInvalid("RTP max payload size must fit a NAL header")
 	}
 	packets := make([]EncoderRTPPacket, 0, len(nals))
+	payloads := make([]byte, 0, encoderRawNALPayloadStorageSize(nals))
 	for _, nal := range nals {
 		if len(nal.raw) == 0 {
 			return nil, encoderInvalid("empty encoder NAL")
@@ -1419,8 +1420,9 @@ func packetizeEncoderRTPSingleNAL(nals []encoderRawNAL, maxPayloadSize int, time
 		if len(nal.raw) > maxPayloadSize {
 			return nil, encoderInvalid("encoder NAL exceeds RTP packetization-mode 0 payload size")
 		}
-		payload := append([]byte(nil), nal.raw...)
-		packets = append(packets, EncoderRTPPacket{Payload: payload, Timestamp: timestamp})
+		start := len(payloads)
+		payloads = append(payloads, nal.raw...)
+		packets = append(packets, EncoderRTPPacket{Payload: payloads[start:len(payloads):len(payloads)], Timestamp: timestamp})
 	}
 	if len(packets) != 0 {
 		packets[len(packets)-1].Marker = true
@@ -1432,15 +1434,22 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 	if maxPayloadSize < 3 {
 		return nil, encoderInvalid("RTP max payload size must leave room for FU-A headers")
 	}
-	packets := make([]EncoderRTPPacket, 0, len(nals))
+	packetCap, payloadCap, err := encoderRTPMode1StoragePlan(nals, maxPayloadSize, stapa)
+	if err != nil {
+		return nil, err
+	}
+	packets := make([]EncoderRTPPacket, 0, packetCap)
+	payloads := make([]byte, 0, payloadCap)
 	for i := 0; i < len(nals); {
 		if stapa && nals[i].parameterSet {
-			payload, count, err := buildEncoderSTAPA(nals[i:], maxPayloadSize)
+			start := len(payloads)
+			var count int
+			payloads, count, err = appendEncoderSTAPA(payloads, nals[i:], maxPayloadSize)
 			if err != nil {
 				return nil, err
 			}
 			if count >= 2 {
-				packets = append(packets, EncoderRTPPacket{Payload: payload, Timestamp: timestamp})
+				packets = append(packets, EncoderRTPPacket{Payload: payloads[start:len(payloads):len(payloads)], Timestamp: timestamp})
 				i += count
 				continue
 			}
@@ -1450,8 +1459,9 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 			return nil, encoderInvalid("empty encoder NAL")
 		}
 		if len(nal.raw) <= maxPayloadSize {
-			payload := append([]byte(nil), nal.raw...)
-			packets = append(packets, EncoderRTPPacket{Payload: payload, Timestamp: timestamp})
+			start := len(payloads)
+			payloads = append(payloads, nal.raw...)
+			packets = append(packets, EncoderRTPPacket{Payload: payloads[start:len(payloads):len(payloads)], Timestamp: timestamp})
 			i++
 			continue
 		}
@@ -1464,8 +1474,8 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 			if n > len(payload) {
 				n = len(payload)
 			}
-			fu := make([]byte, 0, n+2)
-			fu = append(fu, (header&0xe0)|28)
+			start := len(payloads)
+			payloads = append(payloads, (header&0xe0)|28)
 			fuHeader := header & 0x1f
 			if first {
 				fuHeader |= 0x80
@@ -1473,9 +1483,9 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 			if n == len(payload) {
 				fuHeader |= 0x40
 			}
-			fu = append(fu, fuHeader)
-			fu = append(fu, payload[:n]...)
-			packets = append(packets, EncoderRTPPacket{Payload: fu, Timestamp: timestamp})
+			payloads = append(payloads, fuHeader)
+			payloads = append(payloads, payload[:n]...)
+			packets = append(packets, EncoderRTPPacket{Payload: payloads[start:len(payloads):len(payloads)], Timestamp: timestamp})
 			payload = payload[n:]
 			first = false
 		}
@@ -1485,6 +1495,50 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 		packets[len(packets)-1].Marker = true
 	}
 	return packets, nil
+}
+
+func encoderRawNALPayloadStorageSize(nals []encoderRawNAL) int {
+	size := 0
+	for _, nal := range nals {
+		size += len(nal.raw)
+	}
+	return size
+}
+
+func encoderRTPMode1StoragePlan(nals []encoderRawNAL, maxPayloadSize int, stapa bool) (int, int, error) {
+	packetCount := 0
+	payloadSize := 0
+	for i := 0; i < len(nals); {
+		if stapa && nals[i].parameterSet {
+			size, count, err := encoderSTAPASize(nals[i:], maxPayloadSize)
+			if err != nil {
+				return 0, 0, err
+			}
+			if count >= 2 {
+				packetCount++
+				payloadSize += size
+				i += count
+				continue
+			}
+		}
+		nal := nals[i]
+		if len(nal.raw) == 0 {
+			return 0, 0, encoderInvalid("empty encoder NAL")
+		}
+		if len(nal.raw) <= maxPayloadSize {
+			packetCount++
+			payloadSize += len(nal.raw)
+			i++
+			continue
+		}
+		fragmentPayload := len(nal.raw) - 1
+		maxFragment := maxPayloadSize - 2
+		fragmentCount := (fragmentPayload + maxFragment - 1) / maxFragment
+		packetCount += fragmentCount
+		payloadSize += fragmentPayload + 2*fragmentCount
+		i++
+	}
+	return packetCount, payloadSize, nil
 }
 
 func (e *Encoder) stampRTPPackets(packets []EncoderRTPPacket) {
@@ -1606,8 +1660,32 @@ func encoderRTPNALTypeIsParameterSet(typ uint8) bool {
 	return typ == uint8(h264.NALSPS) || typ == uint8(h264.NALPPS)
 }
 
-func buildEncoderSTAPA(nals []encoderRawNAL, maxPayloadSize int) ([]byte, int, error) {
-	payload := []byte{24}
+func encoderSTAPASize(nals []encoderRawNAL, maxPayloadSize int) (int, int, error) {
+	size := 1
+	count := 0
+	for _, nal := range nals {
+		if !nal.parameterSet {
+			break
+		}
+		if len(nal.raw) == 0 {
+			return 0, 0, encoderInvalid("empty encoder NAL")
+		}
+		if len(nal.raw) > 0xffff {
+			return 0, 0, encoderInvalid("encoder NAL is too large for STAP-A")
+		}
+		need := 2 + len(nal.raw)
+		if size+need > maxPayloadSize {
+			break
+		}
+		size += need
+		count++
+	}
+	return size, count, nil
+}
+
+func appendEncoderSTAPA(dst []byte, nals []encoderRawNAL, maxPayloadSize int) ([]byte, int, error) {
+	start := len(dst)
+	dst = append(dst, 24)
 	var maxNRI byte
 	count := 0
 	for _, nal := range nals {
@@ -1615,27 +1693,27 @@ func buildEncoderSTAPA(nals []encoderRawNAL, maxPayloadSize int) ([]byte, int, e
 			break
 		}
 		if len(nal.raw) == 0 {
-			return nil, 0, encoderInvalid("empty encoder NAL")
+			return dst[:start], 0, encoderInvalid("empty encoder NAL")
 		}
 		if len(nal.raw) > 0xffff {
-			return nil, 0, encoderInvalid("encoder NAL is too large for STAP-A")
+			return dst[:start], 0, encoderInvalid("encoder NAL is too large for STAP-A")
 		}
 		need := 2 + len(nal.raw)
-		if len(payload)+need > maxPayloadSize {
+		if len(dst)-start+need > maxPayloadSize {
 			break
 		}
 		if nri := nal.raw[0] & 0x60; nri > maxNRI {
 			maxNRI = nri
 		}
-		payload = append(payload, byte(len(nal.raw)>>8), byte(len(nal.raw)))
-		payload = append(payload, nal.raw...)
+		dst = append(dst, byte(len(nal.raw)>>8), byte(len(nal.raw)))
+		dst = append(dst, nal.raw...)
 		count++
 	}
 	if count < 2 {
-		return nil, count, nil
+		return dst[:start], count, nil
 	}
-	payload[0] = maxNRI | 24
-	return payload, count, nil
+	dst[start] = maxNRI | 24
+	return dst, count, nil
 }
 
 func encoderDeblockingFilterIDC(mode EncoderDeblockMode) uint32 {
