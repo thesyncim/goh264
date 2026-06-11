@@ -79,6 +79,13 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 			c.FrameRateDen = 2
 			c.RTPTimestampIncrement = 0
 		}, want: goh264.ErrInvalidData},
+		{name: "bitrate frame budget overflow", mutate: func(c *goh264.EncoderConfig) {
+			c.TargetBitrate = maxIntForTest
+			c.MaxBitrate = maxIntForTest
+			c.FrameRateNum = 1
+			c.FrameRateDen = 3
+			c.RTPTimestampIncrement = 1
+		}, want: goh264.ErrInvalidData},
 		{name: "undersized luma stride", mutate: func(c *goh264.EncoderConfig) { c.StrideY = 639 }, want: goh264.ErrInvalidData},
 		{name: "unknown pixel format", mutate: func(c *goh264.EncoderConfig) { c.PixelFormat = goh264.EncoderPixelFormat(99) }, want: goh264.ErrUnsupported},
 		{name: "main profile not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.Profile = goh264.EncoderProfileMain }, want: goh264.ErrUnsupported},
@@ -117,6 +124,25 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 				t.Fatalf("NewEncoder error = %v, want %v", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestEncoderReconfigureRejectsBitrateBudgetOverflowWithoutMutation(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	before := enc.Config()
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		TargetBitrate: maxIntForTest,
+		MaxBitrate:    maxIntForTest,
+		FrameRateNum:  1,
+		FrameRateDen:  3,
+	}); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Reconfigure bitrate-budget overflow error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("overflow bitrate-budget Reconfigure mutated config = %+v, want %+v", got, before)
 	}
 }
 

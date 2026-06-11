@@ -1729,17 +1729,42 @@ func encoderBitrateBudgetEnabled(cfg EncoderConfig) bool {
 }
 
 func encoderBitrateFrameBudgetBytes(cfg EncoderConfig) int {
-	if cfg.MaxBitrate <= 0 || cfg.FrameRateNum <= 0 || cfg.FrameRateDen <= 0 {
+	bytes, err := encoderBitrateFrameBudgetBytesChecked(cfg)
+	if err != nil {
 		return 0
 	}
-	bitsNumerator := uint64(cfg.MaxBitrate) * uint64(cfg.FrameRateDen)
-	bitsPerFrame := (bitsNumerator + uint64(cfg.FrameRateNum) - 1) / uint64(cfg.FrameRateNum)
-	bytesPerFrame := (bitsPerFrame + 7) / 8
+	return bytes
+}
+
+func encoderBitrateFrameBudgetBytesChecked(cfg EncoderConfig) (int, error) {
+	if cfg.MaxBitrate <= 0 || cfg.FrameRateNum <= 0 || cfg.FrameRateDen <= 0 {
+		return 0, nil
+	}
+	bitsNumerator, err := checkedMulUint64(uint64(cfg.MaxBitrate), uint64(cfg.FrameRateDen))
+	if err != nil {
+		return 0, encoderInvalid("bitrate frame budget overflows")
+	}
+	divisor := uint64(cfg.FrameRateNum)
+	bitsPerFrame := bitsNumerator / divisor
+	if bitsNumerator%divisor != 0 {
+		bitsPerFrame++
+	}
+	bytesPerFrame := bitsPerFrame / 8
+	if bitsPerFrame%8 != 0 {
+		bytesPerFrame++
+	}
 	maxInt := uint64(int(^uint(0) >> 1))
 	if bytesPerFrame > maxInt {
-		return int(maxInt)
+		return int(maxInt), nil
 	}
-	return int(bytesPerFrame)
+	return int(bytesPerFrame), nil
+}
+
+func checkedMulUint64(a uint64, b uint64) (uint64, error) {
+	if a != 0 && b > ^uint64(0)/a {
+		return 0, ErrInvalidData
+	}
+	return a * b, nil
 }
 
 func encoderVBVBufferBudgetBytes(cfg EncoderConfig) int {
@@ -2315,6 +2340,11 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 			return cfg, err
 		}
 		cfg.RTPTimestampIncrement = increment
+	}
+	if encoderBitrateBudgetEnabled(cfg) {
+		if _, err := encoderBitrateFrameBudgetBytesChecked(cfg); err != nil {
+			return cfg, err
+		}
 	}
 	return cfg, nil
 }

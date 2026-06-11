@@ -213,7 +213,7 @@ proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 misses, including credit consumption/refill across transmitted IDR/P-skip and
 dropped changed-P frames, caller-buffer `EncodeInto` budget drops with empty
 returned output, no callbacks, stable reference/frame/packet state, and P-skip
-recovery, runtime frame-drop mode switches that toggle the derived bitrate
+recovery, checked rejection of overflowed bitrate budget derivation, runtime frame-drop mode switches that toggle the derived bitrate
 budget before the next frame, runtime max-bitrate/VBV lowering that resets stale
 credit before the next frame, `SetBitrate` lowering that
 resets stale frame-budget credit before the next frame, `SetFrameRate` changes
