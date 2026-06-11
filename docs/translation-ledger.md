@@ -61,7 +61,7 @@ header and clipped-slice metadata guards, public NAL-unit metadata index guards
 for Annex B/AVC/RTP access-unit bytes including non-empty caller-buffer prefixes,
 caller-buffer preservation on RTP mode-0 rejection and Annex B/AVC/RTP
 bitrate-drop and late-drop non-output paths, input-frame plane ownership guards after `Encode` returns,
-returned `Encode` result lifetime guards, and RTP packetization-mode 0 surfaces, including
+returned `Encode` result lifetime guards, `EncodeInto` RTP packet isolation from caller-backed output buffers, and RTP packetization-mode 0 surfaces, including
 per-macroblock exact P16x16. The
 admitted forced-IDR and P IntraPCM fallback hot paths now have direct raw
 SPS/PPS and recovery-point SEI NAL helpers, callback packet clipped-payload

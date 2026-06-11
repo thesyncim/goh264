@@ -5623,6 +5623,62 @@ func TestEncoderRTPPacketsDoNotAliasEncodedFrameData(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeIntoRTPPacketsDoNotAliasCallerBuffer(t *testing.T) {
+	for _, tt := range []struct {
+		name              string
+		packetizationMode goh264.EncoderRTPPacketizationMode
+		maxPayloadSize    int
+		stapa             bool
+	}{
+		{name: "mode0", packetizationMode: goh264.EncoderRTPPacketizationSingleNAL, maxPayloadSize: 1200},
+		{name: "mode1-fua", packetizationMode: goh264.EncoderRTPPacketizationNonInterleaved, maxPayloadSize: 32},
+		{name: "mode1-stap-a", packetizationMode: goh264.EncoderRTPPacketizationNonInterleaved, maxPayloadSize: 128, stapa: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.RTPPacketizationMode = tt.packetizationMode
+			cfg.RTPMaxPayloadSize = tt.maxPayloadSize
+			cfg.STAPA = tt.stapa
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			dst := make([]byte, 0, 4096)
+			out, err := enc.EncodeInto(dst[:0], patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("EncodeInto RTP frame: %v", err)
+			}
+			if len(out.Data) == 0 || len(out.RTPPackets) == 0 {
+				t.Fatalf("RTP output data/packets = %d/%d, want nonzero", len(out.Data), len(out.RTPPackets))
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto Data cap = %d, want caller buffer cap %d", cap(out.Data), cap(dst))
+			}
+
+			packetPayloads := make([][]byte, len(out.RTPPackets))
+			packetData := make([][]byte, len(out.RTPPackets))
+			for i, pkt := range out.RTPPackets {
+				packetPayloads[i] = append([]byte(nil), pkt.Payload...)
+				packetData[i] = append([]byte(nil), pkt.Data...)
+			}
+
+			for i := range out.Data {
+				out.Data[i] ^= 0xff
+			}
+			for i, pkt := range out.RTPPackets {
+				if !bytes.Equal(pkt.Payload, packetPayloads[i]) {
+					t.Fatalf("mutating caller-backed EncodedFrame.Data changed RTP packet[%d] Payload", i)
+				}
+				if !bytes.Equal(pkt.Data, packetData[i]) {
+					t.Fatalf("mutating caller-backed EncodedFrame.Data changed RTP packet[%d] Data", i)
+				}
+			}
+		})
+	}
+}
+
 func TestEncoderRTPPacketCallbackReceivesWebRTCMetadata(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPayloadType = 104
