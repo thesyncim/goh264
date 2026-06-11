@@ -428,6 +428,33 @@ func TestH264RealVectorPinnedFATEInventory(t *testing.T) {
 	}
 }
 
+func TestH264RealVectorDocumentationCounts(t *testing.T) {
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	failures := readH264CorpusManifest(t, defaultH264RealVectorFailureManifest)
+	excluded := h264RealVectorExclusionsByRef(t, readH264RealVectorExclusions(t, defaultH264RealVectorExclusionManifest))
+	importedEntries := readH264RealVectorUpstreamInventory(t, defaultH264RealVectorUpstreamInventory)
+	imported := h264RealVectorUpstreamInventoryByRef(t, importedEntries)
+	importedFATE := h264RealVectorUpstreamFATEInventoryByRef(t, importedEntries)
+
+	green := len(manifest) - len(failures)
+	auxiliary := len(imported) - len(importedFATE)
+
+	requireH264DocCountSnippet(t, "README.md", fmt.Sprintf("| Imported public H.264 vector refs | %d |", len(imported)))
+	requireH264DocCountSnippet(t, "README.md", fmt.Sprintf("| Pinned FFmpeg FATE refs in imported inventory | %d |", len(importedFATE)))
+	requireH264DocCountSnippet(t, "README.md", fmt.Sprintf("| Selected public H.264 vectors | %d |", len(manifest)))
+	requireH264DocCountSnippet(t, "README.md", fmt.Sprintf("| Green oracle rows | %d |", green))
+	requireH264DocCountSnippet(t, "README.md", fmt.Sprintf("| Known-red rows in `failures.jsonl` | %d |", len(failures)))
+	requireH264DocCountSnippet(t, "README.md", fmt.Sprintf("| Explicitly excluded upstream H.264-ish rows | %d |", len(excluded)))
+	requireH264DocCountSnippet(t, "README.md", fmt.Sprintf("The selected manifest represents %d imported decoder-facing refs", len(manifest)))
+
+	requireH264DocCountSnippet(t, "docs/source-truth.md",
+		fmt.Sprintf("Public vectors: %d imported public refs, %d selected decoder-facing manifest rows, %d green oracle rows, %d known-red",
+			len(imported), len(manifest), green, len(failures)))
+	requireH264DocCountSnippet(t, "docs/production-readiness.md",
+		fmt.Sprintf("currently imports %d public H.264 refs: %d generated from pinned FFmpeg `n8.0.1` FATE makefiles and %d auxiliary",
+			len(imported), len(importedFATE), auxiliary))
+}
+
 func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 	if !h264RealVectorsEnabled() && os.Getenv("GOH264_REAL_VECTOR_FAILURES") != "1" {
 		t.Skip("set GOH264_REAL_VECTOR_FAILURES=1, GOH264_REAL_VECTORS=1, or GOH264_ORACLE=1 to verify red public vector rows")
@@ -512,6 +539,19 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 	t.Logf("public-vector matrix selected=%d green=%d known-red=%d", len(manifest), green, knownRed)
 	if len(redRows) != 0 {
 		t.Logf("public-vector known-red lanes: %s", h264CorpusKnownRedLaneSummary(redRows))
+	}
+}
+
+func requireH264DocCountSnippet(t *testing.T, path string, snippet string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	doc := strings.Join(strings.Fields(string(data)), " ")
+	want := strings.Join(strings.Fields(snippet), " ")
+	if !strings.Contains(doc, want) {
+		t.Fatalf("%s missing public-vector count snippet %q", path, snippet)
 	}
 }
 
