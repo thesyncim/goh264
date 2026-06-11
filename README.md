@@ -118,7 +118,9 @@ Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
 across disabled, enabled, and slice-boundary deblock controls; a
 macroblock-aligned frame that exactly matches a bounded even integer-pel shift of
 the stored reference can use guarded CAVLC P16x16 no-residual slices with Annex B
-local/FFmpeg, configured AVC, and RTP reassembly decode proof; changed frames can use a
+local/FFmpeg, configured AVC, and RTP reassembly decode proof under disabled
+multi-macroblock deblock plus single-macroblock enabled/slice-boundary deblock;
+changed frames can use a
 guarded CAVLC P IntraPCM slice in the same admitted deblock scope with
 recovery-point SEI emission when enabled, while forced keyframe requests still
 emit IDR; cropped I420 input emits SPS crop metadata and local/FFmpeg decode
@@ -318,8 +320,10 @@ if out.Dropped {
 
 `Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
 then emit the admitted IDR IntraPCM, identical-reference P-skip, exact
-macroblock-aligned P16x16 no-residual, or changed-frame P IntraPCM frame path, optionally split
-into configured multi-slice VCL NALs. Changed-frame P IntraPCM recovery
+macroblock-aligned P16x16 no-residual, or changed-frame P IntraPCM frame path,
+optionally split into configured multi-slice VCL NALs. Exact P16x16 is admitted
+for disabled-deblock multi-macroblock frames and single-macroblock
+enabled/slice-boundary deblock frames. Changed-frame P IntraPCM recovery
 pictures carry recovery-point SEI when enabled. RTP output includes payloads
 plus complete RTP
 packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1

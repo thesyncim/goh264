@@ -1033,11 +1033,13 @@ func (e *Encoder) referenceMatches(view encoderFrameView) bool {
 }
 
 func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, bool) {
-	if e.cfg.DeblockMode != EncoderDeblockDisabled ||
-		view.height < 16 ||
+	if view.height < 16 ||
 		view.height&15 != 0 ||
 		view.width < 16 ||
 		view.width&15 != 0 {
+		return 0, 0, false
+	}
+	if e.cfg.DeblockMode != EncoderDeblockDisabled && encoderMacroblockCount(view.width, view.height) != 1 {
 		return 0, 0, false
 	}
 	ref := &e.reference

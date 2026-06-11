@@ -115,7 +115,8 @@ RTP payload-size, SPS/PPS cadence modes, PLI/FIR/force-IDR, partial
 reconfiguration, public SPS/PPS/Annex B/avcC header generation with crop
 metadata, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
 generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
-bounded exact macroblock-aligned P16x16 no-residual prediction, changed-frame P IntraPCM
+bounded exact macroblock-aligned P16x16 no-residual prediction with
+single-macroblock enabled/slice-boundary deblock proof, changed-frame P IntraPCM
 recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
 dropped-frame budget behavior including VBV-backed `MaxBitrate` bucket misses,
