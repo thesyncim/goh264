@@ -111,8 +111,9 @@ silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage. Package-level `-benchmem` canary rows now
-cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B changed P IntraPCM,
-RTP FU-A IDR IntraPCM, and RTP steady P-skip. Cropped I420 IDR output is
+cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
+Annex B changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16, and RTP
+steady P-skip. Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
 residual coding, and adaptive rate-control feedback remain pending beyond the bounded exact

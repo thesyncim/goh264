@@ -167,8 +167,9 @@ RTP exact P16x16, and RTP steady P-skip paths;
 the live encode path writes RBSP plus raw NAL output directly instead of building
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage. Package-level benchmark canary rows now
-cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B changed
-P IntraPCM, RTP FU-A IDR IntraPCM, and RTP steady P-skip with `-benchmem`.
+cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
+Annex B changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16, and RTP
+steady P-skip with `-benchmem`.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and
