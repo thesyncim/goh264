@@ -143,7 +143,7 @@ packets also carry complete 12-byte RTP headers plus payload bytes with clipped
 per-packet payload views over packet data and packet storage isolated from
 `EncodedFrame.Data`, with shared metadata guards for header fields and clipped
 packet slices, input-frame plane ownership after `Encode` returns across
-Annex B/AVC/RTP, and
+Annex B/AVC/RTP, returned `Encode` result stability across later encodes, and
 `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form including mode 0/1 IDR/P frames with P-skip, exact

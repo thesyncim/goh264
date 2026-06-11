@@ -5232,6 +5232,57 @@ func TestEncoderDoesNotRetainInputFramePlanes(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeResultsSurviveLaterEncode(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", outputFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc", outputFormat: goh264.EncoderOutputAVC},
+		{name: "rtp", outputFormat: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.GOPSize = 10000
+			cfg.IDRInterval = 10000
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode first frame: %v", err)
+			}
+			firstData := append([]byte(nil), first.Data...)
+			firstNALUnits := append([]goh264.EncoderNALUnit(nil), first.NALUnits...)
+			firstRTPPackets := cloneEncoderRTPPackets(first.RTPPackets)
+
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+			if _, err := enc.Encode(secondFrame); err != nil {
+				t.Fatalf("Encode second frame: %v", err)
+			}
+
+			if !bytes.Equal(first.Data, firstData) {
+				t.Fatalf("first EncodedFrame.Data changed after later encode")
+			}
+			if !reflect.DeepEqual(first.NALUnits, firstNALUnits) {
+				t.Fatalf("first EncodedFrame.NALUnits changed after later encode")
+			}
+			if !reflect.DeepEqual(first.RTPPackets, firstRTPPackets) {
+				t.Fatalf("first EncodedFrame.RTPPackets changed after later encode")
+			}
+			assertEncodedFrameNALUnitIndexes(t, first, cfg.OutputFormat)
+		})
+	}
+}
+
 func TestEncoderEncodeRTPPacketsCarryFullRTPHeaders(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPayloadType = 102
@@ -7577,6 +7628,15 @@ func mutateI420EncoderFramePlanes(frame *goh264.EncoderFrame) {
 	for i := range frame.Cr {
 		frame.Cr[i] ^= 0x3f
 	}
+}
+
+func cloneEncoderRTPPackets(packets []goh264.EncoderRTPPacket) []goh264.EncoderRTPPacket {
+	clones := append([]goh264.EncoderRTPPacket(nil), packets...)
+	for i := range clones {
+		clones[i].Data = append([]byte(nil), packets[i].Data...)
+		clones[i].Payload = append([]byte(nil), packets[i].Payload...)
+	}
+	return clones
 }
 
 func setConstantI420Chroma(frame *goh264.EncoderFrame, cb byte, cr byte) {
