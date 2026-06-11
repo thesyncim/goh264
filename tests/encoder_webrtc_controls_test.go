@@ -1383,6 +1383,89 @@ func TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControls(t *testing.
 	}
 }
 
+func TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControlsForAVCAndRTP(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		format goh264.EncoderOutputFormat
+	}{
+		{name: "avc", format: goh264.EncoderOutputAVC},
+		{name: "rtp", format: goh264.EncoderOutputRTP},
+	} {
+		for _, deblock := range []struct {
+			name string
+			mode goh264.EncoderDeblockMode
+		}{
+			{name: "enabled", mode: goh264.EncoderDeblockEnabled},
+			{name: "slice-boundary", mode: goh264.EncoderDeblockSliceBoundary},
+		} {
+			t.Run(tt.name+"/"+deblock.name, func(t *testing.T) {
+				cfg := goh264.DefaultEncoderConfig(16, 16)
+				cfg.OutputFormat = tt.format
+				cfg.DeblockMode = deblock.mode
+				if tt.format != goh264.EncoderOutputRTP {
+					cfg.RTPMaxPayloadSize = 0
+				}
+				enc, err := goh264.NewEncoder(cfg)
+				if err != nil {
+					t.Fatalf("NewEncoder: %v", err)
+				}
+				firstFrame := patternedI420EncoderFrame(16, 16)
+				first, err := enc.Encode(firstFrame)
+				if err != nil {
+					t.Fatalf("Encode first IDR: %v", err)
+				}
+				assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+				secondFrame := integerMotionI420EncoderFrame(firstFrame, 2, 0)
+				secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+				second, err := enc.Encode(secondFrame)
+				if err != nil {
+					t.Fatalf("Encode exact P16x16 no-residual motion %s/%s: %v", tt.name, deblock.name, err)
+				}
+				assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+				dec := goh264.NewDecoder()
+				var decodedFirst, decodedSecond []*goh264.Frame
+				switch tt.format {
+				case goh264.EncoderOutputAVC:
+					headers, err := enc.ParameterSets()
+					if err != nil {
+						t.Fatalf("ParameterSets: %v", err)
+					}
+					if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
+						t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+					}
+					decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
+					if err != nil {
+						t.Fatalf("DecodeConfiguredAVCFrames first %s: %v", deblock.name, err)
+					}
+					decodedSecond, err = dec.DecodeConfiguredAVCFrames(second.Data)
+					if err != nil {
+						t.Fatalf("DecodeConfiguredAVCFrames second %s: %v", deblock.name, err)
+					}
+				case goh264.EncoderOutputRTP:
+					decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+					if err != nil {
+						t.Fatalf("DecodeFrames first RTP %s: %v", deblock.name, err)
+					}
+					decodedSecond, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+					if err != nil {
+						t.Fatalf("DecodeFrames second RTP %s: %v", deblock.name, err)
+					}
+				default:
+					t.Fatalf("unexpected format %v", tt.format)
+				}
+				assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+				assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+				if decodedSecond[0].KeyFrame || decodedSecond[0].SideData.RecoveryPoint != nil {
+					t.Fatalf("decoded exact-motion %s/%s P frame key=%v recovery=%+v, want predictive non-recovery frame",
+						tt.name, deblock.name, decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+				}
+			})
+		}
+	}
+}
+
 func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T) {
 	for _, tt := range []struct {
 		name            string

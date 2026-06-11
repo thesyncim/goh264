@@ -156,7 +156,7 @@ CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
 exact shifted macroblock-aligned frames can emit predictive P16x16 no-residual
 slices through stateful local decode, FFmpeg rawvideo decode, configured AVC
 decode, RTP reassembly decode, and single-macroblock enabled/slice-boundary
-deblock syntax,
+deblock syntax plus configured AVC/RTP decode,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
