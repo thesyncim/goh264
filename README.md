@@ -130,7 +130,9 @@ writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR, P-skip, P16x16 no-residual, and P IntraPCM slice payloads.
 Motion-search P prediction, residual CAVLC coding, rate-control feedback, and
-broader realtime allocation/performance evidence remain pending.
+broader realtime allocation/performance evidence remain pending beyond the
+admitted IDR/P-frame Annex B/RTP canaries, including RTP packetization-mode 0
+P-frame allocation and benchmark rows.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
@@ -441,7 +443,8 @@ the oracle-checked benchmark run; `GOH264_BENCH_CPU_PROFILE` and
 benchmark script.
 For repeated `go test -benchmem` samples covering one-shot Annex B decode,
 stateful Annex B access-unit streaming, and the admitted realtime encoder
-IDR/P-frame/RTP paths, suitable for `benchstat`, run:
+IDR/P-frame/RTP paths, including RTP packetization-mode 0 P-frame rows,
+suitable for `benchstat`, run:
 
 ```sh
 scripts/h264-benchstat-canary.sh

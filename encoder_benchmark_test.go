@@ -212,6 +212,33 @@ func BenchmarkEncodeRTPI420ExactP16x16(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
 }
 
+func BenchmarkEncodeRTPMode0I420PSkip(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	frame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{frame}, true)
+}
+
+func BenchmarkEncodeRTPMode0I420ExactP16x16(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	a := benchmarkEncoderExactP16x16ReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 2, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
+}
+
+func BenchmarkEncodeRTPMode0I420ChangedPIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	a := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	bFrame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	bFrame.Y[0] ^= 0x7f
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{bFrame, a}, true)
+}
+
 func benchmarkEncodeSteadyPFrame(b *testing.B, cfg EncoderConfig, frames []EncoderFrame, wantRTP bool) {
 	b.Helper()
 	enc, err := NewEncoder(cfg)

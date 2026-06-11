@@ -1411,7 +1411,7 @@ func packetizeEncoderRTPSingleNAL(nals []encoderRawNAL, maxPayloadSize int, time
 	if maxPayloadSize < 1 {
 		return nil, encoderInvalid("RTP max payload size must fit a NAL header")
 	}
-	var packets []EncoderRTPPacket
+	packets := make([]EncoderRTPPacket, 0, len(nals))
 	for _, nal := range nals {
 		if len(nal.raw) == 0 {
 			return nil, encoderInvalid("empty encoder NAL")
