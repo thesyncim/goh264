@@ -4820,6 +4820,7 @@ func TestEncoderRTPPacketCallbackReceivesMode0IDRSingleNALMetadata(t *testing.T)
 			!bytes.Equal(pkt.Data, out.RTPPackets[i].Data) {
 			t.Fatalf("callback packet[%d] metadata = %+v, want returned RTP packet fields", i, pkt)
 		}
+		assertEncoderRTPCallbackPacketDoesNotAliasReturned(t, pkt, out.RTPPackets[i], i)
 		if meta.PayloadFormat != goh264.EncoderRTPPayloadSingleNAL ||
 			meta.NALUnitType != wantType ||
 			meta.NALUnitCount != 1 ||
@@ -4999,9 +5000,11 @@ func TestEncoderRTPPacketCallbackReceivesPFrameSingleNALMetadata(t *testing.T) {
 					pkt.PayloadType != cfg.RTPPayloadType ||
 					pkt.SSRC != cfg.RTPSSRC ||
 					pkt.Marker != (i == len(second.RTPPackets)-1) ||
-					!bytes.Equal(pkt.Payload, second.RTPPackets[i].Payload) {
+					!bytes.Equal(pkt.Payload, second.RTPPackets[i].Payload) ||
+					!bytes.Equal(pkt.Data, second.RTPPackets[i].Data) {
 					t.Fatalf("callback packet[%d] metadata = %+v, want returned RTP packet fields", i, pkt)
 				}
+				assertEncoderRTPCallbackPacketDoesNotAliasReturned(t, pkt, second.RTPPackets[i], i)
 				if meta.PayloadFormat != goh264.EncoderRTPPayloadSingleNAL ||
 					meta.NALUnitType != tt.wantNALs[i] ||
 					meta.NALUnitCount != 1 ||
@@ -6588,6 +6591,7 @@ func assertEncoderRTPSingleNALCallbackMetadata(t *testing.T, callbackPackets []g
 			!bytes.Equal(pkt.Data, out.RTPPackets[i].Data) {
 			t.Fatalf("callback packet[%d] metadata = %+v, want returned RTP packet fields", i, pkt)
 		}
+		assertEncoderRTPCallbackPacketDoesNotAliasReturned(t, pkt, out.RTPPackets[i], i)
 		if meta.PayloadFormat != goh264.EncoderRTPPayloadSingleNAL ||
 			meta.NALUnitType != wantType ||
 			meta.NALUnitCount != 1 ||
@@ -6595,6 +6599,24 @@ func assertEncoderRTPSingleNALCallbackMetadata(t *testing.T, callbackPackets []g
 			meta.ParameterSet != (wantType == 7 || wantType == 8) {
 			t.Fatalf("callback meta[%d] = %+v, want complete single-NAL type %d",
 				i, meta, wantType)
+		}
+	}
+}
+
+func assertEncoderRTPCallbackPacketDoesNotAliasReturned(t *testing.T, callbackPkt goh264.EncoderRTPPacket, returnedPkt goh264.EncoderRTPPacket, index int) {
+	t.Helper()
+	if len(callbackPkt.Payload) != 0 {
+		before := append([]byte(nil), returnedPkt.Payload...)
+		callbackPkt.Payload[0] ^= 0xff
+		if !bytes.Equal(returnedPkt.Payload, before) {
+			t.Fatalf("callback packet[%d] Payload aliases returned RTP packet storage", index)
+		}
+	}
+	if len(callbackPkt.Data) != 0 {
+		before := append([]byte(nil), returnedPkt.Data...)
+		callbackPkt.Data[0] ^= 0xff
+		if !bytes.Equal(returnedPkt.Data, before) {
+			t.Fatalf("callback packet[%d] Data aliases returned RTP packet storage", index)
 		}
 	}
 }
