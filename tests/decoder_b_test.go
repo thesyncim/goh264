@@ -500,9 +500,13 @@ func TestDecodeAutoConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 
 			var frames []*Frame
 			for i, sample := range samples {
-				out, err = dec.DecodeFrames(sample)
+				packet := append([]byte(nil), sample...)
+				out, err = dec.DecodeFrames(packet)
 				if err != nil {
 					t.Fatalf("sample[%d]: %v", i, err)
+				}
+				for i := range packet {
+					packet[i] = 0xff
 				}
 				frames = append(frames, out...)
 			}
@@ -536,9 +540,13 @@ func TestDecodeFramesAnnexBTestsrcBFramesAcrossAccessUnitsFlush(t *testing.T) {
 			dec := NewDecoder()
 			var frames []*Frame
 			for i, accessUnit := range accessUnits {
-				out, err := dec.DecodeFrames(accessUnit)
+				packet := append([]byte(nil), accessUnit...)
+				out, err := dec.DecodeFrames(packet)
 				if err != nil {
 					t.Fatalf("access unit[%d]: %v", i, err)
+				}
+				for i := range packet {
+					packet[i] = 0xff
 				}
 				frames = append(frames, out...)
 			}
