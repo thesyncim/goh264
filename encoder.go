@@ -1412,7 +1412,7 @@ func packetizeEncoderRTPSingleNAL(nals []encoderRawNAL, maxPayloadSize int, time
 		return nil, encoderInvalid("RTP max payload size must fit a NAL header")
 	}
 	packets := make([]EncoderRTPPacket, 0, len(nals))
-	payloads := make([]byte, 0, encoderRawNALPayloadStorageSize(nals))
+	data := make([]byte, 0, encoderRawNALPayloadStorageSize(nals)+12*len(nals))
 	for _, nal := range nals {
 		if len(nal.raw) == 0 {
 			return nil, encoderInvalid("empty encoder NAL")
@@ -1420,9 +1420,11 @@ func packetizeEncoderRTPSingleNAL(nals []encoderRawNAL, maxPayloadSize int, time
 		if len(nal.raw) > maxPayloadSize {
 			return nil, encoderInvalid("encoder NAL exceeds RTP packetization-mode 0 payload size")
 		}
-		start := len(payloads)
-		payloads = append(payloads, nal.raw...)
-		packets = append(packets, EncoderRTPPacket{Payload: payloads[start:len(payloads):len(payloads)], Timestamp: timestamp})
+		packetStart := len(data)
+		data = appendEncoderRTPHeaderPadding(data)
+		payloadStart := len(data)
+		data = append(data, nal.raw...)
+		packets = appendEncoderRTPPacketFromData(packets, data, packetStart, payloadStart, timestamp)
 	}
 	if len(packets) != 0 {
 		packets[len(packets)-1].Marker = true
@@ -1439,29 +1441,34 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 		return nil, err
 	}
 	packets := make([]EncoderRTPPacket, 0, packetCap)
-	payloads := make([]byte, 0, payloadCap)
+	data := make([]byte, 0, payloadCap+12*packetCap)
 	for i := 0; i < len(nals); {
 		if stapa && nals[i].parameterSet {
-			start := len(payloads)
+			packetStart := len(data)
+			data = appendEncoderRTPHeaderPadding(data)
+			payloadStart := len(data)
 			var count int
-			payloads, count, err = appendEncoderSTAPA(payloads, nals[i:], maxPayloadSize)
+			data, count, err = appendEncoderSTAPA(data, nals[i:], maxPayloadSize)
 			if err != nil {
 				return nil, err
 			}
 			if count >= 2 {
-				packets = append(packets, EncoderRTPPacket{Payload: payloads[start:len(payloads):len(payloads)], Timestamp: timestamp})
+				packets = appendEncoderRTPPacketFromData(packets, data, packetStart, payloadStart, timestamp)
 				i += count
 				continue
 			}
+			data = data[:packetStart]
 		}
 		nal := nals[i]
 		if len(nal.raw) == 0 {
 			return nil, encoderInvalid("empty encoder NAL")
 		}
 		if len(nal.raw) <= maxPayloadSize {
-			start := len(payloads)
-			payloads = append(payloads, nal.raw...)
-			packets = append(packets, EncoderRTPPacket{Payload: payloads[start:len(payloads):len(payloads)], Timestamp: timestamp})
+			packetStart := len(data)
+			data = appendEncoderRTPHeaderPadding(data)
+			payloadStart := len(data)
+			data = append(data, nal.raw...)
+			packets = appendEncoderRTPPacketFromData(packets, data, packetStart, payloadStart, timestamp)
 			i++
 			continue
 		}
@@ -1474,8 +1481,10 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 			if n > len(payload) {
 				n = len(payload)
 			}
-			start := len(payloads)
-			payloads = append(payloads, (header&0xe0)|28)
+			packetStart := len(data)
+			data = appendEncoderRTPHeaderPadding(data)
+			payloadStart := len(data)
+			data = append(data, (header&0xe0)|28)
 			fuHeader := header & 0x1f
 			if first {
 				fuHeader |= 0x80
@@ -1483,9 +1492,9 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 			if n == len(payload) {
 				fuHeader |= 0x40
 			}
-			payloads = append(payloads, fuHeader)
-			payloads = append(payloads, payload[:n]...)
-			packets = append(packets, EncoderRTPPacket{Payload: payloads[start:len(payloads):len(payloads)], Timestamp: timestamp})
+			data = append(data, fuHeader)
+			data = append(data, payload[:n]...)
+			packets = appendEncoderRTPPacketFromData(packets, data, packetStart, payloadStart, timestamp)
 			payload = payload[n:]
 			first = false
 		}
@@ -1542,35 +1551,44 @@ func encoderRTPMode1StoragePlan(nals []encoderRawNAL, maxPayloadSize int, stapa 
 }
 
 func (e *Encoder) stampRTPPackets(packets []EncoderRTPPacket) {
-	totalDataSize := 0
-	for i := range packets {
-		totalDataSize += 12 + len(packets[i].Payload)
-	}
-	data := make([]byte, 0, totalDataSize)
 	for i := range packets {
 		packets[i].PayloadType = e.cfg.RTPPayloadType
 		packets[i].SequenceNumber = e.rtpSequenceNumber
 		packets[i].SSRC = e.cfg.RTPSSRC
-		start := len(data)
-		data = appendEncoderRTPPacket(data, packets[i])
-		packets[i].Data = data[start:len(data):len(data)]
+		fillEncoderRTPPacketHeader(packets[i].Data, packets[i])
 		e.rtpSequenceNumber++
 	}
 }
 
-func appendEncoderRTPPacket(dst []byte, pkt EncoderRTPPacket) []byte {
+func appendEncoderRTPHeaderPadding(dst []byte) []byte {
+	return append(dst, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+}
+
+func appendEncoderRTPPacketFromData(packets []EncoderRTPPacket, data []byte, packetStart int, payloadStart int, timestamp uint32) []EncoderRTPPacket {
+	return append(packets, EncoderRTPPacket{
+		Data:      data[packetStart:len(data):len(data)],
+		Payload:   data[payloadStart:len(data):len(data)],
+		Timestamp: timestamp,
+	})
+}
+
+func fillEncoderRTPPacketHeader(dst []byte, pkt EncoderRTPPacket) {
 	markerPayloadType := pkt.PayloadType & 0x7f
 	if pkt.Marker {
 		markerPayloadType |= 0x80
 	}
-	dst = append(dst,
-		0x80,
-		markerPayloadType,
-		byte(pkt.SequenceNumber>>8), byte(pkt.SequenceNumber),
-		byte(pkt.Timestamp>>24), byte(pkt.Timestamp>>16), byte(pkt.Timestamp>>8), byte(pkt.Timestamp),
-		byte(pkt.SSRC>>24), byte(pkt.SSRC>>16), byte(pkt.SSRC>>8), byte(pkt.SSRC),
-	)
-	return append(dst, pkt.Payload...)
+	dst[0] = 0x80
+	dst[1] = markerPayloadType
+	dst[2] = byte(pkt.SequenceNumber >> 8)
+	dst[3] = byte(pkt.SequenceNumber)
+	dst[4] = byte(pkt.Timestamp >> 24)
+	dst[5] = byte(pkt.Timestamp >> 16)
+	dst[6] = byte(pkt.Timestamp >> 8)
+	dst[7] = byte(pkt.Timestamp)
+	dst[8] = byte(pkt.SSRC >> 24)
+	dst[9] = byte(pkt.SSRC >> 16)
+	dst[10] = byte(pkt.SSRC >> 8)
+	dst[11] = byte(pkt.SSRC)
 }
 
 func (e *Encoder) notifyRTPPacketCallback(packets []EncoderRTPPacket, frame EncoderFrame, rtpTime uint32, keyFrame bool, idr bool) {
@@ -1592,6 +1610,12 @@ func (e *Encoder) notifyRTPPacketCallback(packets []EncoderRTPPacket, frame Enco
 }
 
 func cloneEncoderRTPPacket(pkt EncoderRTPPacket) EncoderRTPPacket {
+	if len(pkt.Data) == 12+len(pkt.Payload) && bytes.Equal(pkt.Data[12:], pkt.Payload) {
+		pkt.Data = append([]byte(nil), pkt.Data...)
+		pkt.Data = pkt.Data[:len(pkt.Data):len(pkt.Data)]
+		pkt.Payload = pkt.Data[12:len(pkt.Data):len(pkt.Data)]
+		return pkt
+	}
 	pkt.Data = append([]byte(nil), pkt.Data...)
 	pkt.Payload = append([]byte(nil), pkt.Payload...)
 	return pkt

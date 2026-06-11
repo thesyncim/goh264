@@ -2758,6 +2758,15 @@ func TestEncoderEncodeRTPPacketSlicesAppendDoesNotAliasNextPacket(t *testing.T) 
 				if cap(pkt.Data) != len(pkt.Data) {
 					t.Fatalf("packet[%d] Data cap = %d, want clipped length %d", i, cap(pkt.Data), len(pkt.Data))
 				}
+				if len(pkt.Data) != 12+len(pkt.Payload) || !bytes.Equal(pkt.Data[12:], pkt.Payload) {
+					t.Fatalf("packet[%d] Data/Payload lengths or bytes do not match", i)
+				}
+				orig := pkt.Payload[0]
+				pkt.Payload[0] ^= 0xff
+				if pkt.Data[12] != pkt.Payload[0] {
+					t.Fatalf("packet[%d] Payload is not backed by Data payload bytes", i)
+				}
+				pkt.Payload[0] = orig
 			}
 
 			nextPayloadBefore := append([]byte(nil), out.RTPPackets[1].Payload...)
@@ -3495,8 +3504,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp forced IDR EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 34 {
-			t.Fatalf("rtp forced IDR EncodeInto allocations/run = %.0f, want <= 34", allocs)
+		if allocs > 32 {
+			t.Fatalf("rtp forced IDR EncodeInto allocations/run = %.0f, want <= 32", allocs)
 		}
 	})
 
@@ -3531,8 +3540,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp mode0 forced IDR EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 34 {
-			t.Fatalf("rtp mode0 forced IDR EncodeInto allocations/run = %.0f, want <= 34", allocs)
+		if allocs > 32 {
+			t.Fatalf("rtp mode0 forced IDR EncodeInto allocations/run = %.0f, want <= 32", allocs)
 		}
 	})
 
@@ -3565,8 +3574,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp exact P16x16 EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 6 {
-			t.Fatalf("rtp exact P16x16 EncodeInto allocations/run = %.0f, want <= 6", allocs)
+		if allocs > 5 {
+			t.Fatalf("rtp exact P16x16 EncodeInto allocations/run = %.0f, want <= 5", allocs)
 		}
 	})
 
@@ -3597,8 +3606,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp steady p-skip EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 6 {
-			t.Fatalf("rtp steady P-skip EncodeInto allocations/run = %.0f, want <= 6", allocs)
+		if allocs > 5 {
+			t.Fatalf("rtp steady P-skip EncodeInto allocations/run = %.0f, want <= 5", allocs)
 		}
 	})
 
@@ -3640,8 +3649,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 48 {
-			t.Fatalf("rtp changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 48", allocs)
+		if allocs > 46 {
+			t.Fatalf("rtp changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 46", allocs)
 		}
 	})
 
@@ -3676,8 +3685,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp mode0 steady p-skip EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 6 {
-			t.Fatalf("rtp mode0 steady P-skip EncodeInto allocations/run = %.0f, want <= 6", allocs)
+		if allocs > 5 {
+			t.Fatalf("rtp mode0 steady P-skip EncodeInto allocations/run = %.0f, want <= 5", allocs)
 		}
 	})
 
@@ -3712,8 +3721,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp mode0 exact P16x16 EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 6 {
-			t.Fatalf("rtp mode0 exact P16x16 EncodeInto allocations/run = %.0f, want <= 6", allocs)
+		if allocs > 5 {
+			t.Fatalf("rtp mode0 exact P16x16 EncodeInto allocations/run = %.0f, want <= 5", allocs)
 		}
 	})
 
@@ -3757,8 +3766,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp mode0 changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 48 {
-			t.Fatalf("rtp mode0 changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 48", allocs)
+		if allocs > 46 {
+			t.Fatalf("rtp mode0 changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 46", allocs)
 		}
 	})
 }

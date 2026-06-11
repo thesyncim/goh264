@@ -127,15 +127,15 @@ recovery, packet metadata retargeting, paused RTP sequence/callback state, and
 local decode after RTP re-entry, RTP packetization-mode 0 single-NAL IDR/P-frame
 reassembly and oversize rejection, RTP packetization-mode 1 FU-A reassembly,
 STAP-A parameter-set aggregation, RTP payload-type/SSRC/sequence metadata, full
-RTP header bytes with clipped packet payload and data slices, optional RTP
-callback metadata including mode 0/1 IDR/P-frame single-NAL packets, initial `EncodeInto`
+RTP header bytes with clipped packet payload views over packet data, optional
+RTP callback metadata including mode 0/1 IDR/P-frame single-NAL packets, initial `EncodeInto`
 allocation canaries for caller-buffer Annex B/RTP IDR, P-skip, exact-P16x16,
 P-IntraPCM including RTP changed P IntraPCM, and RTP packetization-mode 0
 IDR/P-frame paths, and a
 live encode path that avoids discarded Annex B/AVC copies when only raw NAL
 output is needed plus stack-backed common one-slice NAL, slice-range planning,
-and access-unit RTP payload and full-packet buffer stamping with per-packet
-append isolation.
+and access-unit full RTP packet buffer stamping with clipped payload views and
+per-packet append isolation.
 Package-level benchmark canaries cover admitted Annex B/RTP IDR and P-frame
 encode paths, including RTP changed P IntraPCM and RTP packetization-mode 0
 IDR/P-frame rows, with `-benchmem`. Internal writer proof covers raw
