@@ -1488,11 +1488,18 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 }
 
 func (e *Encoder) stampRTPPackets(packets []EncoderRTPPacket) {
+	totalDataSize := 0
+	for i := range packets {
+		totalDataSize += 12 + len(packets[i].Payload)
+	}
+	data := make([]byte, 0, totalDataSize)
 	for i := range packets {
 		packets[i].PayloadType = e.cfg.RTPPayloadType
 		packets[i].SequenceNumber = e.rtpSequenceNumber
 		packets[i].SSRC = e.cfg.RTPSSRC
-		packets[i].Data = appendEncoderRTPPacket(nil, packets[i])
+		start := len(data)
+		data = appendEncoderRTPPacket(data, packets[i])
+		packets[i].Data = data[start:len(data):len(data)]
 		e.rtpSequenceNumber++
 	}
 }

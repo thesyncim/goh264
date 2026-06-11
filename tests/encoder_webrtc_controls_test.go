@@ -2725,6 +2725,36 @@ func TestEncoderEncodeRTPPacketsCarryFullRTPHeaders(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeRTPPacketDataAppendDoesNotAliasNextPacket(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPMaxPayloadSize = 32
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	out, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode RTP frame: %v", err)
+	}
+	if len(out.RTPPackets) < 2 {
+		t.Fatalf("RTP packet count = %d, want at least two packets for append isolation", len(out.RTPPackets))
+	}
+	for i, pkt := range out.RTPPackets {
+		if cap(pkt.Data) != len(pkt.Data) {
+			t.Fatalf("packet[%d] Data cap = %d, want clipped length %d", i, cap(pkt.Data), len(pkt.Data))
+		}
+	}
+
+	nextBefore := append([]byte(nil), out.RTPPackets[1].Data...)
+	grown := append(out.RTPPackets[0].Data, 0xaa)
+	grown[len(out.RTPPackets[0].Data)] ^= 0xff
+	if !bytes.Equal(out.RTPPackets[1].Data, nextBefore) {
+		t.Fatal("appending to packet[0] Data mutated packet[1] Data")
+	}
+}
+
 func TestEncoderRTPPacketCallbackReceivesWebRTCMetadata(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPayloadType = 104

@@ -96,7 +96,8 @@ Annex B, AVC, configured `SliceCount` multi-slice VCL output, RTP
 packetization-mode 0 single-NAL packets, and RTP packetization-mode 1,
 including FU-A fragmentation and STAP-A parameter-set aggregation,
 payload-type/SSRC/sequence metadata, full RTP packet headers, marker-bit
-boundaries, oversize mode-0 rejection, and optional RTP packet callbacks with
+boundaries, clipped per-packet RTP data slices, oversize mode-0 rejection, and
+optional RTP packet callbacks with
 packet index/count, frame timing, mode 0/1 IDR/P-frame single-NAL payload form,
 NAL type/count, FU-A start/end, and parameter-set metadata. RTP timestamps honor explicit frame PTS and advance
 zero-PTS frames from frame duration or `RTPTimestampIncrement`. `MaxFrameSize`

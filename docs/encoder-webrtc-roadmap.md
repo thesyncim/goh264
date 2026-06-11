@@ -95,7 +95,8 @@ exact-P16 decode, recovery-point side data, multi-slice `first_mb_in_slice`
 ordering, RTP packetization-mode 0 single-NAL IDR/P-frame reassembly and
 oversize rejection, RTP FU-A reassembly, STAP-A parameter-set aggregation,
 payload-type, SSRC, and sequence-number packet metadata. RTP
-packets also carry complete 12-byte RTP headers plus payload bytes, and
+packets also carry complete 12-byte RTP headers plus payload bytes with clipped
+per-packet data slices, and
 `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form including mode 0/1 IDR/P frames, NAL type/count, FU-A start/end, and parameter-set
@@ -170,7 +171,8 @@ in one access unit.
    packetization-mode 1 single NAL/FU-A output, and
    STAP-A parameter-set aggregation with marker-bit boundaries plus
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
-   bytes, callback-style packet metadata including mode 0/1 IDR/P-frame single-NAL packets,
+   bytes, clipped per-packet data slices, callback-style packet metadata
+   including mode 0/1 IDR/P-frame single-NAL packets,
    and automatic timestamp progression for frames without explicit PTS, plus explicit SPS/PPS in-band,
    out-of-band, and every-IDR cadence semantics. Runtime reconfiguration now
    switches output format, RTP mode 0/1, STAP-A, payload type, SSRC, SPS/PPS
