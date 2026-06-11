@@ -138,7 +138,8 @@ surfaces accepted by public decode paths, verifies frame-shape validation, and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses plus `FrameDropLate`
 `MaxEncodeTimeUS` budget misses that advance RTP time without advancing
-reference, frame-number, packet-sequence, or callback state. It proves
+reference, frame-number, packet-sequence, or callback state, including after a
+transmitted reference frame. It proves
 `Encode`/`EncodeInto`
 emit IDR IntraPCM access units that round-trip through local Annex B/AVC decode,
 FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL

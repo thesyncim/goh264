@@ -64,7 +64,8 @@ returns `EncodedFrame.Dropped` without emitted bytes or RTP packets and advances
 the RTP timestamp timeline. `FrameDropLate` now uses `MaxEncodeTimeUS` as an
 encode-time budget only when that mode is selected; late frames return dropped
 metadata, advance the RTP timestamp timeline, and leave reference, frame-number,
-packet-sequence, and callback state untouched.
+packet-sequence, and callback state untouched, including after an existing
+transmitted reference.
 `ParameterSets`
 generates SPS/PPS NALs, crop metadata, Annex B sequence headers, and avcC
 records accepted by the decoder parsers. IDR header cadence is explicit for
@@ -157,7 +158,8 @@ can emit multiple VCL NALs in one access unit.
    without advancing encoder state when frame dropping is disabled, or return
    dropped-frame metadata without emitted packets when `FrameDropToBitrate` is
    active. `FrameDropLate` now drops frames that exceed `MaxEncodeTimeUS`
-   without advancing reference/frame/packet state.
+   without advancing reference/frame/packet state, including after a transmitted
+   reference frame.
 6. In progress: add realtime allocation budgets, encode timing benchmarks, and
    control-loop stress tests. Done for initial `EncodeInto` allocation canaries
    on Annex B and RTP admitted P-frame paths plus package-level benchmark

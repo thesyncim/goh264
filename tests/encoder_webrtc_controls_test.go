@@ -1557,6 +1557,49 @@ func TestEncoderFrameDropLateDropsOverBudgetFrameWithoutAdvancingReferenceOrPack
 	if callbackCalls != len(out.RTPPackets) {
 		t.Fatalf("post-late-drop callbacks = %d, want transmitted packet count %d", callbackCalls, len(out.RTPPackets))
 	}
+
+	firstPacketCount := len(out.RTPPackets)
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxEncodeTimeUS: 1}); err != nil {
+		t.Fatalf("lower MaxEncodeTimeUS: %v", err)
+	}
+	lateChangedFrame := patternedI420EncoderFrame(128, 128)
+	lateChangedFrame.Y[0] ^= 0x4c
+	lateChangedFrame.PTS = 0
+	dropped, err = enc.Encode(lateChangedFrame)
+	if err != nil {
+		t.Fatalf("Encode late-drop changed frame: %v", err)
+	}
+	if !dropped.Dropped || len(dropped.Data) != 0 || len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 {
+		t.Fatalf("late dropped changed frame = %+v, want dropped metadata without output", dropped)
+	}
+	if dropped.RTPTime != out.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("late dropped changed RTP time = %d, want %d", dropped.RTPTime, out.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("late dropped changed frame invoked callback count %d, want still %d", callbackCalls, firstPacketCount)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxEncodeTimeUS: 10_000_000}); err != nil {
+		t.Fatalf("raise MaxEncodeTimeUS for P-skip: %v", err)
+	}
+	pskipFrame := frame
+	pskipFrame.PTS = 0
+	pskip, err := enc.Encode(pskipFrame)
+	if err != nil {
+		t.Fatalf("Encode after late dropped changed frame: %v", err)
+	}
+	if pskip.Dropped || pskip.IDR {
+		t.Fatalf("post-late-drop matching frame dropped=%v idr=%v, want transmitted P-skip", pskip.Dropped, pskip.IDR)
+	}
+	if pskip.RTPTime != dropped.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("post-late-drop matching RTP time = %d, want %d", pskip.RTPTime, dropped.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, pskip.NALUnits, []uint8{1})
+	assertEncoderVCLFrameNums(t, append(append([]byte(nil), out.Data...), pskip.Data...), []uint8{5, 1}, []uint32{0, 1})
+	assertRTPPacketMetadata(t, pskip.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(pskip.RTPPackets) {
+		t.Fatalf("post-late-drop matching callbacks = %d, want %d", callbackCalls, firstPacketCount+len(pskip.RTPPackets))
+	}
 }
 
 func TestEncoderEncodeRecoveryPointSEICanBeDisabled(t *testing.T) {
