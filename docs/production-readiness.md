@@ -203,8 +203,8 @@ It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
 forced IDR, Annex B steady P-skip, Annex B exact P16x16 including
 single-macroblock deblock controls, Annex B macroblock-aligned exact P16x16
 including 8-pixel edge search, Annex B changed P IntraPCM, RTP forced IDR/FU-A,
-RTP exact P16x16, RTP steady P-skip, RTP changed P IntraPCM, and RTP
-packetization-mode 0 IDR/P-frame paths;
+RTP exact P16x16 including 8-pixel edge search, RTP steady P-skip, RTP changed
+P IntraPCM, and RTP packetization-mode 0 IDR/P-frame paths;
 the live encode path writes RBSP plus raw NAL output directly instead of building
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage, and stamps full RTP packet data from

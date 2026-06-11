@@ -143,8 +143,9 @@ timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B
 exact P16x16 including single-macroblock deblock controls, Annex B
 macroblock-aligned exact P16x16 including 8-pixel edge search, Annex B changed
-P IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16, RTP steady P-skip, RTP changed
-P IntraPCM, and RTP packetization-mode 0 IDR/P-skip/exact-P16x16/P-IntraPCM paths so
+P IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16 including 8-pixel edge
+search, RTP steady P-skip, RTP changed P IntraPCM, and RTP packetization-mode 0
+IDR/P-skip/exact-P16x16/P-IntraPCM paths so
 admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
@@ -276,8 +277,8 @@ Encoder tests need independent evidence, not only local decode:
 - Allocation gates for `EncodeInto`/packetization hot paths with caller-owned
   buffers; current canaries cover Annex B forced IDR, Annex B steady P-skip,
   Annex B exact P16x16 including 8-pixel edge search, Annex B changed P
-  IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16, RTP steady P-skip, RTP
-  changed P IntraPCM, and RTP
+  IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16 including 8-pixel edge
+  search, RTP steady P-skip, RTP changed P IntraPCM, and RTP
   packetization-mode 0 IDR/P-frame paths.
 
 ## Production Bar
