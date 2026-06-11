@@ -334,6 +334,50 @@ func TestBuildEncoderI420P16x16NoResidualSliceWritesMacroblockRange(t *testing.T
 	}
 }
 
+func TestBuildEncoderI420P16x16NoResidualSliceWritesPerMacroblockMVDs(t *testing.T) {
+	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              48,
+		Height:             16,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          23,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMVDs := []EncoderMotionVectorDelta{
+		{X: 4, Y: 0},
+		{X: 0, Y: -1},
+		{X: -3, Y: 2},
+	}
+	slice, err := BuildEncoderI420P16x16NoResidualSlice(EncoderI420P16x16NoResidualConfig{
+		Width:                      48,
+		Height:                     16,
+		FrameNum:                   7,
+		InitialQP:                  23,
+		DisableDeblockingFilterIDC: 1,
+		MVDs:                       wantMVDs,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sh, payload := parseEncoderSliceTestHeader(t, sets.AnnexB, slice.AnnexB)
+	if sh.FirstMBAddr != 0 || sh.SliceTypeNoS != PictureTypeP || sh.FrameNum != 7 ||
+		sh.RefCount[0] != 1 || sh.QScale != 23 {
+		t.Fatalf("slice header = %+v", sh)
+	}
+	assertEncoderP16x16NoResidualPayloadMVDs(t, &payload, wantMVDs)
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("per-MB P16x16 no-residual payload bitsLeft=%d, want 0", payload.bitsLeft())
+	}
+}
+
 func TestBuildEncoderI420IntraPCMPSliceWritesParseableHeader(t *testing.T) {
 	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
 		ProfileIDC:         66,
@@ -520,6 +564,9 @@ func TestBuildEncoderI420P16x16NoResidualSliceRejectsInvalidConfig(t *testing.T)
 		{name: "bad qp", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.InitialQP = 52 }},
 		{name: "bad first mb", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.FirstMBAddr = 1 }},
 		{name: "bad macroblock count", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.MacroblockCount = 2 }},
+		{name: "bad mvd count", mutate: func(c *EncoderI420P16x16NoResidualConfig) {
+			c.MVDs = []EncoderMotionVectorDelta{{}, {}}
+		}},
 		{name: "bad nal length", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.NALLengthSize = 5 }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -637,7 +684,16 @@ func parseEncoderSliceTestHeader(t *testing.T, annexBHeaders []byte, annexBSlice
 
 func assertEncoderP16x16NoResidualPayload(t *testing.T, payload *bitReader, macroblockCount int, wantMVDX int32, wantMVDY int32) {
 	t.Helper()
-	for i := 0; i < macroblockCount; i++ {
+	wantMVDs := make([]EncoderMotionVectorDelta, macroblockCount)
+	for i := range wantMVDs {
+		wantMVDs[i] = EncoderMotionVectorDelta{X: wantMVDX, Y: wantMVDY}
+	}
+	assertEncoderP16x16NoResidualPayloadMVDs(t, payload, wantMVDs)
+}
+
+func assertEncoderP16x16NoResidualPayloadMVDs(t *testing.T, payload *bitReader, wantMVDs []EncoderMotionVectorDelta) {
+	t.Helper()
+	for i, wantMVD := range wantMVDs {
 		skipRun, err := payload.readUEGolombLong()
 		if err != nil {
 			t.Fatalf("read generated P16x16 skip run[%d]: %v", i, err)
@@ -658,9 +714,9 @@ func assertEncoderP16x16NoResidualPayload(t *testing.T, payload *bitReader, macr
 		if err != nil {
 			t.Fatalf("read generated P16x16 cbp[%d]: %v", i, err)
 		}
-		if skipRun != 0 || mbType != 0 || mvdX != wantMVDX || mvdY != wantMVDY || cbp != 0 {
+		if skipRun != 0 || mbType != 0 || mvdX != wantMVD.X || mvdY != wantMVD.Y || cbp != 0 {
 			t.Fatalf("P16x16 macroblock[%d] skip/mb/mvd/cbp = %d/%d/%d,%d/%d, want 0/0/%d,%d/0",
-				i, skipRun, mbType, mvdX, mvdY, cbp, wantMVDX, wantMVDY)
+				i, skipRun, mbType, mvdX, mvdY, cbp, wantMVD.X, wantMVD.Y)
 		}
 	}
 }

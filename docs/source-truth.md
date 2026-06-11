@@ -135,7 +135,8 @@ writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
 packaging, AVC decoder configuration records, baseline SPS/PPS syntax with
 4:2:0 crop-unit emission, recovery-point SEI syntax, and Baseline IDR plus
 P-skip/P16x16 no-residual/P IntraPCM slice syntax via decoder-parser and
-encoded-frame round trips.
+encoded-frame round trips, including per-macroblock MVD syntax for the P16x16
+writer.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder

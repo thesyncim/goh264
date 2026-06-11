@@ -168,8 +168,9 @@ P IntraPCM, RTP FU-A IDR IntraPCM, and RTP steady P-skip with `-benchmem`.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and
-Baseline IDR, P-skip, and P16x16 no-residual slice syntax, with the P16x16
-writer and public exact-motion encoder path proved through local Annex B decode
-and FFmpeg rawvideo decode after an IDR reference frame. Broader motion-search
+Baseline IDR, P-skip, and P16x16 no-residual slice syntax including
+per-macroblock MVD emission, with the P16x16 writer and public exact-motion
+encoder path proved through local Annex B decode and FFmpeg rawvideo decode
+after an IDR reference frame. Broader motion-search
 P prediction, residual CAVLC coding, rate-control feedback, broader allocation
 budgets, and realtime performance gates remain pending.

@@ -57,6 +57,11 @@ type EncoderI420PSkipConfig struct {
 	NALLengthSize              int
 }
 
+type EncoderMotionVectorDelta struct {
+	X int32
+	Y int32
+}
+
 type EncoderI420P16x16NoResidualConfig struct {
 	Width  int
 	Height int
@@ -68,6 +73,7 @@ type EncoderI420P16x16NoResidualConfig struct {
 	MacroblockCount            uint32
 	MVDX                       int32
 	MVDY                       int32
+	MVDs                       []EncoderMotionVectorDelta
 	NALLengthSize              int
 }
 
@@ -313,16 +319,20 @@ func EncodeI420P16x16NoResidualSliceRBSP(cfg EncoderI420P16x16NoResidualConfig) 
 
 	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
 	for i := 0; i < macroblockCount; i++ {
+		mvdX, mvdY := cfg.MVDX, cfg.MVDY
+		if len(cfg.MVDs) > 0 {
+			mvdX, mvdY = cfg.MVDs[i].X, cfg.MVDs[i].Y
+		}
 		if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
 			return nil, err
 		}
 		if err := bw.WriteUEGolomb(0); err != nil { // P_L0_16x16
 			return nil, err
 		}
-		if err := bw.WriteSEGolomb(cfg.MVDX); err != nil {
+		if err := bw.WriteSEGolomb(mvdX); err != nil {
 			return nil, err
 		}
-		if err := bw.WriteSEGolomb(cfg.MVDY); err != nil {
+		if err := bw.WriteSEGolomb(mvdY); err != nil {
 			return nil, err
 		}
 		if err := bw.WriteUEGolomb(0); err != nil { // coded_block_pattern
@@ -546,6 +556,10 @@ func validateEncoderI420P16x16NoResidualConfig(cfg EncoderI420P16x16NoResidualCo
 	}
 	if err := validateEncoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount); err != nil {
 		return err
+	}
+	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	if len(cfg.MVDs) > 0 && len(cfg.MVDs) != macroblockCount {
+		return ErrInvalidData
 	}
 	return nil
 }
