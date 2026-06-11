@@ -113,8 +113,9 @@ as one gate and writes per-command logs plus the local performance bundle under
 failure ledger is non-empty or the worktree is dirty.
 `scripts/h264-encoder-release-evidence.sh` runs the admitted encoder local
 release checklist as one gate: full tests, the external encoder control
-contract, internal writer/header/SEI slice syntax tests, and admitted encoder
-`-benchmem` rows. It writes per-command logs under
+contract, the explicit `EncodeInto` allocation canary, internal
+writer/header/SEI slice syntax tests, and admitted encoder `-benchmem` rows.
+It writes per-command logs under
 `.artifacts/h264-encoder-release-evidence/` and fails by default if the
 worktree is dirty.
 

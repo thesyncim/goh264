@@ -54,6 +54,7 @@ run_gate git-diff-check git diff --check
 run_gate git-diff-cached-check git diff --cached --check
 run_gate go-test-all go test ./...
 run_gate encoder-contract go test ./tests -run '^TestEncoder' -count=1 -v
+run_gate encoder-allocation-canary go test ./tests -run '^TestEncoderEncodeIntoAllocationCanary$' -count=1 -v
 run_gate encoder-writers go test ./internal/h264 -run '^(TestBitWriter|TestAppendNAL|TestAppendAVC|TestBuildEncoder|TestAppendSEI)' -count=1 -v
 run_gate encoder-benchmem go test . -run '^$' -bench "$bench_pattern" -benchmem -benchtime "$bench_time"
 
