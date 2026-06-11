@@ -182,6 +182,9 @@ with caller mutation/append isolation proved across repeated helper calls,
 proves in-band keyframe, out-of-band, and every-IDR header modes, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL
 surfaces accepted by public decode paths with the same mutation/append isolation,
+proves encoded input-frame planes are not retained after `Encode` returns by
+mutating caller-owned first-frame storage before a matching second frame across
+Annex B, AVC, and RTP output,
 verifies frame-shape validation returns
 empty output and leaves RTP sequence, callback, frame-number, timestamp, and
 reference state untouched before the next valid P-skip, and

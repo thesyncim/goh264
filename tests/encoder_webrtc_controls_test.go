@@ -5160,6 +5160,78 @@ func TestEncoderEncodedFrameNALUnitsIndexOutputData(t *testing.T) {
 	}
 }
 
+func TestEncoderDoesNotRetainInputFramePlanes(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", outputFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc", outputFormat: goh264.EncoderOutputAVC},
+		{name: "rtp", outputFormat: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.GOPSize = 10000
+			cfg.IDRInterval = 10000
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			firstFrame.PTS = 0
+			secondFrame := cloneI420EncoderFrame(firstFrame)
+
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first frame: %v", err)
+			}
+			if !first.IDR {
+				t.Fatalf("first frame IDR = false, want true")
+			}
+
+			mutateI420EncoderFramePlanes(&firstFrame)
+
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode second frame after input mutation: %v", err)
+			}
+			if second.IDR {
+				t.Fatalf("second frame IDR = true, want inter frame")
+			}
+			assertEncodedFrameNALUnitIndexes(t, second, cfg.OutputFormat)
+
+			controlEnc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder control: %v", err)
+			}
+			controlFirst := cloneI420EncoderFrame(secondFrame)
+			if _, err := controlEnc.Encode(controlFirst); err != nil {
+				t.Fatalf("Encode control first frame: %v", err)
+			}
+			controlSecond, err := controlEnc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode control second frame: %v", err)
+			}
+
+			if !bytes.Equal(second.Data, controlSecond.Data) {
+				t.Fatalf("second encoded bytes changed after caller mutated the first input frame")
+			}
+			if !reflect.DeepEqual(second.NALUnits, controlSecond.NALUnits) {
+				t.Fatalf("second NAL metadata changed after caller mutated the first input frame")
+			}
+			if !reflect.DeepEqual(second.RTPPackets, controlSecond.RTPPackets) {
+				t.Fatalf("second RTP packets changed after caller mutated the first input frame")
+			}
+		})
+	}
+}
+
 func TestEncoderEncodeRTPPacketsCarryFullRTPHeaders(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPayloadType = 102
@@ -7485,6 +7557,26 @@ func patternedI420EncoderFrame(width, height int) goh264.EncoderFrame {
 	}
 	frame.PTS = 3000
 	return frame
+}
+
+func cloneI420EncoderFrame(frame goh264.EncoderFrame) goh264.EncoderFrame {
+	clone := frame
+	clone.Y = append([]byte(nil), frame.Y...)
+	clone.Cb = append([]byte(nil), frame.Cb...)
+	clone.Cr = append([]byte(nil), frame.Cr...)
+	return clone
+}
+
+func mutateI420EncoderFramePlanes(frame *goh264.EncoderFrame) {
+	for i := range frame.Y {
+		frame.Y[i] ^= 0xff
+	}
+	for i := range frame.Cb {
+		frame.Cb[i] ^= 0x7f
+	}
+	for i := range frame.Cr {
+		frame.Cr[i] ^= 0x3f
+	}
 }
 
 func setConstantI420Chroma(frame *goh264.EncoderFrame, cb byte, cr byte) {
