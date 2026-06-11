@@ -120,10 +120,13 @@ Runtime reconfiguration now covers SPS/PPS cadence, Annex B/AVC/RTP output
 format, RTP packetization mode 0/1, STAP-A aggregation, payload type, SSRC, and
 custom RTP timestamp increments plus rate-control mode, VBV size,
 initial/min/max QP, frame-drop mode, GOP/IDR cadence, and deblock mode without
-mutating state on invalid updates. `SetRTPMaxPayloadSize` is proved to retarget
-live RTP FU-A fragmentation before the next P-frame while preserving sequence
-and decode state, including invalid-update rollback. QP updates queue an
-IDR/PPS refresh so the emitted parameter sets match the active slice QP.
+mutating state on invalid updates. Runtime resolution reset is proved to reject
+stale-size frames without consuming the queued IDR, then emit/decode a new-size
+IDR and resume P-skip references at the new dimensions. `SetRTPMaxPayloadSize`
+is proved to retarget live RTP FU-A fragmentation before the next P-frame while
+preserving sequence and decode state, including invalid-update rollback. QP
+updates queue an IDR/PPS refresh so the emitted parameter sets match the active
+slice QP.
 A combined RTP/Annex B/RTP control-loop stress test now proves QP refresh, late
 drop recovery, packet metadata retargeting, paused RTP sequence/callback state
 while no RTP packets are emitted, and local decode after RTP re-entry.

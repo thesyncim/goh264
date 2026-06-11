@@ -133,9 +133,12 @@ recovery-point SEI packaging, and the first IDR frame writer:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 rejects invalid or not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
-partial reconfiguration paths, proves `SetRTPMaxPayloadSize` live RTP FU-A
-retargeting before the next P-frame with sequence/decode continuity and
-invalid-update rollback, proves `ParameterSets` emits SPS/PPS NALs,
+partial reconfiguration paths, proves runtime resolution reset rejects
+stale-size frames without consuming the queued IDR before emitting/decoding a
+new-size IDR and resuming P-skip references at the new dimensions, proves
+`SetRTPMaxPayloadSize` live RTP FU-A retargeting before the next P-frame with
+sequence/decode continuity and invalid-update rollback, proves `ParameterSets`
+emits SPS/PPS NALs,
 Annex B headers, and avcC records accepted by the public decoder parsers,
 proves in-band keyframe, out-of-band, and every-IDR header modes, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL

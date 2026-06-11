@@ -57,6 +57,9 @@ cadence, deblock mode, SPS/PPS cadence, RTP output format, packetization-mode
 0/1, STAP-A, payload type, SSRC, timestamp increment, PLI/FIR, force-IDR, and
 partial reconfiguration controls are tested, including rejected runtime
 rate-control and packetization updates that leave the prior config intact.
+Runtime resolution reset rejects stale-size frames without consuming the queued
+IDR, then emits/decodes a new-size IDR and resumes P-skip references at the new
+dimensions.
 `SetRTPMaxPayloadSize` retargets live RTP FU-A fragmentation before the next
 P-frame while preserving sequence and decode state, including invalid-update
 rollback.
@@ -190,9 +193,11 @@ in one access unit.
    switches output format, RTP mode 0/1, STAP-A, payload type, SSRC, SPS/PPS
    mode, RTP timestamp increments, rate-control mode, VBV size,
    initial/min/max QP, frame-drop mode, GOP/IDR cadence, and deblock mode with
-   rollback on invalid updates. `SetRTPMaxPayloadSize` retargets live RTP FU-A
-   fragmentation before the next P-frame while preserving sequence/decode state
-   and rolling back invalid updates.
+   rollback on invalid updates. Runtime resolution reset rejects stale-size
+   frames without consuming the queued IDR, then emits/decodes a new-size IDR
+   and resumes P-skip references at the new dimensions. `SetRTPMaxPayloadSize`
+   retargets live RTP FU-A fragmentation before the next P-frame while
+   preserving sequence/decode state and rolling back invalid updates.
    Configured `SliceCount` output now feeds RTP mode 1 as separate VCL NAL
    packets when each slice fits the payload limit, and configured
    `MaxFrameSize`/`SliceMaxBytes` budgets now reject oversized encoded output

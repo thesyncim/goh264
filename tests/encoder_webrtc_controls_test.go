@@ -407,6 +407,108 @@ func TestEncoderReconfigureSwitchesOutputFormatForForcedIDR(t *testing.T) {
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, secondFrame))
 }
 
+func TestEncoderReconfigureResolutionResetsReferenceAndQueuesIDR(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 96
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 9_000
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first RTP IDR: %v", err)
+	}
+	if !first.IDR {
+		t.Fatalf("first frame idr=%v, want IDR", first.IDR)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, first.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+
+	secondFrame := firstFrame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode same-size P-skip: %v", err)
+	}
+	if second.IDR {
+		t.Fatalf("same-size frame idr=%v, want P-skip before resolution reset", second.IDR)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)))
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{Width: 32, Height: 16}); err != nil {
+		t.Fatalf("Reconfigure resolution: %v", err)
+	}
+	if got := enc.Config(); got.Width != 32 || got.Height != 16 ||
+		got.StrideY != 32 || got.StrideCb != 16 || got.StrideCr != 16 {
+		t.Fatalf("resolution config = %+v, want 32x16 with matching I420 strides", got)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("resolution reconfigure did not queue an IDR")
+	}
+
+	staleFrame := firstFrame
+	staleFrame.PTS = secondFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	if _, err := enc.Encode(staleFrame); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Encode stale-size frame error = %v, want ErrInvalidData", err)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("stale-size frame consumed queued resolution-reset IDR")
+	}
+
+	resizedFrame := patternedI420EncoderFrame(32, 16)
+	resizedFrame.PTS = staleFrame.PTS
+	resized, err := enc.Encode(resizedFrame)
+	if err != nil {
+		t.Fatalf("Encode resized IDR: %v", err)
+	}
+	if !resized.IDR || enc.PendingIDR() {
+		t.Fatalf("resized frame idr=%v pending=%v, want completed IDR", resized.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, resized.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, resized.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)+len(second.RTPPackets)))
+	assertRTPPacketTimestamps(t, resized.RTPPackets, resized.RTPTime)
+
+	resizedPSkipFrame := resizedFrame
+	resizedPSkipFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	resizedPSkip, err := enc.Encode(resizedPSkipFrame)
+	if err != nil {
+		t.Fatalf("Encode resized P-skip: %v", err)
+	}
+	if resizedPSkip.IDR {
+		t.Fatalf("resized follow-up frame idr=%v, want P-skip", resizedPSkip.IDR)
+	}
+	assertEncoderNALTypes(t, resizedPSkip.NALUnits, []uint8{1})
+	assertRTPPacketMetadata(t, resizedPSkip.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)+len(second.RTPPackets)+len(resized.RTPPackets)))
+	assertRTPPacketTimestamps(t, resizedPSkip.RTPPackets, resizedPSkip.RTPTime)
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode first RTP IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+	decodedSecond, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode same-size P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+	decodedResized, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, resized.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode resized RTP IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedResized, appendI420FrameBytes(nil, resizedFrame))
+	decodedResizedPSkip, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, resizedPSkip.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode resized P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedResizedPSkip, appendI420FrameBytes(nil, resizedPSkipFrame))
+}
+
 func TestEncoderRealtimeControlLoopStressPreservesPacketAndReferenceState(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(128, 128)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
