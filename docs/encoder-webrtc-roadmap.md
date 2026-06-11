@@ -93,10 +93,12 @@ canaries for caller-buffer Annex B steady P-skip, Annex B changed P IntraPCM,
 and RTP steady P-skip paths so admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
-discarded Annex B/AVC copies. Cropped I420 IDR output is proved through local
-decode and FFmpeg rawvideo decode of the cropped visible frame. Queued IDR
-requests still emit IDR, and motion-search prediction, residual coding, and
-rate-control decisions remain pending.
+discarded Annex B/AVC copies. Package-level `-benchmem` canary rows now cover
+Annex B IDR IntraPCM, Annex B steady P-skip, Annex B changed P IntraPCM, RTP
+FU-A IDR IntraPCM, and RTP steady P-skip. Cropped I420 IDR output is proved
+through local decode and FFmpeg rawvideo decode of the cropped visible frame.
+Queued IDR requests still emit IDR, and motion-search prediction, residual
+coding, and rate-control decisions remain pending.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -153,7 +155,8 @@ can emit multiple VCL NALs in one access unit.
    active.
 6. In progress: add realtime allocation budgets, encode timing benchmarks, and
    control-loop stress tests. Done for initial `EncodeInto` allocation canaries
-   on Annex B and RTP admitted P-frame paths.
+   on Annex B and RTP admitted P-frame paths plus package-level benchmark
+   canaries for admitted IDR/P-frame and RTP paths.
 
 ## Oracles And Gates
 

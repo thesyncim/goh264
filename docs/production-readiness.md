@@ -23,7 +23,7 @@ scripts/h264-real-vector-upstream-audit.sh # pinned FFmpeg H.264 FATE coverage
 scripts/h264-decoder-fuzz-smoke.sh # bounded public decode/packet no-panic fuzz smoke
 scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C vs pure Go and native C+asm vs Go+asm lanes
 scripts/h264-real-vector-release-alloc.sh # checked-in Go allocation canary budget
-scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder canary
+scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder/encoder canary
 scripts/h264-performance-evidence.sh  # local benchstat, JSON, CPU, and heap profile bundle
 scripts/h264-decoder-release-evidence.sh # full decoder release-evidence runner
 go test ./tests -run TestEncoder # realtime/WebRTC encoder control contract
@@ -81,8 +81,9 @@ real-vector benchmark script forwards
 it runs the CANL4 public vector with defaults of 64,000,000 Go allocation
 bytes/iteration and 10,000 Go allocations/iteration.
 `scripts/h264-benchstat-canary.sh` runs the package-level decoder benchmarks
-for one-shot Annex B decode and stateful Annex B access-unit streaming with
-`-benchmem`; its output is suitable for `benchstat` trend comparisons.
+for one-shot Annex B decode and stateful Annex B access-unit streaming plus
+the admitted encoder IDR/P-skip/P-IntraPCM and RTP packetization benchmarks
+with `-benchmem`; its output is suitable for `benchstat` trend comparisons.
 `scripts/h264-performance-evidence.sh` writes a local evidence bundle under
 `.artifacts/h264-performance-evidence/` containing benchstat samples, the JSON
 real-vector benchmark report, CPU and heap profiles, and run metadata. Pending:
@@ -147,7 +148,9 @@ enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
 steady P-skip, Annex B changed P IntraPCM, and RTP steady P-skip paths; the
 live encode path writes RBSP plus raw NAL output directly instead of building
-discarded Annex B/AVC copies.
+discarded Annex B/AVC copies. Package-level benchmark canary rows now cover
+Annex B IDR IntraPCM, Annex B steady P-skip, Annex B changed P IntraPCM, RTP
+FU-A IDR IntraPCM, and RTP steady P-skip with `-benchmem`.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and
