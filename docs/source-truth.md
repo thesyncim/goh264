@@ -197,7 +197,7 @@ P-frame encode paths, including odd-pixel constant-chroma exact P16x16 across
 Annex B/AVC/RTP plus RTP mode 0, odd-pixel patterned-chroma P IntraPCM fallback
 across Annex B/AVC/RTP plus RTP mode 0, per-macroblock exact P16x16 across
 Annex B/AVC/RTP plus RTP mode 0, 8-pixel exact-P16 edge search, AVC/RTP changed
-P IntraPCM, RTP STAP-A IDR, and RTP packetization-mode 0 IDR/P-frame rows including exact-P16
+P IntraPCM, RTP STAP-A IDR/changed-P, and RTP packetization-mode 0 IDR/P-frame rows including exact-P16
 edge search, with `-benchmem`.
 Internal writer proof covers raw
 bit/Exp-Golomb

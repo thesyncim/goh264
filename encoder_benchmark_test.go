@@ -524,6 +524,16 @@ func BenchmarkEncodeRTPI420ChangedPIntraPCM(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{bFrame, a}, true)
 }
 
+func BenchmarkEncodeRTPI420STAPAChangedPIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	cfg.STAPA = true
+	cfg.RTPMaxPayloadSize = 1200
+	a := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	bFrame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	bFrame.Y[0] ^= 0x7f
+	benchmarkEncodeSteadyRTPSTAPAChangedPFrame(b, cfg, []EncoderFrame{bFrame, a})
+}
+
 func BenchmarkEncodeRTPMode0I420PSkip(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
 	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
@@ -617,6 +627,48 @@ func benchmarkEncodeSteadyPFrame(b *testing.B, cfg EncoderConfig, frames []Encod
 		}
 		if !wantRTP && len(out.RTPPackets) != 0 {
 			b.Fatalf("non-RTP steady P frame returned RTP packets: %d", len(out.RTPPackets))
+		}
+	}
+	benchmarkEncodeFrameSink = out
+	benchmarkEncodeBytesSink = len(out.Data)
+	benchmarkEncodePacketsSink = len(out.RTPPackets)
+}
+
+func benchmarkEncodeSteadyRTPSTAPAChangedPFrame(b *testing.B, cfg EncoderConfig, frames []EncoderFrame) {
+	b.Helper()
+	enc, err := NewEncoder(cfg)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if _, err := enc.EncodeInto(make([]byte, 0, 4096), frames[len(frames)-1]); err != nil {
+		b.Fatal(err)
+	}
+	dst := make([]byte, 0, 4096)
+
+	b.ReportAllocs()
+	b.SetBytes(int64(benchmarkEncoderFrameBytes(cfg.Width, cfg.Height)))
+	b.ResetTimer()
+
+	var out EncodedFrame
+	for i := 0; i < b.N; i++ {
+		out, err = enc.EncodeInto(dst[:0], frames[i%len(frames)])
+		if err != nil {
+			b.Fatal(err)
+		}
+		if out.IDR || len(out.Data) == 0 || len(out.NALUnits) != 2 || len(out.RTPPackets) != 2 {
+			b.Fatalf("output idr=%v data=%d nals=%d rtp=%d, want STAP-A changed P frame",
+				out.IDR, len(out.Data), len(out.NALUnits), len(out.RTPPackets))
+		}
+		if out.NALUnits[0].Type != 6 || out.NALUnits[1].Type != 1 {
+			b.Fatalf("NAL types = [%d %d], want recovery SEI then P slice", out.NALUnits[0].Type, out.NALUnits[1].Type)
+		}
+		for pktIndex, pkt := range out.RTPPackets {
+			if len(pkt.Payload) == 0 {
+				b.Fatalf("RTP packet[%d] payload is empty", pktIndex)
+			}
+			if nalType := pkt.Payload[0] & 0x1f; nalType == 24 {
+				b.Fatalf("RTP packet[%d] payload type=%d, changed P recovery SEI must stay single-NAL", pktIndex, nalType)
+			}
 		}
 	}
 	benchmarkEncodeFrameSink = out

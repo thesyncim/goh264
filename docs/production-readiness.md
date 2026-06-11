@@ -263,8 +263,8 @@ AVC odd-pixel patterned-chroma P IntraPCM fallback, AVC per-macroblock exact
 P16x16, AVC exact P16x16 including 8-pixel edge search, AVC changed P IntraPCM,
 RTP FU-A IDR IntraPCM, RTP STAP-A IDR IntraPCM, RTP odd-pixel constant-chroma exact P16x16, RTP
 odd-pixel patterned-chroma P IntraPCM fallback, RTP per-macroblock exact P16x16,
-RTP exact P16x16 including 8-pixel edge search, RTP steady P-skip, and RTP
-changed P IntraPCM plus RTP packetization-mode 0
+RTP exact P16x16 including 8-pixel edge search, RTP steady P-skip, RTP
+changed P IntraPCM, and RTP STAP-A changed P IntraPCM plus RTP packetization-mode 0
 IDR/P-skip/exact-P16x16/P-IntraPCM paths including odd-pixel constant-chroma,
 per-macroblock exact P16x16, odd-pixel patterned-chroma fallback, and 8-pixel
 exact-P16 edge search with `-benchmem`.
