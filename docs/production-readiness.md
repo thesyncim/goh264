@@ -142,6 +142,9 @@ sequence/decode continuity and invalid-update rollback, proves runtime
 data without forcing IDR, proves runtime SPS/PPS cadence switches control
 forced-IDR header emission across out-of-band, every-IDR, suppressed in-band,
 and restored in-band modes while the stream remains decodable, proves
+RTP-to-configured-AVC output switching forces an out-of-band IDR, stops RTP
+packets/callbacks, preserves RTP timestamp cadence, and decodes the AVC
+IDR/P-skip sequence through the emitted avcC, proves
 `ParameterSets` emits SPS/PPS NALs,
 Annex B headers, and avcC records accepted by the public decoder parsers,
 proves in-band keyframe, out-of-band, and every-IDR header modes, proves

@@ -68,6 +68,9 @@ recovery side data without forcing IDR.
 Runtime SPS/PPS cadence switches control forced-IDR header emission across
 out-of-band, every-IDR, suppressed in-band, and restored in-band modes while the
 stream remains decodable.
+Runtime RTP-to-configured-AVC output switching forces an out-of-band IDR, stops
+RTP packets/callbacks, preserves RTP timestamp cadence, and decodes the AVC
+IDR/P-skip sequence through the emitted avcC.
 QP updates queue an IDR/PPS refresh. `MaxFrameSize` and `SliceMaxBytes` are now
 enforced as encode-time guards before frame/reference/packet state advances:
 `FrameDropDisabled` keeps the hard-error path, while `FrameDropToBitrate`
@@ -207,6 +210,9 @@ in one access unit.
    side data without forcing IDR. Runtime SPS/PPS cadence switches control
    forced-IDR header emission across out-of-band, every-IDR, suppressed in-band,
    and restored in-band modes while the stream remains decodable.
+   Runtime RTP-to-configured-AVC output switching forces an out-of-band IDR,
+   stops RTP packets/callbacks, preserves RTP timestamp cadence, and decodes the
+   AVC IDR/P-skip sequence through the emitted avcC.
    Configured `SliceCount` output now feeds RTP mode 1 as separate VCL NAL
    packets when each slice fits the payload limit, and configured
    `MaxFrameSize`/`SliceMaxBytes` budgets now reject oversized encoded output
