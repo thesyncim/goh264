@@ -5692,6 +5692,49 @@ func assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t *testin
 	}
 }
 
+func assertEncoderEncodeIntoPerMacroblockExactP16x16AllocationCanary(t *testing.T, cfg goh264.EncoderConfig, label string, wantRTPPackets int, maxAllocs float64) {
+	t.Helper()
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.SliceCount = 2
+	cfg.GOPSize = 10000
+	cfg.IDRInterval = 10000
+	if cfg.OutputFormat != goh264.EncoderOutputRTP {
+		cfg.RTPMaxPayloadSize = 0
+	}
+	a := patternedI420EncoderFrame(32, 32)
+	b := perMacroblockMotionI420EncoderFrame(a, []encoderTestMotion{
+		{dx: 2, dy: 0},
+		{dx: -2, dy: 0},
+		{dx: 0, dy: 2},
+		{dx: 0, dy: -2},
+	})
+	encs := primedI420EncoderPool(t, cfg, a, 128)
+	dst := make([]byte, 0, 4096)
+	var call int
+	allocs := testing.AllocsPerRun(100, func() {
+		if call >= len(encs) {
+			t.Fatalf("encoder pool exhausted after %d calls", call)
+		}
+		out, err := encs[call].EncodeInto(dst[:0], b)
+		call++
+		if err != nil {
+			t.Fatalf("EncodeInto %s per-macroblock exact P16x16: %v", label, err)
+		}
+		if out.IDR || len(out.RTPPackets) != wantRTPPackets || len(out.Data) == 0 ||
+			len(out.NALUnits) != 2 || out.NALUnits[0].Type != 1 || out.NALUnits[1].Type != 1 {
+			t.Fatalf("%s per-macroblock exact P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+				label, out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+		}
+		if cap(out.Data) != cap(dst) {
+			t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+		}
+	})
+	t.Logf("%s per-macroblock exact P16x16 EncodeInto allocations/run = %.0f", label, allocs)
+	if allocs > maxAllocs {
+		t.Fatalf("%s per-macroblock exact P16x16 EncodeInto allocations/run = %.0f, want <= %.0f", label, allocs, maxAllocs)
+	}
+}
+
 func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 	t.Run("annexb forced idr", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
@@ -5935,6 +5978,12 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		if allocs > 4 {
 			t.Fatalf("annexb macroblock-aligned exact P16x16 EncodeInto allocations/run = %.0f, want <= 4", allocs)
 		}
+	})
+
+	t.Run("annexb per-macroblock exact p16x16", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(32, 32)
+		cfg.OutputFormat = goh264.EncoderOutputAnnexB
+		assertEncoderEncodeIntoPerMacroblockExactP16x16AllocationCanary(t, cfg, "annexb", 0, 5)
 	})
 
 	t.Run("annexb exact p16x16 edge search", func(t *testing.T) {
@@ -6201,6 +6250,12 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("avc per-macroblock exact p16x16", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(32, 32)
+		cfg.OutputFormat = goh264.EncoderOutputAVC
+		assertEncoderEncodeIntoPerMacroblockExactP16x16AllocationCanary(t, cfg, "avc", 0, 5)
+	})
+
 	t.Run("avc changed p-intrapcm", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.OutputFormat = goh264.EncoderOutputAVC
@@ -6421,6 +6476,11 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		if allocs > 5 {
 			t.Fatalf("rtp 8-pixel edge exact P16x16 EncodeInto allocations/run = %.0f, want <= 5", allocs)
 		}
+	})
+
+	t.Run("rtp per-macroblock exact p16x16", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(32, 32)
+		assertEncoderEncodeIntoPerMacroblockExactP16x16AllocationCanary(t, cfg, "rtp", 2, 7)
 	})
 
 	t.Run("rtp steady p-skip", func(t *testing.T) {
@@ -6648,6 +6708,13 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		if allocs > 5 {
 			t.Fatalf("rtp mode0 8-pixel edge exact P16x16 EncodeInto allocations/run = %.0f, want <= 5", allocs)
 		}
+	})
+
+	t.Run("rtp mode0 per-macroblock exact p16x16", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(32, 32)
+		cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+		cfg.RTPMaxPayloadSize = 1200
+		assertEncoderEncodeIntoPerMacroblockExactP16x16AllocationCanary(t, cfg, "rtp mode0", 2, 7)
 	})
 
 	t.Run("rtp mode0 changed p-intrapcm", func(t *testing.T) {

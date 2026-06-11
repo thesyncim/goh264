@@ -177,16 +177,18 @@ P-skip, exact P16x16, odd-pixel constant chroma, and P IntraPCM fallback rows
 and callback packet storage isolated from returned RTP packets, initial
 `EncodeInto` allocation canaries for caller-buffer Annex B/AVC/RTP IDR,
 P-skip, exact-P16x16 including odd-pixel constant-chroma across Annex B/AVC/RTP
-and 8-pixel edge search, odd-pixel patterned-chroma P IntraPCM fallback across
-Annex B/AVC/RTP, P-IntraPCM including AVC/RTP changed P IntraPCM, and RTP
-packetization-mode 0 IDR/P-frame paths including odd-pixel constant-chroma,
-odd-pixel patterned-chroma fallback, and exact-P16 edge search, and a
+and 8-pixel edge search, per-macroblock exact P16x16 across Annex B/AVC/RTP,
+odd-pixel patterned-chroma P IntraPCM fallback across Annex B/AVC/RTP,
+P-IntraPCM including AVC/RTP changed P IntraPCM, and RTP packetization-mode 0
+IDR/P-frame paths including odd-pixel constant-chroma, per-macroblock exact
+P16x16, odd-pixel patterned-chroma fallback, and exact-P16 edge search, and a
 live encode path that avoids discarded Annex B/AVC copies when only raw NAL
 output is needed. The admitted forced-IDR and fallback paths build raw SPS/PPS
 and recovery-point SEI NALs directly, with tightened budgets of <=8 allocations
 for Annex B/AVC forced IDR, <=10 for RTP forced IDR, <=6 for Annex B/AVC
-odd-patterned P IntraPCM fallback, and <=8 for RTP odd-patterned fallback, plus
-stack-backed common one-slice NAL and slice-range planning,
+odd-patterned P IntraPCM fallback, <=8 for RTP odd-patterned fallback, <=5 for
+Annex B/AVC per-macroblock exact P16x16, and <=7 for RTP per-macroblock exact
+P16x16, plus stack-backed common one-slice NAL and slice-range planning,
 and access-unit full RTP packet buffer stamping with clipped payload views and
 per-packet append isolation plus frame-data ownership separation.
 Package-level benchmark canaries cover admitted Annex B/AVC/RTP IDR and

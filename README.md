@@ -165,14 +165,16 @@ Motion-search P prediction, residual CAVLC coding, rate-control feedback, and
 broader realtime allocation/performance evidence remain pending beyond the
 admitted IDR/P-frame Annex B/AVC/RTP canaries, which now include odd-pixel
 constant-chroma P16 and patterned-chroma P IntraPCM fallback allocation and
-benchmark rows across Annex B, AVC, RTP, and RTP mode 0, 8-pixel exact-P16
-edge-search allocation and benchmark rows, RTP P-IntraPCM, and
+benchmark rows across Annex B, AVC, RTP, and RTP mode 0, per-macroblock
+exact-P16 allocation rows, 8-pixel exact-P16 edge-search allocation and
+benchmark rows, RTP P-IntraPCM, and
 packetization-mode 0 IDR/P-frame allocation and benchmark rows including
 exact-P16 edge search. The admitted forced-IDR and P IntraPCM fallback hot
 paths build raw SPS/PPS and recovery-point SEI NALs directly for `EncodeInto`,
 with checked budgets of <=8 allocations for Annex B/AVC forced IDR, <=10 for
-RTP forced IDR, <=6 for Annex B/AVC odd-patterned fallback, and <=8 for RTP
-odd-patterned fallback.
+RTP forced IDR, <=6 for Annex B/AVC odd-patterned fallback, <=8 for RTP
+odd-patterned fallback, <=5 for Annex B/AVC per-macroblock exact P16x16, and
+<=7 for RTP per-macroblock exact P16x16.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock

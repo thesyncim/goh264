@@ -229,18 +229,22 @@ It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
 forced IDR, Annex B steady P-skip, Annex B exact P16x16 including
 single-macroblock deblock controls, Annex B odd-pixel constant-chroma exact
 P16x16, Annex B odd-pixel patterned-chroma P IntraPCM fallback, Annex B
-macroblock-aligned exact P16x16 including 8-pixel edge search, Annex B changed
-P IntraPCM, AVC forced IDR, AVC steady P-skip, AVC odd-pixel constant-chroma
-exact P16x16, AVC odd-pixel patterned-chroma P IntraPCM fallback, AVC exact
-P16x16 including 8-pixel edge search, AVC changed P IntraPCM, RTP forced IDR/FU-A,
-RTP odd-pixel constant-chroma exact P16x16, RTP odd-pixel patterned-chroma
-P IntraPCM fallback, RTP exact P16x16 including 8-pixel edge search, RTP steady
-P-skip, RTP changed P IntraPCM, and RTP packetization-mode 0 IDR/P-frame paths
-including odd-pixel constant-chroma, odd-pixel patterned-chroma fallback, and
-exact-P16 edge search. The current tightened budgets guard <=8 allocations for
+macroblock-aligned exact P16x16 including 8-pixel edge search, Annex B
+per-macroblock exact P16x16, Annex B changed P IntraPCM, AVC forced IDR, AVC
+steady P-skip, AVC odd-pixel constant-chroma exact P16x16, AVC odd-pixel
+patterned-chroma P IntraPCM fallback, AVC exact P16x16 including 8-pixel edge
+search, AVC per-macroblock exact P16x16, AVC changed P IntraPCM, RTP forced
+IDR/FU-A, RTP odd-pixel constant-chroma exact P16x16, RTP odd-pixel
+patterned-chroma P IntraPCM fallback, RTP exact P16x16 including 8-pixel edge
+search, RTP per-macroblock exact P16x16, RTP steady P-skip, RTP changed
+P IntraPCM, and RTP packetization-mode 0 IDR/P-frame paths including odd-pixel
+constant-chroma, odd-pixel patterned-chroma fallback, per-macroblock exact
+P16x16, and exact-P16 edge search. The current tightened budgets guard <=8 allocations for
 Annex B/AVC forced IDR, <=10 for RTP forced IDR, <=6 for Annex B/AVC
-odd-patterned P IntraPCM fallback, <=8 for RTP odd-patterned fallback, <=12 for
-Annex B/AVC changed P IntraPCM, and <=16 for RTP changed P IntraPCM; the
+odd-patterned P IntraPCM fallback, <=8 for RTP odd-patterned fallback, <=5 for
+Annex B/AVC per-macroblock exact P16x16, <=7 for RTP per-macroblock exact
+P16x16, <=12 for Annex B/AVC changed P IntraPCM, and <=16 for RTP changed
+P IntraPCM; the
 forced-IDR and recovery-point fallback hot paths build raw SPS/PPS and SEI NALs
 directly instead of constructing unused public packaging;
 the live encode path writes RBSP plus raw NAL output directly instead of building
