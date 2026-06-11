@@ -125,7 +125,7 @@ disabled-deblock multi-macroblock frames plus single-macroblock
 enabled/slice-boundary deblock. Odd-pixel luma shifts are admitted only when
 both 4:2:0 chroma planes are constant, with Annex B, configured AVC, RTP
 reassembly, and RTP mode-0 single-NAL proof; patterned chroma is guarded to
-fall back.
+fall back to P IntraPCM across the same output surfaces.
 Guarded CAVLC P IntraPCM slices handle changed frames after a reference across
 disabled, enabled, and slice-boundary deblock controls. Changed-frame P
 IntraPCM recovery pictures carry recovery-point SEI when enabled, across Annex

@@ -2578,49 +2578,102 @@ func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP(t *testing
 }
 
 func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
-	cfg := goh264.DefaultEncoderConfig(32, 32)
-	cfg.OutputFormat = goh264.EncoderOutputAnnexB
-	cfg.DeblockMode = goh264.EncoderDeblockDisabled
-	cfg.RTPMaxPayloadSize = 0
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
+	for _, tt := range []struct {
+		name   string
+		format goh264.EncoderOutputFormat
+		ffmpeg bool
+	}{
+		{name: "annexb", format: goh264.EncoderOutputAnnexB, ffmpeg: true},
+		{name: "avc", format: goh264.EncoderOutputAVC},
+		{name: "rtp", format: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(32, 32)
+			cfg.OutputFormat = tt.format
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.format != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
 
-	firstFrame := patternedI420EncoderFrame(32, 32)
-	first, err := enc.Encode(firstFrame)
-	if err != nil {
-		t.Fatalf("Encode first IDR: %v", err)
-	}
-	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+			firstFrame := patternedI420EncoderFrame(32, 32)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
 
-	secondFrame := integerMotionI420EncoderFrame(firstFrame, 1, 0)
-	secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
-	second, err := enc.Encode(secondFrame)
-	if err != nil {
-		t.Fatalf("Encode odd-pixel patterned-chroma fallback: %v", err)
-	}
-	if second.KeyFrame || second.IDR {
-		t.Fatalf("odd-pixel patterned-chroma fallback key=%v idr=%v, want non-IDR P IntraPCM", second.KeyFrame, second.IDR)
-	}
-	assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+			secondFrame := integerMotionI420EncoderFrame(firstFrame, 1, 0)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode odd-pixel patterned-chroma fallback: %v", err)
+			}
+			if second.KeyFrame || second.IDR {
+				t.Fatalf("odd-pixel patterned-chroma fallback key=%v idr=%v, want non-IDR P IntraPCM", second.KeyFrame, second.IDR)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
 
-	dec := goh264.NewDecoder()
-	decodedFirst, err := dec.DecodeFrames(first.Data)
-	if err != nil {
-		t.Fatalf("Decode first IDR: %v", err)
-	}
-	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
-	decodedSecond, err := dec.DecodeFrames(second.Data)
-	if err != nil {
-		t.Fatalf("Decode odd-pixel patterned-chroma fallback: %v", err)
-	}
-	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			dec := goh264.NewDecoder()
+			var decodedFirst, decodedSecond []*goh264.Frame
+			switch tt.format {
+			case goh264.EncoderOutputAnnexB:
+				decodedFirst, err = dec.DecodeFrames(first.Data)
+				if err != nil {
+					t.Fatalf("Decode first IDR: %v", err)
+				}
+				decodedSecond, err = dec.DecodeFrames(second.Data)
+				if err != nil {
+					t.Fatalf("Decode odd-pixel patterned-chroma fallback: %v", err)
+				}
+			case goh264.EncoderOutputAVC:
+				headers, err := enc.ParameterSets()
+				if err != nil {
+					t.Fatalf("ParameterSets: %v", err)
+				}
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+				}
+				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
+				}
+				decodedSecond, err = dec.DecodeConfiguredAVCFrames(second.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
+				}
+			case goh264.EncoderOutputRTP:
+				decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames first RTP: %v", err)
+				}
+				decodedSecond, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames second RTP: %v", err)
+				}
+			default:
+				t.Fatalf("unexpected format %v", tt.format)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			if !decodedSecond[0].KeyFrame ||
+				decodedSecond[0].SideData.RecoveryPoint == nil ||
+				decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+				t.Fatalf("decoded odd-pixel fallback key=%v recovery=%+v, want immediate recovery point",
+					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+			}
 
-	stream := append(append([]byte(nil), first.Data...), second.Data...)
-	wantStream := appendI420FrameBytes(nil, firstFrame)
-	wantStream = appendI420FrameBytes(wantStream, secondFrame)
-	assertFFmpegRawVideoOracle(t, stream, wantStream)
+			if tt.ffmpeg {
+				stream := append(append([]byte(nil), first.Data...), second.Data...)
+				wantStream := appendI420FrameBytes(nil, firstFrame)
+				wantStream = appendI420FrameBytes(wantStream, secondFrame)
+				assertFFmpegRawVideoOracle(t, stream, wantStream)
+			}
+		})
+	}
 }
 
 func TestEncoderEncodeWideExactP16x16RequiresDeblockDisabled(t *testing.T) {
@@ -4664,6 +4717,14 @@ func TestEncoderEncodeRTPMode0EmitsPFrameSingleNALPackets(t *testing.T) {
 				return integerMotionI420EncoderFrame(first, 1, 0)
 			},
 			wantNALs: []uint8{1},
+		},
+		{
+			name: "odd-exact-p16x16-patterned-chroma-fallback",
+			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return integerMotionI420EncoderFrame(first, 1, 0)
+			},
+			wantNALs:     []uint8{6, 1},
+			wantRecovery: true,
 		},
 		{
 			name: "changed-p-intrapcm",
