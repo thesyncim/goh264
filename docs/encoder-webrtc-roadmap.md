@@ -105,9 +105,11 @@ in-band keyframes, out-of-band headers, and every-IDR emission.
 `RecoveryPointSEI` generates Annex B and AVC recovery-point
 SEI NAL surfaces and is proved by injecting the encoder output before a P-frame
 and checking the public decoder recovery side data. `Encode` and `EncodeInto`
-now validate frame shape and emit the first admitted frame bitstream paths:
-8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B, AVC,
-RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
+now validate frame shape before bitstream work, returning empty output for
+invalid frames without advancing RTP sequence, callback, frame-number,
+timestamp, or reference state, then emit the first admitted frame bitstream
+paths: 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B,
+AVC, RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
 output, plus configured `SliceCount` multi-slice VCL output, guarded CAVLC
 P-skip slices for identical frames, a guarded exact macroblock-aligned CAVLC P16x16
 no-residual path for bounded even integer-pel shifted references under

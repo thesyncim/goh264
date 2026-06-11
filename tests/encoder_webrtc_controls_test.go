@@ -4757,26 +4757,71 @@ func TestEncoderRTPAutoTimestampAdvancesWithoutExplicitPTS(t *testing.T) {
 }
 
 func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
-	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 32
+	enc, err := goh264.NewEncoder(cfg)
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
 
-	frame := validI420EncoderFrame(16, 16)
-	if out, err := enc.EncodeInto(make([]byte, 0, 1024), frame); err != nil || !out.IDR {
-		t.Fatalf("EncodeInto valid-frame out.IDR=%v error=%v, want successful IDR", out.IDR, err)
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 0
+	first, err := enc.EncodeInto(make([]byte, 0, 4096), frame)
+	if err != nil {
+		t.Fatalf("EncodeInto valid frame: %v", err)
+	}
+	if !first.IDR || first.RTPTime != 0 {
+		t.Fatalf("first valid output IDR/time = %v/%d, want IDR/0", first.IDR, first.RTPTime)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, first.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+			firstPacketCount, callbackCalls)
 	}
 
 	bad := frame
+	bad.PTS = int64(cfg.RTPTimestampIncrement)
 	bad.Y = nil
-	if _, err := enc.EncodeInto(nil, bad); !errors.Is(err, goh264.ErrInvalidData) {
+	if out, err := enc.EncodeInto(make([]byte, 0, 4096), bad); !errors.Is(err, goh264.ErrInvalidData) {
 		t.Fatalf("EncodeInto missing luma error = %v, want ErrInvalidData", err)
+	} else if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+		t.Fatalf("invalid missing-luma output = %+v, want empty output", out)
 	}
 
 	bad = frame
+	bad.PTS = int64(cfg.RTPTimestampIncrement)
 	bad.Width = 32
-	if _, err := enc.Encode(bad); !errors.Is(err, goh264.ErrInvalidData) {
+	if out, err := enc.Encode(bad); !errors.Is(err, goh264.ErrInvalidData) {
 		t.Fatalf("Encode mismatched dimensions error = %v, want ErrInvalidData", err)
+	} else if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+		t.Fatalf("invalid dimension output = %+v, want empty output", out)
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("invalid frames invoked callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+	}
+
+	secondFrame := frame
+	secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
+	second, err := enc.EncodeInto(make([]byte, 0, 4096), secondFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto after invalid frames: %v", err)
+	}
+	if second.Dropped || second.IDR || second.RTPTime != uint32(secondFrame.PTS) {
+		t.Fatalf("post-invalid output dropped/id/time = %v/%v/%d, want P-skip time %d",
+			second.Dropped, second.IDR, second.RTPTime, secondFrame.PTS)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertEncoderVCLFrameNums(t, append(append([]byte(nil), first.Data...), second.Data...), []uint8{5, 1}, []uint32{0, 1})
+	assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(second.RTPPackets) {
+		t.Fatalf("post-invalid callbacks = %d, want %d", callbackCalls, firstPacketCount+len(second.RTPPackets))
 	}
 }
 

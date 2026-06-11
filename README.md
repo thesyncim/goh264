@@ -344,8 +344,11 @@ if out.Dropped {
 }
 ```
 
-`Encode` and `EncodeInto` validate frame shape and caller-owned output buffers,
-then emit the admitted IDR IntraPCM, identical-reference P-skip, exact
+`Encode` and `EncodeInto` validate frame shape before bitstream work; invalid
+frames return empty output without advancing RTP sequence, callback,
+frame-number, timestamp, or reference state, then valid input resumes as the
+expected P-skip.
+They emit the admitted IDR IntraPCM, identical-reference P-skip, exact
 macroblock-aligned P16x16 no-residual, or changed-frame P IntraPCM frame path,
 optionally split into configured multi-slice VCL NALs. Exact P16x16 is admitted
 for disabled-deblock multi-macroblock frames and single-macroblock

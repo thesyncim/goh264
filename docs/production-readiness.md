@@ -154,7 +154,9 @@ payload metadata, and decodes the RTP IDR/P-skip sequence, proves
 Annex B headers, and avcC records accepted by the public decoder parsers,
 proves in-band keyframe, out-of-band, and every-IDR header modes, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL
-surfaces accepted by public decode paths, verifies frame-shape validation, and
+surfaces accepted by public decode paths, verifies frame-shape validation returns
+empty output and leaves RTP sequence, callback, frame-number, timestamp, and
+reference state untouched before the next valid P-skip, and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses and VBV-backed `MaxBitrate` bucket
 misses, including credit consumption/refill across transmitted IDR/P-skip and
