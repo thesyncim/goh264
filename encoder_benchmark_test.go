@@ -63,6 +63,12 @@ func benchmarkEncoderExactP16x16ReferenceFrame() EncoderFrame {
 	return benchmarkEncoderExactP16x16HorizontalReferenceFrame(benchmarkEncoderWidth, benchmarkEncoderHeight, 2)
 }
 
+func benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame() EncoderFrame {
+	frame := benchmarkEncoderExactP16x16HorizontalReferenceFrame(benchmarkEncoderWidth, benchmarkEncoderHeight, 1)
+	benchmarkEncoderSetConstantChroma(&frame, 128, 64)
+	return frame
+}
+
 func benchmarkEncoderExactP16x16HorizontalReferenceFrame(width int, height int, dx int) EncoderFrame {
 	frame := benchmarkEncoderI420Frame(width, height)
 	// Keep the left edge reversible under clamped +/-dx motion so the benchmark
@@ -84,6 +90,17 @@ func benchmarkEncoderExactP16x16HorizontalReferenceFrame(width int, height int, 
 		}
 	}
 	return frame
+}
+
+func benchmarkEncoderSetConstantChroma(frame *EncoderFrame, cb byte, cr byte) {
+	chromaWidth := frame.Width / 2
+	chromaHeight := frame.Height / 2
+	for y := 0; y < chromaHeight; y++ {
+		for x := 0; x < chromaWidth; x++ {
+			frame.Cb[y*frame.StrideCb+x] = cb
+			frame.Cr[y*frame.StrideCr+x] = cr
+		}
+	}
 }
 
 func benchmarkEncoderIntegerMotionFrame(reference EncoderFrame, dx int, dy int) EncoderFrame {
@@ -175,6 +192,13 @@ func BenchmarkEncodeAnnexBI420ExactP16x16(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputAnnexB)
 	a := benchmarkEncoderExactP16x16ReferenceFrame()
 	shifted := benchmarkEncoderIntegerMotionFrame(a, 2, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
+}
+
+func BenchmarkEncodeAnnexBI420OddExactP16x16ConstantChroma(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputAnnexB)
+	a := benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
 }
 

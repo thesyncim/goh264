@@ -145,25 +145,25 @@ packets, and callback packet storage isolated from returned RTP packets. RTP tim
 from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B
-exact P16x16 including single-macroblock deblock controls, Annex B
-macroblock-aligned exact P16x16 including 8-pixel edge search, Annex B changed
-P IntraPCM, AVC forced IDR, AVC steady P-skip, AVC exact P16x16 including
-8-pixel edge search, AVC changed P IntraPCM, RTP forced IDR/FU-A, RTP exact
-P16x16 including 8-pixel edge search, RTP steady P-skip, RTP changed P
-IntraPCM, and RTP packetization-mode 0 IDR/P-skip/exact-P16x16/P-IntraPCM
-paths including 8-pixel exact-P16 edge search, so
+exact P16x16 including single-macroblock deblock controls, Annex B odd-pixel
+constant-chroma exact P16x16, Annex B macroblock-aligned exact P16x16 including
+8-pixel edge search, Annex B changed P IntraPCM, AVC forced IDR, AVC steady
+P-skip, AVC exact P16x16 including 8-pixel edge search, AVC changed P
+IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16 including 8-pixel edge search,
+RTP steady P-skip, RTP changed P IntraPCM, and RTP packetization-mode 0
+IDR/P-skip/exact-P16x16/P-IntraPCM paths including 8-pixel exact-P16 edge search, so
 admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage. Package-level `-benchmem` canary rows now
-cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16
-including 8-pixel edge search, Annex B changed P IntraPCM, AVC IDR IntraPCM,
-AVC steady P-skip, AVC exact P16x16 including 8-pixel edge search, AVC changed
-P IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16 including 8-pixel edge
-search, RTP steady P-skip, and RTP changed P IntraPCM plus RTP packetization-mode 0
-IDR/P-skip/exact-P16x16/P-IntraPCM paths including 8-pixel exact-P16 edge
-search.
+cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
+Annex B odd-pixel constant-chroma exact P16x16, Annex B exact P16x16 including
+8-pixel edge search, Annex B changed P IntraPCM, AVC IDR IntraPCM, AVC steady
+P-skip, AVC exact P16x16 including 8-pixel edge search, AVC changed P
+IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16 including 8-pixel edge search,
+RTP steady P-skip, and RTP changed P IntraPCM plus RTP packetization-mode 0
+IDR/P-skip/exact-P16x16/P-IntraPCM paths including 8-pixel exact-P16 edge search.
 Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
@@ -264,11 +264,13 @@ in one access unit.
 6. In progress: add realtime allocation budgets, encode timing benchmarks, and
    control-loop stress tests. Done for the first RTP/Annex B/RTP control-loop
    stress proof, initial `EncodeInto` allocation canaries on Annex B, AVC, and
-   RTP admitted IDR/P-frame paths including 8-pixel exact-P16 edge search, RTP
-   P-IntraPCM, and packetization-mode 0 IDR/P frames including exact-P16 edge
-   search with tightened RTP allocation budgets, and package-level
+   RTP admitted IDR/P-frame paths including Annex B odd-pixel constant-chroma
+   exact P16x16, 8-pixel exact-P16 edge search, RTP P-IntraPCM, and
+   packetization-mode 0 IDR/P frames including exact-P16 edge search with
+   tightened RTP allocation budgets, and package-level
    benchmark canaries for admitted IDR/P-frame Annex B/AVC/RTP paths including
-   8-pixel exact-P16 edge search.
+   Annex B odd-pixel constant-chroma exact P16x16 and 8-pixel exact-P16 edge
+   search.
 
 ## Oracles And Gates
 
@@ -285,10 +287,11 @@ Encoder tests need independent evidence, not only local decode:
   max-payload, RTP, rate-control/QP, frame-drop, GOP/IDR, and deblock changes.
 - Allocation gates for `EncodeInto`/packetization hot paths with caller-owned
   buffers; current canaries cover Annex B forced IDR, Annex B steady P-skip,
-  Annex B exact P16x16 including 8-pixel edge search, Annex B changed P
-  IntraPCM, AVC forced IDR, AVC steady P-skip, AVC exact P16x16 including
-  8-pixel edge search, AVC changed P IntraPCM, RTP forced IDR/FU-A, RTP exact
-  P16x16 including 8-pixel edge search, RTP steady P-skip, RTP changed P
+  Annex B exact P16x16 including odd-pixel constant-chroma and 8-pixel edge
+  search, Annex B changed P IntraPCM, AVC forced IDR, AVC steady P-skip, AVC
+  exact P16x16 including 8-pixel edge search, AVC changed P IntraPCM, RTP
+  forced IDR/FU-A, RTP exact P16x16 including 8-pixel edge search, RTP steady
+  P-skip, RTP changed P
   IntraPCM, and RTP
   packetization-mode 0 IDR/P-frame paths including exact-P16 edge search.
 

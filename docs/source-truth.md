@@ -173,17 +173,18 @@ storage isolated from `EncodedFrame.Data`, optional
 RTP callback metadata including mode 0/1 IDR/P-frame single-NAL packets with
 callback packet storage isolated from returned RTP packets, initial
 `EncodeInto` allocation canaries for caller-buffer Annex B/AVC/RTP IDR,
-P-skip, exact-P16x16 including 8-pixel edge search, P-IntraPCM including
-AVC/RTP changed P IntraPCM, and RTP packetization-mode 0 IDR/P-frame paths
-including exact-P16 edge search, and a
+P-skip, exact-P16x16 including Annex B odd-pixel constant-chroma and 8-pixel
+edge search, P-IntraPCM including AVC/RTP changed P IntraPCM, and RTP
+packetization-mode 0 IDR/P-frame paths including exact-P16 edge search, and a
 live encode path that avoids discarded Annex B/AVC copies when only raw NAL
 output is needed plus stack-backed common one-slice NAL, slice-range planning,
 and access-unit full RTP packet buffer stamping with clipped payload views and
 per-packet append isolation plus frame-data ownership separation.
 Package-level benchmark canaries cover admitted Annex B/AVC/RTP IDR and
-P-frame encode paths, including 8-pixel exact-P16 edge search, AVC/RTP changed
-P IntraPCM and RTP packetization-mode 0 IDR/P-frame rows including exact-P16
-edge search, with `-benchmem`.
+P-frame encode paths, including Annex B odd-pixel constant-chroma exact P16x16,
+8-pixel exact-P16 edge search, AVC/RTP changed P IntraPCM and RTP
+packetization-mode 0 IDR/P-frame rows including exact-P16 edge search, with
+`-benchmem`.
 Internal writer proof covers raw
 bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
