@@ -2719,6 +2719,90 @@ func TestEncoderFrameDropToBitrateDropsOversizeFrameWithoutAdvancingReferenceOrP
 	assertRTPPacketMetadata(t, third.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
 }
 
+func TestEncoderEncodeIntoFrameDropToBitrateReturnsEmptyOutputAndPreservesState(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 32
+	cfg.MaxFrameSize = 4096
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+	dst := make([]byte, 0, 4096)
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 0
+	first, err := enc.EncodeInto(dst[:0], firstFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto first IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR || first.RTPTime != 0 {
+		t.Fatalf("first EncodeInto output dropped/id/time = %v/%v/%d, want IDR time 0",
+			first.Dropped, first.IDR, first.RTPTime)
+	}
+	if cap(first.Data) != cap(dst) {
+		t.Fatalf("first EncodeInto data cap = %d, want caller cap %d", cap(first.Data), cap(dst))
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, first.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+			firstPacketCount, callbackCalls)
+	}
+	firstData := append([]byte(nil), first.Data...)
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 16}); err != nil {
+		t.Fatalf("lower MaxFrameSize: %v", err)
+	}
+	droppedFrame := patternedI420EncoderFrame(16, 16)
+	droppedFrame.PTS = 0
+	droppedFrame.Y[0] ^= 0x40
+	dropped, err := enc.EncodeInto(dst[:0], droppedFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto dropped bitrate frame: %v", err)
+	}
+	if !dropped.Dropped || len(dropped.Data) != 0 || len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 {
+		t.Fatalf("EncodeInto dropped frame = %+v, want dropped metadata without returned output", dropped)
+	}
+	if dropped.RTPTime != first.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("dropped RTP time = %d, want %d", dropped.RTPTime, first.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("EncodeInto dropped frame invoked callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 4096}); err != nil {
+		t.Fatalf("raise MaxFrameSize: %v", err)
+	}
+	recoveredFrame := firstFrame
+	recoveredFrame.PTS = 0
+	recovered, err := enc.EncodeInto(dst[:0], recoveredFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto after dropped bitrate frame: %v", err)
+	}
+	if recovered.Dropped || recovered.IDR {
+		t.Fatalf("post-drop EncodeInto output dropped=%v idr=%v, want transmitted P-skip",
+			recovered.Dropped, recovered.IDR)
+	}
+	if recovered.RTPTime != dropped.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("post-drop RTP time = %d, want %d", recovered.RTPTime, dropped.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	if cap(recovered.Data) != cap(dst) {
+		t.Fatalf("post-drop EncodeInto data cap = %d, want caller cap %d", cap(recovered.Data), cap(dst))
+	}
+	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
+	assertEncoderVCLFrameNums(t, append(append([]byte(nil), firstData...), recovered.Data...), []uint8{5, 1}, []uint32{0, 1})
+	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+		t.Fatalf("post-drop callbacks = %d, want %d", callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+	}
+}
+
 func TestEncoderFrameDropToBitrateDropsOversizeSliceWithoutAdvancingFrameState(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled

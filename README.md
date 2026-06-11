@@ -367,7 +367,9 @@ configured-AVC-to-RTP forced IDR/P-skip packetization with sequence/callback
 start, plus rate-control/QP/GOP/deblock controls while preserving state on
 rejected updates. Bitrate-budget drops use the configured `MaxBitrate` refill
 rate and `VBVBufferSize` burst capacity, then surface through
-`EncodedFrame.Dropped` when `FrameDropToBitrate` is active.
+`EncodedFrame.Dropped` when `FrameDropToBitrate` is active; caller-buffer
+`EncodeInto` drops return empty output without RTP packets or callbacks before
+the next valid frame resumes as P-skip.
 Motion search beyond the bounded exact macroblock-aligned inter path, quantized
 residual coding, and adaptive rate-control feedback are still future encoder slices.
 

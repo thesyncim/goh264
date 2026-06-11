@@ -82,11 +82,14 @@ returns `EncodedFrame.Dropped` without emitted bytes or RTP packets for explicit
 byte-budget misses or VBV-backed `MaxBitrate` bucket misses, and advances the RTP
 timestamp timeline, with deterministic proof that transmitted frames consume
 credit, per-frame refill resumes after dropped frames, and reference/packet
-state remains stable. Runtime frame-drop mode switches toggle the derived budget
-before the next frame, runtime max-bitrate/VBV lowering resets stale credit,
-`SetBitrate` lowering resets stale frame-budget credit, `SetFrameRate` changes
-reset frame-budget credit and apply the updated RTP cadence across drop/recovery,
-`FrameDropLate` bypasses the derived bitrate budget when the encode-time budget
+state remains stable; caller-buffer `EncodeInto` drops return empty output,
+pause callbacks, and recover through the next P-skip without advancing
+reference/frame/packet state. Runtime frame-drop mode switches toggle the
+derived budget before the next frame, runtime max-bitrate/VBV lowering resets
+stale credit, `SetBitrate` lowering resets stale frame-budget credit,
+`SetFrameRate` changes reset frame-budget credit and apply the updated RTP
+cadence across drop/recovery, `FrameDropLate` bypasses the derived bitrate
+budget when the encode-time budget
 admits the frame, and ConstantQP mode is proved to bypass that derived budget
 before and after runtime switches through CBR. `FrameDropLate` now uses
 `MaxEncodeTimeUS` as an

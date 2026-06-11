@@ -160,9 +160,11 @@ reference state untouched before the next valid P-skip, and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses and VBV-backed `MaxBitrate` bucket
 misses, including credit consumption/refill across transmitted IDR/P-skip and
-dropped changed-P frames, runtime frame-drop mode switches that toggle the
-derived bitrate budget before the next frame, runtime max-bitrate/VBV lowering
-that resets stale credit before the next frame, `SetBitrate` lowering that
+dropped changed-P frames, caller-buffer `EncodeInto` budget drops with empty
+returned output, no callbacks, stable reference/frame/packet state, and P-skip
+recovery, runtime frame-drop mode switches that toggle the derived bitrate
+budget before the next frame, runtime max-bitrate/VBV lowering that resets stale
+credit before the next frame, `SetBitrate` lowering that
 resets stale frame-budget credit before the next frame, `SetFrameRate` changes
 that reset frame-budget credit and apply the updated RTP cadence across
 drop/recovery, `FrameDropLate` bypass of the derived bitrate budget when the
