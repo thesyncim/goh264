@@ -673,12 +673,19 @@ func benchmarkEncodeRTPDropFrame(b *testing.B, cfg EncoderConfig, reference Enco
 	}
 	armDrop(enc)
 	dst := make([]byte, 0, 65536)
+	out, err := enc.EncodeInto(dst[:0], frame)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if !out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+		b.Fatalf("warm output dropped=%v data=%d nals=%d rtp=%d, want empty dropped frame",
+			out.Dropped, len(out.Data), len(out.NALUnits), len(out.RTPPackets))
+	}
 
 	b.ReportAllocs()
 	b.SetBytes(int64(benchmarkEncoderFrameBytes(cfg.Width, cfg.Height)))
 	b.ResetTimer()
 
-	var out EncodedFrame
 	for i := 0; i < b.N; i++ {
 		out, err = enc.EncodeInto(dst[:0], frame)
 		if err != nil {
