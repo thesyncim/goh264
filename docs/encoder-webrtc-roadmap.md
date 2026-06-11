@@ -63,6 +63,8 @@ dimensions.
 `SetRTPMaxPayloadSize` retargets live RTP FU-A fragmentation before the next
 P-frame while preserving sequence and decode state, including invalid-update
 rollback.
+Runtime `RecoveryPointSEI` toggles add, suppress, and restore changed-P
+recovery side data without forcing IDR.
 QP updates queue an IDR/PPS refresh. `MaxFrameSize` and `SliceMaxBytes` are now
 enforced as encode-time guards before frame/reference/packet state advances:
 `FrameDropDisabled` keeps the hard-error path, while `FrameDropToBitrate`
@@ -197,7 +199,9 @@ in one access unit.
    frames without consuming the queued IDR, then emits/decodes a new-size IDR
    and resumes P-skip references at the new dimensions. `SetRTPMaxPayloadSize`
    retargets live RTP FU-A fragmentation before the next P-frame while
-   preserving sequence/decode state and rolling back invalid updates.
+   preserving sequence/decode state and rolling back invalid updates. Runtime
+   `RecoveryPointSEI` toggles add, suppress, and restore changed-P recovery
+   side data without forcing IDR.
    Configured `SliceCount` output now feeds RTP mode 1 as separate VCL NAL
    packets when each slice fits the payload limit, and configured
    `MaxFrameSize`/`SliceMaxBytes` budgets now reject oversized encoded output

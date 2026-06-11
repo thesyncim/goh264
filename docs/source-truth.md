@@ -123,6 +123,8 @@ queued IDR before emitting/decoding a new-size IDR and resuming P-skip
 references at the new dimensions,
 `SetRTPMaxPayloadSize` live RTP FU-A retargeting before the next P-frame with
 sequence/decode continuity and invalid-update rollback,
+runtime `RecoveryPointSEI` toggles that add, suppress, and restore changed-P
+recovery side data without forcing IDR,
 `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
 dropped-frame budget behavior including VBV-backed `MaxBitrate` bucket misses,
 deterministic max-bitrate credit consumption/refill across transmitted and
