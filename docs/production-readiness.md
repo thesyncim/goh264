@@ -222,7 +222,12 @@ RTP odd-pixel constant-chroma exact P16x16, RTP odd-pixel patterned-chroma
 P IntraPCM fallback, RTP exact P16x16 including 8-pixel edge search, RTP steady
 P-skip, RTP changed P IntraPCM, and RTP packetization-mode 0 IDR/P-frame paths
 including odd-pixel constant-chroma, odd-pixel patterned-chroma fallback, and
-exact-P16 edge search;
+exact-P16 edge search. The current tightened budgets guard <=8 allocations for
+Annex B/AVC forced IDR, <=10 for RTP forced IDR, <=6 for Annex B/AVC
+odd-patterned P IntraPCM fallback, <=8 for RTP odd-patterned fallback, <=12 for
+Annex B/AVC changed P IntraPCM, and <=16 for RTP changed P IntraPCM; the
+forced-IDR and recovery-point fallback hot paths build raw SPS/PPS and SEI NALs
+directly instead of constructing unused public packaging;
 the live encode path writes RBSP plus raw NAL output directly instead of building
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage, and stamps full RTP packet data from

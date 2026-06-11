@@ -161,8 +161,13 @@ odd-pixel patterned-chroma fallback, and 8-pixel exact-P16 edge search, so
 admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
-discarded Annex B/AVC copies, with common one-slice NAL and slice-range
-planning backed by stack storage. Package-level `-benchmem` canary rows now
+discarded Annex B/AVC copies, including raw SPS/PPS NALs for forced IDR and raw
+recovery-point SEI NALs for P IntraPCM fallback. Current budgets are tightened
+to <=8 allocations for Annex B/AVC forced IDR, <=10 for RTP forced IDR, <=6 for
+Annex B/AVC odd-patterned fallback, <=8 for RTP odd-patterned fallback, <=12 for
+Annex B/AVC changed P IntraPCM, and <=16 for RTP changed P IntraPCM, with
+common one-slice NAL and slice-range planning backed by stack storage.
+Package-level `-benchmem` canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
 Annex B odd-pixel constant-chroma exact P16x16, Annex B odd-pixel
 patterned-chroma P IntraPCM fallback, Annex B exact P16x16 including 8-pixel edge
@@ -278,7 +283,8 @@ in one access unit.
    RTP admitted IDR/P-frame paths including Annex B odd-pixel constant-chroma
    exact P16x16, AVC/RTP/RTP mode-0 odd-pixel constant-chroma exact P16x16,
    8-pixel exact-P16 edge search, RTP P-IntraPCM, and packetization-mode 0 IDR/P
-   frames including exact-P16 edge search with tightened RTP allocation budgets,
+   frames including exact-P16 edge search with tightened IDR/fallback RTP and
+   Annex B/AVC allocation budgets,
    and package-level benchmark canaries for admitted IDR/P-frame
    Annex B/AVC/RTP paths plus RTP mode 0, including odd-pixel constant-chroma
    exact P16x16 and 8-pixel exact-P16 edge search.
