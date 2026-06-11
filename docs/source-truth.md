@@ -190,7 +190,7 @@ odd-patterned P IntraPCM fallback, <=8 for RTP odd-patterned fallback, <=5 for
 Annex B/AVC per-macroblock exact P16x16, and <=7 for RTP per-macroblock exact
 P16x16, <=12 for Annex B/AVC changed P IntraPCM, and <=16 for RTP changed
 P IntraPCM, plus <=7 for Annex B/AVC/RTP `EncodeInto` max-frame-size and
-slice-max-bytes drops, <=8 for RTP late drops, and stack-backed common
+slice-max-bytes drops, <=8 for Annex B/AVC/RTP late drops, and stack-backed common
 one-slice NAL and slice-range planning,
 and access-unit full RTP packet buffer stamping with clipped payload views and
 per-packet append isolation plus frame-data ownership separation.

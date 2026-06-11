@@ -7067,6 +7067,70 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		})
 	}
 
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb late drop", outputFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc late drop", outputFormat: goh264.EncoderOutputAVC},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(128, 128)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.RTPMaxPayloadSize = 0
+			cfg.FrameDrop = goh264.EncoderFrameDropLate
+			cfg.MaxEncodeTimeUS = 10_000_000
+			cfg.GOPSize = 10000
+			cfg.IDRInterval = 10000
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			a := patternedI420EncoderFrame(128, 128)
+			a.PTS = 0
+			first, err := enc.EncodeInto(make([]byte, 0, 65536), a)
+			if err != nil {
+				t.Fatalf("prime IDR: %v", err)
+			}
+			if !first.IDR || len(first.Data) == 0 || len(first.RTPPackets) != 0 {
+				t.Fatalf("prime output idr=%v data=%d rtp=%d, want non-RTP IDR",
+					first.IDR, len(first.Data), len(first.RTPPackets))
+			}
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxEncodeTimeUS: 1}); err != nil {
+				t.Fatalf("lower MaxEncodeTimeUS: %v", err)
+			}
+			b := patternedI420EncoderFrame(128, 128)
+			b.PTS = 0
+			b.Y[0] ^= 0x40
+			dst := make([]byte, 0, 65536)
+			allocs := testing.AllocsPerRun(100, func() {
+				out, err := enc.EncodeInto(dst[:0], b)
+				if err != nil {
+					t.Fatalf("EncodeInto %s: %v", tt.name, err)
+				}
+				if !out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+					t.Fatalf("%s output = %+v, want empty dropped metadata", tt.name, out)
+				}
+			})
+			t.Logf("%s EncodeInto allocations/run = %.0f", tt.name, allocs)
+			if allocs > 8 {
+				t.Fatalf("%s EncodeInto allocations/run = %.0f, want <= 8", tt.name, allocs)
+			}
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxEncodeTimeUS: 10_000_000}); err != nil {
+				t.Fatalf("restore MaxEncodeTimeUS: %v", err)
+			}
+			recovered, err := enc.EncodeInto(dst[:0], a)
+			if err != nil {
+				t.Fatalf("EncodeInto after %s: %v", tt.name, err)
+			}
+			if recovered.Dropped || recovered.IDR || len(recovered.Data) == 0 || len(recovered.RTPPackets) != 0 {
+				t.Fatalf("post-%s output dropped=%v idr=%v data=%d rtp=%d, want non-RTP P-skip recovery",
+					tt.name, recovered.Dropped, recovered.IDR, len(recovered.Data), len(recovered.RTPPackets))
+			}
+		})
+	}
+
 	t.Run("rtp max-frame-size drop", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.DeblockMode = goh264.EncoderDeblockDisabled

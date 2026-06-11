@@ -175,7 +175,7 @@ Annex B/AVC odd-patterned fallback, <=8 for RTP odd-patterned fallback, <=5 for
 Annex B/AVC per-macroblock exact P16x16, <=7 for RTP per-macroblock exact
 P16x16, <=12 for Annex B/AVC changed P IntraPCM, and <=16 for RTP changed
 P IntraPCM, plus <=7 for Annex B/AVC/RTP `EncodeInto` max-frame-size and
-slice-max-bytes drops and <=8 for RTP late drops, with common one-slice NAL and slice-range planning backed by stack
+slice-max-bytes drops and <=8 for Annex B/AVC/RTP late drops, with common one-slice NAL and slice-range planning backed by stack
 storage.
 Package-level `-benchmem` canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
