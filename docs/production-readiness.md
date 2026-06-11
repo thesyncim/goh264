@@ -6,8 +6,9 @@ bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
 IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
 output, and RTP packetization-mode 1 output, plus guarded identical-reference
 CAVLC P-skip, bounded exact macroblock-aligned P16x16 no-residual prediction
-for even integer-pel shifts up to 8 pixels under disabled-deblock
-multi-macroblock frames plus single-macroblock enabled/slice-boundary deblock,
+for integer-pel shifts up to 8 pixels under disabled-deblock multi-macroblock
+frames plus single-macroblock enabled/slice-boundary deblock, with odd-pixel
+luma motion admitted only when both 4:2:0 chroma planes are constant,
 and changed-frame
 P IntraPCM across disabled, enabled, and slice-boundary deblock controls.
 Encoder
@@ -199,10 +200,12 @@ IDR/P-frame single-NAL packets with callback packet storage isolated from
 returned RTP packets. It also proves identical
 second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
-exact shifted macroblock-aligned frames up to 8 pixels can emit predictive
-P16x16 no-residual slices through stateful local decode, FFmpeg rawvideo decode,
-configured AVC decode, RTP reassembly decode, and single-macroblock
-enabled/slice-boundary deblock syntax plus configured AVC/RTP decode,
+exact shifted macroblock-aligned frames up to 8 pixels, including odd-pixel
+luma motion when chroma is constant, can emit predictive P16x16 no-residual
+slices through stateful local decode, FFmpeg rawvideo decode, configured AVC
+decode, RTP reassembly decode, and single-macroblock enabled/slice-boundary
+deblock syntax plus configured AVC/RTP decode, while patterned chroma falls
+back to P IntraPCM,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B

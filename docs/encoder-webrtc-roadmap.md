@@ -120,13 +120,14 @@ paths: 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B,
 AVC, RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
 output, plus configured `SliceCount` multi-slice VCL output, guarded CAVLC
 P-skip slices for identical frames, a guarded exact macroblock-aligned CAVLC P16x16
-no-residual path for bounded even integer-pel shifted references up to 8 pixels
-under disabled-deblock multi-macroblock frames plus single-macroblock
-enabled/slice-boundary deblock, and guarded
-CAVLC P IntraPCM slices for changed frames after a reference across disabled,
-enabled, and slice-boundary deblock controls. Changed-frame P IntraPCM recovery
-pictures carry recovery-point SEI when enabled, across Annex B, configured AVC,
-and RTP packetization-mode 1 reassembly. Tests prove
+no-residual path for bounded integer-pel shifted references up to 8 pixels under
+disabled-deblock multi-macroblock frames plus single-macroblock
+enabled/slice-boundary deblock. Odd-pixel luma shifts are admitted only when
+both 4:2:0 chroma planes are constant; patterned chroma is guarded to fall back.
+Guarded CAVLC P IntraPCM slices handle changed frames after a reference across
+disabled, enabled, and slice-boundary deblock controls. Changed-frame P
+IntraPCM recovery pictures carry recovery-point SEI when enabled, across Annex
+B, configured AVC, and RTP packetization-mode 1 reassembly. Tests prove
 local raw-frame decode, FFmpeg rawvideo decode, configured AVC and RTP
 exact-P16 decode, recovery-point side data, multi-slice `first_mb_in_slice`
 ordering, RTP packetization-mode 0 single-NAL IDR/P-frame reassembly and
@@ -204,8 +205,9 @@ in one access unit.
 4. In progress: add P-frame prediction, reference management, CAVLC residual
    coding, deblock policy, and rate-control feedback in small oracle-backed
    slices. Done for identical-reference P-skip, exact macroblock-aligned P16x16
-   no-residual prediction for even integer-pel shifts up to 8 pixels with
-   single-macroblock enabled/slice-boundary deblock proof, and changed-frame P
+   no-residual prediction for integer-pel shifts up to 8 pixels, including
+   odd-pixel luma motion only with constant chroma, with single-macroblock
+   enabled/slice-boundary deblock proof, and changed-frame P
    IntraPCM across disabled, enabled, and
    slice-boundary deblock controls, configured multi-slice ranges,
    and recovery-point SEI emission on changed-frame P IntraPCM recovery

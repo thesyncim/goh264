@@ -10,7 +10,8 @@ API currently exposes a tested realtime/WebRTC control contract and valid
 SPS/PPS parameter-set plus recovery-point SEI generation. The first admitted
 bitstream paths cover 8-bit I420 Constrained Baseline IDR IntraPCM, P-skip for
 identical references, exact macroblock-aligned P16x16 no-residual prediction for
-even integer-pel shifts up to 8 pixels, and changed-frame P IntraPCM recovery
+even integer-pel shifts up to 8 pixels plus odd-pixel luma shifts when chroma
+is constant, and changed-frame P IntraPCM recovery
 pictures with Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
 single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
 FFmpeg rawvideo decode, configured AVC and RTP exact-P16 decode,
@@ -143,11 +144,12 @@ drop recovery, packet metadata retargeting, paused RTP sequence/callback state
 while no RTP packets are emitted, and local decode after RTP re-entry.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
 across disabled, enabled, and slice-boundary deblock controls; a
-macroblock-aligned frame that exactly matches a bounded even integer-pel shift of
-the stored reference up to 8 pixels can use guarded CAVLC P16x16 no-residual
-slices with Annex B local/FFmpeg, configured AVC, and RTP reassembly decode
-proof under disabled multi-macroblock deblock plus single-macroblock
-enabled/slice-boundary deblock;
+macroblock-aligned frame that exactly matches a bounded integer-pel shift of the
+stored reference up to 8 pixels can use guarded CAVLC P16x16 no-residual slices
+with Annex B local/FFmpeg, configured AVC, and RTP reassembly decode proof under
+disabled multi-macroblock deblock plus single-macroblock enabled/slice-boundary
+deblock. Odd-pixel luma shifts are admitted only when both 4:2:0 chroma planes
+are constant; patterned chroma falls back to the guarded P IntraPCM path.
 changed frames can use a
 guarded CAVLC P IntraPCM slice in the same admitted deblock scope with
 recovery-point SEI emission when enabled, while forced keyframe requests still

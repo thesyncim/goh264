@@ -2438,6 +2438,111 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 	}
 }
 
+func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionWithConstantChroma(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		dx   int
+		dy   int
+	}{
+		{name: "horizontal", dx: 1},
+		{name: "vertical", dy: -1},
+		{name: "diagonal", dx: 1, dy: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(32, 32)
+			cfg.OutputFormat = goh264.EncoderOutputAnnexB
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.RTPMaxPayloadSize = 0
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			firstFrame := patternedI420EncoderFrame(32, 32)
+			setConstantI420Chroma(&firstFrame, 128, 64)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+			secondFrame := integerMotionI420EncoderFrame(firstFrame, tt.dx, tt.dy)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode odd-pixel exact P16x16 no-residual motion: %v", err)
+			}
+			if second.KeyFrame || second.IDR {
+				t.Fatalf("odd-pixel exact-motion second frame key=%v idr=%v, want non-IDR P16x16", second.KeyFrame, second.IDR)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+			dec := goh264.NewDecoder()
+			decodedFirst, err := dec.DecodeFrames(first.Data)
+			if err != nil {
+				t.Fatalf("Decode first IDR: %v", err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			decodedSecond, err := dec.DecodeFrames(second.Data)
+			if err != nil {
+				t.Fatalf("Decode odd-pixel exact P16x16 no-residual motion: %v", err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+
+			stream := append(append([]byte(nil), first.Data...), second.Data...)
+			wantStream := appendI420FrameBytes(nil, firstFrame)
+			wantStream = appendI420FrameBytes(wantStream, secondFrame)
+			assertFFmpegRawVideoOracle(t, stream, wantStream)
+		})
+	}
+}
+
+func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(32, 32)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(32, 32)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	secondFrame := integerMotionI420EncoderFrame(firstFrame, 1, 0)
+	secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode odd-pixel patterned-chroma fallback: %v", err)
+	}
+	if second.KeyFrame || second.IDR {
+		t.Fatalf("odd-pixel patterned-chroma fallback key=%v idr=%v, want non-IDR P IntraPCM", second.KeyFrame, second.IDR)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode odd-pixel patterned-chroma fallback: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+
+	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	wantStream := appendI420FrameBytes(nil, firstFrame)
+	wantStream = appendI420FrameBytes(wantStream, secondFrame)
+	assertFFmpegRawVideoOracle(t, stream, wantStream)
+}
+
 func TestEncoderEncodeWideExactP16x16RequiresDeblockDisabled(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(32, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
@@ -6251,6 +6356,17 @@ func patternedI420EncoderFrame(width, height int) goh264.EncoderFrame {
 	}
 	frame.PTS = 3000
 	return frame
+}
+
+func setConstantI420Chroma(frame *goh264.EncoderFrame, cb byte, cr byte) {
+	chromaWidth := frame.Width / 2
+	chromaHeight := frame.Height / 2
+	for y := 0; y < chromaHeight; y++ {
+		for x := 0; x < chromaWidth; x++ {
+			frame.Cb[y*frame.StrideCb+x] = cb
+			frame.Cr[y*frame.StrideCr+x] = cr
+		}
+	}
 }
 
 func integerMotionI420EncoderFrame(reference goh264.EncoderFrame, dx int, dy int) goh264.EncoderFrame {

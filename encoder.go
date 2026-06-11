@@ -1139,6 +1139,8 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, b
 	if len(ref.cb) != chromaWidth*chromaHeight || len(ref.cr) != chromaWidth*chromaHeight {
 		return 0, 0, false
 	}
+	constantChromaKnown := false
+	constantChroma := false
 
 	primaryCandidates := [...]struct {
 		dx int
@@ -1150,14 +1152,18 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, b
 		{dx: 0, dy: -2},
 	}
 	for _, candidate := range primaryCandidates {
-		if encoderI420MatchesIntegerMotion(ref, view, candidate.dx, candidate.dy) {
+		if encoderMotionNeedsConstantChroma(candidate.dx, candidate.dy) && !constantChromaKnown {
+			constantChroma = encoderI420ChromaPlanesAreConstant(ref, view, chromaWidth, chromaHeight)
+			constantChromaKnown = true
+		}
+		if encoderI420MatchesIntegerMotion(ref, view, candidate.dx, candidate.dy, constantChroma) {
 			return int32(candidate.dx * 4), int32(candidate.dy * 4), true
 		}
 	}
 	const maxExactMotion = 8
-	for radius := 2; radius <= maxExactMotion; radius += 2 {
-		for dy := -radius; dy <= radius; dy += 2 {
-			for dx := -radius; dx <= radius; dx += 2 {
+	for radius := 1; radius <= maxExactMotion; radius++ {
+		for dy := -radius; dy <= radius; dy++ {
+			for dx := -radius; dx <= radius; dx++ {
 				if dx == 0 && dy == 0 {
 					continue
 				}
@@ -1170,7 +1176,11 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, b
 					(dx == 0 && dy == -2) {
 					continue
 				}
-				if encoderI420MatchesIntegerMotion(ref, view, dx, dy) {
+				if encoderMotionNeedsConstantChroma(dx, dy) && !constantChromaKnown {
+					constantChroma = encoderI420ChromaPlanesAreConstant(ref, view, chromaWidth, chromaHeight)
+					constantChromaKnown = true
+				}
+				if encoderI420MatchesIntegerMotion(ref, view, dx, dy, constantChroma) {
 					return int32(dx * 4), int32(dy * 4), true
 				}
 			}
@@ -1228,7 +1238,15 @@ func encoderP16x16NoResidualHasMVPredictor(mbAddr int, firstMB int, macroblocksP
 	return x > 0 && top-1 >= firstMB
 }
 
-func encoderI420MatchesIntegerMotion(ref *encoderReferenceFrame, view encoderFrameView, dx int, dy int) bool {
+func encoderMotionNeedsConstantChroma(dx int, dy int) bool {
+	return dx%2 != 0 || dy%2 != 0
+}
+
+func encoderI420MatchesIntegerMotion(ref *encoderReferenceFrame, view encoderFrameView, dx int, dy int, constantChroma bool) bool {
+	if encoderMotionNeedsConstantChroma(dx, dy) {
+		return constantChroma &&
+			encoderPlaneMatchesIntegerMotion(view.y, view.strideY, view.width, view.height, ref.y, view.width, dx, dy)
+	}
 	if !encoderPlaneMatchesIntegerMotion(view.y, view.strideY, view.width, view.height, ref.y, view.width, dx, dy) {
 		return false
 	}
@@ -1238,6 +1256,25 @@ func encoderI420MatchesIntegerMotion(ref *encoderReferenceFrame, view encoderFra
 	chromaDY := dy / 2
 	return encoderPlaneMatchesIntegerMotion(view.cb, view.strideCb, chromaWidth, chromaHeight, ref.cb, chromaWidth, chromaDX, chromaDY) &&
 		encoderPlaneMatchesIntegerMotion(view.cr, view.strideCr, chromaWidth, chromaHeight, ref.cr, chromaWidth, chromaDX, chromaDY)
+}
+
+func encoderI420ChromaPlanesAreConstant(ref *encoderReferenceFrame, view encoderFrameView, chromaWidth int, chromaHeight int) bool {
+	return encoderPlaneAllValue(ref.cb, chromaWidth, chromaWidth, chromaHeight, ref.cb[0]) &&
+		encoderPlaneAllValue(view.cb, view.strideCb, chromaWidth, chromaHeight, ref.cb[0]) &&
+		encoderPlaneAllValue(ref.cr, chromaWidth, chromaWidth, chromaHeight, ref.cr[0]) &&
+		encoderPlaneAllValue(view.cr, view.strideCr, chromaWidth, chromaHeight, ref.cr[0])
+}
+
+func encoderPlaneAllValue(plane []byte, stride int, width int, height int, value byte) bool {
+	for y := 0; y < height; y++ {
+		row := plane[y*stride : y*stride+width]
+		for _, got := range row {
+			if got != value {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func encoderPlaneMatchesIntegerMotion(cur []byte, curStride int, width int, height int, ref []byte, refStride int, dx int, dy int) bool {

@@ -116,7 +116,8 @@ reconfiguration, public SPS/PPS/Annex B/avcC header generation with crop
 metadata, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
 generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
 bounded exact macroblock-aligned P16x16 no-residual prediction with
-8-pixel even integer-pel search and single-macroblock enabled/slice-boundary
+8-pixel integer-pel search, including odd-pixel luma motion only when both
+4:2:0 chroma planes are constant, and single-macroblock enabled/slice-boundary
 deblock proof, changed-frame P IntraPCM
 recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 runtime resolution reset that rejects stale-size frames without consuming the
