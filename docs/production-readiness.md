@@ -213,13 +213,16 @@ enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
 forced IDR, Annex B steady P-skip, Annex B exact P16x16 including
 single-macroblock deblock controls, Annex B odd-pixel constant-chroma exact
-P16x16, Annex B macroblock-aligned exact P16x16 including 8-pixel edge search,
-Annex B changed P IntraPCM, AVC forced IDR, AVC steady P-skip, AVC odd-pixel
-constant-chroma exact P16x16, AVC exact P16x16 including 8-pixel edge search,
-AVC changed P IntraPCM, RTP forced IDR/FU-A, RTP odd-pixel constant-chroma exact
-P16x16, RTP exact P16x16 including 8-pixel edge search, RTP steady P-skip, RTP
-changed P IntraPCM, and RTP packetization-mode 0 IDR/P-frame paths including
-odd-pixel constant-chroma and exact-P16 edge search;
+P16x16, Annex B odd-pixel patterned-chroma P IntraPCM fallback, Annex B
+macroblock-aligned exact P16x16 including 8-pixel edge search, Annex B changed
+P IntraPCM, AVC forced IDR, AVC steady P-skip, AVC odd-pixel constant-chroma
+exact P16x16, AVC odd-pixel patterned-chroma P IntraPCM fallback, AVC exact
+P16x16 including 8-pixel edge search, AVC changed P IntraPCM, RTP forced IDR/FU-A,
+RTP odd-pixel constant-chroma exact P16x16, RTP odd-pixel patterned-chroma
+P IntraPCM fallback, RTP exact P16x16 including 8-pixel edge search, RTP steady
+P-skip, RTP changed P IntraPCM, and RTP packetization-mode 0 IDR/P-frame paths
+including odd-pixel constant-chroma, odd-pixel patterned-chroma fallback, and
+exact-P16 edge search;
 the live encode path writes RBSP plus raw NAL output directly instead of building
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage, and stamps full RTP packet data from
@@ -227,14 +230,17 @@ access-unit buffers while exposing clipped payload views, keeping packet storage
 separate from `EncodedFrame.Data`, and preserving append isolation for each public
 packet slice. Package-level benchmark canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
-Annex B odd-pixel constant-chroma exact P16x16, Annex B exact P16x16 including
-8-pixel edge search, Annex B changed P IntraPCM, AVC IDR IntraPCM, AVC steady
-P-skip, AVC odd-pixel constant-chroma exact P16x16, AVC exact P16x16 including
-8-pixel edge search, AVC changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP
-odd-pixel constant-chroma exact P16x16, RTP exact P16x16 including 8-pixel edge
-search, RTP steady P-skip, and RTP changed P IntraPCM plus RTP
+Annex B odd-pixel constant-chroma exact P16x16, Annex B odd-pixel
+patterned-chroma P IntraPCM fallback, Annex B exact P16x16 including 8-pixel edge
+search, Annex B changed P IntraPCM, AVC IDR IntraPCM, AVC steady P-skip, AVC
+odd-pixel constant-chroma exact P16x16, AVC odd-pixel patterned-chroma
+P IntraPCM fallback, AVC exact P16x16 including 8-pixel edge search, AVC changed
+P IntraPCM, RTP FU-A IDR IntraPCM, RTP odd-pixel constant-chroma exact P16x16,
+RTP odd-pixel patterned-chroma P IntraPCM fallback, RTP exact P16x16 including
+8-pixel edge search, RTP steady P-skip, and RTP changed P IntraPCM plus RTP
 packetization-mode 0 IDR/P-skip/exact-P16x16/P-IntraPCM paths including
-odd-pixel constant-chroma and 8-pixel exact-P16 edge search with `-benchmem`.
+odd-pixel constant-chroma, odd-pixel patterned-chroma fallback, and 8-pixel
+exact-P16 edge search with `-benchmem`.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and

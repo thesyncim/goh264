@@ -5548,6 +5548,43 @@ func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 	}
 }
 
+func assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t *testing.T, cfg goh264.EncoderConfig, label string, wantRTPPackets int, maxAllocs float64) {
+	t.Helper()
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.GOPSize = 10000
+	cfg.IDRInterval = 10000
+	if cfg.OutputFormat != goh264.EncoderOutputRTP {
+		cfg.RTPMaxPayloadSize = 0
+	}
+	a := patternedI420EncoderFrame(16, 16)
+	b := integerMotionI420EncoderFrame(a, 1, 0)
+	encs := primedI420EncoderPool(t, cfg, a, 128)
+	dst := make([]byte, 0, 4096)
+	var call int
+	allocs := testing.AllocsPerRun(100, func() {
+		if call >= len(encs) {
+			t.Fatalf("encoder pool exhausted after %d calls", call)
+		}
+		out, err := encs[call].EncodeInto(dst[:0], b)
+		call++
+		if err != nil {
+			t.Fatalf("EncodeInto %s odd patterned-chroma fallback: %v", label, err)
+		}
+		if out.IDR || len(out.RTPPackets) != wantRTPPackets || len(out.Data) == 0 ||
+			len(out.NALUnits) != 2 || out.NALUnits[0].Type != 6 || out.NALUnits[1].Type != 1 {
+			t.Fatalf("%s odd patterned-chroma fallback output idr=%v rtp=%d data=%d nals=%+v",
+				label, out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+		}
+		if cap(out.Data) != cap(dst) {
+			t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+		}
+	})
+	t.Logf("%s odd patterned-chroma fallback EncodeInto allocations/run = %.0f", label, allocs)
+	if allocs > maxAllocs {
+		t.Fatalf("%s odd patterned-chroma fallback EncodeInto allocations/run = %.0f, want <= %.0f", label, allocs, maxAllocs)
+	}
+}
+
 func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 	t.Run("annexb forced idr", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
@@ -5689,6 +5726,12 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		if allocs > 4 {
 			t.Fatalf("annexb odd exact P16x16 constant-chroma EncodeInto allocations/run = %.0f, want <= 4", allocs)
 		}
+	})
+
+	t.Run("annexb odd patterned-chroma fallback", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAnnexB
+		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "annexb", 0, 44)
 	})
 
 	t.Run("annexb exact p16x16 deblock controls", func(t *testing.T) {
@@ -6009,6 +6052,12 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("avc odd patterned-chroma fallback", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAVC
+		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "avc", 0, 44)
+	})
+
 	t.Run("avc exact p16x16 edge search", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(48, 48)
 		cfg.OutputFormat = goh264.EncoderOutputAVC
@@ -6228,6 +6277,11 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("rtp odd patterned-chroma fallback", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "rtp", 2, 46)
+	})
+
 	t.Run("rtp exact p16x16 edge search", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(48, 48)
 		cfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -6444,6 +6498,13 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		if allocs > 5 {
 			t.Fatalf("rtp mode0 odd exact P16x16 constant-chroma EncodeInto allocations/run = %.0f, want <= 5", allocs)
 		}
+	})
+
+	t.Run("rtp mode0 odd patterned-chroma fallback", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+		cfg.RTPMaxPayloadSize = 1200
+		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "rtp mode0", 2, 46)
 	})
 
 	t.Run("rtp mode0 exact p16x16 edge search", func(t *testing.T) {

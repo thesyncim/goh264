@@ -176,18 +176,20 @@ P-skip, exact P16x16, odd-pixel constant chroma, and P IntraPCM fallback rows
 and callback packet storage isolated from returned RTP packets, initial
 `EncodeInto` allocation canaries for caller-buffer Annex B/AVC/RTP IDR,
 P-skip, exact-P16x16 including odd-pixel constant-chroma across Annex B/AVC/RTP
-and 8-pixel edge search, P-IntraPCM including AVC/RTP changed P IntraPCM, and RTP
-packetization-mode 0 IDR/P-frame paths including odd-pixel constant-chroma and
-exact-P16 edge search, and a
+and 8-pixel edge search, odd-pixel patterned-chroma P IntraPCM fallback across
+Annex B/AVC/RTP, P-IntraPCM including AVC/RTP changed P IntraPCM, and RTP
+packetization-mode 0 IDR/P-frame paths including odd-pixel constant-chroma,
+odd-pixel patterned-chroma fallback, and exact-P16 edge search, and a
 live encode path that avoids discarded Annex B/AVC copies when only raw NAL
 output is needed plus stack-backed common one-slice NAL, slice-range planning,
 and access-unit full RTP packet buffer stamping with clipped payload views and
 per-packet append isolation plus frame-data ownership separation.
 Package-level benchmark canaries cover admitted Annex B/AVC/RTP IDR and
 P-frame encode paths, including odd-pixel constant-chroma exact P16x16 across
-Annex B/AVC/RTP plus RTP mode 0, 8-pixel exact-P16 edge search, AVC/RTP changed
-P IntraPCM, and RTP packetization-mode 0 IDR/P-frame rows including exact-P16
-edge search, with `-benchmem`.
+Annex B/AVC/RTP plus RTP mode 0, odd-pixel patterned-chroma P IntraPCM fallback
+across Annex B/AVC/RTP plus RTP mode 0, 8-pixel exact-P16 edge search, AVC/RTP
+changed P IntraPCM, and RTP packetization-mode 0 IDR/P-frame rows including
+exact-P16 edge search, with `-benchmem`.
 Internal writer proof covers raw
 bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL

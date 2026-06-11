@@ -69,6 +69,10 @@ func benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame() EncoderFrame {
 	return frame
 }
 
+func benchmarkEncoderOddPatternedChromaFallbackReferenceFrame() EncoderFrame {
+	return benchmarkEncoderExactP16x16HorizontalReferenceFrame(benchmarkEncoderWidth, benchmarkEncoderHeight, 1)
+}
+
 func benchmarkEncoderExactP16x16HorizontalReferenceFrame(width int, height int, dx int) EncoderFrame {
 	frame := benchmarkEncoderI420Frame(width, height)
 	// Keep the left edge reversible under clamped +/-dx motion so the benchmark
@@ -202,6 +206,13 @@ func BenchmarkEncodeAnnexBI420OddExactP16x16ConstantChroma(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
 }
 
+func BenchmarkEncodeAnnexBI420OddPatternedChromaFallbackPIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputAnnexB)
+	a := benchmarkEncoderOddPatternedChromaFallbackReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
+}
+
 func BenchmarkEncodeAnnexBI420ExactP16x16EdgeSearch(b *testing.B) {
 	cfg := benchmarkEncoderConfigSize(EncoderOutputAnnexB, 48, 48)
 	a := benchmarkEncoderExactP16x16HorizontalReferenceFrame(cfg.Width, cfg.Height, 8)
@@ -260,6 +271,13 @@ func BenchmarkEncodeAVCI420ExactP16x16(b *testing.B) {
 func BenchmarkEncodeAVCI420OddExactP16x16ConstantChroma(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputAVC)
 	a := benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
+}
+
+func BenchmarkEncodeAVCI420OddPatternedChromaFallbackPIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputAVC)
+	a := benchmarkEncoderOddPatternedChromaFallbackReferenceFrame()
 	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
 }
@@ -358,6 +376,13 @@ func BenchmarkEncodeRTPI420OddExactP16x16ConstantChroma(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
 }
 
+func BenchmarkEncodeRTPI420OddPatternedChromaFallbackPIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	a := benchmarkEncoderOddPatternedChromaFallbackReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
+}
+
 func BenchmarkEncodeRTPI420ExactP16x16EdgeSearch(b *testing.B) {
 	cfg := benchmarkEncoderConfigSize(EncoderOutputRTP, 48, 48)
 	a := benchmarkEncoderExactP16x16HorizontalReferenceFrame(cfg.Width, cfg.Height, 8)
@@ -395,6 +420,15 @@ func BenchmarkEncodeRTPMode0I420OddExactP16x16ConstantChroma(b *testing.B) {
 	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
 	cfg.RTPMaxPayloadSize = 1200
 	a := benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
+}
+
+func BenchmarkEncodeRTPMode0I420OddPatternedChromaFallbackPIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	a := benchmarkEncoderOddPatternedChromaFallbackReferenceFrame()
 	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
 }

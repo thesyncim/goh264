@@ -148,27 +148,33 @@ from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B
 exact P16x16 including single-macroblock deblock controls, Annex B odd-pixel
-constant-chroma exact P16x16, Annex B macroblock-aligned exact P16x16 including
-8-pixel edge search, Annex B changed P IntraPCM, AVC forced IDR, AVC steady
-P-skip, AVC odd-pixel constant-chroma exact P16x16, AVC exact P16x16 including
-8-pixel edge search, AVC changed P IntraPCM, RTP forced IDR/FU-A, RTP odd-pixel
-constant-chroma exact P16x16, RTP exact P16x16 including 8-pixel edge search,
-RTP steady P-skip, RTP changed P IntraPCM, and RTP packetization-mode 0
-IDR/P-skip/exact-P16x16/P-IntraPCM paths including odd-pixel constant-chroma
-and 8-pixel exact-P16 edge search, so admitted packetization/output paths cannot
+constant-chroma exact P16x16, Annex B odd-pixel patterned-chroma P IntraPCM
+fallback, Annex B macroblock-aligned exact P16x16 including 8-pixel edge search,
+Annex B changed P IntraPCM, AVC forced IDR, AVC steady P-skip, AVC odd-pixel
+constant-chroma exact P16x16, AVC odd-pixel patterned-chroma P IntraPCM
+fallback, AVC exact P16x16 including 8-pixel edge search, AVC changed P IntraPCM,
+RTP forced IDR/FU-A, RTP odd-pixel constant-chroma exact P16x16, RTP odd-pixel
+patterned-chroma P IntraPCM fallback, RTP exact P16x16 including 8-pixel edge
+search, RTP steady P-skip, RTP changed P IntraPCM, and RTP packetization-mode 0
+IDR/P-skip/exact-P16x16/P-IntraPCM paths including odd-pixel constant-chroma,
+odd-pixel patterned-chroma fallback, and 8-pixel exact-P16 edge search, so
+admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage. Package-level `-benchmem` canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
-Annex B odd-pixel constant-chroma exact P16x16, Annex B exact P16x16 including
-8-pixel edge search, Annex B changed P IntraPCM, AVC IDR IntraPCM, AVC steady
-P-skip, AVC odd-pixel constant-chroma exact P16x16, AVC exact P16x16 including
-8-pixel edge search, AVC changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP
-odd-pixel constant-chroma exact P16x16, RTP exact P16x16 including 8-pixel edge
-search, RTP steady P-skip, and RTP changed P IntraPCM plus RTP packetization-mode 0
-IDR/P-skip/exact-P16x16/P-IntraPCM paths including odd-pixel constant-chroma
-and 8-pixel exact-P16 edge search.
+Annex B odd-pixel constant-chroma exact P16x16, Annex B odd-pixel
+patterned-chroma P IntraPCM fallback, Annex B exact P16x16 including 8-pixel edge
+search, Annex B changed P IntraPCM, AVC IDR IntraPCM, AVC steady P-skip, AVC
+odd-pixel constant-chroma exact P16x16, AVC odd-pixel patterned-chroma
+P IntraPCM fallback, AVC exact P16x16 including 8-pixel edge search, AVC changed
+P IntraPCM, RTP FU-A IDR IntraPCM, RTP odd-pixel constant-chroma exact P16x16,
+RTP odd-pixel patterned-chroma P IntraPCM fallback, RTP exact P16x16 including
+8-pixel edge search, RTP steady P-skip, and RTP changed P IntraPCM plus RTP
+packetization-mode 0 IDR/P-skip/exact-P16x16/P-IntraPCM paths including
+odd-pixel constant-chroma, odd-pixel patterned-chroma fallback, and 8-pixel
+exact-P16 edge search.
 Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
