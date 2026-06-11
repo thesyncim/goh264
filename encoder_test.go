@@ -10,6 +10,7 @@ func TestAppendEncoderP16x16NoResidualMVDsUsesSliceLocalPrediction(t *testing.T)
 		firstMB           int
 		macroblockCount   int
 		macroblocksPerRow int
+		mvs               []encoderP16x16MotionVector
 		want              [][2]int32
 	}{
 		{
@@ -40,9 +41,31 @@ func TestAppendEncoderP16x16NoResidualMVDsUsesSliceLocalPrediction(t *testing.T)
 			macroblocksPerRow: 3,
 			want:              [][2]int32{{8, 0}, {8, 0}, {}, {}},
 		},
+		{
+			name:              "mixed vectors use median prediction",
+			firstMB:           0,
+			macroblockCount:   6,
+			macroblocksPerRow: 3,
+			mvs: []encoderP16x16MotionVector{
+				{x: 8, y: 0},
+				{x: -8, y: 0},
+				{x: 0, y: 8},
+				{x: 0, y: -8},
+				{x: 8, y: 8},
+				{x: -8, y: -8},
+			},
+			want: [][2]int32{{8, 0}, {-16, 0}, {8, 8}, {0, -8}, {8, 8}, {-8, -16}},
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			got := appendEncoderP16x16NoResidualMVDs(nil, tt.firstMB, tt.macroblockCount, tt.macroblocksPerRow, 8, 0)
+			mvs := tt.mvs
+			if len(mvs) == 0 {
+				mvs = make([]encoderP16x16MotionVector, tt.firstMB+tt.macroblockCount)
+				for i := range mvs {
+					mvs[i] = encoderP16x16MotionVector{x: 8}
+				}
+			}
+			got := appendEncoderP16x16NoResidualMVDs(nil, mvs, tt.firstMB, tt.macroblockCount, tt.macroblocksPerRow)
 			if len(got) != len(tt.want) {
 				t.Fatalf("len = %d, want %d", len(got), len(tt.want))
 			}

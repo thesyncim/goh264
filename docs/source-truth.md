@@ -116,8 +116,9 @@ reconfiguration, public SPS/PPS/Annex B/avcC header generation with crop
 metadata, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
 generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
 bounded exact macroblock-aligned P16x16 no-residual prediction with
-8-pixel integer-pel search, including odd-pixel luma motion only when both
-4:2:0 chroma planes are constant, Annex B/configured AVC/RTP plus mode-0
+8-pixel integer-pel search, including mixed per-macroblock vectors and
+odd-pixel luma motion only when both 4:2:0 chroma planes are constant,
+Annex B/configured AVC/RTP plus mode-0
 packetization proof for both admitted constant-chroma motion and patterned-chroma
 P IntraPCM fallback, and single-macroblock enabled/slice-boundary deblock proof,
 changed-frame P IntraPCM

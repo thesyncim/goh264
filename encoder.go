@@ -339,6 +339,7 @@ type Encoder struct {
 	nextRTPTime        uint32
 	rtpTimeInitialized bool
 	reference          encoderReferenceFrame
+	p16MVs             []encoderP16x16MotionVector
 	p16MVDs            []h264.EncoderMotionVectorDelta
 	bitrateCreditBytes int
 	bitrateCreditInit  bool
@@ -578,68 +579,70 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			}
 			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
 		}
-	} else if mvdX, mvdY, ok := e.p16x16NoResidualMotion(view); ok {
-		var mvdBuf [64]h264.EncoderMotionVectorDelta
-		macroblocksPerRow := view.width >> 4
-		for _, r := range sliceRanges {
-			mvdsBuf := mvdBuf[:0]
-			if r.macroblockCount > cap(mvdsBuf) {
-				e.p16MVDs = resizeEncoderP16x16MVDs(e.p16MVDs, r.macroblockCount)
-				mvdsBuf = e.p16MVDs[:0]
-			}
-			mvds := appendEncoderP16x16NoResidualMVDs(mvdsBuf, r.firstMB, r.macroblockCount, macroblocksPerRow, mvdX, mvdY)
-			nal, err := buildEncoderI420P16x16NoResidualNAL(h264.EncoderI420P16x16NoResidualConfig{
-				Width:                      view.width,
-				Height:                     view.height,
-				FrameNum:                   e.frameNum & 0xff,
-				InitialQP:                  e.cfg.InitialQP,
-				DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
-				FirstMBAddr:                uint32(r.firstMB),
-				MacroblockCount:            uint32(r.macroblockCount),
-				MVDX:                       mvdX,
-				MVDY:                       mvdY,
-				MVDs:                       mvds,
-				NALLengthSize:              4,
-			})
-			if err != nil {
-				return EncodedFrame{}, err
-			}
-			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
-		}
 	} else {
-		if e.cfg.RecoveryPointSEI {
-			sei, err := h264.BuildEncoderRecoveryPointSEINAL(h264.EncoderRecoveryPointSEIConfig{
-				RecoveryFrameCount:    0,
-				ExactMatchFlag:        true,
-				BrokenLinkFlag:        e.cfg.BFrames > 0,
-				ChangingSliceGroupIDC: 0,
-			})
-			if err != nil {
-				return EncodedFrame{}, err
+		var p16MVBuf [64]encoderP16x16MotionVector
+		p16MVs, ok := e.p16x16NoResidualMotion(view, p16MVBuf[:0])
+		if !ok {
+			if e.cfg.RecoveryPointSEI {
+				sei, err := h264.BuildEncoderRecoveryPointSEINAL(h264.EncoderRecoveryPointSEIConfig{
+					RecoveryFrameCount:    0,
+					ExactMatchFlag:        true,
+					BrokenLinkFlag:        e.cfg.BFrames > 0,
+					ChangingSliceGroupIDC: 0,
+				})
+				if err != nil {
+					return EncodedFrame{}, err
+				}
+				nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSEI), raw: sei})
 			}
-			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSEI), raw: sei})
-		}
-		for _, r := range sliceRanges {
-			nal, err := buildEncoderI420IntraPCMPNAL(h264.EncoderI420IntraPCMPConfig{
-				Width:                      view.width,
-				Height:                     view.height,
-				StrideY:                    view.strideY,
-				StrideCb:                   view.strideCb,
-				StrideCr:                   view.strideCr,
-				Y:                          view.y,
-				Cb:                         view.cb,
-				Cr:                         view.cr,
-				FrameNum:                   e.frameNum & 0xff,
-				InitialQP:                  e.cfg.InitialQP,
-				DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
-				FirstMBAddr:                uint32(r.firstMB),
-				MacroblockCount:            uint32(r.macroblockCount),
-				NALLengthSize:              4,
-			})
-			if err != nil {
-				return EncodedFrame{}, err
+			for _, r := range sliceRanges {
+				nal, err := buildEncoderI420IntraPCMPNAL(h264.EncoderI420IntraPCMPConfig{
+					Width:                      view.width,
+					Height:                     view.height,
+					StrideY:                    view.strideY,
+					StrideCb:                   view.strideCb,
+					StrideCr:                   view.strideCr,
+					Y:                          view.y,
+					Cb:                         view.cb,
+					Cr:                         view.cr,
+					FrameNum:                   e.frameNum & 0xff,
+					InitialQP:                  e.cfg.InitialQP,
+					DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+					FirstMBAddr:                uint32(r.firstMB),
+					MacroblockCount:            uint32(r.macroblockCount),
+					NALLengthSize:              4,
+				})
+				if err != nil {
+					return EncodedFrame{}, err
+				}
+				nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
 			}
-			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
+		} else {
+			var mvdBuf [64]h264.EncoderMotionVectorDelta
+			macroblocksPerRow := view.width >> 4
+			for _, r := range sliceRanges {
+				mvdsBuf := mvdBuf[:0]
+				if r.macroblockCount > cap(mvdsBuf) {
+					e.p16MVDs = resizeEncoderP16x16MVDs(e.p16MVDs, r.macroblockCount)
+					mvdsBuf = e.p16MVDs[:0]
+				}
+				mvds := appendEncoderP16x16NoResidualMVDs(mvdsBuf, p16MVs, r.firstMB, r.macroblockCount, macroblocksPerRow)
+				nal, err := buildEncoderI420P16x16NoResidualNAL(h264.EncoderI420P16x16NoResidualConfig{
+					Width:                      view.width,
+					Height:                     view.height,
+					FrameNum:                   e.frameNum & 0xff,
+					InitialQP:                  e.cfg.InitialQP,
+					DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+					FirstMBAddr:                uint32(r.firstMB),
+					MacroblockCount:            uint32(r.macroblockCount),
+					MVDs:                       mvds,
+					NALLengthSize:              4,
+				})
+				if err != nil {
+					return EncodedFrame{}, err
+				}
+				nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
+			}
 		}
 	}
 
@@ -980,6 +983,11 @@ type encoderSliceRange struct {
 	macroblockCount int
 }
 
+type encoderP16x16MotionVector struct {
+	x int32
+	y int32
+}
+
 func encoderLateDropStart(cfg EncoderConfig) time.Time {
 	if cfg.FrameDrop == EncoderFrameDropLate && cfg.MaxEncodeTimeUS > 0 {
 		return time.Now()
@@ -1134,31 +1142,59 @@ func (e *Encoder) referenceMatches(view encoderFrameView) bool {
 	return true
 }
 
-func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, bool) {
+func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView, dst []encoderP16x16MotionVector) ([]encoderP16x16MotionVector, bool) {
 	if view.height < 16 ||
 		view.height&15 != 0 ||
 		view.width < 16 ||
 		view.width&15 != 0 {
-		return 0, 0, false
+		return nil, false
 	}
 	if e.cfg.DeblockMode != EncoderDeblockDisabled && encoderMacroblockCount(view.width, view.height) != 1 {
-		return 0, 0, false
+		return nil, false
 	}
 	ref := &e.reference
 	if !ref.valid || ref.width != view.width || ref.height != view.height {
-		return 0, 0, false
+		return nil, false
 	}
 	if len(ref.y) != view.width*view.height {
-		return 0, 0, false
+		return nil, false
 	}
 	chromaWidth := view.width / 2
 	chromaHeight := view.height / 2
 	if len(ref.cb) != chromaWidth*chromaHeight || len(ref.cr) != chromaWidth*chromaHeight {
-		return 0, 0, false
+		return nil, false
+	}
+
+	macroblocksPerRow := view.width >> 4
+	macroblockCount := macroblocksPerRow * (view.height >> 4)
+	if cap(dst) < macroblockCount {
+		e.p16MVs = resizeEncoderP16x16MVs(e.p16MVs, macroblockCount)
+		dst = e.p16MVs[:0]
+	} else {
+		dst = dst[:0]
 	}
 	constantChromaKnown := false
 	constantChroma := false
 
+	if dx, dy, ok := encoderI420FindFrameP16x16NoResidualMotion(ref, view, &constantChromaKnown, &constantChroma); ok {
+		mv := encoderP16x16MotionVector{x: int32(dx * 4), y: int32(dy * 4)}
+		for mbAddr := 0; mbAddr < macroblockCount; mbAddr++ {
+			dst = append(dst, mv)
+		}
+		return dst, true
+	}
+
+	for mbAddr := 0; mbAddr < macroblockCount; mbAddr++ {
+		dx, dy, ok := encoderI420FindP16x16NoResidualMotion(ref, view, mbAddr, macroblocksPerRow, &constantChromaKnown, &constantChroma)
+		if !ok {
+			return nil, false
+		}
+		dst = append(dst, encoderP16x16MotionVector{x: int32(dx * 4), y: int32(dy * 4)})
+	}
+	return dst, true
+}
+
+func encoderI420FindFrameP16x16NoResidualMotion(ref *encoderReferenceFrame, view encoderFrameView, constantChromaKnown *bool, constantChroma *bool) (int, int, bool) {
 	primaryCandidates := [...]struct {
 		dx int
 		dy int
@@ -1169,12 +1205,12 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, b
 		{dx: 0, dy: -2},
 	}
 	for _, candidate := range primaryCandidates {
-		if encoderMotionNeedsConstantChroma(candidate.dx, candidate.dy) && !constantChromaKnown {
-			constantChroma = encoderI420ChromaPlanesAreConstant(ref, view, chromaWidth, chromaHeight)
-			constantChromaKnown = true
+		if encoderMotionNeedsConstantChroma(candidate.dx, candidate.dy) && !*constantChromaKnown {
+			*constantChroma = encoderI420ChromaPlanesAreConstant(ref, view, view.width/2, view.height/2)
+			*constantChromaKnown = true
 		}
-		if encoderI420MatchesIntegerMotion(ref, view, candidate.dx, candidate.dy, constantChroma) {
-			return int32(candidate.dx * 4), int32(candidate.dy * 4), true
+		if encoderI420MatchesIntegerMotion(ref, view, candidate.dx, candidate.dy, *constantChroma) {
+			return candidate.dx, candidate.dy, true
 		}
 	}
 	const maxExactMotion = 8
@@ -1193,12 +1229,61 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, b
 					(dx == 0 && dy == -2) {
 					continue
 				}
-				if encoderMotionNeedsConstantChroma(dx, dy) && !constantChromaKnown {
-					constantChroma = encoderI420ChromaPlanesAreConstant(ref, view, chromaWidth, chromaHeight)
-					constantChromaKnown = true
+				if encoderMotionNeedsConstantChroma(dx, dy) && !*constantChromaKnown {
+					*constantChroma = encoderI420ChromaPlanesAreConstant(ref, view, view.width/2, view.height/2)
+					*constantChromaKnown = true
 				}
-				if encoderI420MatchesIntegerMotion(ref, view, dx, dy, constantChroma) {
-					return int32(dx * 4), int32(dy * 4), true
+				if encoderI420MatchesIntegerMotion(ref, view, dx, dy, *constantChroma) {
+					return dx, dy, true
+				}
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+func encoderI420FindP16x16NoResidualMotion(ref *encoderReferenceFrame, view encoderFrameView, mbAddr int, macroblocksPerRow int, constantChromaKnown *bool, constantChroma *bool) (int, int, bool) {
+	primaryCandidates := [...]struct {
+		dx int
+		dy int
+	}{
+		{dx: 0, dy: 0},
+		{dx: 2, dy: 0},
+		{dx: -2, dy: 0},
+		{dx: 0, dy: 2},
+		{dx: 0, dy: -2},
+	}
+	for _, candidate := range primaryCandidates {
+		if encoderMotionNeedsConstantChroma(candidate.dx, candidate.dy) && !*constantChromaKnown {
+			*constantChroma = encoderI420ChromaPlanesAreConstant(ref, view, view.width/2, view.height/2)
+			*constantChromaKnown = true
+		}
+		if encoderI420MacroblockMatchesIntegerMotion(ref, view, mbAddr, macroblocksPerRow, candidate.dx, candidate.dy, *constantChroma) {
+			return candidate.dx, candidate.dy, true
+		}
+	}
+	const maxExactMotion = 8
+	for radius := 1; radius <= maxExactMotion; radius++ {
+		for dy := -radius; dy <= radius; dy++ {
+			for dx := -radius; dx <= radius; dx++ {
+				if dx == 0 && dy == 0 {
+					continue
+				}
+				if absInt(dx) != radius && absInt(dy) != radius {
+					continue
+				}
+				if (dx == 2 && dy == 0) ||
+					(dx == -2 && dy == 0) ||
+					(dx == 0 && dy == 2) ||
+					(dx == 0 && dy == -2) {
+					continue
+				}
+				if encoderMotionNeedsConstantChroma(dx, dy) && !*constantChromaKnown {
+					*constantChroma = encoderI420ChromaPlanesAreConstant(ref, view, view.width/2, view.height/2)
+					*constantChromaKnown = true
+				}
+				if encoderI420MacroblockMatchesIntegerMotion(ref, view, mbAddr, macroblocksPerRow, dx, dy, *constantChroma) {
+					return dx, dy, true
 				}
 			}
 		}
@@ -1213,7 +1298,7 @@ func absInt(v int) int {
 	return v
 }
 
-func appendEncoderP16x16NoResidualMVDs(dst []h264.EncoderMotionVectorDelta, firstMB int, macroblockCount int, macroblocksPerRow int, mvdX int32, mvdY int32) []h264.EncoderMotionVectorDelta {
+func appendEncoderP16x16NoResidualMVDs(dst []h264.EncoderMotionVectorDelta, mvs []encoderP16x16MotionVector, firstMB int, macroblockCount int, macroblocksPerRow int) []h264.EncoderMotionVectorDelta {
 	if cap(dst) < macroblockCount {
 		dst = make([]h264.EncoderMotionVectorDelta, macroblockCount)
 	} else {
@@ -1224,35 +1309,89 @@ func appendEncoderP16x16NoResidualMVDs(dst []h264.EncoderMotionVectorDelta, firs
 	}
 	for i := 0; i < macroblockCount; i++ {
 		mbAddr := firstMB + i
-		if encoderP16x16NoResidualHasMVPredictor(mbAddr, firstMB, macroblocksPerRow) {
-			dst[i] = h264.EncoderMotionVectorDelta{}
-		} else {
-			dst[i] = h264.EncoderMotionVectorDelta{X: mvdX, Y: mvdY}
-		}
+		mv := mvs[mbAddr]
+		pred := encoderP16x16NoResidualMVPredictor(mvs, mbAddr, firstMB, macroblocksPerRow)
+		dst[i] = h264.EncoderMotionVectorDelta{X: mv.x - pred.x, Y: mv.y - pred.y}
 	}
 	return dst
 }
 
-func encoderP16x16NoResidualHasMVPredictor(mbAddr int, firstMB int, macroblocksPerRow int) bool {
-	if macroblocksPerRow <= 0 || mbAddr <= firstMB {
-		return false
-	}
+func encoderP16x16NoResidualMVPredictor(mvs []encoderP16x16MotionVector, mbAddr int, firstMB int, macroblocksPerRow int) encoderP16x16MotionVector {
+	var left, top, diagonal encoderP16x16MotionVector
 	x := mbAddr % macroblocksPerRow
 	y := mbAddr / macroblocksPerRow
+	leftAvailable := false
 	if x > 0 && mbAddr-1 >= firstMB {
-		return true
+		leftAvailable = true
+		left = mvs[mbAddr-1]
 	}
-	if y == 0 {
-		return false
+	topAvailable := false
+	topAddr := mbAddr - macroblocksPerRow
+	if y > 0 && topAddr >= firstMB {
+		topAvailable = true
+		top = mvs[topAddr]
 	}
-	top := mbAddr - macroblocksPerRow
-	if top >= firstMB {
-		return true
+	diagonalAvailable := false
+	if y > 0 {
+		topRight := topAddr + 1
+		if x < macroblocksPerRow-1 && topRight >= firstMB {
+			diagonalAvailable = true
+			diagonal = mvs[topRight]
+		} else {
+			topLeft := topAddr - 1
+			if x > 0 && topLeft >= firstMB {
+				diagonalAvailable = true
+				diagonal = mvs[topLeft]
+			}
+		}
 	}
-	if x < macroblocksPerRow-1 && top+1 >= firstMB {
-		return true
+
+	matchCount := 0
+	if leftAvailable {
+		matchCount++
 	}
-	return x > 0 && top-1 >= firstMB
+	if topAvailable {
+		matchCount++
+	}
+	if diagonalAvailable {
+		matchCount++
+	}
+	switch matchCount {
+	case 0:
+		return encoderP16x16MotionVector{}
+	case 1:
+		if leftAvailable {
+			return left
+		}
+		if topAvailable {
+			return top
+		}
+		return diagonal
+	default:
+		return encoderP16x16MotionVector{
+			x: encoderMidPredInt32(left.x, top.x, diagonal.x),
+			y: encoderMidPredInt32(left.y, top.y, diagonal.y),
+		}
+	}
+}
+
+func encoderMidPredInt32(a int32, b int32, c int32) int32 {
+	if a > b {
+		if c > b {
+			if c > a {
+				b = a
+			} else {
+				b = c
+			}
+		}
+	} else if b > c {
+		if c > a {
+			b = c
+		} else {
+			b = a
+		}
+	}
+	return b
 }
 
 func encoderMotionNeedsConstantChroma(dx int, dy int) bool {
@@ -1273,6 +1412,25 @@ func encoderI420MatchesIntegerMotion(ref *encoderReferenceFrame, view encoderFra
 	chromaDY := dy / 2
 	return encoderPlaneMatchesIntegerMotion(view.cb, view.strideCb, chromaWidth, chromaHeight, ref.cb, chromaWidth, chromaDX, chromaDY) &&
 		encoderPlaneMatchesIntegerMotion(view.cr, view.strideCr, chromaWidth, chromaHeight, ref.cr, chromaWidth, chromaDX, chromaDY)
+}
+
+func encoderI420MacroblockMatchesIntegerMotion(ref *encoderReferenceFrame, view encoderFrameView, mbAddr int, macroblocksPerRow int, dx int, dy int, constantChroma bool) bool {
+	mbX := (mbAddr % macroblocksPerRow) << 4
+	mbY := (mbAddr / macroblocksPerRow) << 4
+	if !encoderPlaneBlockMatchesIntegerMotion(view.y, view.strideY, view.width, view.height, ref.y, view.width, mbX, mbY, 16, 16, dx, dy) {
+		return false
+	}
+	if encoderMotionNeedsConstantChroma(dx, dy) {
+		return constantChroma
+	}
+	chromaX := mbX >> 1
+	chromaY := mbY >> 1
+	chromaWidth := view.width >> 1
+	chromaHeight := view.height >> 1
+	chromaDX := dx / 2
+	chromaDY := dy / 2
+	return encoderPlaneBlockMatchesIntegerMotion(view.cb, view.strideCb, chromaWidth, chromaHeight, ref.cb, chromaWidth, chromaX, chromaY, 8, 8, chromaDX, chromaDY) &&
+		encoderPlaneBlockMatchesIntegerMotion(view.cr, view.strideCr, chromaWidth, chromaHeight, ref.cr, chromaWidth, chromaX, chromaY, 8, 8, chromaDX, chromaDY)
 }
 
 func encoderI420ChromaPlanesAreConstant(ref *encoderReferenceFrame, view encoderFrameView, chromaWidth int, chromaHeight int) bool {
@@ -1300,6 +1458,20 @@ func encoderPlaneMatchesIntegerMotion(cur []byte, curStride int, width int, heig
 		refY := clampEncoderReferenceCoord(y+dy, height)
 		for x := 0; x < width; x++ {
 			refX := clampEncoderReferenceCoord(x+dx, width)
+			if curRow[x] != ref[refY*refStride+refX] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func encoderPlaneBlockMatchesIntegerMotion(cur []byte, curStride int, width int, height int, ref []byte, refStride int, left int, top int, blockWidth int, blockHeight int, dx int, dy int) bool {
+	for y := 0; y < blockHeight; y++ {
+		curRow := cur[(top+y)*curStride+left : (top+y)*curStride+left+blockWidth]
+		refY := clampEncoderReferenceCoord(top+y+dy, height)
+		for x := 0; x < blockWidth; x++ {
+			refX := clampEncoderReferenceCoord(left+x+dx, width)
 			if curRow[x] != ref[refY*refStride+refX] {
 				return false
 			}
@@ -1340,6 +1512,13 @@ func (e *Encoder) storeReference(view encoderFrameView) {
 func resizeEncoderReferencePlane(buf []byte, size int) []byte {
 	if cap(buf) < size {
 		return make([]byte, size)
+	}
+	return buf[:size]
+}
+
+func resizeEncoderP16x16MVs(buf []encoderP16x16MotionVector, size int) []encoderP16x16MotionVector {
+	if cap(buf) < size {
+		return make([]encoderP16x16MotionVector, size)
 	}
 	return buf[:size]
 }

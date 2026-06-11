@@ -2438,6 +2438,113 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 	}
 }
 
+func TestEncoderEncodePerMacroblockExactP16x16NoResidualMotionForAnnexBAVCRTP(t *testing.T) {
+	motions := []encoderTestMotion{
+		{dx: 2, dy: 0},
+		{dx: -2, dy: 0},
+		{dx: 0, dy: 2},
+		{dx: 0, dy: -2},
+	}
+	for _, tt := range []struct {
+		name   string
+		format goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", format: goh264.EncoderOutputAnnexB},
+		{name: "avc", format: goh264.EncoderOutputAVC},
+		{name: "rtp", format: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(32, 32)
+			cfg.OutputFormat = tt.format
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.SliceCount = 2
+			if tt.format != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			firstFrame := patternedI420EncoderFrame(32, 32)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5, 5})
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
+
+			secondFrame := perMacroblockMotionI420EncoderFrame(firstFrame, motions)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode per-macroblock exact P16x16 no-residual motion: %v", err)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1, 1})
+			if len(second.Data) >= 128 {
+				t.Fatalf("per-macroblock P16x16 output size = %d, want compact no-residual slices", len(second.Data))
+			}
+			switch tt.format {
+			case goh264.EncoderOutputAnnexB:
+				assertEncoderVCLFirstMBs(t, append(append([]byte(nil), headers.AnnexB...), second.Data...), []uint8{1, 1}, []uint32{0, 2})
+			case goh264.EncoderOutputRTP:
+				assertEncoderVCLFirstMBs(t, append(append([]byte(nil), headers.AnnexB...), annexBFromEncoderRTPPackets(t, second.RTPPackets)...), []uint8{1, 1}, []uint32{0, 2})
+			}
+
+			dec := goh264.NewDecoder()
+			var decodedFirst, decodedSecond []*goh264.Frame
+			switch tt.format {
+			case goh264.EncoderOutputAnnexB:
+				decodedFirst, err = dec.DecodeFrames(first.Data)
+				if err != nil {
+					t.Fatalf("DecodeFrames first Annex B: %v", err)
+				}
+				decodedSecond, err = dec.DecodeFrames(second.Data)
+				if err != nil {
+					t.Fatalf("DecodeFrames second Annex B: %v", err)
+				}
+			case goh264.EncoderOutputAVC:
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+				}
+				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
+				}
+				decodedSecond, err = dec.DecodeConfiguredAVCFrames(second.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
+				}
+			case goh264.EncoderOutputRTP:
+				decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames first RTP: %v", err)
+				}
+				decodedSecond, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames second RTP: %v", err)
+				}
+			default:
+				t.Fatalf("unexpected format %v", tt.format)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			if decodedSecond[0].KeyFrame || decodedSecond[0].SideData.RecoveryPoint != nil {
+				t.Fatalf("decoded per-macroblock P frame key=%v recovery=%+v, want predictive non-recovery frame",
+					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+			}
+			if tt.format == goh264.EncoderOutputAnnexB {
+				stream := append(append([]byte(nil), first.Data...), second.Data...)
+				wantStream := appendI420FrameBytes(nil, firstFrame)
+				wantStream = appendI420FrameBytes(wantStream, secondFrame)
+				assertFFmpegRawVideoOracle(t, stream, wantStream)
+			}
+		})
+	}
+}
+
 func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionWithConstantChroma(t *testing.T) {
 	for _, tt := range []struct {
 		name string
@@ -6794,6 +6901,51 @@ func integerMotionI420EncoderFrame(reference goh264.EncoderFrame, dx int, dy int
 			refX := clampEncoderTestCoord(x+chromaDX, chromaWidth)
 			frame.Cb[y*frame.StrideCb+x] = reference.Cb[refY*reference.StrideCb+refX]
 			frame.Cr[y*frame.StrideCr+x] = reference.Cr[refY*reference.StrideCr+refX]
+		}
+	}
+	return frame
+}
+
+type encoderTestMotion struct {
+	dx int
+	dy int
+}
+
+func perMacroblockMotionI420EncoderFrame(reference goh264.EncoderFrame, motions []encoderTestMotion) goh264.EncoderFrame {
+	frame := validI420EncoderFrame(reference.Width, reference.Height)
+	frame.PTS = reference.PTS
+	frame.Duration = reference.Duration
+	mbWidth := reference.Width / 16
+	mbHeight := reference.Height / 16
+	if len(motions) != mbWidth*mbHeight {
+		panic("per-macroblock motion count does not match frame")
+	}
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		for mbX := 0; mbX < mbWidth; mbX++ {
+			motion := motions[mbY*mbWidth+mbX]
+			left := mbX * 16
+			top := mbY * 16
+			for y := 0; y < 16; y++ {
+				refY := clampEncoderTestCoord(top+y+motion.dy, frame.Height)
+				for x := 0; x < 16; x++ {
+					refX := clampEncoderTestCoord(left+x+motion.dx, frame.Width)
+					frame.Y[(top+y)*frame.StrideY+left+x] = reference.Y[refY*reference.StrideY+refX]
+				}
+			}
+			chromaLeft := mbX * 8
+			chromaTop := mbY * 8
+			chromaWidth := frame.Width / 2
+			chromaHeight := frame.Height / 2
+			chromaDX := motion.dx / 2
+			chromaDY := motion.dy / 2
+			for y := 0; y < 8; y++ {
+				refY := clampEncoderTestCoord(chromaTop+y+chromaDY, chromaHeight)
+				for x := 0; x < 8; x++ {
+					refX := clampEncoderTestCoord(chromaLeft+x+chromaDX, chromaWidth)
+					frame.Cb[(chromaTop+y)*frame.StrideCb+chromaLeft+x] = reference.Cb[refY*reference.StrideCb+refX]
+					frame.Cr[(chromaTop+y)*frame.StrideCr+chromaLeft+x] = reference.Cr[refY*reference.StrideCr+refX]
+				}
+			}
 		}
 	}
 	return frame

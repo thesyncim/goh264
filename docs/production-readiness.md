@@ -6,8 +6,9 @@ bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
 IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
 output, and RTP packetization-mode 1 output, plus guarded identical-reference
 CAVLC P-skip, bounded exact macroblock-aligned P16x16 no-residual prediction
-for integer-pel shifts up to 8 pixels under disabled-deblock multi-macroblock
-frames plus single-macroblock enabled/slice-boundary deblock, with odd-pixel
+for frame-wide and per-macroblock integer-pel shifts up to 8 pixels under
+disabled-deblock multi-macroblock frames plus single-macroblock
+enabled/slice-boundary deblock, with odd-pixel
 luma motion admitted only when both 4:2:0 chroma planes are constant,
 and changed-frame
 P IntraPCM across disabled, enabled, and slice-boundary deblock controls.
@@ -214,12 +215,13 @@ chroma, and P IntraPCM fallback rows with callback packet storage isolated from
 returned RTP packets. It also proves identical
 second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
-exact shifted macroblock-aligned frames up to 8 pixels, including odd-pixel
-luma motion when chroma is constant, can emit predictive P16x16 no-residual
-slices through stateful local decode, FFmpeg rawvideo decode, configured AVC
-decode, RTP reassembly decode, and single-macroblock enabled/slice-boundary
-deblock syntax plus configured AVC/RTP decode and RTP mode-0 single-NAL
-packetization, while patterned chroma is proved to fall back to P IntraPCM
+exact shifted macroblock-aligned frames up to 8 pixels, including mixed
+per-macroblock vectors and odd-pixel luma motion when chroma is constant, can
+emit predictive P16x16 no-residual slices through stateful local decode, FFmpeg
+rawvideo decode, configured AVC decode, RTP reassembly decode, and
+single-macroblock enabled/slice-boundary deblock syntax plus configured AVC/RTP
+decode and RTP mode-0 single-NAL packetization, while patterned chroma is
+proved to fall back to P IntraPCM
 across Annex B, configured AVC, RTP reassembly, and RTP mode-0 single-NAL output,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
@@ -264,7 +266,8 @@ trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and
 Baseline IDR, P-skip, and P16x16 no-residual slice syntax including
 per-macroblock MVD emission, with the P16x16 writer and public exact-motion
-encoder path proved through local Annex B decode and FFmpeg rawvideo decode
-after an IDR reference frame. Broader motion-search
+encoder path proved through local Annex B decode, FFmpeg rawvideo decode, and
+mixed per-macroblock Annex B/AVC/RTP decode after an IDR reference frame.
+Broader motion-search
 P prediction, residual CAVLC coding, rate-control feedback, broader allocation
 budgets, and realtime performance gates remain pending.

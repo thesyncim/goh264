@@ -120,8 +120,9 @@ paths: 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B,
 AVC, RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
 output, plus configured `SliceCount` multi-slice VCL output, guarded CAVLC
 P-skip slices for identical frames, a guarded exact macroblock-aligned CAVLC P16x16
-no-residual path for bounded integer-pel shifted references up to 8 pixels under
-disabled-deblock multi-macroblock frames plus single-macroblock
+no-residual path for bounded frame-wide and per-macroblock integer-pel shifted
+references up to 8 pixels under disabled-deblock multi-macroblock frames plus
+single-macroblock
 enabled/slice-boundary deblock. Odd-pixel luma shifts are admitted only when
 both 4:2:0 chroma planes are constant, with Annex B, configured AVC, RTP
 reassembly, and RTP mode-0 single-NAL proof; patterned chroma is guarded to
@@ -184,7 +185,8 @@ Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
 residual coding, and adaptive rate-control feedback remain pending beyond the
-bounded 8-pixel exact macroblock-aligned P16x16 admission.
+bounded 8-pixel exact macroblock-aligned P16x16 admission, including the
+per-macroblock exact-vector subset.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -223,8 +225,9 @@ in one access unit.
 4. In progress: add P-frame prediction, reference management, CAVLC residual
    coding, deblock policy, and rate-control feedback in small oracle-backed
    slices. Done for identical-reference P-skip, exact macroblock-aligned P16x16
-   no-residual prediction for integer-pel shifts up to 8 pixels, including
-   odd-pixel luma motion only with constant chroma, with single-macroblock
+   no-residual prediction for frame-wide and per-macroblock integer-pel shifts
+   up to 8 pixels, including odd-pixel luma motion only with constant chroma,
+   with single-macroblock
    enabled/slice-boundary deblock proof, and changed-frame P
    IntraPCM across disabled, enabled, and
    slice-boundary deblock controls, configured multi-slice ranges,
