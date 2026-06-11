@@ -136,8 +136,8 @@ packets also carry complete 12-byte RTP headers plus payload bytes with clipped
 per-packet payload views over packet data, and
 `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
-single-NAL payload form including mode 0/1 IDR/P frames, NAL type/count, FU-A start/end, and parameter-set
-packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
+single-NAL payload form including mode 0/1 IDR/P frames, NAL type/count, FU-A start/end, parameter-set
+packets, and callback packet storage isolated from returned RTP packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
 from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B

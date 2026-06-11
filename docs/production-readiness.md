@@ -194,7 +194,8 @@ FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL
 IDR/P-frame reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
 clipped packet payload views over packet data and optional RTP callback metadata
-including mode 0/1 IDR/P-frame single-NAL packets. It also proves identical
+including mode 0/1 IDR/P-frame single-NAL packets with callback packet storage
+isolated from returned RTP packets. It also proves identical
 second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
 exact shifted macroblock-aligned frames up to 8 pixels can emit predictive
