@@ -500,7 +500,7 @@ the oracle-checked benchmark run; `GOH264_BENCH_CPU_PROFILE` and
 `GOH264_BENCH_MEM_PROFILE` forward those paths through the real-vector
 benchmark script.
 For repeated `go test -benchmem` samples covering one-shot Annex B decode,
-stateful Annex B access-unit streaming, and the admitted realtime encoder
+stateful Annex B access-unit streaming, isolated raw-output export, and the admitted realtime encoder
 IDR/P-frame Annex B/AVC/RTP paths, including RTP P-IntraPCM and
 packetization-mode 0 IDR/P-frame rows, suitable for `benchstat`, run:
 

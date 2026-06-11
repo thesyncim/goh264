@@ -167,3 +167,34 @@ func BenchmarkDecodeAnnexBHigh10IDRPRawYUV(b *testing.B) {
 	benchmarkDecodeBytesSink = len(raw)
 	benchmarkDecodeRawSink = raw
 }
+
+func BenchmarkFrameAppendRawYUVBytesLEHigh10IDRP(b *testing.B) {
+	data := benchmarkAnnexBFixture(b)
+	frames, err := NewDecoder().DecodeAnnexBFrames(data)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if len(frames) != benchmarkHigh10IDRPFrames {
+		b.Fatalf("frames = %d, want %d", len(frames), benchmarkHigh10IDRPFrames)
+	}
+	raw := make([]byte, 0, benchmarkHigh10IDRPRawBytes)
+
+	b.ReportAllocs()
+	b.SetBytes(int64(benchmarkHigh10IDRPRawBytes))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		raw = raw[:0]
+		for _, frame := range frames {
+			raw, err = frame.AppendRawYUVBytesLE(raw)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		if len(raw) != benchmarkHigh10IDRPRawBytes {
+			b.Fatalf("raw bytes = %d, want %d", len(raw), benchmarkHigh10IDRPRawBytes)
+		}
+	}
+	benchmarkDecodeBytesSink = len(raw)
+	benchmarkDecodeRawSink = raw
+}

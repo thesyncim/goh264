@@ -41,7 +41,7 @@ run_env_gate() {
     printf 'corpus_cache=%s\n' "${GOH264_CORPUS_CACHE:-/tmp/goh264-fate-probe-cache}"
     printf 'release_perf_filter=%s\n' "$filter"
     printf 'release_alloc_filter=%s\n' "${GOH264_RELEASE_ALLOC_FILTER:-canl4}"
-    printf 'benchstat_pattern=%s\n' "${GOH264_BENCHSTAT_PATTERN:-Benchmark(Decode.*AnnexBHigh10IDRP|Encode.*I420)}"
+    printf 'benchstat_pattern=%s\n' "${GOH264_BENCHSTAT_PATTERN:-Benchmark(Decode.*AnnexBHigh10IDRP|FrameAppendRawYUVBytesLEHigh10IDRP|Encode.*I420)}"
     printf 'benchstat_time=%s\n' "$GOH264_BENCHSTAT_TIME"
 } >"$summary"
 

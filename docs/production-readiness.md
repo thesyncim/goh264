@@ -90,7 +90,8 @@ real-vector benchmark script forwards
 it runs the CANL4 public vector with defaults of 64,000,000 Go allocation
 bytes/iteration and 10,000 Go allocations/iteration.
 `scripts/h264-benchstat-canary.sh` runs the package-level decoder benchmarks
-for one-shot Annex B decode and stateful Annex B access-unit streaming plus
+for one-shot Annex B decode, stateful Annex B access-unit streaming, and isolated
+raw-output export plus
 the admitted encoder Annex B/AVC/RTP IDR/P-skip/exact-P16
 edge-search/P-IntraPCM and RTP packetization benchmarks with `-benchmem`; its
 output is suitable for `benchstat` trend comparisons. `GOH264_BENCHSTAT_TIME`
