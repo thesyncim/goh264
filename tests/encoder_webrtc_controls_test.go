@@ -4723,14 +4723,11 @@ func TestEncoderRTPPacketCallbackReceivesWebRTCMetadata(t *testing.T) {
 	if len(out.RTPPackets) < 3 {
 		t.Fatalf("RTP packet count = %d, want STAP-A plus FU-A fragments", len(out.RTPPackets))
 	}
-	if callbackPackets[0].Payload[0] == out.RTPPackets[0].Payload[0] ||
-		callbackPackets[0].Data[0] == out.RTPPackets[0].Data[0] {
-		t.Fatal("callback packet aliases returned RTP packet storage")
-	}
 
 	var sawSTAPA, sawFUAStart, sawFUAEnd bool
 	for i, meta := range callbackMetadata {
 		pkt := callbackPackets[i]
+		assertEncoderRTPCallbackPacketDoesNotAliasReturned(t, pkt, out.RTPPackets[i], i)
 		if meta.PacketIndex != i || meta.PacketCount != len(out.RTPPackets) {
 			t.Fatalf("callback meta[%d] index/count = %d/%d, want %d/%d",
 				i, meta.PacketIndex, meta.PacketCount, i, len(out.RTPPackets))
