@@ -107,9 +107,11 @@ and `SliceMaxBytes` are enforced before frame/reference/packet state advances:
 packets for explicit byte-budget misses or VBV-backed `MaxBitrate` bucket
 misses, advances the RTP timestamp timeline, and has deterministic
 credit-consumption/refill proof across transmitted IDR/P-skip and dropped
-changed-P frames. Runtime max-bitrate/VBV lowering is proved to reset stale
-credit before the next frame, and `SetBitrate` lowering is proved to reset
-stale frame-budget credit before the next frame. `SetFrameRate` changes are
+changed-P frames. Runtime frame-drop mode switches are proved to toggle the
+derived bitrate budget before the next frame. Runtime max-bitrate/VBV lowering
+is proved to reset stale credit before the next frame, and `SetBitrate`
+lowering is proved to reset stale frame-budget credit before the next frame.
+`SetFrameRate` changes are
 proved to reset frame-budget credit and apply the new RTP cadence across drop
 and recovery. ConstantQP mode is proved to bypass the derived bitrate budget,
 including after runtime switches through CBR.
