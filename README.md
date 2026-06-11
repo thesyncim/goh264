@@ -122,9 +122,11 @@ Runtime reconfiguration now covers SPS/PPS cadence, Annex B/AVC/RTP output
 format, RTP packetization mode 0/1, STAP-A aggregation, payload type, SSRC, and
 custom RTP timestamp increments plus rate-control mode, VBV size,
 initial/min/max QP, frame-drop mode, GOP/IDR cadence, and deblock mode without
-mutating state on invalid updates. Runtime resolution reset is proved to reject
-stale-size frames without consuming the queued IDR, then emit/decode a new-size
-IDR and resume P-skip references at the new dimensions. `SetRTPMaxPayloadSize`
+mutating state on invalid updates, including invalid output/header/preset
+controls and invalid RTP re-entry payload sizing. Runtime resolution reset is
+proved to reject stale-size frames without consuming the queued IDR, then
+emit/decode a new-size IDR and resume P-skip references at the new dimensions.
+`SetRTPMaxPayloadSize`
 is proved to retarget live RTP FU-A fragmentation before the next P-frame while
 preserving sequence and decode state, including invalid-update rollback.
 Runtime `RecoveryPointSEI` toggles are proved to add, suppress, and restore

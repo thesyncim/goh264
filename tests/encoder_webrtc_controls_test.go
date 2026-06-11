@@ -1154,6 +1154,61 @@ func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *t
 	}
 }
 
+func TestEncoderReconfigureRejectsInvalidOutputControlsWithoutMutation(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAVC
+	cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	if _, err := enc.Encode(patternedI420EncoderFrame(16, 16)); err != nil {
+		t.Fatalf("Encode first AVC frame: %v", err)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("freshly encoded AVC frame left unexpected pending IDR")
+	}
+
+	before := enc.Config()
+	tests := []struct {
+		name   string
+		update goh264.EncoderReconfigure
+	}{
+		{name: "bad sps pps mode", update: goh264.EncoderReconfigure{
+			SPSPPSMode: goh264.EncoderSPSPPSMode(99),
+			ForceIDR:   true,
+		}},
+		{name: "bad preset", update: goh264.EncoderReconfigure{
+			Preset:   goh264.EncoderPreset(99),
+			ForceIDR: true,
+		}},
+		{name: "bad output format", update: goh264.EncoderReconfigure{
+			OutputFormat: goh264.EncoderOutputFormat(99),
+			ForceIDR:     true,
+		}},
+		{name: "bad rtp re-entry payload size", update: goh264.EncoderReconfigure{
+			OutputFormat:      goh264.EncoderOutputRTP,
+			RTPMaxPayloadSize: 2,
+			ForceIDR:          true,
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := enc.Reconfigure(tt.update); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Reconfigure invalid output controls error = %v, want ErrInvalidData", err)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("invalid output controls mutated config = %+v, want %+v", got, before)
+			}
+			if enc.PendingIDR() {
+				t.Fatal("invalid output controls queued an IDR")
+			}
+		})
+	}
+}
+
 func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutation(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	enc, err := goh264.NewEncoder(cfg)

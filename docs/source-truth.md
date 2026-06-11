@@ -121,6 +121,8 @@ recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 runtime resolution reset that rejects stale-size frames without consuming the
 queued IDR before emitting/decoding a new-size IDR and resuming P-skip
 references at the new dimensions,
+invalid runtime rate, output/header/preset, RTP re-entry payload-size, and
+packetization updates that leave config and queued-IDR state intact,
 `SetRTPMaxPayloadSize` live RTP FU-A retargeting before the next P-frame with
 sequence/decode continuity and invalid-update rollback,
 runtime `RecoveryPointSEI` toggles that add, suppress, and restore changed-P
