@@ -123,10 +123,10 @@ reference, RTP/Annex B/RTP control-loop stress across QP refresh, late drop
 recovery, packet metadata retargeting, paused RTP sequence/callback state, and
 local decode after RTP re-entry, RTP packetization-mode 1 FU-A reassembly,
 STAP-A parameter-set aggregation, RTP payload-type/SSRC/sequence metadata, full
-RTP header bytes, optional RTP callback metadata,
-initial `EncodeInto` allocation canaries for caller-buffer Annex B and RTP P-frame paths, and a live
-encode path that avoids discarded Annex B/AVC copies when only raw NAL output is
-needed plus stack-backed common one-slice NAL and slice-range planning.
+RTP header bytes, optional RTP callback metadata, initial `EncodeInto`
+allocation canaries for caller-buffer Annex B/RTP IDR and P-frame paths, and a
+live encode path that avoids discarded Annex B/AVC copies when only raw NAL
+output is needed plus stack-backed common one-slice NAL and slice-range planning.
 Package-level benchmark canaries cover admitted Annex B/RTP IDR and P-frame
 encode paths with `-benchmem`. Internal writer proof covers raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL

@@ -97,8 +97,9 @@ single-NAL payload form, NAL type/count, FU-A start/end, and parameter-set
 packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
 from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
-canaries for caller-buffer Annex B steady P-skip, Annex B changed P IntraPCM,
-and RTP steady P-skip paths so admitted packetization/output paths cannot
+canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B
+changed P IntraPCM, RTP forced IDR/FU-A, and RTP steady P-skip paths so
+admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
@@ -167,8 +168,8 @@ can emit multiple VCL NALs in one access unit.
 6. In progress: add realtime allocation budgets, encode timing benchmarks, and
    control-loop stress tests. Done for the first RTP/Annex B/RTP control-loop
    stress proof, initial `EncodeInto` allocation canaries on Annex B and RTP
-   admitted P-frame paths, and package-level benchmark canaries for admitted
-   IDR/P-frame and RTP paths.
+   admitted IDR/P-frame paths, and package-level benchmark canaries for
+   admitted IDR/P-frame and RTP paths.
 
 ## Oracles And Gates
 
