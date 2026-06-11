@@ -297,6 +297,15 @@ func BenchmarkEncodeRTPMode0I420ExactP16x16(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
 }
 
+func BenchmarkEncodeRTPMode0I420ExactP16x16EdgeSearch(b *testing.B) {
+	cfg := benchmarkEncoderConfigSize(EncoderOutputRTP, 32, 16)
+	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	a := benchmarkEncoderExactP16x16HorizontalReferenceFrame(cfg.Width, cfg.Height, 8)
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 8, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
+}
+
 func BenchmarkEncodeRTPMode0I420ChangedPIntraPCM(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
 	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL

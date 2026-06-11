@@ -145,7 +145,8 @@ exact P16x16 including single-macroblock deblock controls, Annex B
 macroblock-aligned exact P16x16 including 8-pixel edge search, Annex B changed
 P IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16 including 8-pixel edge
 search, RTP steady P-skip, RTP changed P IntraPCM, and RTP packetization-mode 0
-IDR/P-skip/exact-P16x16/P-IntraPCM paths so
+IDR/P-skip/exact-P16x16/P-IntraPCM paths including 8-pixel exact-P16 edge
+search, so
 admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
@@ -155,7 +156,8 @@ cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16
 including 8-pixel edge search, Annex B changed P IntraPCM, RTP FU-A IDR
 IntraPCM, RTP exact P16x16 including 8-pixel edge search, RTP steady P-skip,
 and RTP changed P IntraPCM plus RTP packetization-mode 0
-IDR/P-skip/exact-P16x16/P-IntraPCM.
+IDR/P-skip/exact-P16x16/P-IntraPCM paths including 8-pixel exact-P16 edge
+search.
 Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
@@ -256,8 +258,8 @@ in one access unit.
    control-loop stress tests. Done for the first RTP/Annex B/RTP control-loop
    stress proof, initial `EncodeInto` allocation canaries on Annex B and RTP
    admitted IDR/P-frame paths including 8-pixel exact-P16 edge search, RTP
-   P-IntraPCM, and packetization-mode 0 IDR/P frames with tightened RTP
-   allocation budgets, and package-level
+   P-IntraPCM, and packetization-mode 0 IDR/P frames including exact-P16 edge
+   search with tightened RTP allocation budgets, and package-level
    benchmark canaries for admitted IDR/P-frame and RTP paths including
    8-pixel exact-P16 edge search.
 
@@ -279,7 +281,7 @@ Encoder tests need independent evidence, not only local decode:
   Annex B exact P16x16 including 8-pixel edge search, Annex B changed P
   IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16 including 8-pixel edge
   search, RTP steady P-skip, RTP changed P IntraPCM, and RTP
-  packetization-mode 0 IDR/P-frame paths.
+  packetization-mode 0 IDR/P-frame paths including exact-P16 edge search.
 
 ## Production Bar
 

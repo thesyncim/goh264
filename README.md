@@ -159,7 +159,8 @@ Motion-search P prediction, residual CAVLC coding, rate-control feedback, and
 broader realtime allocation/performance evidence remain pending beyond the
 admitted IDR/P-frame Annex B/RTP canaries, which now include 8-pixel exact-P16
 edge-search allocation and benchmark rows, RTP P-IntraPCM, and
-packetization-mode 0 IDR/P-frame allocation and benchmark rows.
+packetization-mode 0 IDR/P-frame allocation and benchmark rows including
+exact-P16 edge search.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
