@@ -1069,7 +1069,7 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, b
 			return int32(candidate.dx * 4), int32(candidate.dy * 4), true
 		}
 	}
-	const maxExactMotion = 4
+	const maxExactMotion = 8
 	for radius := 2; radius <= maxExactMotion; radius += 2 {
 		for dy := -radius; dy <= radius; dy += 2 {
 			for dx := -radius; dx <= radius; dx += 2 {

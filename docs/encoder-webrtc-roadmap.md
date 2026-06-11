@@ -120,8 +120,8 @@ paths: 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B,
 AVC, RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
 output, plus configured `SliceCount` multi-slice VCL output, guarded CAVLC
 P-skip slices for identical frames, a guarded exact macroblock-aligned CAVLC P16x16
-no-residual path for bounded even integer-pel shifted references under
-disabled-deblock multi-macroblock frames plus single-macroblock
+no-residual path for bounded even integer-pel shifted references up to 8 pixels
+under disabled-deblock multi-macroblock frames plus single-macroblock
 enabled/slice-boundary deblock, and guarded
 CAVLC P IntraPCM slices for changed frames after a reference across disabled,
 enabled, and slice-boundary deblock controls. Changed-frame P IntraPCM recovery
@@ -157,8 +157,8 @@ IDR/P-skip/exact-P16x16/P-IntraPCM.
 Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
-residual coding, and adaptive rate-control feedback remain pending beyond the bounded exact
-macroblock-aligned P16x16 admission.
+residual coding, and adaptive rate-control feedback remain pending beyond the
+bounded 8-pixel exact macroblock-aligned P16x16 admission.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -197,8 +197,9 @@ in one access unit.
 4. In progress: add P-frame prediction, reference management, CAVLC residual
    coding, deblock policy, and rate-control feedback in small oracle-backed
    slices. Done for identical-reference P-skip, exact macroblock-aligned P16x16
-   no-residual prediction with single-macroblock enabled/slice-boundary deblock
-   proof, and changed-frame P IntraPCM across disabled, enabled, and
+   no-residual prediction for even integer-pel shifts up to 8 pixels with
+   single-macroblock enabled/slice-boundary deblock proof, and changed-frame P
+   IntraPCM across disabled, enabled, and
    slice-boundary deblock controls, configured multi-slice ranges,
    and recovery-point SEI emission on changed-frame P IntraPCM recovery
    pictures; forced keyframes still emit IDR.

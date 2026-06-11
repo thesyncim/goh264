@@ -6,8 +6,9 @@ bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
 IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
 output, and RTP packetization-mode 1 output, plus guarded identical-reference
 CAVLC P-skip, bounded exact macroblock-aligned P16x16 no-residual prediction
-under disabled-deblock multi-macroblock frames plus single-macroblock
-enabled/slice-boundary deblock, and changed-frame
+for even integer-pel shifts up to 8 pixels under disabled-deblock
+multi-macroblock frames plus single-macroblock enabled/slice-boundary deblock,
+and changed-frame
 P IntraPCM across disabled, enabled, and slice-boundary deblock controls.
 Encoder
 production gates live in `docs/encoder-webrtc-roadmap.md` until broader
@@ -191,10 +192,10 @@ clipped packet payload views over packet data and optional RTP callback metadata
 including mode 0/1 IDR/P-frame single-NAL packets. It also proves identical
 second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
-exact shifted macroblock-aligned frames can emit predictive P16x16 no-residual
-slices through stateful local decode, FFmpeg rawvideo decode, configured AVC
-decode, RTP reassembly decode, and single-macroblock enabled/slice-boundary
-deblock syntax plus configured AVC/RTP decode,
+exact shifted macroblock-aligned frames up to 8 pixels can emit predictive
+P16x16 no-residual slices through stateful local decode, FFmpeg rawvideo decode,
+configured AVC decode, RTP reassembly decode, and single-macroblock
+enabled/slice-boundary deblock syntax plus configured AVC/RTP decode,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B

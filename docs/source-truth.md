@@ -116,7 +116,8 @@ reconfiguration, public SPS/PPS/Annex B/avcC header generation with crop
 metadata, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
 generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
 bounded exact macroblock-aligned P16x16 no-residual prediction with
-single-macroblock enabled/slice-boundary deblock proof, changed-frame P IntraPCM
+8-pixel even integer-pel search and single-macroblock enabled/slice-boundary
+deblock proof, changed-frame P IntraPCM
 recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 runtime resolution reset that rejects stale-size frames without consuming the
 queued IDR before emitting/decoding a new-size IDR and resuming P-skip

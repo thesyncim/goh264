@@ -2356,6 +2356,37 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 			wantSecondNALs:  []uint8{1},
 			wantSecondFirst: []uint32{0},
 		},
+		{
+			name:            "edge-horizontal-single-row",
+			width:           48,
+			height:          16,
+			dx:              8,
+			sliceCount:      1,
+			wantFirstNALs:   []uint8{7, 8, 5},
+			wantSecondNALs:  []uint8{1},
+			wantSecondFirst: []uint32{0},
+		},
+		{
+			name:            "edge-vertical-two-row",
+			width:           16,
+			height:          48,
+			dy:              8,
+			sliceCount:      1,
+			wantFirstNALs:   []uint8{7, 8, 5},
+			wantSecondNALs:  []uint8{1},
+			wantSecondFirst: []uint32{0},
+		},
+		{
+			name:            "edge-diagonal-two-row",
+			width:           48,
+			height:          48,
+			dx:              8,
+			dy:              -8,
+			sliceCount:      3,
+			wantFirstNALs:   []uint8{7, 8, 5, 5, 5},
+			wantSecondNALs:  []uint8{1, 1, 1},
+			wantSecondFirst: []uint32{0, 3, 6},
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := goh264.DefaultEncoderConfig(tt.width, tt.height)
