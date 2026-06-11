@@ -5869,6 +5869,43 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("avc odd exact p16x16 constant chroma", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAVC
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		a := patternedI420EncoderFrame(16, 16)
+		setConstantI420Chroma(&a, 128, 64)
+		b := integerMotionI420EncoderFrame(a, 1, 0)
+		encs := primedI420EncoderPool(t, cfg, a, 128)
+		dst := make([]byte, 0, 4096)
+		var call int
+		allocs := testing.AllocsPerRun(100, func() {
+			if call >= len(encs) {
+				t.Fatalf("encoder pool exhausted after %d calls", call)
+			}
+			out, err := encs[call].EncodeInto(dst[:0], b)
+			call++
+			if err != nil {
+				t.Fatalf("EncodeInto AVC odd exact P16x16: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("odd exact AVC P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("avc odd exact P16x16 constant-chroma EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 4 {
+			t.Fatalf("avc odd exact P16x16 constant-chroma EncodeInto allocations/run = %.0f, want <= 4", allocs)
+		}
+	})
+
 	t.Run("avc exact p16x16 edge search", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(48, 48)
 		cfg.OutputFormat = goh264.EncoderOutputAVC
@@ -6053,6 +6090,41 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("rtp odd exact p16x16 constant chroma", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		a := patternedI420EncoderFrame(16, 16)
+		setConstantI420Chroma(&a, 128, 64)
+		b := integerMotionI420EncoderFrame(a, 1, 0)
+		encs := primedI420EncoderPool(t, cfg, a, 128)
+		dst := make([]byte, 0, 4096)
+		var call int
+		allocs := testing.AllocsPerRun(100, func() {
+			if call >= len(encs) {
+				t.Fatalf("encoder pool exhausted after %d calls", call)
+			}
+			out, err := encs[call].EncodeInto(dst[:0], b)
+			call++
+			if err != nil {
+				t.Fatalf("EncodeInto RTP odd exact P16x16: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) == 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("odd exact RTP P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("rtp odd exact P16x16 constant-chroma EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 5 {
+			t.Fatalf("rtp odd exact P16x16 constant-chroma EncodeInto allocations/run = %.0f, want <= 5", allocs)
+		}
+	})
+
 	t.Run("rtp exact p16x16 edge search", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(48, 48)
 		cfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -6231,6 +6303,43 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		t.Logf("rtp mode0 exact P16x16 EncodeInto allocations/run = %.0f", allocs)
 		if allocs > 5 {
 			t.Fatalf("rtp mode0 exact P16x16 EncodeInto allocations/run = %.0f, want <= 5", allocs)
+		}
+	})
+
+	t.Run("rtp mode0 odd exact p16x16 constant chroma", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+		cfg.RTPMaxPayloadSize = 1200
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		a := patternedI420EncoderFrame(16, 16)
+		setConstantI420Chroma(&a, 128, 64)
+		b := integerMotionI420EncoderFrame(a, 1, 0)
+		encs := primedI420EncoderPool(t, cfg, a, 128)
+		dst := make([]byte, 0, 4096)
+		var call int
+		allocs := testing.AllocsPerRun(100, func() {
+			if call >= len(encs) {
+				t.Fatalf("encoder pool exhausted after %d calls", call)
+			}
+			out, err := encs[call].EncodeInto(dst[:0], b)
+			call++
+			if err != nil {
+				t.Fatalf("EncodeInto RTP mode0 odd exact P16x16: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 1 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("odd exact RTP mode0 P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("rtp mode0 odd exact P16x16 constant-chroma EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 5 {
+			t.Fatalf("rtp mode0 odd exact P16x16 constant-chroma EncodeInto allocations/run = %.0f, want <= 5", allocs)
 		}
 	})
 

@@ -257,6 +257,13 @@ func BenchmarkEncodeAVCI420ExactP16x16(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
 }
 
+func BenchmarkEncodeAVCI420OddExactP16x16ConstantChroma(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputAVC)
+	a := benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
+}
+
 func BenchmarkEncodeAVCI420ExactP16x16EdgeSearch(b *testing.B) {
 	cfg := benchmarkEncoderConfigSize(EncoderOutputAVC, 48, 48)
 	a := benchmarkEncoderExactP16x16HorizontalReferenceFrame(cfg.Width, cfg.Height, 8)
@@ -344,6 +351,13 @@ func BenchmarkEncodeRTPI420ExactP16x16(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
 }
 
+func BenchmarkEncodeRTPI420OddExactP16x16ConstantChroma(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	a := benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
+}
+
 func BenchmarkEncodeRTPI420ExactP16x16EdgeSearch(b *testing.B) {
 	cfg := benchmarkEncoderConfigSize(EncoderOutputRTP, 48, 48)
 	a := benchmarkEncoderExactP16x16HorizontalReferenceFrame(cfg.Width, cfg.Height, 8)
@@ -373,6 +387,15 @@ func BenchmarkEncodeRTPMode0I420ExactP16x16(b *testing.B) {
 	cfg.RTPMaxPayloadSize = 1200
 	a := benchmarkEncoderExactP16x16ReferenceFrame()
 	shifted := benchmarkEncoderIntegerMotionFrame(a, 2, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
+}
+
+func BenchmarkEncodeRTPMode0I420OddExactP16x16ConstantChroma(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	a := benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 1, 0)
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
 }
 
