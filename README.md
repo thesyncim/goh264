@@ -105,7 +105,9 @@ and `SliceMaxBytes` are enforced before frame/reference/packet state advances:
 `FrameDropDisabled` preserves the hard-error path, while
 `FrameDropToBitrate` returns `EncodedFrame.Dropped` without emitted bytes or RTP
 packets for explicit byte-budget misses or VBV-backed `MaxBitrate` bucket
-misses, and advances the RTP timestamp timeline.
+misses, advances the RTP timestamp timeline, and has deterministic
+credit-consumption/refill proof across transmitted IDR/P-skip and dropped
+changed-P frames.
 Runtime reconfiguration now covers SPS/PPS cadence, Annex B/AVC/RTP output
 format, RTP packetization mode 0/1, STAP-A aggregation, payload type, SSRC, and
 custom RTP timestamp increments plus rate-control mode, VBV size,

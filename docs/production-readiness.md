@@ -140,9 +140,11 @@ proves in-band keyframe, out-of-band, and every-IDR header modes, proves
 surfaces accepted by public decode paths, verifies frame-shape validation, and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses and VBV-backed `MaxBitrate` bucket
-misses, plus `FrameDropLate` `MaxEncodeTimeUS` budget misses that advance RTP time without advancing
-reference, frame-number, packet-sequence, or callback state, including after a
-transmitted reference frame. A combined control-loop stress row now switches
+misses, including credit consumption/refill across transmitted IDR/P-skip and
+dropped changed-P frames, plus `FrameDropLate` `MaxEncodeTimeUS` budget misses
+that advance RTP time without advancing reference, frame-number,
+packet-sequence, or callback state, including after a transmitted reference
+frame. A combined control-loop stress row now switches
 RTP to Annex B and back through QP refresh, late drop, P-skip recovery, packet
 metadata retargeting, and local decode after RTP re-entry while proving RTP
 sequence numbers and callbacks pause when no RTP packets are emitted. It proves
