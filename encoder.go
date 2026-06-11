@@ -163,6 +163,10 @@ type EncoderConfig struct {
 	RTPTimestampIncrement uint32
 }
 
+// EncoderFrame is one I420 input frame.
+//
+// Encode and EncodeInto read the plane slices during the call and do not retain
+// them after the call returns.
 type EncoderFrame struct {
 	Y        []byte
 	Cb       []byte
@@ -178,6 +182,10 @@ type EncoderFrame struct {
 	Color    EncoderColorConfig
 }
 
+// EncoderNALUnit describes one H.264 NAL unit inside EncodedFrame.Data.
+//
+// Offset points at the NAL header byte, not at the Annex B start code or AVC
+// length prefix. Size is the raw NAL byte count.
 type EncoderNALUnit struct {
 	Type         uint8
 	Offset       int
@@ -186,6 +194,12 @@ type EncoderNALUnit struct {
 	ParameterSet bool
 }
 
+// EncoderRTPPacket is one encoded RTP packet.
+//
+// Data contains the complete RTP packet, including the 12-byte header. Payload
+// is a clipped view over the payload bytes inside Data, so appending to either
+// slice cannot overwrite another returned packet. Returned RTP packet storage is
+// independent from EncodedFrame.Data.
 type EncoderRTPPacket struct {
 	Data           []byte
 	Payload        []byte
@@ -204,6 +218,8 @@ const (
 	EncoderRTPPayloadFUA
 )
 
+// EncoderRTPPacketMetadata describes a packet reported through
+// EncoderRTPPacketCallback.
 type EncoderRTPPacketMetadata struct {
 	PacketIndex int
 	PacketCount int
@@ -222,8 +238,19 @@ type EncoderRTPPacketMetadata struct {
 	ParameterSet  bool
 }
 
+// EncoderRTPPacketCallback observes RTP packets emitted by Encode or EncodeInto.
+//
+// The callback runs synchronously before Encode or EncodeInto returns. The
+// packet passed to the callback is a clone and does not alias the packet storage
+// returned in EncodedFrame.RTPPackets.
 type EncoderRTPPacketCallback func(packet EncoderRTPPacket, metadata EncoderRTPPacketMetadata)
 
+// EncodedFrame is the result of one encoder call.
+//
+// Data contains the encoded access unit in the configured output format. NALUnits
+// index into Data. RTPPackets is populated only for EncoderOutputRTP and owns
+// storage separate from Data. When Dropped is true, no bytes, NAL units, or RTP
+// packets were emitted.
 type EncodedFrame struct {
 	Data       []byte
 	NALUnits   []EncoderNALUnit
@@ -236,6 +263,10 @@ type EncodedFrame struct {
 	Dropped    bool
 }
 
+// EncoderParameterSets contains caller-owned SPS/PPS helper surfaces.
+//
+// Each byte slice returned by ParameterSets is isolated from later calls and may
+// be mutated by the caller.
 type EncoderParameterSets struct {
 	SPS                           []byte
 	PPS                           []byte
@@ -243,6 +274,10 @@ type EncoderParameterSets struct {
 	AVCDecoderConfigurationRecord []byte
 }
 
+// EncoderSEI contains caller-owned recovery-point SEI helper surfaces.
+//
+// Each byte slice returned by RecoveryPointSEI is isolated from later calls and
+// may be mutated by the caller.
 type EncoderSEI struct {
 	NAL    []byte
 	AnnexB []byte
@@ -364,6 +399,9 @@ func (e *Encoder) Config() EncoderConfig {
 	return e.cfg
 }
 
+// ParameterSets returns SPS/PPS headers for the current encoder configuration.
+//
+// All returned byte slices are caller-owned and isolated from the encoder.
 func (e *Encoder) ParameterSets() (EncoderParameterSets, error) {
 	if e == nil {
 		return EncoderParameterSets{}, encoderInvalid("nil encoder")
@@ -408,6 +446,10 @@ func (e *Encoder) ParameterSets() (EncoderParameterSets, error) {
 	}, nil
 }
 
+// RecoveryPointSEI returns a recovery-point SEI NAL for the current encoder
+// configuration.
+//
+// All returned byte slices are caller-owned and isolated from the encoder.
 func (e *Encoder) RecoveryPointSEI(recoveryFrameCount uint32) (EncoderSEI, error) {
 	if e == nil {
 		return EncoderSEI{}, encoderInvalid("nil encoder")
@@ -429,10 +471,18 @@ func (e *Encoder) RecoveryPointSEI(recoveryFrameCount uint32) (EncoderSEI, error
 	}, nil
 }
 
+// Encode encodes one frame using encoder-owned output storage.
+//
+// For caller-owned access-unit storage, use EncodeInto.
 func (e *Encoder) Encode(frame EncoderFrame) (EncodedFrame, error) {
 	return e.EncodeInto(nil, frame)
 }
 
+// EncodeInto encodes one frame, appending access-unit bytes to dst.
+//
+// The returned EncodedFrame.Data may share backing storage with dst. Keep dst
+// unchanged while using Data. For RTP output, returned RTP packets own storage
+// separate from Data.
 func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, error) {
 	if e == nil {
 		return EncodedFrame{}, encoderInvalid("nil encoder")
@@ -713,6 +763,10 @@ func (e *Encoder) SetRTPMaxPayloadSize(size int) error {
 	return nil
 }
 
+// SetRTPPacketCallback installs an optional synchronous callback for emitted RTP
+// packets.
+//
+// Passing nil disables the callback.
 func (e *Encoder) SetRTPPacketCallback(callback EncoderRTPPacketCallback) {
 	if e != nil {
 		e.rtpPacketCallback = callback
