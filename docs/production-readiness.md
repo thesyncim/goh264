@@ -193,9 +193,10 @@ emit IDR IntraPCM access units that round-trip through local Annex B/AVC decode,
 FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL
 IDR/P-frame reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
-clipped packet payload views over packet data and optional RTP callback metadata
-including mode 0/1 IDR/P-frame single-NAL packets with callback packet storage
-isolated from returned RTP packets. It also proves identical
+clipped packet payload views over packet data, packet storage isolated from
+`EncodedFrame.Data`, and optional RTP callback metadata including mode 0/1
+IDR/P-frame single-NAL packets with callback packet storage isolated from
+returned RTP packets. It also proves identical
 second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
 exact shifted macroblock-aligned frames up to 8 pixels can emit predictive
@@ -215,8 +216,9 @@ IDR/P-frame paths including exact-P16 edge search;
 the live encode path writes RBSP plus raw NAL output directly instead of building
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage, and stamps full RTP packet data from
-access-unit buffers while exposing clipped payload views and preserving append
-isolation for each public packet slice. Package-level benchmark canary rows now
+access-unit buffers while exposing clipped payload views, keeping packet storage
+separate from `EncodedFrame.Data`, and preserving append isolation for each public
+packet slice. Package-level benchmark canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
 including 8-pixel edge search, Annex B changed P IntraPCM, AVC IDR IntraPCM,
 AVC steady P-skip, AVC exact P16x16 including 8-pixel edge search, AVC changed

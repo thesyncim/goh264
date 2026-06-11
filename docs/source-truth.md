@@ -166,7 +166,8 @@ recovery, packet metadata retargeting, paused RTP sequence/callback state, and
 local decode after RTP re-entry, RTP packetization-mode 0 single-NAL IDR/P-frame
 reassembly and oversize rejection, RTP packetization-mode 1 FU-A reassembly,
 STAP-A parameter-set aggregation, RTP payload-type/SSRC/sequence metadata, full
-RTP header bytes with clipped packet payload views over packet data, optional
+RTP header bytes with clipped packet payload views over packet data and packet
+storage isolated from `EncodedFrame.Data`, optional
 RTP callback metadata including mode 0/1 IDR/P-frame single-NAL packets with
 callback packet storage isolated from returned RTP packets, initial
 `EncodeInto` allocation canaries for caller-buffer Annex B/AVC/RTP IDR,
@@ -176,7 +177,7 @@ including exact-P16 edge search, and a
 live encode path that avoids discarded Annex B/AVC copies when only raw NAL
 output is needed plus stack-backed common one-slice NAL, slice-range planning,
 and access-unit full RTP packet buffer stamping with clipped payload views and
-per-packet append isolation.
+per-packet append isolation plus frame-data ownership separation.
 Package-level benchmark canaries cover admitted Annex B/AVC/RTP IDR and
 P-frame encode paths, including 8-pixel exact-P16 edge search, AVC/RTP changed
 P IntraPCM and RTP packetization-mode 0 IDR/P-frame rows including exact-P16

@@ -98,7 +98,8 @@ Annex B, AVC, configured `SliceCount` multi-slice VCL output, RTP
 packetization-mode 0 single-NAL packets, and RTP packetization-mode 1,
 including FU-A fragmentation and STAP-A parameter-set aggregation,
 payload-type/SSRC/sequence metadata, full RTP packet headers, marker-bit
-boundaries, clipped per-packet RTP payload views over packet data, oversize
+boundaries, clipped per-packet RTP payload views over packet data, RTP packet
+storage isolated from `EncodedFrame.Data`, oversize
 mode-0 rejection, and optional RTP packet callbacks with
 packet index/count, frame timing, mode 0/1 IDR/P-frame single-NAL payload form,
 NAL type/count, FU-A start/end, parameter-set metadata, and callback packet
@@ -361,7 +362,8 @@ enabled/slice-boundary deblock frames. Changed-frame P IntraPCM recovery
 pictures carry recovery-point SEI when enabled. RTP output includes payloads
 plus complete RTP
 packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1
-FU-A/STAP-A output, optional per-packet callback metadata including mode 0/1
+FU-A/STAP-A output, RTP packet storage isolated from `EncodedFrame.Data`,
+optional per-packet callback metadata including mode 0/1
 IDR/P-frame single-NAL packets with callback packet storage isolated from the
 returned RTP packets, and automatic
 timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now

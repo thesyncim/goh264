@@ -133,7 +133,8 @@ ordering, RTP packetization-mode 0 single-NAL IDR/P-frame reassembly and
 oversize rejection, RTP FU-A reassembly, STAP-A parameter-set aggregation,
 payload-type, SSRC, and sequence-number packet metadata. RTP
 packets also carry complete 12-byte RTP headers plus payload bytes with clipped
-per-packet payload views over packet data, and
+per-packet payload views over packet data and packet storage isolated from
+`EncodedFrame.Data`, and
 `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form including mode 0/1 IDR/P frames, NAL type/count, FU-A start/end, parameter-set
