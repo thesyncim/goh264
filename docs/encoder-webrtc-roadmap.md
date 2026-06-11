@@ -175,15 +175,17 @@ storage.
 Package-level `-benchmem` canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
 Annex B odd-pixel constant-chroma exact P16x16, Annex B odd-pixel
-patterned-chroma P IntraPCM fallback, Annex B exact P16x16 including 8-pixel edge
-search, Annex B changed P IntraPCM, AVC IDR IntraPCM, AVC steady P-skip, AVC
-odd-pixel constant-chroma exact P16x16, AVC odd-pixel patterned-chroma
-P IntraPCM fallback, AVC exact P16x16 including 8-pixel edge search, AVC changed
-P IntraPCM, RTP FU-A IDR IntraPCM, RTP odd-pixel constant-chroma exact P16x16,
-RTP odd-pixel patterned-chroma P IntraPCM fallback, RTP exact P16x16 including
-8-pixel edge search, RTP steady P-skip, and RTP changed P IntraPCM plus RTP
-packetization-mode 0 IDR/P-skip/exact-P16x16/P-IntraPCM paths including
-odd-pixel constant-chroma, odd-pixel patterned-chroma fallback, and 8-pixel
+patterned-chroma P IntraPCM fallback, Annex B per-macroblock exact P16x16,
+Annex B exact P16x16 including 8-pixel edge search, Annex B changed P IntraPCM,
+AVC IDR IntraPCM, AVC steady P-skip, AVC odd-pixel constant-chroma exact P16x16,
+AVC odd-pixel patterned-chroma P IntraPCM fallback, AVC per-macroblock exact
+P16x16, AVC exact P16x16 including 8-pixel edge search, AVC changed P IntraPCM,
+RTP FU-A IDR IntraPCM, RTP odd-pixel constant-chroma exact P16x16, RTP
+odd-pixel patterned-chroma P IntraPCM fallback, RTP per-macroblock exact P16x16,
+RTP exact P16x16 including 8-pixel edge search, RTP steady P-skip, and RTP
+changed P IntraPCM plus RTP packetization-mode 0
+IDR/P-skip/exact-P16x16/P-IntraPCM paths including odd-pixel constant-chroma,
+per-macroblock exact P16x16, odd-pixel patterned-chroma fallback, and 8-pixel
 exact-P16 edge search.
 Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
@@ -295,7 +297,7 @@ in one access unit.
    Annex B/AVC allocation budgets,
    and package-level benchmark canaries for admitted IDR/P-frame
    Annex B/AVC/RTP paths plus RTP mode 0, including odd-pixel constant-chroma
-   exact P16x16 and 8-pixel exact-P16 edge search.
+   exact P16x16, per-macroblock exact P16x16, and 8-pixel exact-P16 edge search.
 
 ## Oracles And Gates
 

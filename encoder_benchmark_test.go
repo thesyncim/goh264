@@ -73,6 +73,10 @@ func benchmarkEncoderOddPatternedChromaFallbackReferenceFrame() EncoderFrame {
 	return benchmarkEncoderExactP16x16HorizontalReferenceFrame(benchmarkEncoderWidth, benchmarkEncoderHeight, 1)
 }
 
+func benchmarkEncoderPerMacroblockP16x16ReferenceFrame() EncoderFrame {
+	return benchmarkEncoderI420Frame(32, 32)
+}
+
 func benchmarkEncoderExactP16x16HorizontalReferenceFrame(width int, height int, dx int) EncoderFrame {
 	frame := benchmarkEncoderI420Frame(width, height)
 	// Keep the left edge reversible under clamped +/-dx motion so the benchmark
@@ -94,6 +98,68 @@ func benchmarkEncoderExactP16x16HorizontalReferenceFrame(width int, height int, 
 		}
 	}
 	return frame
+}
+
+type benchmarkEncoderMotion struct {
+	dx int
+	dy int
+}
+
+func benchmarkEncoderPerMacroblockMotionFrame(reference EncoderFrame, motions []benchmarkEncoderMotion) EncoderFrame {
+	chromaWidth := reference.Width / 2
+	chromaHeight := reference.Height / 2
+	frame := EncoderFrame{
+		Y:        make([]byte, reference.Width*reference.Height),
+		Cb:       make([]byte, chromaWidth*chromaHeight),
+		Cr:       make([]byte, chromaWidth*chromaHeight),
+		StrideY:  reference.Width,
+		StrideCb: chromaWidth,
+		StrideCr: chromaWidth,
+		Width:    reference.Width,
+		Height:   reference.Height,
+		Duration: reference.Duration,
+	}
+	mbWidth := reference.Width / 16
+	mbHeight := reference.Height / 16
+	if len(motions) != mbWidth*mbHeight {
+		panic("per-macroblock motion count does not match frame")
+	}
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		for mbX := 0; mbX < mbWidth; mbX++ {
+			motion := motions[mbY*mbWidth+mbX]
+			left := mbX * 16
+			top := mbY * 16
+			for y := 0; y < 16; y++ {
+				refY := benchmarkEncoderClampCoord(top+y+motion.dy, frame.Height)
+				for x := 0; x < 16; x++ {
+					refX := benchmarkEncoderClampCoord(left+x+motion.dx, frame.Width)
+					frame.Y[(top+y)*frame.StrideY+left+x] = reference.Y[refY*reference.StrideY+refX]
+				}
+			}
+			chromaLeft := mbX * 8
+			chromaTop := mbY * 8
+			chromaDX := motion.dx / 2
+			chromaDY := motion.dy / 2
+			for y := 0; y < 8; y++ {
+				refY := benchmarkEncoderClampCoord(chromaTop+y+chromaDY, chromaHeight)
+				for x := 0; x < 8; x++ {
+					refX := benchmarkEncoderClampCoord(chromaLeft+x+chromaDX, chromaWidth)
+					frame.Cb[(chromaTop+y)*frame.StrideCb+chromaLeft+x] = reference.Cb[refY*reference.StrideCb+refX]
+					frame.Cr[(chromaTop+y)*frame.StrideCr+chromaLeft+x] = reference.Cr[refY*reference.StrideCr+refX]
+				}
+			}
+		}
+	}
+	return frame
+}
+
+func benchmarkEncoderPerMacroblockP16x16Frame(reference EncoderFrame) EncoderFrame {
+	return benchmarkEncoderPerMacroblockMotionFrame(reference, []benchmarkEncoderMotion{
+		{dx: 2, dy: 0},
+		{dx: -2, dy: 0},
+		{dx: 0, dy: 2},
+		{dx: 0, dy: -2},
+	})
 }
 
 func benchmarkEncoderSetConstantChroma(frame *EncoderFrame, cb byte, cr byte) {
@@ -199,6 +265,14 @@ func BenchmarkEncodeAnnexBI420ExactP16x16(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
 }
 
+func BenchmarkEncodeAnnexBI420PerMacroblockExactP16x16(b *testing.B) {
+	cfg := benchmarkEncoderConfigSize(EncoderOutputAnnexB, 32, 32)
+	cfg.SliceCount = 2
+	a := benchmarkEncoderPerMacroblockP16x16ReferenceFrame()
+	shifted := benchmarkEncoderPerMacroblockP16x16Frame(a)
+	benchmarkEncodePreparedPFrame(b, cfg, a, shifted, 2, false)
+}
+
 func BenchmarkEncodeAnnexBI420OddExactP16x16ConstantChroma(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputAnnexB)
 	a := benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame()
@@ -266,6 +340,14 @@ func BenchmarkEncodeAVCI420ExactP16x16(b *testing.B) {
 	a := benchmarkEncoderExactP16x16ReferenceFrame()
 	shifted := benchmarkEncoderIntegerMotionFrame(a, 2, 0)
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
+}
+
+func BenchmarkEncodeAVCI420PerMacroblockExactP16x16(b *testing.B) {
+	cfg := benchmarkEncoderConfigSize(EncoderOutputAVC, 32, 32)
+	cfg.SliceCount = 2
+	a := benchmarkEncoderPerMacroblockP16x16ReferenceFrame()
+	shifted := benchmarkEncoderPerMacroblockP16x16Frame(a)
+	benchmarkEncodePreparedPFrame(b, cfg, a, shifted, 2, false)
 }
 
 func BenchmarkEncodeAVCI420OddExactP16x16ConstantChroma(b *testing.B) {
@@ -369,6 +451,14 @@ func BenchmarkEncodeRTPI420ExactP16x16(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
 }
 
+func BenchmarkEncodeRTPI420PerMacroblockExactP16x16(b *testing.B) {
+	cfg := benchmarkEncoderConfigSize(EncoderOutputRTP, 32, 32)
+	cfg.SliceCount = 2
+	a := benchmarkEncoderPerMacroblockP16x16ReferenceFrame()
+	shifted := benchmarkEncoderPerMacroblockP16x16Frame(a)
+	benchmarkEncodePreparedPFrame(b, cfg, a, shifted, 2, true)
+}
+
 func BenchmarkEncodeRTPI420OddExactP16x16ConstantChroma(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
 	a := benchmarkEncoderOddExactP16x16ConstantChromaReferenceFrame()
@@ -413,6 +503,16 @@ func BenchmarkEncodeRTPMode0I420ExactP16x16(b *testing.B) {
 	a := benchmarkEncoderExactP16x16ReferenceFrame()
 	shifted := benchmarkEncoderIntegerMotionFrame(a, 2, 0)
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
+}
+
+func BenchmarkEncodeRTPMode0I420PerMacroblockExactP16x16(b *testing.B) {
+	cfg := benchmarkEncoderConfigSize(EncoderOutputRTP, 32, 32)
+	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	cfg.SliceCount = 2
+	a := benchmarkEncoderPerMacroblockP16x16ReferenceFrame()
+	shifted := benchmarkEncoderPerMacroblockP16x16Frame(a)
+	benchmarkEncodePreparedPFrame(b, cfg, a, shifted, 2, true)
 }
 
 func BenchmarkEncodeRTPMode0I420OddExactP16x16ConstantChroma(b *testing.B) {
@@ -481,6 +581,44 @@ func benchmarkEncodeSteadyPFrame(b *testing.B, cfg EncoderConfig, frames []Encod
 		}
 		if !wantRTP && len(out.RTPPackets) != 0 {
 			b.Fatalf("non-RTP steady P frame returned RTP packets: %d", len(out.RTPPackets))
+		}
+	}
+	benchmarkEncodeFrameSink = out
+	benchmarkEncodeBytesSink = len(out.Data)
+	benchmarkEncodePacketsSink = len(out.RTPPackets)
+}
+
+func benchmarkEncodePreparedPFrame(b *testing.B, cfg EncoderConfig, reference EncoderFrame, frame EncoderFrame, wantNALs int, wantRTP bool) {
+	b.Helper()
+	dst := make([]byte, 0, 4096)
+
+	b.ReportAllocs()
+	b.SetBytes(int64(benchmarkEncoderFrameBytes(cfg.Width, cfg.Height)))
+
+	var out EncodedFrame
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		enc, err := NewEncoder(cfg)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if _, err := enc.EncodeInto(dst[:0], reference); err != nil {
+			b.Fatal(err)
+		}
+		b.StartTimer()
+		out, err = enc.EncodeInto(dst[:0], frame)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if out.IDR || len(out.Data) == 0 || len(out.NALUnits) != wantNALs {
+			b.Fatalf("output idr=%v data=%d nals=%d, want prepared P frame with %d NALs",
+				out.IDR, len(out.Data), len(out.NALUnits), wantNALs)
+		}
+		if wantRTP && len(out.RTPPackets) == 0 {
+			b.Fatal("RTP prepared P frame did not return packets")
+		}
+		if !wantRTP && len(out.RTPPackets) != 0 {
+			b.Fatalf("non-RTP prepared P frame returned RTP packets: %d", len(out.RTPPackets))
 		}
 	}
 	benchmarkEncodeFrameSink = out

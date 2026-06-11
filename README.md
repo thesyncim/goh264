@@ -166,7 +166,7 @@ broader realtime allocation/performance evidence remain pending beyond the
 admitted IDR/P-frame Annex B/AVC/RTP canaries, which now include odd-pixel
 constant-chroma P16 and patterned-chroma P IntraPCM fallback allocation and
 benchmark rows across Annex B, AVC, RTP, and RTP mode 0, per-macroblock
-exact-P16 allocation rows, 8-pixel exact-P16 edge-search allocation and
+exact-P16 allocation and benchmark rows, 8-pixel exact-P16 edge-search allocation and
 benchmark rows, RTP P-IntraPCM, and
 packetization-mode 0 IDR/P-frame allocation and benchmark rows including
 exact-P16 edge search. The admitted forced-IDR and P IntraPCM fallback hot
