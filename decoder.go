@@ -1249,8 +1249,7 @@ func (f *Frame) appendRawYUVBytes8(dst []byte) ([]byte, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
 		return dst, ErrInvalidData
 	}
-	if f.CropLeft < 0 || f.CropTop < 0 || f.YStride < f.Width+f.CropLeft ||
-		len(f.Y) < (f.CropTop+f.Height-1)*f.YStride+f.CropLeft+f.Width {
+	if !framePlaneHasVisibleRect(len(f.Y), f.YStride, f.CropLeft, f.CropTop, f.Width, f.Height) {
 		return dst, ErrInvalidData
 	}
 	chromaWidth := 0
@@ -1274,9 +1273,8 @@ func (f *Frame) appendRawYUVBytes8(dst []byte) ([]byte, error) {
 			if err != nil {
 				return dst, err
 			}
-			if f.CStride < chromaWidth+chromaCropLeft ||
-				len(f.Cb) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth ||
-				len(f.Cr) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth {
+			if !framePlaneHasVisibleRect(len(f.Cb), f.CStride, chromaCropLeft, chromaCropTop, chromaWidth, chromaHeight) ||
+				!framePlaneHasVisibleRect(len(f.Cr), f.CStride, chromaCropLeft, chromaCropTop, chromaWidth, chromaHeight) {
 				return dst, ErrInvalidData
 			}
 		}
@@ -1401,8 +1399,7 @@ func (f *Frame) rawYUV16Geometry() (int, int, int, int, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
 		return 0, 0, 0, 0, ErrInvalidData
 	}
-	if f.CropLeft < 0 || f.CropTop < 0 || f.YStride < f.Width+f.CropLeft ||
-		len(f.Y16) < (f.CropTop+f.Height-1)*f.YStride+f.CropLeft+f.Width {
+	if !framePlaneHasVisibleRect(len(f.Y16), f.YStride, f.CropLeft, f.CropTop, f.Width, f.Height) {
 		return 0, 0, 0, 0, ErrInvalidData
 	}
 	chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, f.ChromaFormatIDC)
@@ -1416,12 +1413,38 @@ func (f *Frame) rawYUV16Geometry() (int, int, int, int, error) {
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
-	if f.CStride < chromaWidth+chromaCropLeft ||
-		len(f.Cb16) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth ||
-		len(f.Cr16) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth {
+	if !framePlaneHasVisibleRect(len(f.Cb16), f.CStride, chromaCropLeft, chromaCropTop, chromaWidth, chromaHeight) ||
+		!framePlaneHasVisibleRect(len(f.Cr16), f.CStride, chromaCropLeft, chromaCropTop, chromaWidth, chromaHeight) {
 		return 0, 0, 0, 0, ErrInvalidData
 	}
 	return chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, nil
+}
+
+func framePlaneHasVisibleRect(planeLen int, stride int, cropLeft int, cropTop int, width int, height int) bool {
+	if planeLen < 0 || stride < 0 || cropLeft < 0 || cropTop < 0 || width <= 0 || height <= 0 {
+		return false
+	}
+	minStride, err := checkedAddInt(width, cropLeft)
+	if err != nil || stride < minStride {
+		return false
+	}
+	lastRow, err := checkedAddInt(cropTop, height-1)
+	if err != nil {
+		return false
+	}
+	offset, err := checkedMulInt(lastRow, stride)
+	if err != nil {
+		return false
+	}
+	offset, err = checkedAddInt(offset, cropLeft)
+	if err != nil {
+		return false
+	}
+	end, err := checkedAddInt(offset, width)
+	if err != nil {
+		return false
+	}
+	return planeLen >= end
 }
 
 func (f *Frame) validateRawYUV16Samples(chromaWidth int, chromaHeight int, chromaCropLeft int, chromaCropTop int, maxSample uint16) error {

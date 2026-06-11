@@ -80,8 +80,9 @@ Allocation evidence: `tests/decoder_high_output_test.go` guards
 with exact-capacity caller-owned buffers and requires zero steady-state
 allocations for 8-bit and high-bit-depth output paths, including caller-buffer
 preservation on invalid 8-bit chroma geometry and high-bit-depth luma/chroma
-sample errors. `Frame.RawYUVSize` rejects overflowed caller-constructed frame
-geometry instead of returning wrapped byte counts.
+sample errors. `Frame.RawYUVSize` and the raw-output appenders reject
+overflowed caller-constructed frame geometry instead of returning wrapped byte
+counts or panicking during plane slicing.
 Public SEI `FrameSideData` byte slices are guarded as caller-owned by mutating
 decoded unregistered-user-data, A53, and LCEVC slices and re-decoding the same
 input bytes.

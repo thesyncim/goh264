@@ -472,6 +472,60 @@ func TestFrameRawYUVSizeRejectsOverflow(t *testing.T) {
 	}
 }
 
+func TestFrameAppendRawYUVRejectsOverflowedPlaneGeometryWithoutPanic(t *testing.T) {
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{
+			name: "8-bit",
+			call: func() error {
+				frame := Frame{
+					Width:           1,
+					Height:          1,
+					CropLeft:        maxIntForTest,
+					ChromaFormatIDC: 0,
+					BitDepthLuma:    8,
+					BitDepthChroma:  8,
+					YStride:         maxIntForTest,
+					Y:               []byte{0},
+				}
+				_, err := frame.AppendRawYUV(nil)
+				return err
+			},
+		},
+		{
+			name: "high-bit-depth",
+			call: func() error {
+				frame := Frame{
+					Width:           1,
+					Height:          1,
+					CropLeft:        maxIntForTest,
+					ChromaFormatIDC: 0,
+					BitDepthLuma:    10,
+					BitDepthChroma:  10,
+					YStride:         maxIntForTest,
+					Y16:             []uint16{0},
+				}
+				_, err := frame.AppendRawYUVBytesLE(nil)
+				return err
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("%s panicked on overflowed geometry: %v", tt.name, r)
+				}
+			}()
+			if err := tt.call(); err != ErrInvalidData {
+				t.Fatalf("%s overflowed geometry error = %v, want ErrInvalidData", tt.name, err)
+			}
+		})
+	}
+}
+
 func TestFrameAppendRawYUVErrorPreservesCallerBuffer(t *testing.T) {
 	frame := Frame{
 		Width:           2,
