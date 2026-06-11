@@ -88,7 +88,10 @@ bytes/iteration and 10,000 Go allocations/iteration.
 for one-shot Annex B decode and stateful Annex B access-unit streaming plus
 the admitted encoder Annex B/AVC/RTP IDR/P-skip/exact-P16
 edge-search/P-IntraPCM and RTP packetization benchmarks with `-benchmem`; its
-output is suitable for `benchstat` trend comparisons.
+output is suitable for `benchstat` trend comparisons. `GOH264_BENCHSTAT_TIME`
+sets the effective `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is accepted as an
+alias when `GOH264_BENCHSTAT_TIME` is unset, and the performance/release
+evidence metadata records the effective value.
 `scripts/h264-performance-evidence.sh` writes a local evidence bundle under
 `.artifacts/h264-performance-evidence/` containing benchstat samples, the JSON
 real-vector benchmark report, CPU and heap profiles, and run metadata. Pending:

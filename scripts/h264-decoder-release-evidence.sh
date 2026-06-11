@@ -10,6 +10,8 @@ mkdir -p "$out_dir"
 
 summary="$out_dir/summary.txt"
 filter="${GOH264_RELEASE_PERF_FILTER:-canl4}"
+benchstat_time="${GOH264_BENCHSTAT_TIME:-${GOH264_BENCHSTAT_BENCHTIME:-100ms}}"
+export GOH264_BENCHSTAT_TIME="$benchstat_time"
 
 run_gate() {
     local name="$1"
@@ -40,6 +42,7 @@ run_env_gate() {
     printf 'release_perf_filter=%s\n' "$filter"
     printf 'release_alloc_filter=%s\n' "${GOH264_RELEASE_ALLOC_FILTER:-canl4}"
     printf 'benchstat_pattern=%s\n' "${GOH264_BENCHSTAT_PATTERN:-Benchmark(Decode.*AnnexBHigh10IDRP|Encode.*I420)}"
+    printf 'benchstat_time=%s\n' "$GOH264_BENCHSTAT_TIME"
 } >"$summary"
 
 printf 'writing decoder release evidence to %s\n' "$out_dir" >&2

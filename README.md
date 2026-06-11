@@ -487,6 +487,10 @@ packetization-mode 0 IDR/P-frame rows, suitable for `benchstat`, run:
 scripts/h264-benchstat-canary.sh
 ```
 
+Use `GOH264_BENCHSTAT_COUNT` and `GOH264_BENCHSTAT_TIME` to control sample
+count and `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is accepted as a
+compatibility alias when `GOH264_BENCHSTAT_TIME` is unset.
+
 To create a local release-evidence bundle with benchstat samples, the JSON
 real-vector benchmark report, CPU/heap profiles, and run metadata:
 
@@ -545,7 +549,9 @@ No tag should be treated as production until a release-evidence pass proves:
 - `scripts/h264-real-vector-release-alloc.sh` is green with the checked-in Go
   allocation canary budget.
 - `scripts/h264-benchstat-canary.sh` runs decoder and admitted encoder rows
-  with stable `-benchmem` output for trend comparison.
+  with stable `-benchmem` output for trend comparison. `GOH264_BENCHSTAT_TIME`
+  controls the effective `-benchtime`, with `GOH264_BENCHSTAT_BENCHTIME`
+  accepted as an unset-time alias.
 - `scripts/h264-performance-evidence.sh` creates the local performance bundle
   with JSON benchmark output plus CPU/heap profiles.
 - Allocation and performance evidence is recorded in
