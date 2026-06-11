@@ -246,8 +246,8 @@ Annex B/AVC forced IDR, <=10 for RTP forced IDR/FU-A and STAP-A, <=6 for Annex B
 odd-patterned P IntraPCM fallback, <=8 for RTP odd-patterned fallback, <=5 for
 Annex B/AVC per-macroblock exact P16x16, <=7 for RTP per-macroblock exact
 P16x16, <=12 for Annex B/AVC changed P IntraPCM, and <=16 for RTP changed
-P IntraPCM, plus <=7 for RTP `EncodeInto` max-frame-size drops and <=8 for RTP
-late drops; the
+P IntraPCM, plus <=7 for RTP `EncodeInto` max-frame-size and
+slice-max-bytes drops and <=8 for RTP late drops; the
 forced-IDR and recovery-point fallback hot paths build raw SPS/PPS and SEI NALs
 directly instead of constructing unused public packaging;
 the live encode path writes RBSP plus raw NAL output directly instead of building
