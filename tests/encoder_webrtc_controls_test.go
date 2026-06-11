@@ -5163,6 +5163,73 @@ func TestEncoderEncodeIntoLateDropPreservesCallerBuffer(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeIntoBitrateDropPreservesCallerBuffer(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+		mutate       func(*goh264.EncoderConfig)
+	}{
+		{name: "annexb max-frame-size", outputFormat: goh264.EncoderOutputAnnexB, mutate: func(cfg *goh264.EncoderConfig) {
+			cfg.MaxFrameSize = 16
+		}},
+		{name: "avc max-frame-size", outputFormat: goh264.EncoderOutputAVC, mutate: func(cfg *goh264.EncoderConfig) {
+			cfg.MaxFrameSize = 16
+		}},
+		{name: "rtp max-frame-size", outputFormat: goh264.EncoderOutputRTP, mutate: func(cfg *goh264.EncoderConfig) {
+			cfg.MaxFrameSize = 16
+		}},
+		{name: "annexb slice-max-bytes", outputFormat: goh264.EncoderOutputAnnexB, mutate: func(cfg *goh264.EncoderConfig) {
+			cfg.SliceMaxBytes = 1
+		}},
+		{name: "avc slice-max-bytes", outputFormat: goh264.EncoderOutputAVC, mutate: func(cfg *goh264.EncoderConfig) {
+			cfg.SliceMaxBytes = 1
+		}},
+		{name: "rtp slice-max-bytes", outputFormat: goh264.EncoderOutputRTP, mutate: func(cfg *goh264.EncoderConfig) {
+			cfg.SliceMaxBytes = 1
+		}},
+		{name: "annexb max-bitrate", outputFormat: goh264.EncoderOutputAnnexB, mutate: func(cfg *goh264.EncoderConfig) {
+			cfg.TargetBitrate = 1_000
+			cfg.MaxBitrate = 1_000
+			cfg.VBVBufferSize = 64
+		}},
+		{name: "avc max-bitrate", outputFormat: goh264.EncoderOutputAVC, mutate: func(cfg *goh264.EncoderConfig) {
+			cfg.TargetBitrate = 1_000
+			cfg.MaxBitrate = 1_000
+			cfg.VBVBufferSize = 64
+		}},
+		{name: "rtp max-bitrate", outputFormat: goh264.EncoderOutputRTP, mutate: func(cfg *goh264.EncoderConfig) {
+			cfg.TargetBitrate = 1_000
+			cfg.MaxBitrate = 1_000
+			cfg.VBVBufferSize = 64
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.FrameDrop = goh264.EncoderFrameDropToBitrate
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			tt.mutate(&cfg)
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			dst, backingBefore := encoderPrefilledCallerBuffer()
+			out, err := enc.EncodeInto(dst, patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("EncodeInto bitrate drop: %v", err)
+			}
+			if !out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+				t.Fatalf("bitrate-drop output = %+v, want dropped metadata without output", out)
+			}
+			assertEncoderCallerBufferUnchanged(t, dst, backingBefore)
+		})
+	}
+}
+
 func TestEncoderEncodeRTPPacketsCarryWebRTCMetadata(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPayloadType = 102
