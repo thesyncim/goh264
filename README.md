@@ -149,7 +149,8 @@ stored reference up to 8 pixels can use guarded CAVLC P16x16 no-residual slices
 with Annex B local/FFmpeg, configured AVC, and RTP reassembly decode proof under
 disabled multi-macroblock deblock plus single-macroblock enabled/slice-boundary
 deblock. Odd-pixel luma shifts are admitted only when both 4:2:0 chroma planes
-are constant; patterned chroma falls back to the guarded P IntraPCM path.
+are constant, with Annex B, configured AVC, RTP reassembly, and RTP mode-0
+single-NAL proof; patterned chroma falls back to the guarded P IntraPCM path.
 changed frames can use a
 guarded CAVLC P IntraPCM slice in the same admitted deblock scope with
 recovery-point SEI emission when enabled, while forced keyframe requests still

@@ -123,7 +123,9 @@ P-skip slices for identical frames, a guarded exact macroblock-aligned CAVLC P16
 no-residual path for bounded integer-pel shifted references up to 8 pixels under
 disabled-deblock multi-macroblock frames plus single-macroblock
 enabled/slice-boundary deblock. Odd-pixel luma shifts are admitted only when
-both 4:2:0 chroma planes are constant; patterned chroma is guarded to fall back.
+both 4:2:0 chroma planes are constant, with Annex B, configured AVC, RTP
+reassembly, and RTP mode-0 single-NAL proof; patterned chroma is guarded to
+fall back.
 Guarded CAVLC P IntraPCM slices handle changed frames after a reference across
 disabled, enabled, and slice-boundary deblock controls. Changed-frame P
 IntraPCM recovery pictures carry recovery-point SEI when enabled, across Annex

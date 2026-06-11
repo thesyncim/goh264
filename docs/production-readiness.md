@@ -204,8 +204,8 @@ exact shifted macroblock-aligned frames up to 8 pixels, including odd-pixel
 luma motion when chroma is constant, can emit predictive P16x16 no-residual
 slices through stateful local decode, FFmpeg rawvideo decode, configured AVC
 decode, RTP reassembly decode, and single-macroblock enabled/slice-boundary
-deblock syntax plus configured AVC/RTP decode, while patterned chroma falls
-back to P IntraPCM,
+deblock syntax plus configured AVC/RTP decode and RTP mode-0 single-NAL
+packetization, while patterned chroma falls back to P IntraPCM,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B

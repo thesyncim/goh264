@@ -2497,6 +2497,86 @@ func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionWithConstantChroma(t *t
 	}
 }
 
+func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		format goh264.EncoderOutputFormat
+	}{
+		{name: "avc", format: goh264.EncoderOutputAVC},
+		{name: "rtp", format: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(32, 32)
+			cfg.OutputFormat = tt.format
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.format != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			firstFrame := patternedI420EncoderFrame(32, 32)
+			setConstantI420Chroma(&firstFrame, 128, 64)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+			secondFrame := integerMotionI420EncoderFrame(firstFrame, 1, 1)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode odd-pixel exact P16x16 no-residual motion: %v", err)
+			}
+			if second.KeyFrame || second.IDR {
+				t.Fatalf("odd-pixel exact-motion second frame key=%v idr=%v, want non-IDR P16x16", second.KeyFrame, second.IDR)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+			dec := goh264.NewDecoder()
+			var decodedFirst, decodedSecond []*goh264.Frame
+			switch tt.format {
+			case goh264.EncoderOutputAVC:
+				headers, err := enc.ParameterSets()
+				if err != nil {
+					t.Fatalf("ParameterSets: %v", err)
+				}
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+				}
+				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
+				}
+				decodedSecond, err = dec.DecodeConfiguredAVCFrames(second.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
+				}
+			case goh264.EncoderOutputRTP:
+				decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames first RTP: %v", err)
+				}
+				decodedSecond, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames second RTP: %v", err)
+				}
+			default:
+				t.Fatalf("unexpected format %v", tt.format)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			if decodedSecond[0].KeyFrame || decodedSecond[0].SideData.RecoveryPoint != nil {
+				t.Fatalf("decoded odd-pixel exact-motion P frame key=%v recovery=%+v, want predictive non-recovery frame",
+					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+			}
+		})
+	}
+}
+
 func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(32, 32)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
@@ -4556,6 +4636,7 @@ func TestEncoderEncodeRTPMode0EmitsSingleNALPackets(t *testing.T) {
 func TestEncoderEncodeRTPMode0EmitsPFrameSingleNALPackets(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
+		prepareFirst func(*goh264.EncoderFrame)
 		nextFrame    func(goh264.EncoderFrame) goh264.EncoderFrame
 		wantNALs     []uint8
 		wantRecovery bool
@@ -4571,6 +4652,16 @@ func TestEncoderEncodeRTPMode0EmitsPFrameSingleNALPackets(t *testing.T) {
 			name: "exact-p16x16",
 			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
 				return integerMotionI420EncoderFrame(first, 2, 0)
+			},
+			wantNALs: []uint8{1},
+		},
+		{
+			name: "odd-exact-p16x16-constant-chroma",
+			prepareFirst: func(first *goh264.EncoderFrame) {
+				setConstantI420Chroma(first, 128, 64)
+			},
+			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return integerMotionI420EncoderFrame(first, 1, 0)
 			},
 			wantNALs: []uint8{1},
 		},
@@ -4595,6 +4686,9 @@ func TestEncoderEncodeRTPMode0EmitsPFrameSingleNALPackets(t *testing.T) {
 				t.Fatalf("NewEncoder mode 0: %v", err)
 			}
 			firstFrame := patternedI420EncoderFrame(16, 16)
+			if tt.prepareFirst != nil {
+				tt.prepareFirst(&firstFrame)
+			}
 			firstFrame.PTS = 9000
 			first, err := enc.Encode(firstFrame)
 			if err != nil {
