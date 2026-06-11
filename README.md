@@ -14,8 +14,8 @@ shifted references, and changed-frame P IntraPCM recovery pictures with
 Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
 single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
 FFmpeg rawvideo decode, configured AVC and RTP exact-P16 decode,
-recovery-point side data, RTP mode-0 reassembly, RTP FU-A reassembly, STAP-A
-parameter-set aggregation tests, and encode-time `MaxFrameSize`/`SliceMaxBytes`
+recovery-point side data, RTP mode-0 IDR/P-frame reassembly, RTP FU-A
+reassembly, STAP-A parameter-set aggregation tests, and encode-time `MaxFrameSize`/`SliceMaxBytes`
 budget guards with hard-error and dropped-frame paths plus runtime RTP/output,
 rate-control, QP, GOP/IDR, and deblock reconfiguration gates.
 The goal is not a loose rewrite: internal codec paths keep upstream state

@@ -2538,25 +2538,7 @@ func TestEncoderEncodeRTPMode0EmitsSingleNALPackets(t *testing.T) {
 		t.Fatalf("Encode RTP mode 0 IDR: %v", err)
 	}
 	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
-	if len(out.RTPPackets) != len(out.NALUnits) {
-		t.Fatalf("mode 0 RTP packets = %d, want one packet per NAL %d", len(out.RTPPackets), len(out.NALUnits))
-	}
-	for i, pkt := range out.RTPPackets {
-		unit := out.NALUnits[i]
-		wantPayload := out.Data[unit.Offset : unit.Offset+unit.Size]
-		if !bytes.Equal(pkt.Payload, wantPayload) {
-			t.Fatalf("packet[%d] payload does not match raw NAL", i)
-		}
-		if typ := pkt.Payload[0] & 0x1f; typ == 24 || typ == 28 {
-			t.Fatalf("packet[%d] payload type = %d, want single raw NAL", i, typ)
-		}
-		if pkt.Marker != (i == len(out.RTPPackets)-1) {
-			t.Fatalf("packet[%d] marker = %v, want only final marker", i, pkt.Marker)
-		}
-		if pkt.Timestamp != uint32(frame.PTS) {
-			t.Fatalf("packet[%d] timestamp = %d, want %d", i, pkt.Timestamp, frame.PTS)
-		}
-	}
+	assertEncoderRTPMode0RawNALPackets(t, out, cfg.RTPMaxPayloadSize)
 
 	annexB := annexBFromEncoderRTPPackets(t, out.RTPPackets)
 	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
@@ -2564,6 +2546,93 @@ func TestEncoderEncodeRTPMode0EmitsSingleNALPackets(t *testing.T) {
 		t.Fatalf("DecodeAnnexBFrames reassembled mode 0 RTP: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
+}
+
+func TestEncoderEncodeRTPMode0EmitsPFrameSingleNALPackets(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		nextFrame    func(goh264.EncoderFrame) goh264.EncoderFrame
+		wantNALs     []uint8
+		wantRecovery bool
+	}{
+		{
+			name: "p-skip",
+			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return first
+			},
+			wantNALs: []uint8{1},
+		},
+		{
+			name: "exact-p16x16",
+			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return integerMotionI420EncoderFrame(first, 2, 0)
+			},
+			wantNALs: []uint8{1},
+		},
+		{
+			name: "changed-p-intrapcm",
+			nextFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				second := patternedI420EncoderFrame(first.Width, first.Height)
+				second.Y[0] ^= 0x39
+				return second
+			},
+			wantNALs:     []uint8{6, 1},
+			wantRecovery: true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+			cfg.RTPMaxPayloadSize = 1200
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder mode 0: %v", err)
+			}
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			firstFrame.PTS = 9000
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first mode 0 IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+			assertEncoderRTPMode0RawNALPackets(t, first, cfg.RTPMaxPayloadSize)
+
+			secondFrame := tt.nextFrame(firstFrame)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode mode 0 %s: %v", tt.name, err)
+			}
+			if second.IDR || second.KeyFrame {
+				t.Fatalf("mode 0 %s key=%v idr=%v, want non-IDR P frame", tt.name, second.KeyFrame, second.IDR)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, tt.wantNALs)
+			assertEncoderRTPMode0RawNALPackets(t, second, cfg.RTPMaxPayloadSize)
+
+			dec := goh264.NewDecoder()
+			decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+			if err != nil {
+				t.Fatalf("DecodeFrames first mode 0 IDR: %v", err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			decodedSecond, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+			if err != nil {
+				t.Fatalf("DecodeFrames mode 0 %s: %v", tt.name, err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			recovery := decodedSecond[0].SideData.RecoveryPoint
+			if tt.wantRecovery {
+				if !decodedSecond[0].KeyFrame || recovery == nil || recovery.RecoveryFrameCount != 0 {
+					t.Fatalf("mode 0 %s recovery key=%v recovery=%+v, want immediate recovery point",
+						tt.name, decodedSecond[0].KeyFrame, recovery)
+				}
+			} else if decodedSecond[0].KeyFrame || recovery != nil {
+				t.Fatalf("mode 0 %s decoded key=%v recovery=%+v, want predictive non-recovery frame",
+					tt.name, decodedSecond[0].KeyFrame, recovery)
+			}
+		})
+	}
 }
 
 func TestEncoderRTPMode0RejectsOversizeNAL(t *testing.T) {
@@ -3594,6 +3663,32 @@ func assertRTPPacketTimestamps(t *testing.T, packets []goh264.EncoderRTPPacket, 
 		if len(pkt.Data) >= 8 && binary.BigEndian.Uint32(pkt.Data[4:8]) != want {
 			t.Fatalf("packet[%d] RTP header timestamp = %d, want %d",
 				i, binary.BigEndian.Uint32(pkt.Data[4:8]), want)
+		}
+	}
+}
+
+func assertEncoderRTPMode0RawNALPackets(t *testing.T, out goh264.EncodedFrame, maxPayloadSize int) {
+	t.Helper()
+	if len(out.RTPPackets) != len(out.NALUnits) {
+		t.Fatalf("mode 0 RTP packets = %d, want one packet per NAL %d", len(out.RTPPackets), len(out.NALUnits))
+	}
+	for i, pkt := range out.RTPPackets {
+		unit := out.NALUnits[i]
+		wantPayload := out.Data[unit.Offset : unit.Offset+unit.Size]
+		if !bytes.Equal(pkt.Payload, wantPayload) {
+			t.Fatalf("packet[%d] payload does not match raw NAL", i)
+		}
+		if maxPayloadSize > 0 && len(pkt.Payload) > maxPayloadSize {
+			t.Fatalf("packet[%d] payload size = %d, max %d", i, len(pkt.Payload), maxPayloadSize)
+		}
+		if typ := pkt.Payload[0] & 0x1f; typ == 24 || typ == 28 {
+			t.Fatalf("packet[%d] payload type = %d, want single raw NAL", i, typ)
+		}
+		if pkt.Marker != (i == len(out.RTPPackets)-1) {
+			t.Fatalf("packet[%d] marker = %v, want only final marker", i, pkt.Marker)
+		}
+		if pkt.Timestamp != out.RTPTime {
+			t.Fatalf("packet[%d] timestamp = %d, want %d", i, pkt.Timestamp, out.RTPTime)
 		}
 	}
 }

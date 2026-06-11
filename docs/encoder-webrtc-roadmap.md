@@ -92,8 +92,8 @@ pictures carry recovery-point SEI when enabled, across Annex B, configured AVC,
 and RTP packetization-mode 1 reassembly. Tests prove
 local raw-frame decode, FFmpeg rawvideo decode, configured AVC and RTP
 exact-P16 decode, recovery-point side data, multi-slice `first_mb_in_slice`
-ordering, RTP packetization-mode 0 single-NAL reassembly and oversize
-rejection, RTP FU-A reassembly, STAP-A parameter-set aggregation,
+ordering, RTP packetization-mode 0 single-NAL IDR/P-frame reassembly and
+oversize rejection, RTP FU-A reassembly, STAP-A parameter-set aggregation,
 payload-type, SSRC, and sequence-number packet metadata. RTP
 packets also carry complete 12-byte RTP headers plus payload bytes, and
 `SetRTPPacketCallback` reports callback-style packet metadata for
@@ -162,8 +162,9 @@ in one access unit.
    and recovery-point SEI emission on changed-frame P IntraPCM recovery
    pictures; forced keyframes still emit IDR.
 5. In progress: add RTP packetization and WebRTC control handling with
-   packet-level tests. Done for packetization-mode 0 single-NAL output with
-   oversize rejection, packetization-mode 1 single NAL/FU-A output, and
+   packet-level tests. Done for packetization-mode 0 single-NAL IDR, P-skip,
+   exact-P16x16, and P IntraPCM output with oversize rejection,
+   packetization-mode 1 single NAL/FU-A output, and
    STAP-A parameter-set aggregation with marker-bit boundaries plus
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
    bytes, callback-style packet metadata, and automatic timestamp progression
@@ -195,7 +196,7 @@ Encoder tests need independent evidence, not only local decode:
 - Round-trip decode through `goh264` and FFmpeg CLI for every encoded fixture.
 - Bitstream admission through FFmpeg/ffprobe for SPS/PPS/profile/level and
   packetized AVC output.
-- WebRTC packetization tests for mode-0 single NAL, FU-A, STAP-A, MTU
+- WebRTC packetization tests for mode-0 single NAL IDR/P-frames, FU-A, STAP-A, MTU
   boundaries, marker bits, and keyframe parameter-set behavior.
 - Rate-control tests that verify bitrate and frame-size envelopes across a
   deterministic source corpus.

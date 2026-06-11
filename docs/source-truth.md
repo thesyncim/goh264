@@ -124,7 +124,8 @@ dropped-frame budget behavior including VBV-backed `MaxBitrate` bucket misses,
 without reference/frame/packet/callback advancement before and after an existing
 reference, RTP/Annex B/RTP control-loop stress across QP refresh, late drop
 recovery, packet metadata retargeting, paused RTP sequence/callback state, and
-local decode after RTP re-entry, RTP packetization-mode 1 FU-A reassembly,
+local decode after RTP re-entry, RTP packetization-mode 0 single-NAL IDR/P-frame
+reassembly and oversize rejection, RTP packetization-mode 1 FU-A reassembly,
 STAP-A parameter-set aggregation, RTP payload-type/SSRC/sequence metadata, full
 RTP header bytes, optional RTP callback metadata, initial `EncodeInto`
 allocation canaries for caller-buffer Annex B/RTP IDR, P-skip, exact-P16x16,
