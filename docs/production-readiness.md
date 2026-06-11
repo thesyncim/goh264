@@ -30,6 +30,7 @@ scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH
 scripts/h264-real-vector-release-alloc.sh # checked-in Go allocation canary budget
 scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder/encoder canary
 scripts/h264-performance-evidence.sh  # local benchstat, JSON, CPU, and heap profile bundle
+scripts/h264-release-evidence.sh # combined decoder and admitted encoder release runner
 scripts/h264-decoder-release-evidence.sh # full decoder release-evidence runner
 scripts/h264-encoder-release-evidence.sh # admitted encoder contract/writer/bench runner
 go test ./tests -run TestEncoder # realtime/WebRTC encoder control contract
@@ -100,6 +101,11 @@ evidence metadata records the effective value.
 real-vector benchmark report, CPU and heap profiles, and run metadata. Pending:
 checked-in reviewed profile artifacts, larger performance corpus, and
 in-process libavcodec baseline.
+`scripts/h264-release-evidence.sh` is the top-level release gate. It requires a
+clean worktree by default, writes summary/log output under
+`.artifacts/h264-full-release-evidence/`, and runs the decoder release-evidence
+runner and the admitted encoder release-evidence runner into separate child
+directories.
 `scripts/h264-decoder-release-evidence.sh` runs the decoder release checklist
 as one gate and writes per-command logs plus the local performance bundle under
 `.artifacts/h264-release-evidence/`. It fails by default if the known-red

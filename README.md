@@ -551,6 +551,8 @@ Released version: none yet.
 
 No tag should be treated as production until a release-evidence pass proves:
 
+- `scripts/h264-release-evidence.sh` is green as the combined decoder and
+  admitted-encoder release gate.
 - `scripts/h264-decoder-release-evidence.sh` is green.
 - `go test ./...` is green.
 - `scripts/h264-real-vector-strict.sh` is green.
@@ -582,7 +584,11 @@ No tag should be treated as production until a release-evidence pass proves:
   evidence.
 - The source-truth and translation-ledger docs match the committed tests.
 
-The release-evidence runner writes logs under
+The combined release-evidence runner writes logs under
+`.artifacts/h264-full-release-evidence/` by default, drives the decoder and
+admitted encoder runners, and requires a clean worktree unless
+`GOH264_FULL_RELEASE_ALLOW_DIRTY=1` is set for diagnostics.
+The decoder release-evidence runner writes logs under
 `.artifacts/h264-release-evidence/` by default and fails while
 `testdata/h264/realvectors/failures.jsonl` contains known-red rows unless
 `GOH264_RELEASE_ALLOW_KNOWN_RED=1` is set for a non-release diagnostic run. It

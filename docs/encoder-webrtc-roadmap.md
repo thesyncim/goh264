@@ -324,5 +324,6 @@ Encoder support is not production-ready until:
 - Allocation and realtime budget gates are checked into the normal release
   evidence. The admitted local contract, writer, allocation, and `-benchmem`
   rows are now bundled by `scripts/h264-encoder-release-evidence.sh`; broader
-  production status still requires the remaining motion-search, residual,
-  rate-control, and packetizer breadth above.
+  production status still requires the combined
+  `scripts/h264-release-evidence.sh` pass plus the remaining motion-search,
+  residual, rate-control, and packetizer breadth above.
