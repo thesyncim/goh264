@@ -135,8 +135,9 @@ guards public input/result/callback surfaces for integration-facing encoder
 structs, rejects invalid or not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
 partial reconfiguration paths, proves invalid frame-rate helper/reconfigure,
-runtime rate, output/header/preset, RTP re-entry payload-size, and packetization
-updates leave config, queued-IDR state, RTP cadence, packets, and callbacks intact,
+runtime rate, latency/slice, output/header/preset, RTP re-entry payload-size,
+and packetization updates leave config, queued-IDR state, RTP cadence, packets,
+and callbacks intact,
 proves runtime resolution reset rejects stale-size frames without
 consuming the queued IDR before emitting/decoding a new-size IDR and resuming
 P-skip references at the new dimensions, proves

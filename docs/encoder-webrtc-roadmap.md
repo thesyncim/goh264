@@ -58,8 +58,9 @@ rate-control mode, VBV size, initial/min/max QP, frame-drop mode, GOP/IDR
 cadence, deblock mode, SPS/PPS cadence, RTP output format, packetization-mode
 0/1, STAP-A, payload type, SSRC, timestamp increment, PLI/FIR, force-IDR, and
 partial reconfiguration controls are tested, including rejected runtime
-frame-rate/rate-control, output/header/preset, RTP re-entry payload-size, and
-packetization updates that leave the prior config and queued-IDR state intact.
+frame-rate/rate-control, latency/slice, output/header/preset,
+RTP re-entry payload-size, and packetization updates that leave the prior config
+and queued-IDR state intact.
 Runtime resolution reset rejects stale-size frames without consuming the queued
 IDR, then emits/decodes a new-size IDR and resumes P-skip references at the new
 dimensions.
