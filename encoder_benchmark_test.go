@@ -408,6 +408,42 @@ func BenchmarkEncodeRTPI420IDRIntraPCMFUA(b *testing.B) {
 	benchmarkEncodePacketsSink = len(out.RTPPackets)
 }
 
+func BenchmarkEncodeRTPI420IDRIntraPCMSTAPA(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	cfg.STAPA = true
+	cfg.RTPMaxPayloadSize = 128
+	frame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	dst := make([]byte, 0, 4096)
+
+	b.ReportAllocs()
+	b.SetBytes(int64(benchmarkEncoderInputBytes()))
+	b.ResetTimer()
+
+	var out EncodedFrame
+	for i := 0; i < b.N; i++ {
+		enc, err := NewEncoder(cfg)
+		if err != nil {
+			b.Fatal(err)
+		}
+		out, err = enc.EncodeInto(dst[:0], frame)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !out.IDR || len(out.RTPPackets) < 2 || len(out.Data) == 0 {
+			b.Fatalf("output idr=%v rtp=%d data=%d, want RTP STAP-A IDR", out.IDR, len(out.RTPPackets), len(out.Data))
+		}
+		if len(out.RTPPackets[0].Payload) == 0 {
+			b.Fatal("first RTP payload is empty, want STAP-A")
+		}
+		if nalType := out.RTPPackets[0].Payload[0] & 0x1f; nalType != 24 {
+			b.Fatalf("first RTP payload type=%d, want STAP-A", nalType)
+		}
+	}
+	benchmarkEncodeFrameSink = out
+	benchmarkEncodeBytesSink = len(out.Data)
+	benchmarkEncodePacketsSink = len(out.RTPPackets)
+}
+
 func BenchmarkEncodeRTPMode0I420IDRIntraPCM(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
 	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
