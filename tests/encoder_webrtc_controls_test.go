@@ -5105,6 +5105,64 @@ func TestEncoderRTPMode0RejectsOversizeNAL(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeIntoRTPMode0RejectPreservesCallerBuffer(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 64
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder mode 0: %v", err)
+	}
+
+	dst, backingBefore := encoderPrefilledCallerBuffer()
+	out, err := enc.EncodeInto(dst, patternedI420EncoderFrame(16, 16))
+	if !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("EncodeInto oversize mode 0 error = %v, want ErrInvalidData", err)
+	}
+	if len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 ||
+		out.KeyFrame || out.IDR || out.PTS != 0 || out.DTS != 0 || out.RTPTime != 0 || out.Dropped {
+		t.Fatalf("EncodeInto oversize mode 0 output = %+v, want empty frame", out)
+	}
+	assertEncoderCallerBufferUnchanged(t, dst, backingBefore)
+}
+
+func TestEncoderEncodeIntoLateDropPreservesCallerBuffer(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", outputFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc", outputFormat: goh264.EncoderOutputAVC},
+		{name: "rtp", outputFormat: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.FrameDrop = goh264.EncoderFrameDropLate
+			cfg.MaxEncodeTimeUS = 1
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			dst, backingBefore := encoderPrefilledCallerBuffer()
+			out, err := enc.EncodeInto(dst, patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("EncodeInto late drop: %v", err)
+			}
+			if !out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+				t.Fatalf("late-drop output = %+v, want dropped metadata without output", out)
+			}
+			assertEncoderCallerBufferUnchanged(t, dst, backingBefore)
+		})
+	}
+}
+
 func TestEncoderEncodeRTPPacketsCarryWebRTCMetadata(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPayloadType = 102
@@ -7675,6 +7733,21 @@ func cloneEncoderRTPPackets(packets []goh264.EncoderRTPPacket) []goh264.EncoderR
 		clones[i].Payload = append([]byte(nil), packets[i].Payload...)
 	}
 	return clones
+}
+
+func encoderPrefilledCallerBuffer() ([]byte, []byte) {
+	backing := bytes.Repeat([]byte{0xcc}, 4096)
+	prefix := []byte{0xde, 0xad, 0xbe, 0xef, 0x55}
+	copy(backing, prefix)
+	return backing[:len(prefix)], append([]byte(nil), backing...)
+}
+
+func assertEncoderCallerBufferUnchanged(t *testing.T, dst []byte, before []byte) {
+	t.Helper()
+	after := dst[:cap(dst)]
+	if !bytes.Equal(after, before) {
+		t.Fatalf("EncodeInto mutated caller buffer on non-output path")
+	}
 }
 
 func setConstantI420Chroma(frame *goh264.EncoderFrame, cb byte, cr byte) {

@@ -674,10 +674,6 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			Dropped: true,
 		}, nil
 	}
-	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
-	if err != nil {
-		return EncodedFrame{}, err
-	}
 	var packets []EncoderRTPPacket
 	if e.cfg.OutputFormat == EncoderOutputRTP {
 		switch e.cfg.RTPPacketizationMode {
@@ -700,8 +696,6 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 				Dropped: true,
 			}, nil
 		}
-		e.stampRTPPackets(packets)
-		e.notifyRTPPacketCallback(packets, frame, rtpTime, idr, idr)
 	} else if encoderLateBudgetMiss(lateStart, e.cfg) {
 		e.advanceEncoderRTPTime(frame, rtpTime)
 		return EncodedFrame{
@@ -710,6 +704,14 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			RTPTime: rtpTime,
 			Dropped: true,
 		}, nil
+	}
+	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
+	if err != nil {
+		return EncodedFrame{}, err
+	}
+	if e.cfg.OutputFormat == EncoderOutputRTP {
+		e.stampRTPPackets(packets)
+		e.notifyRTPPacketCallback(packets, frame, rtpTime, idr, idr)
 	}
 
 	e.advanceEncoderRTPTime(frame, rtpTime)
