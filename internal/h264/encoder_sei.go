@@ -50,6 +50,16 @@ func BuildEncoderRecoveryPointSEI(cfg EncoderRecoveryPointSEIConfig) (EncoderSEI
 	}, nil
 }
 
+// BuildEncoderRecoveryPointSEINAL returns only the raw recovery-point SEI NAL.
+func BuildEncoderRecoveryPointSEINAL(cfg EncoderRecoveryPointSEIConfig) ([]byte, error) {
+	payload, err := EncodeRecoveryPointSEIPayload(cfg)
+	if err != nil {
+		return nil, err
+	}
+	rbsp := AppendSEIRBSP(make([]byte, 0, 2+len(payload)+1), seiTypeRecoveryPoint, payload)
+	return AppendNAL(make([]byte, 0, 1+len(rbsp)+len(rbsp)/2), 0, NALSEI, rbsp)
+}
+
 func EncodeRecoveryPointSEIPayload(cfg EncoderRecoveryPointSEIConfig) ([]byte, error) {
 	if cfg.RecoveryFrameCount >= 1<<maxLog2MaxFrameNum || cfg.ChangingSliceGroupIDC > 2 {
 		return nil, ErrInvalidData

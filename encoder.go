@@ -596,11 +596,16 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		}
 	} else {
 		if e.cfg.RecoveryPointSEI {
-			sei, err := e.RecoveryPointSEI(0)
+			sei, err := h264.BuildEncoderRecoveryPointSEINAL(h264.EncoderRecoveryPointSEIConfig{
+				RecoveryFrameCount:    0,
+				ExactMatchFlag:        true,
+				BrokenLinkFlag:        e.cfg.BFrames > 0,
+				ChangingSliceGroupIDC: 0,
+			})
 			if err != nil {
 				return EncodedFrame{}, err
 			}
-			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSEI), raw: sei.NAL})
+			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSEI), raw: sei})
 		}
 		for _, r := range sliceRanges {
 			nal, err := buildEncoderI420IntraPCMPNAL(h264.EncoderI420IntraPCMPConfig{
@@ -1003,7 +1008,7 @@ func buildEncoderI420IntraPCMPNAL(cfg h264.EncoderI420IntraPCMPConfig) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	return h264.AppendNAL(nil, 2, h264.NALSlice, rbsp)
+	return h264.AppendNAL(make([]byte, 0, 1+len(rbsp)+len(rbsp)/2), 2, h264.NALSlice, rbsp)
 }
 
 func (e *Encoder) validateFrame(frame EncoderFrame) error {

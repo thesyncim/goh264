@@ -62,6 +62,27 @@ func TestBuildEncoderRecoveryPointSEIRoundTripsThroughParsers(t *testing.T) {
 	}
 }
 
+func TestBuildEncoderRecoveryPointSEINALMatchesPackagedSEI(t *testing.T) {
+	cfg := EncoderRecoveryPointSEIConfig{
+		RecoveryFrameCount:    4,
+		ExactMatchFlag:        true,
+		BrokenLinkFlag:        true,
+		ChangingSliceGroupIDC: 2,
+		NALLengthSize:         4,
+	}
+	sei, err := BuildEncoderRecoveryPointSEI(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nal, err := BuildEncoderRecoveryPointSEINAL(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(nal, sei.NAL) {
+		t.Fatalf("raw SEI NAL = %x, want packaged NAL %x", nal, sei.NAL)
+	}
+}
+
 func TestBuildEncoderRecoveryPointSEIRejectsInvalidSyntax(t *testing.T) {
 	for _, tt := range []struct {
 		name   string

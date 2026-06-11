@@ -254,7 +254,8 @@ func EncodeI420IntraPCMPSliceRBSP(cfg EncoderI420IntraPCMPConfig) ([]byte, error
 		return nil, err
 	}
 
-	var bw BitWriter
+	firstMB, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	bw := NewBitWriter(make([]byte, 0, 32+macroblockCount*384))
 	if err := writeEncoderI420PSliceHeader(&bw, EncoderI420PSkipConfig{
 		Width:                      cfg.Width,
 		Height:                     cfg.Height,
@@ -268,7 +269,6 @@ func EncodeI420IntraPCMPSliceRBSP(cfg EncoderI420IntraPCMPConfig) ([]byte, error
 	}
 
 	mbWidth := (cfg.Width + 15) >> 4
-	firstMB, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
 	lastMB := firstMB + macroblockCount
 	samples := encoderI420IntraPCMSamples{
 		Width:    cfg.Width,

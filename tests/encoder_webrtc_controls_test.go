@@ -5731,7 +5731,7 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 	t.Run("annexb odd patterned-chroma fallback", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.OutputFormat = goh264.EncoderOutputAnnexB
-		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "annexb", 0, 44)
+		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "annexb", 0, 6)
 	})
 
 	t.Run("annexb exact p16x16 deblock controls", func(t *testing.T) {
@@ -5901,8 +5901,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("annexb changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 44 {
-			t.Fatalf("annexb changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 44", allocs)
+		if allocs > 12 {
+			t.Fatalf("annexb changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 12", allocs)
 		}
 	})
 
@@ -6055,7 +6055,7 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 	t.Run("avc odd patterned-chroma fallback", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.OutputFormat = goh264.EncoderOutputAVC
-		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "avc", 0, 44)
+		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "avc", 0, 6)
 	})
 
 	t.Run("avc exact p16x16 edge search", func(t *testing.T) {
@@ -6133,8 +6133,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("avc changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 44 {
-			t.Fatalf("avc changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 44", allocs)
+		if allocs > 12 {
+			t.Fatalf("avc changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 12", allocs)
 		}
 	})
 
@@ -6279,7 +6279,7 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 
 	t.Run("rtp odd patterned-chroma fallback", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
-		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "rtp", 2, 46)
+		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "rtp", 2, 8)
 	})
 
 	t.Run("rtp exact p16x16 edge search", func(t *testing.T) {
@@ -6386,8 +6386,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 46 {
-			t.Fatalf("rtp changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 46", allocs)
+		if allocs > 16 {
+			t.Fatalf("rtp changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 16", allocs)
 		}
 	})
 
@@ -6504,7 +6504,7 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
 		cfg.RTPMaxPayloadSize = 1200
-		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "rtp mode0", 2, 46)
+		assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t, cfg, "rtp mode0", 2, 8)
 	})
 
 	t.Run("rtp mode0 exact p16x16 edge search", func(t *testing.T) {
@@ -6583,8 +6583,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp mode0 changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 46 {
-			t.Fatalf("rtp mode0 changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 46", allocs)
+		if allocs > 16 {
+			t.Fatalf("rtp mode0 changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 16", allocs)
 		}
 	})
 }
