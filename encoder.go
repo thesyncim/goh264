@@ -292,6 +292,7 @@ type Encoder struct {
 	nextRTPTime        uint32
 	rtpTimeInitialized bool
 	reference          encoderReferenceFrame
+	p16MVDs            []h264.EncoderMotionVectorDelta
 	framesSinceIDR     int
 	rtpPacketCallback  EncoderRTPPacketCallback
 }
@@ -500,7 +501,12 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		var mvdBuf [64]h264.EncoderMotionVectorDelta
 		macroblocksPerRow := view.width >> 4
 		for _, r := range sliceRanges {
-			mvds := appendEncoderP16x16NoResidualMVDs(mvdBuf[:0], r.firstMB, r.macroblockCount, macroblocksPerRow, mvdX, mvdY)
+			mvdsBuf := mvdBuf[:0]
+			if r.macroblockCount > cap(mvdsBuf) {
+				e.p16MVDs = resizeEncoderP16x16MVDs(e.p16MVDs, r.macroblockCount)
+				mvdsBuf = e.p16MVDs[:0]
+			}
+			mvds := appendEncoderP16x16NoResidualMVDs(mvdsBuf, r.firstMB, r.macroblockCount, macroblocksPerRow, mvdX, mvdY)
 			nal, err := buildEncoderI420P16x16NoResidualNAL(h264.EncoderI420P16x16NoResidualConfig{
 				Width:                      view.width,
 				Height:                     view.height,
@@ -878,7 +884,7 @@ func buildEncoderI420P16x16NoResidualNAL(cfg h264.EncoderI420P16x16NoResidualCon
 	if err != nil {
 		return nil, err
 	}
-	return h264.AppendNAL(nil, 2, h264.NALSlice, rbsp)
+	return h264.AppendNAL(make([]byte, 0, 1+len(rbsp)+len(rbsp)/2), 2, h264.NALSlice, rbsp)
 }
 
 func buildEncoderI420IntraPCMPNAL(cfg h264.EncoderI420IntraPCMPConfig) ([]byte, error) {
@@ -1138,6 +1144,13 @@ func (e *Encoder) storeReference(view encoderFrameView) {
 func resizeEncoderReferencePlane(buf []byte, size int) []byte {
 	if cap(buf) < size {
 		return make([]byte, size)
+	}
+	return buf[:size]
+}
+
+func resizeEncoderP16x16MVDs(buf []h264.EncoderMotionVectorDelta, size int) []h264.EncoderMotionVectorDelta {
+	if cap(buf) < size {
+		return make([]h264.EncoderMotionVectorDelta, size)
 	}
 	return buf[:size]
 }

@@ -100,8 +100,8 @@ packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
 from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B
-exact P16x16, Annex B changed P IntraPCM, RTP forced IDR/FU-A, RTP exact
-P16x16, and RTP steady P-skip paths so
+exact P16x16, Annex B macroblock-aligned exact P16x16, Annex B changed
+P IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16, and RTP steady P-skip paths so
 admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing

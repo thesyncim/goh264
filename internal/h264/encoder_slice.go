@@ -304,7 +304,8 @@ func EncodeI420P16x16NoResidualSliceRBSP(cfg EncoderI420P16x16NoResidualConfig) 
 		return nil, err
 	}
 
-	var bw BitWriter
+	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	bw := NewBitWriter(make([]byte, 0, 32+macroblockCount*8))
 	if err := writeEncoderI420PSliceHeader(&bw, EncoderI420PSkipConfig{
 		Width:                      cfg.Width,
 		Height:                     cfg.Height,
@@ -317,7 +318,6 @@ func EncodeI420P16x16NoResidualSliceRBSP(cfg EncoderI420P16x16NoResidualConfig) 
 		return nil, err
 	}
 
-	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
 	for i := 0; i < macroblockCount; i++ {
 		mvdX, mvdY := cfg.MVDX, cfg.MVDY
 		if len(cfg.MVDs) > 0 {

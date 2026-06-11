@@ -157,10 +157,10 @@ decode, and RTP reassembly decode,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
-forced IDR, Annex B steady P-skip, Annex B exact P16x16, Annex B changed
-P IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16, and RTP steady P-skip paths;
-the
-live encode path writes RBSP plus raw NAL output directly instead of building
+forced IDR, Annex B steady P-skip, Annex B exact P16x16, Annex B
+macroblock-aligned exact P16x16, Annex B changed P IntraPCM, RTP forced IDR/FU-A,
+RTP exact P16x16, and RTP steady P-skip paths;
+the live encode path writes RBSP plus raw NAL output directly instead of building
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage. Package-level benchmark canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B changed

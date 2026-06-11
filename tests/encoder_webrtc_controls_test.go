@@ -2659,6 +2659,56 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("annexb exact p16x16 macroblock-aligned", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(160, 128)
+		cfg.OutputFormat = goh264.EncoderOutputAnnexB
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		a := patternedI420EncoderFrame(160, 128)
+		b := integerMotionI420EncoderFrame(a, 2, 0)
+		c := integerMotionI420EncoderFrame(b, 2, 0)
+		encs := make([]*goh264.Encoder, 128)
+		for i := range encs {
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder[%d]: %v", i, err)
+			}
+			if _, err := enc.EncodeInto(make([]byte, 0, 65536), a); err != nil {
+				t.Fatalf("prime IDR[%d]: %v", i, err)
+			}
+			if _, err := enc.EncodeInto(make([]byte, 0, 65536), b); err != nil {
+				t.Fatalf("prime exact P16x16[%d]: %v", i, err)
+			}
+			encs[i] = enc
+		}
+		dst := make([]byte, 0, 65536)
+		var call int
+		allocs := testing.AllocsPerRun(100, func() {
+			if call >= len(encs) {
+				t.Fatalf("encoder pool exhausted after %d calls", call)
+			}
+			out, err := encs[call].EncodeInto(dst[:0], c)
+			call++
+			if err != nil {
+				t.Fatalf("EncodeInto macroblock-aligned exact P16x16: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("macroblock-aligned exact P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("annexb macroblock-aligned exact P16x16 EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 4 {
+			t.Fatalf("annexb macroblock-aligned exact P16x16 EncodeInto allocations/run = %.0f, want <= 4", allocs)
+		}
+	})
+
 	t.Run("annexb changed p-intrapcm", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.OutputFormat = goh264.EncoderOutputAnnexB
