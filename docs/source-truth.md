@@ -131,9 +131,9 @@ Package-level benchmark canaries cover admitted Annex B/RTP IDR and P-frame
 encode paths with `-benchmem`. Internal writer proof covers raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
 packaging, AVC decoder configuration records, baseline SPS/PPS syntax with
-4:2:0 crop-unit emission,
-recovery-point SEI syntax, and Baseline IDR plus P-skip/P IntraPCM slice syntax
-via decoder-parser and encoded-frame round trips.
+4:2:0 crop-unit emission, recovery-point SEI syntax, and Baseline IDR plus
+P-skip/P16x16 no-residual/P IntraPCM slice syntax via decoder-parser and
+encoded-frame round trips.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder

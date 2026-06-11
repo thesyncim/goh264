@@ -228,6 +228,112 @@ func TestBuildEncoderI420PSkipSliceWritesMacroblockRange(t *testing.T) {
 	}
 }
 
+func TestBuildEncoderI420P16x16NoResidualSliceWritesParseableHeader(t *testing.T) {
+	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              18,
+		Height:             18,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          23,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slice, err := BuildEncoderI420P16x16NoResidualSlice(EncoderI420P16x16NoResidualConfig{
+		Width:                      18,
+		Height:                     18,
+		FrameNum:                   6,
+		InitialQP:                  23,
+		DisableDeblockingFilterIDC: 1,
+		MVDX:                       1,
+		MVDY:                       -1,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nals, err := SplitAnnexB(append(append([]byte(nil), sets.AnnexB...), slice.AnnexB...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nals) != 3 || nals[2].Type != NALSlice {
+		t.Fatalf("NALs = %+v, want SPS/PPS/P-slice", nals)
+	}
+	sps, err := DecodeSPS(nals[0].RBSP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spsList [maxSPSCount]*SPS
+	spsList[sps.SPSID] = sps
+	pps, err := DecodePPS(nals[1].RBSP, &spsList)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ppsList [maxPPSCount]*PPS
+	ppsList[pps.PPSID] = pps
+
+	sh, payload, err := parseSliceHeaderWithPayload(nals[2], &ppsList)
+	if err != nil {
+		t.Fatalf("parse generated P16x16 no-residual slice header: %v", err)
+	}
+	if sh.FirstMBAddr != 0 || sh.SliceTypeNoS != PictureTypeP || sh.FrameNum != 6 ||
+		sh.RefCount[0] != 1 || sh.NBRefModifications[0] != 0 ||
+		sh.NBMMCO != 0 || sh.QScale != 23 || sh.DeblockingFilter != 0 {
+		t.Fatalf("slice header = %+v", sh)
+	}
+	assertEncoderP16x16NoResidualPayload(t, &payload, 4, 1, -1)
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("P16x16 no-residual payload bitsLeft=%d, want 0", payload.bitsLeft())
+	}
+}
+
+func TestBuildEncoderI420P16x16NoResidualSliceWritesMacroblockRange(t *testing.T) {
+	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              48,
+		Height:             16,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          23,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slice, err := BuildEncoderI420P16x16NoResidualSlice(EncoderI420P16x16NoResidualConfig{
+		Width:                      48,
+		Height:                     16,
+		FrameNum:                   6,
+		InitialQP:                  23,
+		DisableDeblockingFilterIDC: 1,
+		FirstMBAddr:                1,
+		MacroblockCount:            2,
+		MVDX:                       -2,
+		MVDY:                       3,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sh, payload := parseEncoderSliceTestHeader(t, sets.AnnexB, slice.AnnexB)
+	if sh.FirstMBAddr != 1 || sh.SliceTypeNoS != PictureTypeP || sh.FrameNum != 6 ||
+		sh.RefCount[0] != 1 || sh.QScale != 23 {
+		t.Fatalf("slice header = %+v", sh)
+	}
+	assertEncoderP16x16NoResidualPayload(t, &payload, 2, -2, 3)
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("ranged P16x16 no-residual payload bitsLeft=%d, want 0", payload.bitsLeft())
+	}
+}
+
 func TestBuildEncoderI420IntraPCMPSliceWritesParseableHeader(t *testing.T) {
 	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
 		ProfileIDC:         66,
@@ -395,6 +501,37 @@ func TestBuildEncoderI420PSkipSliceRejectsInvalidConfig(t *testing.T) {
 	}
 }
 
+func TestBuildEncoderI420P16x16NoResidualSliceRejectsInvalidConfig(t *testing.T) {
+	cfg := EncoderI420P16x16NoResidualConfig{
+		Width:                      16,
+		Height:                     16,
+		FrameNum:                   1,
+		InitialQP:                  26,
+		DisableDeblockingFilterIDC: 0,
+	}
+	for _, tt := range []struct {
+		name   string
+		mutate func(*EncoderI420P16x16NoResidualConfig)
+	}{
+		{name: "odd width", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.Width = 15 }},
+		{name: "zero height", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.Height = 0 }},
+		{name: "bad frame num", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.FrameNum = 256 }},
+		{name: "bad deblock idc", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.DisableDeblockingFilterIDC = 3 }},
+		{name: "bad qp", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.InitialQP = 52 }},
+		{name: "bad first mb", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.FirstMBAddr = 1 }},
+		{name: "bad macroblock count", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.MacroblockCount = 2 }},
+		{name: "bad nal length", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.NALLengthSize = 5 }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			next := cfg
+			tt.mutate(&next)
+			if _, err := BuildEncoderI420P16x16NoResidualSlice(next); err != ErrInvalidData {
+				t.Fatalf("BuildEncoderI420P16x16NoResidualSlice error = %v, want ErrInvalidData", err)
+			}
+		})
+	}
+}
+
 func TestBuildEncoderI420IntraPCMPSliceRejectsInvalidConfig(t *testing.T) {
 	frame := encoderSliceTestI420(16, 16)
 	cfg := EncoderI420IntraPCMPConfig{
@@ -496,6 +633,36 @@ func parseEncoderSliceTestHeader(t *testing.T, annexBHeaders []byte, annexBSlice
 		t.Fatalf("parse generated slice header: %v", err)
 	}
 	return sh, payload
+}
+
+func assertEncoderP16x16NoResidualPayload(t *testing.T, payload *bitReader, macroblockCount int, wantMVDX int32, wantMVDY int32) {
+	t.Helper()
+	for i := 0; i < macroblockCount; i++ {
+		skipRun, err := payload.readUEGolombLong()
+		if err != nil {
+			t.Fatalf("read generated P16x16 skip run[%d]: %v", i, err)
+		}
+		mbType, err := payload.readUEGolombLong()
+		if err != nil {
+			t.Fatalf("read generated P16x16 mb_type[%d]: %v", i, err)
+		}
+		mvdX, err := payload.readSEGolombLong()
+		if err != nil {
+			t.Fatalf("read generated P16x16 mvd_l0_x[%d]: %v", i, err)
+		}
+		mvdY, err := payload.readSEGolombLong()
+		if err != nil {
+			t.Fatalf("read generated P16x16 mvd_l0_y[%d]: %v", i, err)
+		}
+		cbp, err := payload.readUEGolombLong()
+		if err != nil {
+			t.Fatalf("read generated P16x16 cbp[%d]: %v", i, err)
+		}
+		if skipRun != 0 || mbType != 0 || mvdX != wantMVDX || mvdY != wantMVDY || cbp != 0 {
+			t.Fatalf("P16x16 macroblock[%d] skip/mb/mvd/cbp = %d/%d/%d,%d/%d, want 0/0/%d,%d/0",
+				i, skipRun, mbType, mvdX, mvdY, cbp, wantMVDX, wantMVDY)
+		}
+	}
 }
 
 type encoderSliceTestFrame struct {

@@ -121,9 +121,9 @@ crop metadata and local/FFmpeg decode sees the cropped visible frame. Internal
 writer primitives cover raw bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
-first Baseline IDR, P-skip, and P IntraPCM slice payloads. Motion-search P
-prediction, residual CAVLC coding, rate-control feedback, and broader realtime
-allocation/performance evidence remain pending.
+first Baseline IDR, P-skip, P16x16 no-residual, and P IntraPCM slice payloads.
+Motion-search P prediction, residual CAVLC coding, rate-control feedback, and
+broader realtime allocation/performance evidence remain pending.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock

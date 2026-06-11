@@ -57,6 +57,20 @@ type EncoderI420PSkipConfig struct {
 	NALLengthSize              int
 }
 
+type EncoderI420P16x16NoResidualConfig struct {
+	Width  int
+	Height int
+
+	FrameNum                   uint32
+	InitialQP                  int
+	DisableDeblockingFilterIDC uint32
+	FirstMBAddr                uint32
+	MacroblockCount            uint32
+	MVDX                       int32
+	MVDY                       int32
+	NALLengthSize              int
+}
+
 type EncoderIDRSlice struct {
 	RBSP   []byte
 	NAL    []byte
@@ -111,6 +125,34 @@ func BuildEncoderI420IntraPCMPSlice(cfg EncoderI420IntraPCMPConfig) (EncoderPSli
 		cfg.NALLengthSize = 4
 	}
 	rbsp, err := EncodeI420IntraPCMPSliceRBSP(cfg)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	nal, err := AppendNAL(nil, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	annexB, err := AppendAnnexBNAL(nil, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	avc, err := AppendAVCNAL(nil, cfg.NALLengthSize, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	return EncoderPSlice{
+		RBSP:   rbsp,
+		NAL:    nal,
+		AnnexB: annexB,
+		AVC:    avc,
+	}, nil
+}
+
+func BuildEncoderI420P16x16NoResidualSlice(cfg EncoderI420P16x16NoResidualConfig) (EncoderPSlice, error) {
+	if cfg.NALLengthSize == 0 {
+		cfg.NALLengthSize = 4
+	}
+	rbsp, err := EncodeI420P16x16NoResidualSliceRBSP(cfg)
 	if err != nil {
 		return EncoderPSlice{}, err
 	}
@@ -247,6 +289,46 @@ func EncodeI420IntraPCMPSliceRBSP(cfg EncoderI420IntraPCMPConfig) ([]byte, error
 		}
 	}
 
+	bw.WriteRBSPTrailingBits()
+	return bw.Bytes(), nil
+}
+
+func EncodeI420P16x16NoResidualSliceRBSP(cfg EncoderI420P16x16NoResidualConfig) ([]byte, error) {
+	if err := validateEncoderI420P16x16NoResidualConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	var bw BitWriter
+	if err := writeEncoderI420PSliceHeader(&bw, EncoderI420PSkipConfig{
+		Width:                      cfg.Width,
+		Height:                     cfg.Height,
+		FrameNum:                   cfg.FrameNum,
+		InitialQP:                  cfg.InitialQP,
+		DisableDeblockingFilterIDC: cfg.DisableDeblockingFilterIDC,
+		FirstMBAddr:                cfg.FirstMBAddr,
+		MacroblockCount:            cfg.MacroblockCount,
+	}); err != nil {
+		return nil, err
+	}
+
+	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	for i := 0; i < macroblockCount; i++ {
+		if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
+			return nil, err
+		}
+		if err := bw.WriteUEGolomb(0); err != nil { // P_L0_16x16
+			return nil, err
+		}
+		if err := bw.WriteSEGolomb(cfg.MVDX); err != nil {
+			return nil, err
+		}
+		if err := bw.WriteSEGolomb(cfg.MVDY); err != nil {
+			return nil, err
+		}
+		if err := bw.WriteUEGolomb(0); err != nil { // coded_block_pattern
+			return nil, err
+		}
+	}
 	bw.WriteRBSPTrailingBits()
 	return bw.Bytes(), nil
 }
@@ -448,6 +530,22 @@ func validateEncoderI420IntraPCMSamples(cfg encoderI420IntraPCMSamples) error {
 	chromaHeight := cfg.Height >> 1
 	if len(cfg.Cb) < cfg.StrideCb*chromaHeight || len(cfg.Cr) < cfg.StrideCr*chromaHeight {
 		return ErrInvalidData
+	}
+	return nil
+}
+
+func validateEncoderI420P16x16NoResidualConfig(cfg EncoderI420P16x16NoResidualConfig) error {
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width&1 != 0 || cfg.Height&1 != 0 {
+		return ErrInvalidData
+	}
+	if cfg.FrameNum >= 1<<8 ||
+		cfg.InitialQP < 0 || cfg.InitialQP > 51 ||
+		cfg.DisableDeblockingFilterIDC > 2 ||
+		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
+		return ErrInvalidData
+	}
+	if err := validateEncoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount); err != nil {
+		return err
 	}
 	return nil
 }

@@ -124,10 +124,14 @@ encoding and Annex B/AVC parser round trips. `internal/h264/encoder_slice.go`
 adds the first Baseline IDR slice writer using CAVLC I_PCM macroblocks, with
 edge padding and deblock-control syntax kept explicit, plus a parse-proved
 Baseline P-skip writer that emits `mb_skip_run` for the selected slice range
-and a parse-proved Baseline P IntraPCM writer that emits `mb_skip_run=0` plus
-P-slice `mb_type=30` macroblocks. The current IDR, P-skip, and P IntraPCM
-writers accept explicit raster-scan macroblock ranges so public `SliceCount`
-can emit multiple VCL NALs in one access unit.
+and a parse-proved Baseline P16x16 no-residual writer that emits explicit
+P_L0_16x16 macroblocks with signed MVD syntax and zero CBP. A public decode
+oracle proves SPS/PPS + IDR IntraPCM + P16x16 no-residual output through local
+Annex B decode and FFmpeg rawvideo decode. A parse-proved Baseline P IntraPCM
+writer emits `mb_skip_run=0` plus P-slice `mb_type=30` macroblocks. The current
+IDR, P-skip, P16x16 no-residual, and P IntraPCM writers accept explicit
+raster-scan macroblock ranges so public `SliceCount` can emit multiple VCL NALs
+in one access unit.
 
 ## Implementation Order
 
@@ -185,8 +189,8 @@ Encoder tests need independent evidence, not only local decode:
 - Reconfiguration tests for bitrate, framerate, force-IDR, resolution reset,
   max-payload, RTP, rate-control/QP, frame-drop, GOP/IDR, and deblock changes.
 - Allocation gates for `EncodeInto`/packetization hot paths with caller-owned
-  buffers; current canaries cover Annex B steady P-skip, Annex B changed
-  P IntraPCM, and RTP steady P-skip.
+  buffers; current canaries cover Annex B forced IDR, Annex B steady P-skip,
+  Annex B changed P IntraPCM, RTP forced IDR/FU-A, and RTP steady P-skip.
 
 ## Production Bar
 
