@@ -6522,6 +6522,46 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("rtp stapa forced idr", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.STAPA = true
+		cfg.RTPMaxPayloadSize = 128
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		frame := patternedI420EncoderFrame(16, 16)
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), frame); err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		dst := make([]byte, 0, 4096)
+		allocs := testing.AllocsPerRun(100, func() {
+			enc.ForceIDR()
+			out, err := enc.EncodeInto(dst[:0], frame)
+			if err != nil {
+				t.Fatalf("EncodeInto RTP STAP-A forced IDR: %v", err)
+			}
+			if !out.IDR || len(out.RTPPackets) < 2 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 3 || out.NALUnits[0].Type != 7 || out.NALUnits[1].Type != 8 || out.NALUnits[2].Type != 5 {
+				t.Fatalf("forced RTP STAP-A IDR output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if len(out.RTPPackets[0].Payload) == 0 || out.RTPPackets[0].Payload[0]&0x1f != 24 {
+				t.Fatalf("forced RTP STAP-A IDR first payload = %x, want STAP-A", out.RTPPackets[0].Payload)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("rtp STAP-A forced IDR EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 10 {
+			t.Fatalf("rtp STAP-A forced IDR EncodeInto allocations/run = %.0f, want <= 10", allocs)
+		}
+	})
+
 	t.Run("rtp mode0 forced idr", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.DeblockMode = goh264.EncoderDeblockDisabled

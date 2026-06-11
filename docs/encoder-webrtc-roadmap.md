@@ -158,7 +158,7 @@ Annex B per-macroblock exact P16x16, Annex B changed P IntraPCM, AVC forced IDR,
 AVC steady P-skip, AVC odd-pixel constant-chroma exact P16x16, AVC odd-pixel
 patterned-chroma P IntraPCM fallback, AVC exact P16x16 including 8-pixel edge
 search, AVC per-macroblock exact P16x16, AVC changed P IntraPCM, RTP forced
-IDR/FU-A, RTP odd-pixel constant-chroma exact P16x16, RTP odd-pixel
+IDR/FU-A, RTP forced IDR with STAP-A, RTP odd-pixel constant-chroma exact P16x16, RTP odd-pixel
 patterned-chroma P IntraPCM fallback, RTP exact P16x16 including 8-pixel edge
 search, RTP per-macroblock exact P16x16, RTP steady P-skip, RTP changed
 P IntraPCM, and RTP packetization-mode 0 IDR/P-skip/exact-P16x16/P-IntraPCM
@@ -169,7 +169,8 @@ silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
 discarded Annex B/AVC copies, including raw SPS/PPS NALs for forced IDR and raw
 recovery-point SEI NALs for P IntraPCM fallback. Current budgets are tightened
-to <=8 allocations for Annex B/AVC forced IDR, <=10 for RTP forced IDR, <=6 for
+to <=8 allocations for Annex B/AVC forced IDR, <=10 for RTP forced IDR/FU-A
+and STAP-A, <=6 for
 Annex B/AVC odd-patterned fallback, <=8 for RTP odd-patterned fallback, <=5 for
 Annex B/AVC per-macroblock exact P16x16, <=7 for RTP per-macroblock exact
 P16x16, <=12 for Annex B/AVC changed P IntraPCM, and <=16 for RTP changed
