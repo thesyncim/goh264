@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+const maxIntForTest = int(^uint(0) >> 1)
+
 var rawOutputAllocationByteSink []byte
 var rawOutputAllocationUint16Sink []uint16
 
@@ -454,6 +456,19 @@ func TestFrameHighOutputRejectsInvalidGeometryAndDepth(t *testing.T) {
 	}
 	if _, err := badSample.AppendRawYUVBytesLE(nil); err != ErrInvalidData {
 		t.Fatalf("bad sample AppendRawYUVBytesLE error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestFrameRawYUVSizeRejectsOverflow(t *testing.T) {
+	frame := Frame{
+		Width:           maxIntForTest/2 + 1,
+		Height:          3,
+		ChromaFormatIDC: 0,
+		BitDepthLuma:    8,
+		BitDepthChroma:  8,
+	}
+	if _, err := frame.RawYUVSize(); err != ErrInvalidData {
+		t.Fatalf("RawYUVSize overflow error = %v, want ErrInvalidData", err)
 	}
 }
 

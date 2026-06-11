@@ -1131,7 +1131,7 @@ func (f *Frame) RawYUVSize() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return samples * bytesPerSample, nil
+	return checkedMulInt(samples, bytesPerSample)
 }
 
 // AppendRawYUV16 appends the visible high-bit-depth frame as planar uint16 YUV.
@@ -1360,8 +1360,42 @@ func (f *Frame) rawYUVSampleCount() (int, error) {
 			return 0, err
 		}
 	}
-	return f.Width*f.Height + 2*chromaWidth*chromaHeight, nil
+	lumaSamples, err := checkedMulInt(f.Width, f.Height)
+	if err != nil {
+		return 0, err
+	}
+	chromaSamples, err := checkedMulInt(chromaWidth, chromaHeight)
+	if err != nil {
+		return 0, err
+	}
+	chromaSamples, err = checkedMulInt(chromaSamples, 2)
+	if err != nil {
+		return 0, err
+	}
+	return checkedAddInt(lumaSamples, chromaSamples)
 }
+
+func checkedAddInt(a int, b int) (int, error) {
+	if a < 0 || b < 0 {
+		return 0, ErrInvalidData
+	}
+	if a > maxInt-b {
+		return 0, ErrInvalidData
+	}
+	return a + b, nil
+}
+
+func checkedMulInt(a int, b int) (int, error) {
+	if a < 0 || b < 0 {
+		return 0, ErrInvalidData
+	}
+	if a != 0 && b > maxInt/a {
+		return 0, ErrInvalidData
+	}
+	return a * b, nil
+}
+
+const maxInt = int(^uint(0) >> 1)
 
 func (f *Frame) rawYUV16Geometry() (int, int, int, int, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
