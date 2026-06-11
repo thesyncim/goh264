@@ -1322,6 +1322,8 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 		name            string
 		width           int
 		height          int
+		dx              int
+		dy              int
 		sliceCount      int
 		wantFirstNALs   []uint8
 		wantSecondNALs  []uint8
@@ -1331,6 +1333,7 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 			name:            "single-row-single-slice",
 			width:           32,
 			height:          16,
+			dx:              2,
 			sliceCount:      1,
 			wantFirstNALs:   []uint8{7, 8, 5},
 			wantSecondNALs:  []uint8{1},
@@ -1340,6 +1343,7 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 			name:            "single-row-two-slices",
 			width:           32,
 			height:          16,
+			dx:              2,
 			sliceCount:      2,
 			wantFirstNALs:   []uint8{7, 8, 5, 5},
 			wantSecondNALs:  []uint8{1, 1},
@@ -1349,6 +1353,7 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 			name:            "narrow-two-row-single-slice",
 			width:           16,
 			height:          32,
+			dx:              2,
 			sliceCount:      1,
 			wantFirstNALs:   []uint8{7, 8, 5},
 			wantSecondNALs:  []uint8{1},
@@ -1358,10 +1363,32 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 			name:            "ragged-four-slice-two-row",
 			width:           48,
 			height:          32,
+			dx:              2,
 			sliceCount:      4,
 			wantFirstNALs:   []uint8{7, 8, 5, 5, 5, 5},
 			wantSecondNALs:  []uint8{1, 1, 1, 1},
 			wantSecondFirst: []uint32{0, 2, 4, 5},
+		},
+		{
+			name:            "diagonal-two-row-single-slice",
+			width:           32,
+			height:          32,
+			dx:              2,
+			dy:              2,
+			sliceCount:      1,
+			wantFirstNALs:   []uint8{7, 8, 5},
+			wantSecondNALs:  []uint8{1},
+			wantSecondFirst: []uint32{0},
+		},
+		{
+			name:            "larger-horizontal-single-row",
+			width:           32,
+			height:          16,
+			dx:              4,
+			sliceCount:      1,
+			wantFirstNALs:   []uint8{7, 8, 5},
+			wantSecondNALs:  []uint8{1},
+			wantSecondFirst: []uint32{0},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1385,7 +1412,7 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 			}
 			assertEncoderNALTypes(t, first.NALUnits, tt.wantFirstNALs)
 
-			secondFrame := integerMotionI420EncoderFrame(firstFrame, 2, 0)
+			secondFrame := integerMotionI420EncoderFrame(firstFrame, tt.dx, tt.dy)
 			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
 			second, err := enc.Encode(secondFrame)
 			if err != nil {

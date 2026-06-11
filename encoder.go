@@ -1053,7 +1053,7 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, b
 		return 0, 0, false
 	}
 
-	candidates := [...]struct {
+	primaryCandidates := [...]struct {
 		dx int
 		dy int
 	}{
@@ -1062,12 +1062,41 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, b
 		{dx: 0, dy: 2},
 		{dx: 0, dy: -2},
 	}
-	for _, candidate := range candidates {
+	for _, candidate := range primaryCandidates {
 		if encoderI420MatchesIntegerMotion(ref, view, candidate.dx, candidate.dy) {
 			return int32(candidate.dx * 4), int32(candidate.dy * 4), true
 		}
 	}
+	const maxExactMotion = 4
+	for radius := 2; radius <= maxExactMotion; radius += 2 {
+		for dy := -radius; dy <= radius; dy += 2 {
+			for dx := -radius; dx <= radius; dx += 2 {
+				if dx == 0 && dy == 0 {
+					continue
+				}
+				if absInt(dx) != radius && absInt(dy) != radius {
+					continue
+				}
+				if (dx == 2 && dy == 0) ||
+					(dx == -2 && dy == 0) ||
+					(dx == 0 && dy == 2) ||
+					(dx == 0 && dy == -2) {
+					continue
+				}
+				if encoderI420MatchesIntegerMotion(ref, view, dx, dy) {
+					return int32(dx * 4), int32(dy * 4), true
+				}
+			}
+		}
+	}
 	return 0, 0, false
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 func appendEncoderP16x16NoResidualMVDs(dst []h264.EncoderMotionVectorDelta, firstMB int, macroblockCount int, macroblocksPerRow int, mvdX int32, mvdY int32) []h264.EncoderMotionVectorDelta {

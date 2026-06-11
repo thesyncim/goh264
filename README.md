@@ -116,7 +116,7 @@ drop recovery, packet metadata retargeting, paused RTP sequence/callback state
 while no RTP packets are emitted, and local decode after RTP re-entry.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
 across disabled, enabled, and slice-boundary deblock controls; a
-macroblock-aligned frame that exactly matches a small even integer-pel shift of
+macroblock-aligned frame that exactly matches a bounded even integer-pel shift of
 the stored reference can use guarded CAVLC P16x16 no-residual slices with Annex B
 local/FFmpeg, configured AVC, and RTP reassembly decode proof; changed frames can use a
 guarded CAVLC P IntraPCM slice in the same admitted deblock scope with
@@ -331,7 +331,7 @@ controls plus rate-control/QP/GOP/deblock controls while preserving state on
 rejected updates. Bitrate-budget drops use the configured `MaxBitrate` refill
 rate and `VBVBufferSize` burst capacity, then surface through
 `EncodedFrame.Dropped` when `FrameDropToBitrate` is active.
-Motion search beyond the exact macroblock-aligned inter path, quantized
+Motion search beyond the bounded exact macroblock-aligned inter path, quantized
 residual coding, and adaptive rate-control feedback are still future encoder slices.
 
 ## Supported Inputs

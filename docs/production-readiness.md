@@ -5,7 +5,7 @@ now in scope, with a tested public control contract in `encoder.go`. Encoder
 bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
 IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
 output, and RTP packetization-mode 1 output, plus guarded identical-reference
-CAVLC P-skip, exact macroblock-aligned P16x16 no-residual prediction, and changed-frame
+CAVLC P-skip, bounded exact macroblock-aligned P16x16 no-residual prediction, and changed-frame
 P IntraPCM across disabled, enabled, and slice-boundary deblock controls.
 Encoder
 production gates live in `docs/encoder-webrtc-roadmap.md` until broader
