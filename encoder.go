@@ -2387,6 +2387,9 @@ func rtpTimestampIncrementChecked(clock, frameRateNum, frameRateDen int) (uint32
 		return 0, encoderInvalid("RTP timestamp increment overflows")
 	}
 	increment := ticks / frameRateNum
+	if increment == 0 {
+		return 0, encoderInvalid("RTP timestamp increment must be positive")
+	}
 	if uint64(increment) > uint64(^uint32(0)) {
 		return 0, encoderInvalid("RTP timestamp increment must fit in 32 bits")
 	}

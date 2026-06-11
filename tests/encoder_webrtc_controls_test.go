@@ -79,6 +79,12 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 			c.FrameRateDen = 2
 			c.RTPTimestampIncrement = 0
 		}, want: goh264.ErrInvalidData},
+		{name: "derived RTP timestamp underflow", mutate: func(c *goh264.EncoderConfig) {
+			c.TimeBaseDen = 1
+			c.FrameRateNum = 2
+			c.FrameRateDen = 1
+			c.RTPTimestampIncrement = 0
+		}, want: goh264.ErrInvalidData},
 		{name: "bitrate frame budget overflow", mutate: func(c *goh264.EncoderConfig) {
 			c.TargetBitrate = maxIntForTest
 			c.MaxBitrate = maxIntForTest
@@ -165,6 +171,20 @@ func TestEncoderSetFrameRateRejectsTimestampOverflowWithoutMutation(t *testing.T
 	}
 	if got := enc.Config(); got != before {
 		t.Fatalf("overflow SetFrameRate mutated config = %+v, want %+v", got, before)
+	}
+}
+
+func TestEncoderSetFrameRateRejectsZeroTimestampIncrementWithoutMutation(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	before := enc.Config()
+	if err := enc.SetFrameRate(before.TimeBaseDen+1, 1); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("SetFrameRate zero-increment error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("zero-increment SetFrameRate mutated config = %+v, want %+v", got, before)
 	}
 }
 

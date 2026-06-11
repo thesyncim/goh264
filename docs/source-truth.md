@@ -176,7 +176,7 @@ budget before the next frame, runtime max-bitrate/VBV lowering that resets stale
 credit before the next frame, `SetBitrate` lowering that resets stale
 frame-budget credit before the next frame, `SetFrameRate` changes that reset
 frame-budget credit and apply the updated RTP cadence across drop/recovery
-while rolling back derived RTP timestamp overflow,
+while rolling back derived RTP timestamp overflow or zero-increment underflow,
 `FrameDropLate` bypass of the derived bitrate budget when the encode-time budget
 admits the frame,
 ConstantQP bitrate-budget bypass across runtime rate-control mode switches,
