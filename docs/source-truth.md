@@ -106,6 +106,7 @@ matching `h264_decode_frame()` `buf_size == 0` delayed-output behavior,
 malformed AVC/Annex B `NEW_EXTRADATA` non-fatal packet-side-data guards,
 malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,
+packet side-data byte-slice ownership across delayed B-frame output,
 raw-output caller-buffer preservation on invalid 8-bit chroma geometry and
 high-bit-depth luma/chroma sample errors,
 public SEI side-data byte-slice ownership against caller mutation,

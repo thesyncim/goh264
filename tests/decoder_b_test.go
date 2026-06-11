@@ -351,7 +351,7 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	}
 	var frames []*Frame
 	for i, sample := range samples {
-		out, err := dec.DecodePacketFrames(Packet{
+		pkt := Packet{
 			Data: sample,
 			SideData: []PacketSideData{
 				{
@@ -375,9 +375,15 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 					Data: []byte{0xe0, byte(i + 1), 0x00, 0x03, 0x01},
 				},
 			},
-		})
+		}
+		out, err := dec.DecodePacketFrames(pkt)
 		if err != nil {
 			t.Fatalf("sample[%d]: %v", i, err)
+		}
+		for sideIndex := range pkt.SideData {
+			for byteIndex := range pkt.SideData[sideIndex].Data {
+				pkt.SideData[sideIndex].Data[byteIndex] = 0xff
+			}
 		}
 		frames = append(frames, out...)
 	}

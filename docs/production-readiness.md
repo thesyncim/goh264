@@ -156,6 +156,9 @@ packet still decodes against the last good configuration and reference state.
 In-band malformed SPS/PPS NALs are also guarded as non-fatal: they do not
 replace the last good parameter sets before the next valid slice on configured
 AVC or mixed configured-AVC/Annex B public decode paths.
+Packet side-data byte payloads are copied before delayed B-frame storage:
+mutating caller-owned packet side-data immediately after each decode call does
+not affect immediate or flushed `FrameSideData`.
 
 Encoder readiness evidence currently covers controls, parameter-set headers,
 recovery-point SEI packaging, and the first IDR frame writer:
