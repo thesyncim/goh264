@@ -105,16 +105,17 @@ timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B
 exact P16x16 including single-macroblock deblock controls, Annex B
 macroblock-aligned exact P16x16, Annex B changed
-P IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16, RTP steady P-skip, and RTP
-packetization-mode 0 P-skip/exact-P16x16/P-IntraPCM paths so
+P IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16, RTP steady P-skip, RTP changed
+P IntraPCM, and RTP packetization-mode 0 P-skip/exact-P16x16/P-IntraPCM paths so
 admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage. Package-level `-benchmem` canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
-Annex B changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16, and RTP
-steady P-skip plus RTP packetization-mode 0 P-skip/exact-P16x16/P-IntraPCM.
+Annex B changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16, RTP
+steady P-skip, and RTP changed P IntraPCM plus RTP packetization-mode 0
+P-skip/exact-P16x16/P-IntraPCM.
 Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
@@ -188,8 +189,9 @@ in one access unit.
 6. In progress: add realtime allocation budgets, encode timing benchmarks, and
    control-loop stress tests. Done for the first RTP/Annex B/RTP control-loop
    stress proof, initial `EncodeInto` allocation canaries on Annex B and RTP
-   admitted IDR/P-frame paths including packetization-mode 0 P frames, and
-   package-level benchmark canaries for admitted IDR/P-frame and RTP paths.
+   admitted IDR/P-frame paths including RTP P-IntraPCM and packetization-mode 0
+   P frames, and package-level benchmark canaries for admitted IDR/P-frame and
+   RTP paths.
 
 ## Oracles And Gates
 
@@ -207,7 +209,8 @@ Encoder tests need independent evidence, not only local decode:
 - Allocation gates for `EncodeInto`/packetization hot paths with caller-owned
   buffers; current canaries cover Annex B forced IDR, Annex B steady P-skip,
   Annex B exact P16x16, Annex B changed P IntraPCM, RTP forced IDR/FU-A, RTP
-  exact P16x16, RTP steady P-skip, and RTP packetization-mode 0 P-frame paths.
+  exact P16x16, RTP steady P-skip, RTP changed P IntraPCM, and RTP
+  packetization-mode 0 P-frame paths.
 
 ## Production Bar
 

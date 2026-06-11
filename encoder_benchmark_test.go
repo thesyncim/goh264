@@ -212,6 +212,14 @@ func BenchmarkEncodeRTPI420ExactP16x16(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
 }
 
+func BenchmarkEncodeRTPI420ChangedPIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	a := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	bFrame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	bFrame.Y[0] ^= 0x7f
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{bFrame, a}, true)
+}
+
 func BenchmarkEncodeRTPMode0I420PSkip(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
 	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL

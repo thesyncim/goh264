@@ -3370,6 +3370,49 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("rtp changed p-intrapcm", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		a := patternedI420EncoderFrame(16, 16)
+		b := patternedI420EncoderFrame(16, 16)
+		b.Y[0] ^= 0x7f
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), a); err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		dst := make([]byte, 0, 4096)
+		allocs := testing.AllocsPerRun(100, func() {
+			out, err := enc.EncodeInto(dst[:0], b)
+			if err != nil {
+				t.Fatalf("EncodeInto RTP changed P: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 2 || len(out.Data) == 0 {
+				t.Fatalf("changed RTP P output idr=%v rtp=%d data=%d", out.IDR, len(out.RTPPackets), len(out.Data))
+			}
+			assertEncoderNALTypes(t, out.NALUnits, []uint8{6, 1})
+			out, err = enc.EncodeInto(dst[:0], a)
+			if err != nil {
+				t.Fatalf("EncodeInto RTP changed P reset: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 2 || len(out.Data) == 0 {
+				t.Fatalf("changed RTP P reset output idr=%v rtp=%d data=%d", out.IDR, len(out.RTPPackets), len(out.Data))
+			}
+			assertEncoderNALTypes(t, out.NALUnits, []uint8{6, 1})
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("rtp changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 56 {
+			t.Fatalf("rtp changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 56", allocs)
+		}
+	})
+
 	t.Run("rtp mode0 steady p-skip", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.DeblockMode = goh264.EncoderDeblockDisabled

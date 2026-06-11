@@ -1432,7 +1432,7 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 	if maxPayloadSize < 3 {
 		return nil, encoderInvalid("RTP max payload size must leave room for FU-A headers")
 	}
-	var packets []EncoderRTPPacket
+	packets := make([]EncoderRTPPacket, 0, len(nals))
 	for i := 0; i < len(nals); {
 		if stapa && nals[i].parameterSet {
 			payload, count, err := buildEncoderSTAPA(nals[i:], maxPayloadSize)
