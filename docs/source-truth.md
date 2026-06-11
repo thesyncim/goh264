@@ -171,7 +171,8 @@ local decode after RTP re-entry, RTP packetization-mode 0 single-NAL IDR/P-frame
 reassembly and oversize rejection, RTP packetization-mode 1 FU-A reassembly,
 STAP-A parameter-set aggregation, RTP payload-type/SSRC/sequence metadata, full
 RTP header bytes with clipped packet payload views over packet data and packet
-storage isolated from `EncodedFrame.Data`, optional
+storage isolated from `EncodedFrame.Data`, shared packet metadata guards for
+header fields and clipped packet slices, optional
 RTP callback metadata including mode 0/1 IDR/P-frame single-NAL packets with
 P-skip, exact P16x16, odd-pixel constant chroma, and P IntraPCM fallback rows
 and callback packet storage isolated from returned RTP packets while preserving

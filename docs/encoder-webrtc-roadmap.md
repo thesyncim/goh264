@@ -140,7 +140,8 @@ changed-P recovery SEI single-NAL output when STAP-A is enabled,
 payload-type, SSRC, and sequence-number packet metadata. RTP
 packets also carry complete 12-byte RTP headers plus payload bytes with clipped
 per-packet payload views over packet data and packet storage isolated from
-`EncodedFrame.Data`, and
+`EncodedFrame.Data`, with shared metadata guards for header fields and clipped
+packet slices, and
 `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form including mode 0/1 IDR/P frames with P-skip, exact

@@ -211,7 +211,8 @@ FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL
 IDR/P-frame reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
 clipped packet payload views over packet data, packet storage isolated from
-`EncodedFrame.Data`, and optional RTP callback metadata including mode 0/1
+`EncodedFrame.Data`, shared packet metadata guards for header fields and
+clipped packet slices, and optional RTP callback metadata including mode 0/1
 IDR/P-frame single-NAL packets for P-skip, exact P16x16, odd-pixel constant
 chroma, and P IntraPCM fallback rows with callback packet storage isolated from
 returned RTP packets while preserving the same clipped payload-over-packet-data

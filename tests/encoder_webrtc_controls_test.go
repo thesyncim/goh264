@@ -7794,14 +7794,45 @@ func assertRTPPacketMetadata(t *testing.T, packets []goh264.EncoderRTPPacket, pa
 		t.Fatal("RTP packet list is empty")
 	}
 	for i, pkt := range packets {
+		if len(pkt.Data) != 12+len(pkt.Payload) {
+			t.Fatalf("packet[%d] full RTP packet length = %d, want header plus payload %d",
+				i, len(pkt.Data), 12+len(pkt.Payload))
+		}
+		if !bytes.Equal(pkt.Data[12:], pkt.Payload) {
+			t.Fatalf("packet[%d] RTP payload bytes do not match Data payload", i)
+		}
+		if cap(pkt.Data) != len(pkt.Data) {
+			t.Fatalf("packet[%d] Data cap = %d, want clipped length %d", i, cap(pkt.Data), len(pkt.Data))
+		}
+		if cap(pkt.Payload) != len(pkt.Payload) {
+			t.Fatalf("packet[%d] Payload cap = %d, want clipped length %d", i, cap(pkt.Payload), len(pkt.Payload))
+		}
+		if pkt.Data[0] != 0x80 {
+			t.Fatalf("packet[%d] RTP version/P/X/CC byte = %#x, want 0x80", i, pkt.Data[0])
+		}
 		if pkt.PayloadType != payloadType {
 			t.Fatalf("packet[%d] payload type = %d, want %d", i, pkt.PayloadType, payloadType)
+		}
+		if got := pkt.Data[1] & 0x7f; got != payloadType {
+			t.Fatalf("packet[%d] RTP header payload type = %d, want %d", i, got, payloadType)
+		}
+		if got := pkt.Data[1]&0x80 != 0; got != pkt.Marker {
+			t.Fatalf("packet[%d] RTP marker header = %v, want packet marker %v", i, got, pkt.Marker)
 		}
 		if pkt.SSRC != ssrc {
 			t.Fatalf("packet[%d] SSRC = %#x, want %#x", i, pkt.SSRC, ssrc)
 		}
+		if got := binary.BigEndian.Uint32(pkt.Data[8:12]); got != ssrc {
+			t.Fatalf("packet[%d] RTP header SSRC = %#x, want %#x", i, got, ssrc)
+		}
 		if pkt.SequenceNumber != firstSeq+uint16(i) {
 			t.Fatalf("packet[%d] sequence = %d, want %d", i, pkt.SequenceNumber, firstSeq+uint16(i))
+		}
+		if got := binary.BigEndian.Uint16(pkt.Data[2:4]); got != pkt.SequenceNumber {
+			t.Fatalf("packet[%d] RTP header sequence = %d, want %d", i, got, pkt.SequenceNumber)
+		}
+		if got := binary.BigEndian.Uint32(pkt.Data[4:8]); got != pkt.Timestamp {
+			t.Fatalf("packet[%d] RTP header timestamp = %d, want %d", i, got, pkt.Timestamp)
 		}
 	}
 }
