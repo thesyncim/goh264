@@ -44,27 +44,30 @@ type EncoderParameterSets struct {
 	AVCDecoderConfigurationRecord []byte
 }
 
+// EncoderParameterSetNALs contains raw SPS and PPS NALs.
+type EncoderParameterSetNALs struct {
+	SPS []byte
+	PPS []byte
+}
+
 func BuildEncoderParameterSets(cfg EncoderParameterSetConfig) (EncoderParameterSets, error) {
 	if cfg.NALLengthSize == 0 {
 		cfg.NALLengthSize = 4
 	}
-	spsRBSP, err := EncodeBaselineSPSRBSP(cfg)
+	spsRBSP, ppsRBSP, err := encodeBaselineParameterSetRBSPs(cfg)
 	if err != nil {
 		return EncoderParameterSets{}, err
 	}
-	ppsRBSP, err := EncodeBaselinePPSRBSP(cfg)
+	sps, err := AppendNAL(make([]byte, 0, 1+len(spsRBSP)+len(spsRBSP)/2), 3, NALSPS, spsRBSP)
 	if err != nil {
 		return EncoderParameterSets{}, err
 	}
-	sps, err := AppendNAL(nil, 3, NALSPS, spsRBSP)
+	pps, err := AppendNAL(make([]byte, 0, 1+len(ppsRBSP)+len(ppsRBSP)/2), 3, NALPPS, ppsRBSP)
 	if err != nil {
 		return EncoderParameterSets{}, err
 	}
-	pps, err := AppendNAL(nil, 3, NALPPS, ppsRBSP)
-	if err != nil {
-		return EncoderParameterSets{}, err
-	}
-	annexB, err := AppendAnnexBNAL(nil, 3, NALSPS, spsRBSP)
+	annexBCap := 4 + 1 + len(spsRBSP) + len(spsRBSP)/2 + 4 + 1 + len(ppsRBSP) + len(ppsRBSP)/2
+	annexB, err := AppendAnnexBNAL(make([]byte, 0, annexBCap), 3, NALSPS, spsRBSP)
 	if err != nil {
 		return EncoderParameterSets{}, err
 	}
@@ -84,6 +87,35 @@ func BuildEncoderParameterSets(cfg EncoderParameterSetConfig) (EncoderParameterS
 	}, nil
 }
 
+// BuildEncoderParameterSetNALs returns only the raw SPS and PPS NALs.
+func BuildEncoderParameterSetNALs(cfg EncoderParameterSetConfig) (EncoderParameterSetNALs, error) {
+	spsRBSP, ppsRBSP, err := encodeBaselineParameterSetRBSPs(cfg)
+	if err != nil {
+		return EncoderParameterSetNALs{}, err
+	}
+	sps, err := AppendNAL(make([]byte, 0, 1+len(spsRBSP)+len(spsRBSP)/2), 3, NALSPS, spsRBSP)
+	if err != nil {
+		return EncoderParameterSetNALs{}, err
+	}
+	pps, err := AppendNAL(make([]byte, 0, 1+len(ppsRBSP)+len(ppsRBSP)/2), 3, NALPPS, ppsRBSP)
+	if err != nil {
+		return EncoderParameterSetNALs{}, err
+	}
+	return EncoderParameterSetNALs{SPS: sps, PPS: pps}, nil
+}
+
+func encodeBaselineParameterSetRBSPs(cfg EncoderParameterSetConfig) ([]byte, []byte, error) {
+	spsRBSP, err := EncodeBaselineSPSRBSP(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	ppsRBSP, err := EncodeBaselinePPSRBSP(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return spsRBSP, ppsRBSP, nil
+}
+
 func EncodeBaselineSPSRBSP(cfg EncoderParameterSetConfig) ([]byte, error) {
 	if err := validateEncoderParameterSetConfig(cfg); err != nil {
 		return nil, err
@@ -95,7 +127,7 @@ func EncodeBaselineSPSRBSP(cfg EncoderParameterSetConfig) ([]byte, error) {
 	cropTop := cfg.CropTop
 	cropBottom := cfg.CropBottom + (mbHeight*16 - cfg.Height)
 
-	var bw BitWriter
+	bw := NewBitWriter(make([]byte, 0, 64))
 	if err := bw.WriteBits(uint32(cfg.ProfileIDC), 8); err != nil {
 		return nil, err
 	}
@@ -158,7 +190,7 @@ func EncodeBaselinePPSRBSP(cfg EncoderParameterSetConfig) ([]byte, error) {
 	if err := validateEncoderParameterSetConfig(cfg); err != nil {
 		return nil, err
 	}
-	var bw BitWriter
+	bw := NewBitWriter(make([]byte, 0, 16))
 	for _, v := range []uint32{cfg.PPSID, cfg.SPSID} {
 		if err := bw.WriteUEGolomb(v); err != nil {
 			return nil, err

@@ -102,6 +102,32 @@ func TestBuildEncoderParameterSetsRoundTripsThroughParsers(t *testing.T) {
 	}
 }
 
+func TestBuildEncoderParameterSetNALsMatchPackagedSets(t *testing.T) {
+	cfg := EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              640,
+		Height:             480,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          26,
+		NALLengthSize:      4,
+	}
+	sets, err := BuildEncoderParameterSets(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nals, err := BuildEncoderParameterSetNALs(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(nals.SPS, sets.SPS) || !bytes.Equal(nals.PPS, sets.PPS) {
+		t.Fatalf("raw parameter set NALs SPS=%x PPS=%x, want SPS=%x PPS=%x", nals.SPS, nals.PPS, sets.SPS, sets.PPS)
+	}
+}
+
 func TestBuildEncoderParameterSetsWritesI420Crop(t *testing.T) {
 	cfg := EncoderParameterSetConfig{
 		ProfileIDC:         66,

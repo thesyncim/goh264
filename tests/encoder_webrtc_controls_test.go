@@ -5616,8 +5616,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("annexb forced IDR EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 32 {
-			t.Fatalf("annexb forced IDR EncodeInto allocations/run = %.0f, want <= 32", allocs)
+		if allocs > 8 {
+			t.Fatalf("annexb forced IDR EncodeInto allocations/run = %.0f, want <= 8", allocs)
 		}
 	})
 
@@ -5938,8 +5938,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("avc forced IDR EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 32 {
-			t.Fatalf("avc forced IDR EncodeInto allocations/run = %.0f, want <= 32", allocs)
+		if allocs > 8 {
+			t.Fatalf("avc forced IDR EncodeInto allocations/run = %.0f, want <= 8", allocs)
 		}
 	})
 
@@ -6167,8 +6167,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp forced IDR EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 32 {
-			t.Fatalf("rtp forced IDR EncodeInto allocations/run = %.0f, want <= 32", allocs)
+		if allocs > 10 {
+			t.Fatalf("rtp forced IDR EncodeInto allocations/run = %.0f, want <= 10", allocs)
 		}
 	})
 
@@ -6203,8 +6203,8 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 		})
 		t.Logf("rtp mode0 forced IDR EncodeInto allocations/run = %.0f", allocs)
-		if allocs > 32 {
-			t.Fatalf("rtp mode0 forced IDR EncodeInto allocations/run = %.0f, want <= 32", allocs)
+		if allocs > 10 {
+			t.Fatalf("rtp mode0 forced IDR EncodeInto allocations/run = %.0f, want <= 10", allocs)
 		}
 	})
 

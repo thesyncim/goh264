@@ -423,11 +423,28 @@ func (e *Encoder) ParameterSets() (EncoderParameterSets, error) {
 	if e == nil {
 		return EncoderParameterSets{}, encoderInvalid("nil encoder")
 	}
-	profileIDC, constraintFlags, err := encoderProfileSyntax(e.cfg.Profile)
+	cfg, err := e.parameterSetConfig()
 	if err != nil {
 		return EncoderParameterSets{}, err
 	}
-	sets, err := h264.BuildEncoderParameterSets(h264.EncoderParameterSetConfig{
+	sets, err := h264.BuildEncoderParameterSets(cfg)
+	if err != nil {
+		return EncoderParameterSets{}, err
+	}
+	return EncoderParameterSets{
+		SPS:                           append([]byte(nil), sets.SPS...),
+		PPS:                           append([]byte(nil), sets.PPS...),
+		AnnexB:                        append([]byte(nil), sets.AnnexB...),
+		AVCDecoderConfigurationRecord: append([]byte(nil), sets.AVCDecoderConfigurationRecord...),
+	}, nil
+}
+
+func (e *Encoder) parameterSetConfig() (h264.EncoderParameterSetConfig, error) {
+	profileIDC, constraintFlags, err := encoderProfileSyntax(e.cfg.Profile)
+	if err != nil {
+		return h264.EncoderParameterSetConfig{}, err
+	}
+	return h264.EncoderParameterSetConfig{
 		ProfileIDC:                     profileIDC,
 		ConstraintSetFlags:             constraintFlags,
 		LevelIDC:                       e.cfg.LevelIDC,
@@ -451,15 +468,6 @@ func (e *Encoder) ParameterSets() (EncoderParameterSets, error) {
 		ChromaSampleLocTypeTopField:    e.cfg.Color.ChromaSampleLocTypeTopField,
 		ChromaSampleLocTypeBottomField: e.cfg.Color.ChromaSampleLocTypeBottomField,
 		NALLengthSize:                  4,
-	})
-	if err != nil {
-		return EncoderParameterSets{}, err
-	}
-	return EncoderParameterSets{
-		SPS:                           append([]byte(nil), sets.SPS...),
-		PPS:                           append([]byte(nil), sets.PPS...),
-		AnnexB:                        append([]byte(nil), sets.AnnexB...),
-		AVCDecoderConfigurationRecord: append([]byte(nil), sets.AVCDecoderConfigurationRecord...),
 	}, nil
 }
 
@@ -513,7 +521,11 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	var nalsBuf [4]encoderRawNAL
 	nals := nalsBuf[:0]
 	if e.shouldEmitParameterSets(idr) {
-		sets, err := e.ParameterSets()
+		parameterSetCfg, err := e.parameterSetConfig()
+		if err != nil {
+			return EncodedFrame{}, err
+		}
+		sets, err := h264.BuildEncoderParameterSetNALs(parameterSetCfg)
 		if err != nil {
 			return EncodedFrame{}, err
 		}
@@ -984,7 +996,7 @@ func buildEncoderI420IntraPCMIDRNAL(cfg h264.EncoderI420IntraPCMIDRConfig) ([]by
 	if err != nil {
 		return nil, err
 	}
-	return h264.AppendNAL(nil, 3, h264.NALIDRSlice, rbsp)
+	return h264.AppendNAL(make([]byte, 0, 1+len(rbsp)+len(rbsp)/2), 3, h264.NALIDRSlice, rbsp)
 }
 
 func buildEncoderI420PSkipNAL(cfg h264.EncoderI420PSkipConfig) ([]byte, error) {
