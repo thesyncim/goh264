@@ -78,7 +78,9 @@ measured, so current no-asm Go builds still report `go-pure`.
 Allocation evidence: `tests/decoder_high_output_test.go` guards
 `Frame.AppendRawYUV`, `Frame.AppendRawYUVBytesLE`, and `Frame.AppendRawYUV16`
 with exact-capacity caller-owned buffers and requires zero steady-state
-allocations for 8-bit and high-bit-depth output paths. `cmd/goh264bench`
+allocations for 8-bit and high-bit-depth output paths, including caller-buffer
+preservation on invalid 8-bit chroma geometry and high-bit-depth sample errors.
+`cmd/goh264bench`
 records Go benchmark allocation totals and reports `alloc_bytes_per_iter`,
 `allocs_per_iter`, `alloc_bytes_per_frame`, and `allocs_per_frame` for each
 timed Go lane; `-max-go-alloc-bytes-per-iter` and

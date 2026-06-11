@@ -1152,6 +1152,9 @@ func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 		return dst, err
 	}
 	maxSample := maxRawSample(depth)
+	if err := f.validateRawYUV16Samples(chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, maxSample); err != nil {
+		return dst, err
+	}
 	for y := 0; y < f.Height; y++ {
 		row := (f.CropTop+y)*f.YStride + f.CropLeft
 		dst, err = appendRawUint16Samples(dst, f.Y16[row:row+f.Width], maxSample)
@@ -1205,6 +1208,9 @@ func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
 		return dst, err
 	}
 	maxSample := maxRawSample(depth)
+	if err := f.validateRawYUV16Samples(chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, maxSample); err != nil {
+		return dst, err
+	}
 	for y := 0; y < f.Height; y++ {
 		row := (f.CropTop+y)*f.YStride + f.CropLeft
 		dst, err = appendRawUint16LE(dst, f.Y16[row:row+f.Width], maxSample)
@@ -1247,33 +1253,43 @@ func (f *Frame) appendRawYUVBytes8(dst []byte) ([]byte, error) {
 		len(f.Y) < (f.CropTop+f.Height-1)*f.YStride+f.CropLeft+f.Width {
 		return dst, ErrInvalidData
 	}
+	chromaWidth := 0
+	chromaHeight := 0
+	chromaCropLeft := 0
+	chromaCropTop := 0
+	if f.ChromaFormatIDC == 0 {
+		var err error
+		chromaWidth, chromaHeight, err = frameChromaSize(f.Width, f.Height, 1)
+		if err != nil {
+			return dst, err
+		}
+	} else {
+		var err error
+		chromaWidth, chromaHeight, err = frameChromaSize(f.Width, f.Height, f.ChromaFormatIDC)
+		if err != nil {
+			return dst, err
+		}
+		if chromaWidth != 0 && chromaHeight != 0 {
+			chromaCropLeft, chromaCropTop, err = frameChromaCrop(f.CropLeft, f.CropTop, f.ChromaFormatIDC)
+			if err != nil {
+				return dst, err
+			}
+			if f.CStride < chromaWidth+chromaCropLeft ||
+				len(f.Cb) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth ||
+				len(f.Cr) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth {
+				return dst, ErrInvalidData
+			}
+		}
+	}
 	for y := 0; y < f.Height; y++ {
 		row := (f.CropTop+y)*f.YStride + f.CropLeft
 		dst = append(dst, f.Y[row:row+f.Width]...)
 	}
 	if f.ChromaFormatIDC == 0 {
-		chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, 1)
-		if err != nil {
-			return dst, err
-		}
 		return appendNeutralRawBytes(dst, chromaWidth*chromaHeight*2, byte(neutralRawChromaSample(8))), nil
-	}
-
-	chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, f.ChromaFormatIDC)
-	if err != nil {
-		return dst, err
 	}
 	if chromaWidth == 0 || chromaHeight == 0 {
 		return dst, nil
-	}
-	chromaCropLeft, chromaCropTop, err := frameChromaCrop(f.CropLeft, f.CropTop, f.ChromaFormatIDC)
-	if err != nil {
-		return dst, err
-	}
-	if f.CStride < chromaWidth+chromaCropLeft ||
-		len(f.Cb) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth ||
-		len(f.Cr) < (chromaCropTop+chromaHeight-1)*f.CStride+chromaCropLeft+chromaWidth {
-		return dst, ErrInvalidData
 	}
 	for y := 0; y < chromaHeight; y++ {
 		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
@@ -1372,6 +1388,35 @@ func (f *Frame) rawYUV16Geometry() (int, int, int, int, error) {
 		return 0, 0, 0, 0, ErrInvalidData
 	}
 	return chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, nil
+}
+
+func (f *Frame) validateRawYUV16Samples(chromaWidth int, chromaHeight int, chromaCropLeft int, chromaCropTop int, maxSample uint16) error {
+	for y := 0; y < f.Height; y++ {
+		row := (f.CropTop+y)*f.YStride + f.CropLeft
+		if !rawUint16SamplesValid(f.Y16[row:row+f.Width], maxSample) {
+			return ErrInvalidData
+		}
+	}
+	if f.ChromaFormatIDC == 0 || chromaWidth == 0 || chromaHeight == 0 {
+		return nil
+	}
+	for y := 0; y < chromaHeight; y++ {
+		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
+		if !rawUint16SamplesValid(f.Cb16[row:row+chromaWidth], maxSample) ||
+			!rawUint16SamplesValid(f.Cr16[row:row+chromaWidth], maxSample) {
+			return ErrInvalidData
+		}
+	}
+	return nil
+}
+
+func rawUint16SamplesValid(samples []uint16, maxSample uint16) bool {
+	for _, sample := range samples {
+		if sample > maxSample {
+			return false
+		}
+	}
+	return true
 }
 
 func maxRawSample(depth int) uint16 {

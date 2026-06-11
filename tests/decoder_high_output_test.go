@@ -2,7 +2,10 @@
 
 package goh264_test
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 var rawOutputAllocationByteSink []byte
 var rawOutputAllocationUint16Sink []uint16
@@ -451,6 +454,102 @@ func TestFrameHighOutputRejectsInvalidGeometryAndDepth(t *testing.T) {
 	}
 	if _, err := badSample.AppendRawYUVBytesLE(nil); err != ErrInvalidData {
 		t.Fatalf("bad sample AppendRawYUVBytesLE error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestFrameAppendRawYUVErrorPreservesCallerBuffer(t *testing.T) {
+	frame := Frame{
+		Width:           2,
+		Height:          2,
+		ChromaFormatIDC: 1,
+		BitDepthLuma:    8,
+		BitDepthChroma:  8,
+		YStride:         2,
+		CStride:         1,
+		Y:               []byte{1, 2, 3, 4},
+		Cb:              nil,
+		Cr:              []byte{6},
+	}
+	dst, before := decoderPrefilledByteBuffer()
+	out, err := frame.AppendRawYUV(dst)
+	if err != ErrInvalidData {
+		t.Fatalf("AppendRawYUV invalid chroma error = %v, want ErrInvalidData", err)
+	}
+	if len(out) != len(dst) {
+		t.Fatalf("AppendRawYUV invalid output len = %d, want original len %d", len(out), len(dst))
+	}
+	assertDecoderByteBufferUnchanged(t, dst, before)
+}
+
+func TestFrameAppendRawYUVHighErrorPreservesCallerBuffer(t *testing.T) {
+	frame := Frame{
+		Width:           2,
+		Height:          2,
+		ChromaFormatIDC: 0,
+		BitDepthLuma:    10,
+		YStride:         2,
+		Y16:             []uint16{1, 2, 3, 1024},
+	}
+
+	t.Run("uint16", func(t *testing.T) {
+		dst, before := decoderPrefilledUint16Buffer()
+		out, err := frame.AppendRawYUV16(dst)
+		if err != ErrInvalidData {
+			t.Fatalf("AppendRawYUV16 bad sample error = %v, want ErrInvalidData", err)
+		}
+		if len(out) != len(dst) {
+			t.Fatalf("AppendRawYUV16 invalid output len = %d, want original len %d", len(out), len(dst))
+		}
+		assertDecoderUint16BufferUnchanged(t, dst, before)
+	})
+
+	t.Run("bytes-le", func(t *testing.T) {
+		dst, before := decoderPrefilledByteBuffer()
+		out, err := frame.AppendRawYUVBytesLE(dst)
+		if err != ErrInvalidData {
+			t.Fatalf("AppendRawYUVBytesLE bad sample error = %v, want ErrInvalidData", err)
+		}
+		if len(out) != len(dst) {
+			t.Fatalf("AppendRawYUVBytesLE invalid output len = %d, want original len %d", len(out), len(dst))
+		}
+		assertDecoderByteBufferUnchanged(t, dst, before)
+	})
+}
+
+func decoderPrefilledByteBuffer() ([]byte, []byte) {
+	backing := bytes.Repeat([]byte{0xcc}, 128)
+	prefix := []byte{0xde, 0xad, 0xbe, 0xef}
+	copy(backing, prefix)
+	return backing[:len(prefix)], append([]byte(nil), backing...)
+}
+
+func decoderPrefilledUint16Buffer() ([]uint16, []uint16) {
+	backing := make([]uint16, 64)
+	for i := range backing {
+		backing[i] = 0xcccc
+	}
+	prefix := []uint16{0xdead, 0xbeef}
+	copy(backing, prefix)
+	return backing[:len(prefix)], append([]uint16(nil), backing...)
+}
+
+func assertDecoderByteBufferUnchanged(t *testing.T, dst []byte, before []byte) {
+	t.Helper()
+	if !bytes.Equal(dst[:cap(dst)], before) {
+		t.Fatalf("raw-output helper mutated caller byte buffer on error")
+	}
+}
+
+func assertDecoderUint16BufferUnchanged(t *testing.T, dst []uint16, before []uint16) {
+	t.Helper()
+	after := dst[:cap(dst)]
+	if len(after) != len(before) {
+		t.Fatalf("raw-output helper backing len = %d, want %d", len(after), len(before))
+	}
+	for i := range after {
+		if after[i] != before[i] {
+			t.Fatalf("raw-output helper mutated caller uint16 buffer at %d: got %#x want %#x", i, after[i], before[i])
+		}
 	}
 }
 

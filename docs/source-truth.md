@@ -106,6 +106,8 @@ matching `h264_decode_frame()` `buf_size == 0` delayed-output behavior,
 malformed AVC/Annex B `NEW_EXTRADATA` non-fatal packet-side-data guards,
 malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,
+raw-output caller-buffer preservation on invalid 8-bit chroma geometry and
+high-bit-depth sample errors,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
 Realtime/WebRTC encoder proof currently covers control admission and
