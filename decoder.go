@@ -300,6 +300,12 @@ type ContentLight struct {
 	MaxPicAverageLightLevel uint32
 }
 
+// Frame is one decoded output picture.
+//
+// For 8-bit pictures, Y, Cb, and Cr contain the decoded planes. For high
+// bit-depth pictures, Y16, Cb16, and Cr16 contain the decoded planes. Width and
+// Height describe the visible output size; CropLeft and CropTop locate that
+// visible rectangle inside the underlying plane buffers.
 type Frame struct {
 	Width                          int
 	Height                         int
@@ -988,6 +994,11 @@ func avRationalToScaledUint32(data []byte, off int, scale int64) (uint32, bool) 
 	return uint32(value), true
 }
 
+// AppendRawYUV appends the visible frame as 8-bit planar YUV.
+//
+// The output order is Y, Cb, then Cr. The returned slice may share backing
+// storage with dst; keep dst unchanged while using the returned bytes.
+// High-bit-depth frames return ErrUnsupported.
 func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
 		return dst, ErrInvalidData
@@ -998,6 +1009,7 @@ func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	return f.appendRawYUVBytes8(dst)
 }
 
+// BytesPerSample returns the raw-output byte width for each visible sample.
 func (f *Frame) BytesPerSample() (int, error) {
 	depth, err := f.rawBitDepth()
 	if err != nil {
@@ -1009,6 +1021,7 @@ func (f *Frame) BytesPerSample() (int, error) {
 	return 2, nil
 }
 
+// RawPixelFormat returns the FFmpeg-style rawvideo pixel format for the frame.
 func (f *Frame) RawPixelFormat() (string, error) {
 	depth, err := f.rawBitDepth()
 	if err != nil {
@@ -1040,6 +1053,7 @@ func (f *Frame) RawPixelFormat() (string, error) {
 	return base + rawBitDepthSuffix(depth), nil
 }
 
+// RawYUVSize returns the byte count produced by AppendRawYUVBytesLE.
 func (f *Frame) RawYUVSize() (int, error) {
 	samples, err := f.rawYUVSampleCount()
 	if err != nil {
@@ -1052,6 +1066,11 @@ func (f *Frame) RawYUVSize() (int, error) {
 	return samples * bytesPerSample, nil
 }
 
+// AppendRawYUV16 appends the visible high-bit-depth frame as planar uint16 YUV.
+//
+// The output order is Y, Cb, then Cr. The returned slice may share backing
+// storage with dst; keep dst unchanged while using the returned samples. 8-bit
+// frames return ErrUnsupported.
 func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 	depth, err := f.rawBitDepth()
 	if err != nil {
@@ -1099,6 +1118,12 @@ func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 	return dst, nil
 }
 
+// AppendRawYUVBytesLE appends the visible frame as planar YUV bytes.
+//
+// The output order is Y, Cb, then Cr. 8-bit frames use one byte per sample;
+// high-bit-depth frames use little-endian uint16 samples. The returned slice may
+// share backing storage with dst; keep dst unchanged while using the returned
+// bytes.
 func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
 	depth, err := f.rawBitDepth()
 	if err != nil {
