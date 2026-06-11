@@ -1317,31 +1317,55 @@ func TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
 	}
 }
 
-func TestEncoderEncodeWideExactP16x16NoResidualMotion(t *testing.T) {
+func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T) {
 	for _, tt := range []struct {
 		name            string
+		width           int
+		height          int
 		sliceCount      int
 		wantFirstNALs   []uint8
 		wantSecondNALs  []uint8
 		wantSecondFirst []uint32
 	}{
 		{
-			name:            "single-slice",
+			name:            "single-row-single-slice",
+			width:           32,
+			height:          16,
 			sliceCount:      1,
 			wantFirstNALs:   []uint8{7, 8, 5},
 			wantSecondNALs:  []uint8{1},
 			wantSecondFirst: []uint32{0},
 		},
 		{
-			name:            "two-slices",
+			name:            "single-row-two-slices",
+			width:           32,
+			height:          16,
 			sliceCount:      2,
 			wantFirstNALs:   []uint8{7, 8, 5, 5},
 			wantSecondNALs:  []uint8{1, 1},
 			wantSecondFirst: []uint32{0, 1},
 		},
+		{
+			name:            "narrow-two-row-single-slice",
+			width:           16,
+			height:          32,
+			sliceCount:      1,
+			wantFirstNALs:   []uint8{7, 8, 5},
+			wantSecondNALs:  []uint8{1},
+			wantSecondFirst: []uint32{0},
+		},
+		{
+			name:            "ragged-four-slice-two-row",
+			width:           48,
+			height:          32,
+			sliceCount:      4,
+			wantFirstNALs:   []uint8{7, 8, 5, 5, 5, 5},
+			wantSecondNALs:  []uint8{1, 1, 1, 1},
+			wantSecondFirst: []uint32{0, 2, 4, 5},
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := goh264.DefaultEncoderConfig(32, 16)
+			cfg := goh264.DefaultEncoderConfig(tt.width, tt.height)
 			cfg.OutputFormat = goh264.EncoderOutputAnnexB
 			cfg.DeblockMode = goh264.EncoderDeblockDisabled
 			cfg.RTPMaxPayloadSize = 0
@@ -1354,7 +1378,7 @@ func TestEncoderEncodeWideExactP16x16NoResidualMotion(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParameterSets: %v", err)
 			}
-			firstFrame := patternedI420EncoderFrame(32, 16)
+			firstFrame := patternedI420EncoderFrame(tt.width, tt.height)
 			first, err := enc.Encode(firstFrame)
 			if err != nil {
 				t.Fatalf("Encode first IDR: %v", err)
