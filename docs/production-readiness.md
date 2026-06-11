@@ -139,7 +139,10 @@ new-size IDR and resuming P-skip references at the new dimensions, proves
 `SetRTPMaxPayloadSize` live RTP FU-A retargeting before the next P-frame with
 sequence/decode continuity and invalid-update rollback, proves runtime
 `RecoveryPointSEI` toggles add, suppress, and restore changed-P recovery side
-data without forcing IDR, proves `ParameterSets` emits SPS/PPS NALs,
+data without forcing IDR, proves runtime SPS/PPS cadence switches control
+forced-IDR header emission across out-of-band, every-IDR, suppressed in-band,
+and restored in-band modes while the stream remains decodable, proves
+`ParameterSets` emits SPS/PPS NALs,
 Annex B headers, and avcC records accepted by the public decoder parsers,
 proves in-band keyframe, out-of-band, and every-IDR header modes, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL

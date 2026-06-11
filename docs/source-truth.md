@@ -125,6 +125,9 @@ references at the new dimensions,
 sequence/decode continuity and invalid-update rollback,
 runtime `RecoveryPointSEI` toggles that add, suppress, and restore changed-P
 recovery side data without forcing IDR,
+runtime SPS/PPS cadence switches that control forced-IDR header emission across
+out-of-band, every-IDR, suppressed in-band, and restored in-band modes while the
+stream remains decodable,
 `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
 dropped-frame budget behavior including VBV-backed `MaxBitrate` bucket misses,
 deterministic max-bitrate credit consumption/refill across transmitted and

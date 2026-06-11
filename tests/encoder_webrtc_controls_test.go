@@ -1062,6 +1062,126 @@ func TestEncoderSPSPPSCadenceModesControlIDRHeaders(t *testing.T) {
 	}
 }
 
+func TestEncoderReconfigureSPSPPSCadenceControlsLiveIDRHeaders(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	frame := patternedI420EncoderFrame(16, 16)
+	dec := goh264.NewDecoder()
+	var stream []byte
+	var wantStream []byte
+
+	encodeForcedIDR := func(label string, wantNALs []uint8) goh264.EncodedFrame {
+		t.Helper()
+		enc.ForceIDR()
+		if !enc.PendingIDR() {
+			t.Fatalf("%s ForceIDR did not queue IDR", label)
+		}
+		out, err := enc.Encode(frame)
+		if err != nil {
+			t.Fatalf("%s Encode: %v", label, err)
+		}
+		if !out.IDR || enc.PendingIDR() {
+			t.Fatalf("%s output idr=%v pending=%v, want completed IDR", label, out.IDR, enc.PendingIDR())
+		}
+		assertEncoderNALTypes(t, out.NALUnits, wantNALs)
+		decoded, err := dec.DecodeFrames(out.Data)
+		if err != nil {
+			t.Fatalf("%s DecodeFrames: %v", label, err)
+		}
+		assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
+		stream = append(stream, out.Data...)
+		wantStream = appendI420FrameBytes(wantStream, frame)
+		frame.PTS += int64(cfg.RTPTimestampIncrement)
+		return out
+	}
+
+	// The first frame is an implicit IDR and seeds the decoder with parameter sets.
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode initial IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("initial output idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode initial IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, frame))
+	stream = append(stream, first.Data...)
+	wantStream = appendI420FrameBytes(wantStream, frame)
+	frame.PTS += int64(cfg.RTPTimestampIncrement)
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		SPSPPSMode: goh264.EncoderSPSPPSOutOfBand,
+	}); err != nil {
+		t.Fatalf("Reconfigure out-of-band SPS/PPS: %v", err)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("out-of-band SPS/PPS reconfigure queued unexpected IDR")
+	}
+	outOfBand := encodeForcedIDR("out-of-band", []uint8{5})
+
+	noBeforeIDR := false
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		SPSPPSMode:      goh264.EncoderSPSPPSEveryIDR,
+		SPSPPSBeforeIDR: &noBeforeIDR,
+	}); err != nil {
+		t.Fatalf("Reconfigure every-IDR SPS/PPS: %v", err)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("every-IDR SPS/PPS reconfigure queued unexpected IDR")
+	}
+	everyIDR := encodeForcedIDR("every-IDR", []uint8{7, 8, 5})
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		SPSPPSMode:      goh264.EncoderSPSPPSInBandKeyframes,
+		SPSPPSBeforeIDR: &noBeforeIDR,
+	}); err != nil {
+		t.Fatalf("Reconfigure in-band suppressed SPS/PPS: %v", err)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("in-band suppressed SPS/PPS reconfigure queued unexpected IDR")
+	}
+	suppressed := encodeForcedIDR("in-band suppressed", []uint8{5})
+
+	beforeIDR := true
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		SPSPPSBeforeIDR: &beforeIDR,
+	}); err != nil {
+		t.Fatalf("Reconfigure in-band restored SPS/PPS: %v", err)
+	}
+	if got := enc.Config(); got.SPSPPSMode != goh264.EncoderSPSPPSInBandKeyframes || !got.SPSPPSBeforeIDR {
+		t.Fatalf("restored SPS/PPS config = %+v, want in-band before IDR", got)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("in-band restored SPS/PPS reconfigure queued unexpected IDR")
+	}
+	restored := encodeForcedIDR("in-band restored", []uint8{7, 8, 5})
+
+	assertEncoderVCLFrameNums(t, stream,
+		[]uint8{5, 5, 5, 5, 5},
+		[]uint32{0, 1, 2, 3, 4},
+	)
+	assertFFmpegRawVideoOracle(t, stream, wantStream)
+	if outOfBand.RTPTime != first.RTPTime+cfg.RTPTimestampIncrement ||
+		everyIDR.RTPTime != outOfBand.RTPTime+cfg.RTPTimestampIncrement ||
+		suppressed.RTPTime != everyIDR.RTPTime+cfg.RTPTimestampIncrement ||
+		restored.RTPTime != suppressed.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("forced IDR RTP times = %d/%d/%d/%d/%d, want cadence increment %d",
+			first.RTPTime, outOfBand.RTPTime, everyIDR.RTPTime, suppressed.RTPTime, restored.RTPTime,
+			cfg.RTPTimestampIncrement)
+	}
+}
+
 func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(638, 478)
 	cfg.FrameRateNum = 30000

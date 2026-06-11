@@ -126,8 +126,11 @@ IDR and resume P-skip references at the new dimensions. `SetRTPMaxPayloadSize`
 is proved to retarget live RTP FU-A fragmentation before the next P-frame while
 preserving sequence and decode state, including invalid-update rollback.
 Runtime `RecoveryPointSEI` toggles are proved to add, suppress, and restore
-changed-P recovery side data without forcing IDR. QP updates queue an IDR/PPS
-refresh so the emitted parameter sets match the active slice QP.
+changed-P recovery side data without forcing IDR. Runtime SPS/PPS cadence
+switches are proved to control forced-IDR header emission across out-of-band,
+every-IDR, suppressed in-band, and restored in-band modes while the stream
+remains decodable. QP updates queue an IDR/PPS refresh so the emitted parameter
+sets match the active slice QP.
 A combined RTP/Annex B/RTP control-loop stress test now proves QP refresh, late
 drop recovery, packet metadata retargeting, paused RTP sequence/callback state
 while no RTP packets are emitted, and local decode after RTP re-entry.
