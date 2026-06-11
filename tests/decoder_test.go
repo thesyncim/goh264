@@ -913,6 +913,53 @@ func TestDecodeFrameSideDataFromLeadingSEI(t *testing.T) {
 	}
 }
 
+func TestDecodeFrameSideDataByteSlicesAreCallerOwned(t *testing.T) {
+	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x04, 0x05, 0x06})},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload([]byte{0x7e, 0x00, 0x00, 0x03, 0x01})},
+	))
+
+	frame, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side := frame.SideData
+	if len(side.UserDataUnregistered) != 1 {
+		t.Fatalf("unregistered side data count = %d, want 1", len(side.UserDataUnregistered))
+	}
+	wantUnregistered := append([]byte(nil), side.UserDataUnregistered[0]...)
+	wantA53 := append([]byte(nil), side.A53ClosedCaptions...)
+	wantLCEVC := append([]byte(nil), side.LCEVC...)
+	if len(wantUnregistered) == 0 || len(wantA53) == 0 || len(wantLCEVC) == 0 {
+		t.Fatalf("side data = unregistered %x a53 %x lcevc %x", wantUnregistered, wantA53, wantLCEVC)
+	}
+
+	for i := range side.UserDataUnregistered[0] {
+		side.UserDataUnregistered[0][i] ^= 0xff
+	}
+	for i := range side.A53ClosedCaptions {
+		side.A53ClosedCaptions[i] ^= 0xff
+	}
+	for i := range side.LCEVC {
+		side.LCEVC[i] ^= 0xff
+	}
+
+	frame, err = NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side = frame.SideData
+	if len(side.UserDataUnregistered) != 1 || !bytes.Equal(side.UserDataUnregistered[0], wantUnregistered) {
+		t.Fatalf("unregistered after caller mutation = %x, want %x", side.UserDataUnregistered, wantUnregistered)
+	}
+	if !bytes.Equal(side.A53ClosedCaptions, wantA53) {
+		t.Fatalf("a53 after caller mutation = %x, want %x", side.A53ClosedCaptions, wantA53)
+	}
+	if !bytes.Equal(side.LCEVC, wantLCEVC) {
+		t.Fatalf("lcevc after caller mutation = %x, want %x", side.LCEVC, wantLCEVC)
+	}
+}
+
 func TestDecodeFrameSideDataSkipsNoopDisplayMatrixAndInvalidStereo3D(t *testing.T) {
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
 		decoderSEITestMessage{typ: decoderSEITypeDisplayOrientation, payload: decoderSEIDisplayOrientationPayloadWith(0, false, false)},

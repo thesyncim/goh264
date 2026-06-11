@@ -81,6 +81,9 @@ with exact-capacity caller-owned buffers and requires zero steady-state
 allocations for 8-bit and high-bit-depth output paths, including caller-buffer
 preservation on invalid 8-bit chroma geometry and high-bit-depth luma/chroma
 sample errors.
+Public SEI `FrameSideData` byte slices are guarded as caller-owned by mutating
+decoded unregistered-user-data, A53, and LCEVC slices and re-decoding the same
+input bytes.
 `cmd/goh264bench`
 records Go benchmark allocation totals and reports `alloc_bytes_per_iter`,
 `allocs_per_iter`, `alloc_bytes_per_frame`, and `allocs_per_frame` for each
