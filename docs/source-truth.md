@@ -121,7 +121,7 @@ raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
 Realtime/WebRTC encoder proof currently covers control admission and
 parameter-set headers: default 8-bit I420 constrained-baseline RTP config,
-invalid-control rejection including I420 crop-unit bounds, bitrate, framerate,
+invalid-control rejection including I420 crop-unit bounds and crop-sum overflow, bitrate, framerate,
 RTP payload-size, SPS/PPS cadence modes, PLI/FIR/force-IDR, partial
 reconfiguration, public SPS/PPS/Annex B/avcC header generation with crop
 metadata, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame

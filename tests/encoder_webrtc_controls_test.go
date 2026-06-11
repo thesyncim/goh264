@@ -98,6 +98,14 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 		{name: "bad qp range", mutate: func(c *goh264.EncoderConfig) { c.MinQP = 40; c.MaxQP = 20 }, want: goh264.ErrInvalidData},
 		{name: "negative crop", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = -2 }, want: goh264.ErrInvalidData},
 		{name: "odd I420 crop", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = 1 }, want: goh264.ErrInvalidData},
+		{name: "horizontal crop overflow", mutate: func(c *goh264.EncoderConfig) {
+			c.Crop.Left = maxIntForTest - 1
+			c.Crop.Right = maxIntForTest - 1
+		}, want: goh264.ErrInvalidData},
+		{name: "vertical crop overflow", mutate: func(c *goh264.EncoderConfig) {
+			c.Crop.Top = maxIntForTest - 1
+			c.Crop.Bottom = maxIntForTest - 1
+		}, want: goh264.ErrInvalidData},
 		{name: "crop consumes width", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = c.Width / 2; c.Crop.Right = c.Width / 2 }, want: goh264.ErrInvalidData},
 		{name: "slice count beyond macroblocks", mutate: func(c *goh264.EncoderConfig) { c.Width = 16; c.Height = 16; c.SliceCount = 2 }, want: goh264.ErrInvalidData},
 		{name: "negative slice byte target", mutate: func(c *goh264.EncoderConfig) { c.SliceMaxBytes = -1 }, want: goh264.ErrInvalidData},

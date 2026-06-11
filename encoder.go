@@ -2356,7 +2356,15 @@ func validateEncoderCrop(crop EncoderCrop, width int, height int) error {
 	if crop.Left%2 != 0 || crop.Right%2 != 0 || crop.Top%2 != 0 || crop.Bottom%2 != 0 {
 		return encoderInvalid("I420 crop offsets must be even")
 	}
-	if crop.Left+crop.Right >= width || crop.Top+crop.Bottom >= height {
+	horizontalCrop, err := checkedAddInt(crop.Left, crop.Right)
+	if err != nil {
+		return encoderInvalid("crop offsets are too large")
+	}
+	verticalCrop, err := checkedAddInt(crop.Top, crop.Bottom)
+	if err != nil {
+		return encoderInvalid("crop offsets are too large")
+	}
+	if horizontalCrop >= width || verticalCrop >= height {
 		return encoderInvalid("crop offsets must leave a visible frame")
 	}
 	return nil
