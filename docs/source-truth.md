@@ -172,7 +172,8 @@ without reference/frame/packet/callback advancement before and after an existing
 reference, RTP/Annex B/RTP control-loop stress across QP refresh, late drop
 recovery, packet metadata retargeting, paused RTP sequence/callback state, and
 local decode after RTP re-entry, public NAL-unit metadata indexing back into
-encoded access-unit bytes for Annex B/AVC/RTP output, RTP packetization-mode 0 single-NAL IDR/P-frame
+encoded access-unit bytes for Annex B/AVC/RTP output including non-empty
+caller-buffer prefixes, RTP packetization-mode 0 single-NAL IDR/P-frame
 reassembly and oversize rejection, RTP packetization-mode 1 FU-A reassembly,
 STAP-A parameter-set aggregation, RTP payload-type/SSRC/sequence metadata, full
 RTP header bytes with clipped packet payload views over packet data and packet

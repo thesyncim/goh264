@@ -5160,6 +5160,44 @@ func TestEncoderEncodedFrameNALUnitsIndexOutputData(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeIntoAppendsAndIndexesAfterPrefix(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", outputFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc", outputFormat: goh264.EncoderOutputAVC},
+		{name: "rtp", outputFormat: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			prefix := []byte{0xde, 0xad, 0xbe, 0xef, 0x55}
+			dst := append([]byte(nil), prefix...)
+			out, err := enc.EncodeInto(dst, patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("EncodeInto with prefix: %v", err)
+			}
+			if !bytes.HasPrefix(out.Data, prefix) {
+				t.Fatalf("EncodeInto output does not preserve caller prefix: got %x want prefix %x", out.Data, prefix)
+			}
+			if len(out.Data) == len(prefix) {
+				t.Fatalf("EncodeInto output length = prefix length %d, want appended access unit", len(prefix))
+			}
+			assertEncodedFrameNALUnitIndexesFrom(t, out, cfg.OutputFormat, len(prefix))
+		})
+	}
+}
+
 func TestEncoderDoesNotRetainInputFramePlanes(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
@@ -7801,19 +7839,28 @@ func assertEncoderNALTypes(t *testing.T, nals []goh264.EncoderNALUnit, want []ui
 
 func assertEncodedFrameNALUnitIndexes(t *testing.T, out goh264.EncodedFrame, format goh264.EncoderOutputFormat) {
 	t.Helper()
+	assertEncodedFrameNALUnitIndexesFrom(t, out, format, 0)
+}
+
+func assertEncodedFrameNALUnitIndexesFrom(t *testing.T, out goh264.EncodedFrame, format goh264.EncoderOutputFormat, dataStart int) {
+	t.Helper()
 	if out.Dropped {
 		t.Fatal("cannot validate NAL indexes for dropped frame")
 	}
-	if len(out.Data) == 0 || len(out.NALUnits) == 0 {
+	if dataStart < 0 || dataStart > len(out.Data) {
+		t.Fatalf("encoded frame data start = %d outside data length %d", dataStart, len(out.Data))
+	}
+	accessUnit := out.Data[dataStart:]
+	if len(accessUnit) == 0 || len(out.NALUnits) == 0 {
 		t.Fatalf("encoded frame data/nals = %d/%d, want populated access unit", len(out.Data), len(out.NALUnits))
 	}
 	var parsed []h264.NALUnit
 	var err error
 	switch format {
 	case goh264.EncoderOutputAnnexB, goh264.EncoderOutputRTP:
-		parsed, err = h264.SplitAnnexB(out.Data)
+		parsed, err = h264.SplitAnnexB(accessUnit)
 	case goh264.EncoderOutputAVC:
-		parsed, err = h264.SplitAVCC(out.Data, 4)
+		parsed, err = h264.SplitAVCC(accessUnit, 4)
 	default:
 		t.Fatalf("unknown output format %v", format)
 	}
@@ -7824,8 +7871,8 @@ func assertEncodedFrameNALUnitIndexes(t *testing.T, out goh264.EncodedFrame, for
 		t.Fatalf("parsed NAL count = %d, public NAL count = %d", len(parsed), len(out.NALUnits))
 	}
 	for i, unit := range out.NALUnits {
-		if unit.Offset < 0 || unit.Size <= 0 || unit.Offset+unit.Size > len(out.Data) {
-			t.Fatalf("NAL[%d] offset/size = %d/%d outside data length %d", i, unit.Offset, unit.Size, len(out.Data))
+		if unit.Offset < dataStart || unit.Size <= 0 || unit.Offset+unit.Size > len(out.Data) {
+			t.Fatalf("NAL[%d] offset/size = %d/%d outside access unit range [%d,%d)", i, unit.Offset, unit.Size, dataStart, len(out.Data))
 		}
 		raw := out.Data[unit.Offset : unit.Offset+unit.Size]
 		if !bytes.Equal(raw, parsed[i].Raw) {

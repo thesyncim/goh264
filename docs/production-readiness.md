@@ -216,6 +216,7 @@ FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL
 IDR/P-frame reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP
 public NAL-unit metadata indexing back into encoded access-unit bytes for Annex
 B, AVC, and RTP output,
+including `EncodeInto` calls that append after an existing caller-buffer prefix,
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
 clipped packet payload views over packet data, packet storage isolated from
 `EncodedFrame.Data`, shared packet metadata guards for header fields and
