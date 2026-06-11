@@ -109,6 +109,9 @@ custom RTP timestamp increments plus rate-control mode, VBV size,
 initial/min/max QP, frame-drop mode, GOP/IDR cadence, and deblock mode without
 mutating state on invalid updates. QP updates queue an IDR/PPS refresh so the
 emitted parameter sets match the active slice QP.
+A combined RTP/Annex B/RTP control-loop stress test now proves QP refresh, late
+drop recovery, packet metadata retargeting, paused RTP sequence/callback state
+while no RTP packets are emitted, and local decode after RTP re-entry.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
 across disabled, enabled, and slice-boundary deblock controls; changed frames
 can use a guarded CAVLC P IntraPCM slice in the same admitted deblock scope

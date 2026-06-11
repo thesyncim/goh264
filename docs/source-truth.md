@@ -119,9 +119,11 @@ changed-frame P IntraPCM recovery pictures, forced-keyframe IDR, FFmpeg rawvideo
 decode, `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
 dropped-frame budget behavior, `FrameDropLate` `MaxEncodeTimeUS` budget drops
 without reference/frame/packet/callback advancement before and after an existing
-reference, RTP packetization-mode 1 FU-A reassembly, STAP-A parameter-set
-aggregation, RTP payload-type/SSRC/sequence metadata, full RTP header bytes,
-optional RTP callback metadata,
+reference, RTP/Annex B/RTP control-loop stress across QP refresh, late drop
+recovery, packet metadata retargeting, paused RTP sequence/callback state, and
+local decode after RTP re-entry, RTP packetization-mode 1 FU-A reassembly,
+STAP-A parameter-set aggregation, RTP payload-type/SSRC/sequence metadata, full
+RTP header bytes, optional RTP callback metadata,
 initial `EncodeInto` allocation canaries for caller-buffer Annex B and RTP P-frame paths, and a live
 encode path that avoids discarded Annex B/AVC copies when only raw NAL output is
 needed plus stack-backed common one-slice NAL and slice-range planning.

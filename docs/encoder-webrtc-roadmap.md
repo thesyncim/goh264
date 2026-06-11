@@ -66,6 +66,10 @@ encode-time budget only when that mode is selected; late frames return dropped
 metadata, advance the RTP timestamp timeline, and leave reference, frame-number,
 packet-sequence, and callback state untouched, including after an existing
 transmitted reference.
+A combined control-loop stress proof now walks RTP IDR, Annex B forced IDR with
+QP refresh, Annex B late drop, Annex B P-skip recovery, and RTP re-entry with
+retargeted packet metadata while preserving decode, reference, callback, RTP
+sequence, and timestamp semantics.
 `ParameterSets`
 generates SPS/PPS NALs, crop metadata, Annex B sequence headers, and avcC
 records accepted by the decoder parsers. IDR header cadence is explicit for
@@ -161,9 +165,10 @@ can emit multiple VCL NALs in one access unit.
    without advancing reference/frame/packet state, including after a transmitted
    reference frame.
 6. In progress: add realtime allocation budgets, encode timing benchmarks, and
-   control-loop stress tests. Done for initial `EncodeInto` allocation canaries
-   on Annex B and RTP admitted P-frame paths plus package-level benchmark
-   canaries for admitted IDR/P-frame and RTP paths.
+   control-loop stress tests. Done for the first RTP/Annex B/RTP control-loop
+   stress proof, initial `EncodeInto` allocation canaries on Annex B and RTP
+   admitted P-frame paths, and package-level benchmark canaries for admitted
+   IDR/P-frame and RTP paths.
 
 ## Oracles And Gates
 

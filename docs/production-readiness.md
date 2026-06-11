@@ -139,7 +139,10 @@ proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses plus `FrameDropLate`
 `MaxEncodeTimeUS` budget misses that advance RTP time without advancing
 reference, frame-number, packet-sequence, or callback state, including after a
-transmitted reference frame. It proves
+transmitted reference frame. A combined control-loop stress row now switches
+RTP to Annex B and back through QP refresh, late drop, P-skip recovery, packet
+metadata retargeting, and local decode after RTP re-entry while proving RTP
+sequence numbers and callbacks pause when no RTP packets are emitted. It proves
 `Encode`/`EncodeInto`
 emit IDR IntraPCM access units that round-trip through local Annex B/AVC decode,
 FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL
