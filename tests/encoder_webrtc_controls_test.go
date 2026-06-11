@@ -66,6 +66,19 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 	}{
 		{name: "zero width", mutate: func(c *goh264.EncoderConfig) { c.Width = 0 }, want: goh264.ErrInvalidData},
 		{name: "odd I420 dimensions", mutate: func(c *goh264.EncoderConfig) { c.Width = 641 }, want: goh264.ErrInvalidData},
+		{name: "coded macroblock count overflow", mutate: func(c *goh264.EncoderConfig) {
+			c.Width = maxIntForTest - 1
+			c.Height = 16
+			c.StrideY = c.Width
+			c.StrideCb = c.Width / 2
+			c.StrideCr = c.Width / 2
+		}, want: goh264.ErrInvalidData},
+		{name: "derived RTP timestamp overflow", mutate: func(c *goh264.EncoderConfig) {
+			c.TimeBaseDen = maxIntForTest
+			c.FrameRateNum = 1
+			c.FrameRateDen = 2
+			c.RTPTimestampIncrement = 0
+		}, want: goh264.ErrInvalidData},
 		{name: "undersized luma stride", mutate: func(c *goh264.EncoderConfig) { c.StrideY = 639 }, want: goh264.ErrInvalidData},
 		{name: "unknown pixel format", mutate: func(c *goh264.EncoderConfig) { c.PixelFormat = goh264.EncoderPixelFormat(99) }, want: goh264.ErrUnsupported},
 		{name: "main profile not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.Profile = goh264.EncoderProfileMain }, want: goh264.ErrUnsupported},
@@ -104,6 +117,20 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 				t.Fatalf("NewEncoder error = %v, want %v", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestEncoderSetFrameRateRejectsTimestampOverflowWithoutMutation(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	before := enc.Config()
+	if err := enc.SetFrameRate(1, maxIntForTest); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("SetFrameRate overflow error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("overflow SetFrameRate mutated config = %+v, want %+v", got, before)
 	}
 }
 

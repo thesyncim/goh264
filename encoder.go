@@ -786,7 +786,11 @@ func (e *Encoder) SetFrameRate(num, den int) error {
 	cfg := e.cfg
 	cfg.FrameRateNum = num
 	cfg.FrameRateDen = den
-	cfg.RTPTimestampIncrement = rtpTimestampIncrement(cfg.TimeBaseDen, num, den)
+	increment, err := rtpTimestampIncrementChecked(cfg.TimeBaseDen, num, den)
+	if err != nil {
+		return err
+	}
+	cfg.RTPTimestampIncrement = increment
 	normalized, err := normalizeEncoderConfig(cfg)
 	if err != nil {
 		return err
@@ -861,7 +865,11 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if update.FrameRateNum != 0 || update.FrameRateDen != 0 {
 		cfg.FrameRateNum = update.FrameRateNum
 		cfg.FrameRateDen = update.FrameRateDen
-		cfg.RTPTimestampIncrement = rtpTimestampIncrement(cfg.TimeBaseDen, cfg.FrameRateNum, cfg.FrameRateDen)
+		increment, err := rtpTimestampIncrementChecked(cfg.TimeBaseDen, cfg.FrameRateNum, cfg.FrameRateDen)
+		if err != nil {
+			return err
+		}
+		cfg.RTPTimestampIncrement = increment
 	}
 	if update.Width != 0 || update.Height != 0 {
 		cfg.Width = update.Width
@@ -1556,7 +1564,30 @@ func appendEncoderSliceRanges(dst []encoderSliceRange, width int, height int, sl
 }
 
 func encoderMacroblockCount(width int, height int) int {
-	return ((width + 15) >> 4) * ((height + 15) >> 4)
+	count, err := encoderMacroblockCountChecked(width, height)
+	if err != nil {
+		return 0
+	}
+	return count
+}
+
+func encoderMacroblockCountChecked(width int, height int) (int, error) {
+	if width <= 0 || height <= 0 {
+		return 0, encoderInvalid("width and height must be positive")
+	}
+	mbWidthInput, err := checkedAddInt(width, 15)
+	if err != nil {
+		return 0, encoderInvalid("coded width is too large")
+	}
+	mbHeightInput, err := checkedAddInt(height, 15)
+	if err != nil {
+		return 0, encoderInvalid("coded height is too large")
+	}
+	count, err := checkedMulInt(mbWidthInput>>4, mbHeightInput>>4)
+	if err != nil {
+		return 0, encoderInvalid("coded macroblock count overflows")
+	}
+	return count, nil
 }
 
 func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []encoderRawNAL) ([]byte, []EncoderNALUnit, error) {
@@ -2216,7 +2247,11 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	if cfg.SliceCount == 0 {
 		cfg.SliceCount = 1
 	}
-	if cfg.SliceCount > encoderMacroblockCount(cfg.Width, cfg.Height) {
+	macroblockCount, err := encoderMacroblockCountChecked(cfg.Width, cfg.Height)
+	if err != nil {
+		return cfg, err
+	}
+	if cfg.SliceCount > macroblockCount {
 		return cfg, encoderInvalid("slice count cannot exceed coded macroblock count")
 	}
 	if cfg.Workers == 0 {
@@ -2275,7 +2310,11 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		}
 	}
 	if cfg.RTPTimestampIncrement == 0 {
-		cfg.RTPTimestampIncrement = rtpTimestampIncrement(cfg.TimeBaseDen, cfg.FrameRateNum, cfg.FrameRateDen)
+		increment, err := rtpTimestampIncrementChecked(cfg.TimeBaseDen, cfg.FrameRateNum, cfg.FrameRateDen)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.RTPTimestampIncrement = increment
 	}
 	return cfg, nil
 }
@@ -2294,10 +2333,26 @@ func validateEncoderCrop(crop EncoderCrop, width int, height int) error {
 }
 
 func rtpTimestampIncrement(clock, frameRateNum, frameRateDen int) uint32 {
-	if clock <= 0 || frameRateNum <= 0 || frameRateDen <= 0 {
+	increment, err := rtpTimestampIncrementChecked(clock, frameRateNum, frameRateDen)
+	if err != nil {
 		return 0
 	}
-	return uint32((clock * frameRateDen) / frameRateNum)
+	return increment
+}
+
+func rtpTimestampIncrementChecked(clock, frameRateNum, frameRateDen int) (uint32, error) {
+	if clock <= 0 || frameRateNum <= 0 || frameRateDen <= 0 {
+		return 0, encoderInvalid("RTP clock and frame rate must be positive")
+	}
+	ticks, err := checkedMulInt(clock, frameRateDen)
+	if err != nil {
+		return 0, encoderInvalid("RTP timestamp increment overflows")
+	}
+	increment := ticks / frameRateNum
+	if uint64(increment) > uint64(^uint32(0)) {
+		return 0, encoderInvalid("RTP timestamp increment must fit in 32 bits")
+	}
+	return uint32(increment), nil
 }
 
 func (e *Encoder) encoderRTPTime(frame EncoderFrame) uint32 {
