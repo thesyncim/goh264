@@ -142,7 +142,7 @@ from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B
 exact P16x16 including single-macroblock deblock controls, Annex B
-macroblock-aligned exact P16x16, Annex B changed
+macroblock-aligned exact P16x16 including 8-pixel edge search, Annex B changed
 P IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16, RTP steady P-skip, RTP changed
 P IntraPCM, and RTP packetization-mode 0 IDR/P-skip/exact-P16x16/P-IntraPCM paths so
 admitted packetization/output paths cannot
@@ -253,8 +253,9 @@ in one access unit.
 6. In progress: add realtime allocation budgets, encode timing benchmarks, and
    control-loop stress tests. Done for the first RTP/Annex B/RTP control-loop
    stress proof, initial `EncodeInto` allocation canaries on Annex B and RTP
-   admitted IDR/P-frame paths including RTP P-IntraPCM and packetization-mode 0
-   IDR/P frames with tightened RTP allocation budgets, and package-level
+   admitted IDR/P-frame paths including 8-pixel exact-P16 edge search, RTP
+   P-IntraPCM, and packetization-mode 0 IDR/P frames with tightened RTP
+   allocation budgets, and package-level
    benchmark canaries for admitted IDR/P-frame and RTP paths.
 
 ## Oracles And Gates
@@ -272,8 +273,9 @@ Encoder tests need independent evidence, not only local decode:
   max-payload, RTP, rate-control/QP, frame-drop, GOP/IDR, and deblock changes.
 - Allocation gates for `EncodeInto`/packetization hot paths with caller-owned
   buffers; current canaries cover Annex B forced IDR, Annex B steady P-skip,
-  Annex B exact P16x16, Annex B changed P IntraPCM, RTP forced IDR/FU-A, RTP
-  exact P16x16, RTP steady P-skip, RTP changed P IntraPCM, and RTP
+  Annex B exact P16x16 including 8-pixel edge search, Annex B changed P
+  IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16, RTP steady P-skip, RTP
+  changed P IntraPCM, and RTP
   packetization-mode 0 IDR/P-frame paths.
 
 ## Production Bar

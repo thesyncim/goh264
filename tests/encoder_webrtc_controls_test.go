@@ -5380,6 +5380,42 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("annexb exact p16x16 edge search", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(48, 48)
+		cfg.OutputFormat = goh264.EncoderOutputAnnexB
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		a := patternedI420EncoderFrame(48, 48)
+		b := integerMotionI420EncoderFrame(a, 8, -8)
+		encs := primedI420EncoderPool(t, cfg, a, 128)
+		dst := make([]byte, 0, 65536)
+		var call int
+		allocs := testing.AllocsPerRun(100, func() {
+			if call >= len(encs) {
+				t.Fatalf("encoder pool exhausted after %d calls", call)
+			}
+			out, err := encs[call].EncodeInto(dst[:0], b)
+			call++
+			if err != nil {
+				t.Fatalf("EncodeInto 8-pixel edge exact P16x16: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("8-pixel edge exact P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("annexb 8-pixel edge exact P16x16 EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 4 {
+			t.Fatalf("annexb 8-pixel edge exact P16x16 EncodeInto allocations/run = %.0f, want <= 4", allocs)
+		}
+	})
+
 	t.Run("annexb changed p-intrapcm", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.OutputFormat = goh264.EncoderOutputAnnexB
