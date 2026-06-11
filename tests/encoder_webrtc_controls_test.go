@@ -4834,6 +4834,85 @@ func TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets(t *testing.T) {
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
 }
 
+func TestEncoderEncodeRTPMode1STAPADoesNotAggregateChangedPRecoverySEI(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.STAPA = true
+	cfg.RTPMaxPayloadSize = 1200
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 10101
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first STAP-A IDR: %v", err)
+	}
+	if len(first.RTPPackets) < 2 || first.RTPPackets[0].Payload[0]&0x1f != 24 {
+		t.Fatalf("first STAP-A IDR packets = %d first payload %x, want SPS/PPS aggregate then VCL",
+			len(first.RTPPackets), first.RTPPackets[0].Payload)
+	}
+	assertSTAPANALTypes(t, first.RTPPackets[0].Payload, []uint8{7, 8})
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y[0] ^= 0x57
+	secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode changed STAP-A P frame: %v", err)
+	}
+	if second.IDR || second.KeyFrame {
+		t.Fatalf("changed STAP-A P frame key=%v idr=%v, want non-IDR output", second.KeyFrame, second.IDR)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+	if len(second.RTPPackets) != 2 {
+		t.Fatalf("changed STAP-A P RTP packet count = %d, want SEI and P slice packets", len(second.RTPPackets))
+	}
+	for i, pkt := range second.RTPPackets {
+		if len(pkt.Payload) == 0 {
+			t.Fatalf("changed STAP-A P packet[%d] has empty payload", i)
+		}
+		if got := pkt.Payload[0] & 0x1f; got == 24 {
+			t.Fatalf("changed STAP-A P packet[%d] unexpectedly used STAP-A payload: %x", i, pkt.Payload)
+		}
+		if len(pkt.Payload) > cfg.RTPMaxPayloadSize {
+			t.Fatalf("changed STAP-A P packet[%d] payload size = %d, max %d", i, len(pkt.Payload), cfg.RTPMaxPayloadSize)
+		}
+		if pkt.Timestamp != second.RTPTime {
+			t.Fatalf("changed STAP-A P packet[%d] timestamp = %d, want %d", i, pkt.Timestamp, second.RTPTime)
+		}
+		if pkt.Marker != (i == len(second.RTPPackets)-1) {
+			t.Fatalf("changed STAP-A P packet[%d] marker = %v, want only final marker", i, pkt.Marker)
+		}
+	}
+	if got := second.RTPPackets[0].Payload[0] & 0x1f; got != 6 {
+		t.Fatalf("changed STAP-A P packet[0] NAL type = %d, want recovery SEI", got)
+	}
+	if got := second.RTPPackets[1].Payload[0] & 0x1f; got != 1 {
+		t.Fatalf("changed STAP-A P packet[1] NAL type = %d, want P slice", got)
+	}
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode first STAP-A IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+	decodedSecond, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode changed STAP-A P frame: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+	if !decodedSecond[0].KeyFrame ||
+		decodedSecond[0].SideData.RecoveryPoint == nil ||
+		decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("changed STAP-A P recovery key=%v recovery=%+v, want immediate recovery point",
+			decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+	}
+}
+
 func TestEncoderEncodeRTPMode0EmitsSingleNALPackets(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL

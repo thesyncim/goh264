@@ -136,6 +136,7 @@ local raw-frame decode, FFmpeg rawvideo decode, configured AVC and RTP
 exact-P16 decode, recovery-point side data, multi-slice `first_mb_in_slice`
 ordering, RTP packetization-mode 0 single-NAL IDR/P-frame reassembly and
 oversize rejection, RTP FU-A reassembly, STAP-A parameter-set aggregation,
+changed-P recovery SEI single-NAL output when STAP-A is enabled,
 payload-type, SSRC, and sequence-number packet metadata. RTP
 packets also carry complete 12-byte RTP headers plus payload bytes with clipped
 per-packet payload views over packet data and packet storage isolated from
@@ -244,7 +245,8 @@ in one access unit.
    packet-level tests. Done for packetization-mode 0 single-NAL IDR, P-skip,
    exact-P16x16, and P IntraPCM output with oversize rejection,
    packetization-mode 1 single NAL/FU-A output, and
-   STAP-A parameter-set aggregation with marker-bit boundaries plus
+   STAP-A parameter-set aggregation with marker-bit boundaries plus changed-P
+   recovery SEI left as single-NAL output plus
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
    bytes, clipped per-packet payload views over packet data, callback-style
    packet metadata including mode 0/1 IDR/P-frame single-NAL packets,
