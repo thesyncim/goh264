@@ -358,15 +358,24 @@ type Frame struct {
 	SideData                       FrameSideData
 }
 
+// NewDecoder returns a stateful decoder.
 func NewDecoder() *Decoder {
 	return &Decoder{}
 }
 
+// Decode decodes data through DecodeFrames and returns the single output frame.
+//
+// It returns ErrUnsupported when the packet produces zero or multiple frames
+// without another decode error.
 func (d *Decoder) Decode(data []byte) (*Frame, error) {
 	frames, err := d.DecodeFrames(data)
 	return singleFrameFromFrames(frames, err)
 }
 
+// DecodeFrames decodes an auto-detected Annex B or configured-AVC packet.
+//
+// Passing an AVC decoder configuration record updates configured-AVC state and
+// returns no frames. Passing empty data flushes delayed frames.
 func (d *Decoder) DecodeFrames(data []byte) ([]*Frame, error) {
 	return d.decodeFrames(data, h264.DecodedFrameSideData{})
 }
@@ -397,11 +406,22 @@ func (d *Decoder) decodeFrames(data []byte, packetSideData h264.DecodedFrameSide
 	return framesFromH264(frames), nil
 }
 
+// DecodePacket decodes pkt through DecodePacketFrames and returns the single
+// output frame.
+//
+// It returns ErrUnsupported when the packet produces zero or multiple frames
+// without another decode error.
 func (d *Decoder) DecodePacket(pkt Packet) (*Frame, error) {
 	frames, err := d.DecodePacketFrames(pkt)
 	return singleFrameFromFrames(frames, err)
 }
 
+// DecodePacketFrames decodes a compressed packet plus FFmpeg-compatible packet
+// side data.
+//
+// PacketSideDataNewExtradata is parsed before packet data and is non-fatal when
+// malformed, leaving the previous configuration in use. Passing an empty packet
+// flushes delayed frames and does not attach packet side data.
 func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
@@ -420,11 +440,16 @@ func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
 	return d.decodeFrames(pkt.Data, packetFrameSideDataFromPacket(pkt.SideData))
 }
 
+// DecodeAnnexB decodes a complete Annex B byte stream and returns the single
+// output frame.
 func (d *Decoder) DecodeAnnexB(data []byte) (*Frame, error) {
 	frames, err := d.DecodeAnnexBFrames(data)
 	return singleFrameFromFrames(frames, err)
 }
 
+// DecodeAnnexBFrames decodes a complete Annex B byte stream in one call.
+//
+// For stateful packet streaming and delayed-output flushing, use DecodeFrames.
 func (d *Decoder) DecodeAnnexBFrames(data []byte) ([]*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
@@ -440,11 +465,18 @@ func (d *Decoder) DecodeAnnexBFrames(data []byte) ([]*Frame, error) {
 	return out, nil
 }
 
+// DecodeAVC decodes a complete AVC packet stream with the supplied NAL length
+// size and returns the single output frame.
 func (d *Decoder) DecodeAVC(data []byte, nalLengthSize int) (*Frame, error) {
 	frames, err := d.DecodeAVCFrames(data, nalLengthSize)
 	return singleFrameFromFrames(frames, err)
 }
 
+// DecodeAVCFrames decodes a complete AVC packet stream with the supplied NAL
+// length size in one call.
+//
+// For stateful AVC streaming, first parse an AVC decoder configuration record
+// and then use DecodeConfiguredAVCFrames.
 func (d *Decoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
@@ -460,11 +492,19 @@ func (d *Decoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*Frame, err
 	return out, nil
 }
 
+// DecodeConfiguredAVC decodes data using the stored AVC configuration and
+// returns the single output frame.
 func (d *Decoder) DecodeConfiguredAVC(data []byte) (*Frame, error) {
 	frames, err := d.DecodeConfiguredAVCFrames(data)
 	return singleFrameFromFrames(frames, err)
 }
 
+// DecodeConfiguredAVCFrames decodes a stateful AVC packet using the stored AVC
+// configuration.
+//
+// The stored configuration is set by ParseAVCDecoderConfigurationRecord or by a
+// prior AVC decoder configuration record passed to DecodeFrames. Passing empty
+// data flushes delayed frames.
 func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	if d == nil || d.avcNALLengthSize == 0 {
 		return nil, ErrInvalidData
@@ -479,6 +519,7 @@ func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	return framesFromH264(frames), nil
 }
 
+// FlushDelayedFrames drains decoded frames held for delayed output.
 func (d *Decoder) FlushDelayedFrames() ([]*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
@@ -490,11 +531,19 @@ func (d *Decoder) FlushDelayedFrames() ([]*Frame, error) {
 	return framesFromH264(frames), nil
 }
 
+// DecodeAVCWithConfigurationRecord updates the stored AVC configuration, decodes
+// data, and returns the single output frame.
 func (d *Decoder) DecodeAVCWithConfigurationRecord(config []byte, data []byte) (*Frame, error) {
 	frames, err := d.DecodeAVCFramesWithConfigurationRecord(config, data)
 	return singleFrameFromFrames(frames, err)
 }
 
+// DecodeAVCFramesWithConfigurationRecord updates the stored AVC configuration
+// from config and decodes data with that configuration.
+//
+// For non-empty data this helper also drains delayed frames before returning.
+// Passing empty data updates the configuration and flushes existing delayed
+// frames.
 func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []byte) ([]*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
@@ -553,6 +602,7 @@ func framesFromH264(frames []*h264.DecodedFrame) []*Frame {
 	return out
 }
 
+// ParseHeadersAnnexB parses Annex B parameter sets and returns stream metadata.
 func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
 	nals, err := h264.SplitAnnexB(data)
 	if err != nil {
@@ -561,6 +611,7 @@ func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
 	return d.parseHeaders(nals)
 }
 
+// ParseHeadersAVC parses AVC parameter sets and returns stream metadata.
 func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, error) {
 	nals, err := h264.SplitAVCC(data, nalLengthSize)
 	if err != nil {
@@ -569,6 +620,8 @@ func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, e
 	return d.parseHeaders(nals)
 }
 
+// ParseAVCDecoderConfigurationRecord parses an AVC decoder configuration record,
+// stores it for configured-AVC decode calls, and returns stream metadata.
 func (d *Decoder) ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
 	if d == nil {
 		return AVCDecoderConfiguration{}, ErrInvalidData
