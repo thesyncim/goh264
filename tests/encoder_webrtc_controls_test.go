@@ -5131,6 +5131,35 @@ func TestEncoderEncodeRTPPacketsCarryWebRTCMetadata(t *testing.T) {
 	assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)))
 }
 
+func TestEncoderEncodedFrameNALUnitsIndexOutputData(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", outputFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc", outputFormat: goh264.EncoderOutputAVC},
+		{name: "rtp", outputFormat: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			out, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode: %v", err)
+			}
+			assertEncodedFrameNALUnitIndexes(t, out, cfg.OutputFormat)
+		})
+	}
+}
+
 func TestEncoderEncodeRTPPacketsCarryFullRTPHeaders(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPayloadType = 102
@@ -7614,6 +7643,52 @@ func assertEncoderNALTypes(t *testing.T, nals []goh264.EncoderNALUnit, want []ui
 	for i, typ := range want {
 		if nals[i].Type != typ {
 			t.Fatalf("NAL[%d] type = %d, want %d (%+v)", i, nals[i].Type, typ, nals)
+		}
+	}
+}
+
+func assertEncodedFrameNALUnitIndexes(t *testing.T, out goh264.EncodedFrame, format goh264.EncoderOutputFormat) {
+	t.Helper()
+	if out.Dropped {
+		t.Fatal("cannot validate NAL indexes for dropped frame")
+	}
+	if len(out.Data) == 0 || len(out.NALUnits) == 0 {
+		t.Fatalf("encoded frame data/nals = %d/%d, want populated access unit", len(out.Data), len(out.NALUnits))
+	}
+	var parsed []h264.NALUnit
+	var err error
+	switch format {
+	case goh264.EncoderOutputAnnexB, goh264.EncoderOutputRTP:
+		parsed, err = h264.SplitAnnexB(out.Data)
+	case goh264.EncoderOutputAVC:
+		parsed, err = h264.SplitAVCC(out.Data, 4)
+	default:
+		t.Fatalf("unknown output format %v", format)
+	}
+	if err != nil {
+		t.Fatalf("split encoded frame data: %v", err)
+	}
+	if len(parsed) != len(out.NALUnits) {
+		t.Fatalf("parsed NAL count = %d, public NAL count = %d", len(parsed), len(out.NALUnits))
+	}
+	for i, unit := range out.NALUnits {
+		if unit.Offset < 0 || unit.Size <= 0 || unit.Offset+unit.Size > len(out.Data) {
+			t.Fatalf("NAL[%d] offset/size = %d/%d outside data length %d", i, unit.Offset, unit.Size, len(out.Data))
+		}
+		raw := out.Data[unit.Offset : unit.Offset+unit.Size]
+		if !bytes.Equal(raw, parsed[i].Raw) {
+			t.Fatalf("NAL[%d] raw bytes do not match indexed EncodedFrame.Data", i)
+		}
+		if unit.Type != uint8(parsed[i].Type) || unit.Type != raw[0]&0x1f {
+			t.Fatalf("NAL[%d] type = %d parsed=%d raw=%d", i, unit.Type, parsed[i].Type, raw[0]&0x1f)
+		}
+		wantParameterSet := unit.Type == 7 || unit.Type == 8
+		if unit.ParameterSet != wantParameterSet {
+			t.Fatalf("NAL[%d] parameterSet = %v, want %v", i, unit.ParameterSet, wantParameterSet)
+		}
+		wantKeyFrame := unit.Type == 5 || unit.ParameterSet
+		if unit.KeyFrame != wantKeyFrame {
+			t.Fatalf("NAL[%d] keyFrame = %v, want %v", i, unit.KeyFrame, wantKeyFrame)
 		}
 	}
 }

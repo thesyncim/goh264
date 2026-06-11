@@ -135,7 +135,8 @@ B, configured AVC, and RTP packetization-mode 1 reassembly. Tests prove
 local raw-frame decode, FFmpeg rawvideo decode, configured AVC and RTP
 exact-P16 decode, recovery-point side data, multi-slice `first_mb_in_slice`
 ordering, RTP packetization-mode 0 single-NAL IDR/P-frame reassembly and
-oversize rejection, RTP FU-A reassembly, STAP-A parameter-set aggregation,
+oversize rejection, public NAL-unit metadata indexing back into encoded
+access-unit bytes for Annex B/AVC/RTP output, RTP FU-A reassembly, STAP-A parameter-set aggregation,
 changed-P recovery SEI single-NAL output when STAP-A is enabled,
 payload-type, SSRC, and sequence-number packet metadata. RTP
 packets also carry complete 12-byte RTP headers plus payload bytes with clipped
