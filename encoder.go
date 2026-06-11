@@ -5,6 +5,7 @@ package goh264
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/thesyncim/goh264/internal/h264"
 )
@@ -438,6 +439,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		return EncodedFrame{}, err
 	}
 	idr := e.shouldEncodeIDR(view, frame)
+	lateStart := encoderLateDropStart(e.cfg)
 	var nalsBuf [4]encoderRawNAL
 	nals := nalsBuf[:0]
 	if e.shouldEmitParameterSets(idr) {
@@ -560,8 +562,25 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		if err != nil {
 			return EncodedFrame{}, err
 		}
+		if encoderLateBudgetMiss(lateStart, e.cfg) {
+			e.advanceEncoderRTPTime(frame, rtpTime)
+			return EncodedFrame{
+				PTS:     frame.PTS,
+				DTS:     frame.PTS,
+				RTPTime: rtpTime,
+				Dropped: true,
+			}, nil
+		}
 		e.stampRTPPackets(packets)
 		e.notifyRTPPacketCallback(packets, frame, rtpTime, idr, idr)
+	} else if encoderLateBudgetMiss(lateStart, e.cfg) {
+		e.advanceEncoderRTPTime(frame, rtpTime)
+		return EncodedFrame{
+			PTS:     frame.PTS,
+			DTS:     frame.PTS,
+			RTPTime: rtpTime,
+			Dropped: true,
+		}, nil
 	}
 
 	e.advanceEncoderRTPTime(frame, rtpTime)
@@ -802,6 +821,17 @@ type encoderReferenceFrame struct {
 type encoderSliceRange struct {
 	firstMB         int
 	macroblockCount int
+}
+
+func encoderLateDropStart(cfg EncoderConfig) time.Time {
+	if cfg.FrameDrop == EncoderFrameDropLate && cfg.MaxEncodeTimeUS > 0 {
+		return time.Now()
+	}
+	return time.Time{}
+}
+
+func encoderLateBudgetMiss(start time.Time, cfg EncoderConfig) bool {
+	return !start.IsZero() && time.Since(start) > time.Duration(cfg.MaxEncodeTimeUS)*time.Microsecond
 }
 
 func buildEncoderI420IntraPCMIDRNAL(cfg h264.EncoderI420IntraPCMIDRConfig) ([]byte, error) {

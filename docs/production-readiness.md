@@ -136,7 +136,10 @@ proves in-band keyframe, out-of-band, and every-IDR header modes, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL
 surfaces accepted by public decode paths, verifies frame-shape validation, and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
-`MaxFrameSize`/`SliceMaxBytes` budget misses. It proves `Encode`/`EncodeInto`
+`MaxFrameSize`/`SliceMaxBytes` budget misses plus `FrameDropLate`
+`MaxEncodeTimeUS` budget misses that advance RTP time without advancing
+reference, frame-number, packet-sequence, or callback state. It proves
+`Encode`/`EncodeInto`
 emit IDR IntraPCM access units that round-trip through local Annex B/AVC decode,
 FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL
 reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP

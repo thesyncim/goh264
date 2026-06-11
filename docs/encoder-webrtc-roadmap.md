@@ -61,7 +61,10 @@ QP updates queue an IDR/PPS refresh. `MaxFrameSize` and `SliceMaxBytes` are now
 enforced as encode-time guards before frame/reference/packet state advances:
 `FrameDropDisabled` keeps the hard-error path, while `FrameDropToBitrate`
 returns `EncodedFrame.Dropped` without emitted bytes or RTP packets and advances
-the RTP timestamp timeline.
+the RTP timestamp timeline. `FrameDropLate` now uses `MaxEncodeTimeUS` as an
+encode-time budget only when that mode is selected; late frames return dropped
+metadata, advance the RTP timestamp timeline, and leave reference, frame-number,
+packet-sequence, and callback state untouched.
 `ParameterSets`
 generates SPS/PPS NALs, crop metadata, Annex B sequence headers, and avcC
 records accepted by the decoder parsers. IDR header cadence is explicit for
@@ -153,7 +156,8 @@ can emit multiple VCL NALs in one access unit.
    `MaxFrameSize`/`SliceMaxBytes` budgets now reject oversized encoded output
    without advancing encoder state when frame dropping is disabled, or return
    dropped-frame metadata without emitted packets when `FrameDropToBitrate` is
-   active.
+   active. `FrameDropLate` now drops frames that exceed `MaxEncodeTimeUS`
+   without advancing reference/frame/packet state.
 6. In progress: add realtime allocation budgets, encode timing benchmarks, and
    control-loop stress tests. Done for initial `EncodeInto` allocation canaries
    on Annex B and RTP admitted P-frame paths plus package-level benchmark
