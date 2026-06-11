@@ -2809,6 +2809,68 @@ func TestEncoderRTPPacketCallbackReceivesWebRTCMetadata(t *testing.T) {
 	}
 }
 
+func TestEncoderRTPPacketCallbackReceivesMode0IDRSingleNALMetadata(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	cfg.RTPPayloadType = 106
+	cfg.RTPSSRC = 0x55667788
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder mode 0: %v", err)
+	}
+
+	var callbackPackets []goh264.EncoderRTPPacket
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackPackets = append(callbackPackets, pkt)
+		callbackMetadata = append(callbackMetadata, meta)
+	})
+
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 0x222000
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode mode 0 IDR with callback: %v", err)
+	}
+	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+	assertEncoderRTPMode0RawNALPackets(t, out, cfg.RTPMaxPayloadSize)
+	if len(callbackPackets) != len(out.RTPPackets) || len(callbackMetadata) != len(out.RTPPackets) {
+		t.Fatalf("callback packets/meta = %d/%d, want RTP packet count %d",
+			len(callbackPackets), len(callbackMetadata), len(out.RTPPackets))
+	}
+	for i, meta := range callbackMetadata {
+		pkt := callbackPackets[i]
+		wantType := out.NALUnits[i].Type
+		if meta.PacketIndex != i || meta.PacketCount != len(out.RTPPackets) {
+			t.Fatalf("callback meta[%d] index/count = %d/%d, want %d/%d",
+				i, meta.PacketIndex, meta.PacketCount, i, len(out.RTPPackets))
+		}
+		if meta.FramePTS != frame.PTS || meta.FrameDTS != frame.PTS ||
+			meta.RTPTime != out.RTPTime || !meta.KeyFrame || !meta.IDR {
+			t.Fatalf("callback meta[%d] frame fields = %+v, want IDR timing metadata", i, meta)
+		}
+		if pkt.SequenceNumber != out.RTPPackets[i].SequenceNumber ||
+			pkt.Timestamp != out.RTPPackets[i].Timestamp ||
+			pkt.PayloadType != cfg.RTPPayloadType ||
+			pkt.SSRC != cfg.RTPSSRC ||
+			pkt.Marker != (i == len(out.RTPPackets)-1) ||
+			!bytes.Equal(pkt.Payload, out.RTPPackets[i].Payload) ||
+			!bytes.Equal(pkt.Data, out.RTPPackets[i].Data) {
+			t.Fatalf("callback packet[%d] metadata = %+v, want returned RTP packet fields", i, pkt)
+		}
+		if meta.PayloadFormat != goh264.EncoderRTPPayloadSingleNAL ||
+			meta.NALUnitType != wantType ||
+			meta.NALUnitCount != 1 ||
+			!meta.StartOfNAL || !meta.EndOfNAL ||
+			meta.ParameterSet != (wantType == 7 || wantType == 8) {
+			t.Fatalf("callback meta[%d] = %+v, want complete mode-0 IDR single-NAL type %d",
+				i, meta, wantType)
+		}
+	}
+}
+
 func TestEncoderRTPPacketCallbackReceivesPFrameSingleNALMetadata(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
