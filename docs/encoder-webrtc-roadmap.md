@@ -88,10 +88,14 @@ packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form, NAL type/count, FU-A start/end, and parameter-set
 packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
 from frame duration or `RTPTimestampIncrement`, including after runtime
-timestamp-increment reconfiguration. Cropped I420 IDR output is
-proved through local decode and FFmpeg rawvideo decode of the cropped visible
-frame. Queued IDR requests still emit IDR, and motion-search prediction,
-residual coding, and rate-control decisions remain pending.
+timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
+canaries for caller-buffer Annex B steady P-skip, Annex B changed P IntraPCM,
+and RTP steady P-skip paths so admitted packetization/output paths cannot
+silently regress while broader allocation budgets are still pending. Cropped
+I420 IDR output is proved through local decode and FFmpeg rawvideo decode of
+the cropped visible frame. Queued IDR requests still emit IDR, and
+motion-search prediction, residual coding, and rate-control decisions remain
+pending.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -146,8 +150,9 @@ can emit multiple VCL NALs in one access unit.
    without advancing encoder state when frame dropping is disabled, or return
    dropped-frame metadata without emitted packets when `FrameDropToBitrate` is
    active.
-6. Add realtime allocation budgets, encode timing benchmarks, and control-loop
-   stress tests.
+6. In progress: add realtime allocation budgets, encode timing benchmarks, and
+   control-loop stress tests. Done for initial `EncodeInto` allocation canaries
+   on Annex B and RTP admitted P-frame paths.
 
 ## Oracles And Gates
 
@@ -163,7 +168,8 @@ Encoder tests need independent evidence, not only local decode:
 - Reconfiguration tests for bitrate, framerate, force-IDR, resolution reset,
   max-payload, RTP, rate-control/QP, frame-drop, GOP/IDR, and deblock changes.
 - Allocation gates for `EncodeInto`/packetization hot paths with caller-owned
-  buffers.
+  buffers; current canaries cover Annex B steady P-skip, Annex B changed
+  P IntraPCM, and RTP steady P-skip.
 
 ## Production Bar
 

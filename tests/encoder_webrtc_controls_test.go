@@ -2017,6 +2017,114 @@ func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
+	t.Run("annexb steady p-skip", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAnnexB
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		frame := patternedI420EncoderFrame(16, 16)
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), frame); err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		dst := make([]byte, 0, 4096)
+		allocs := testing.AllocsPerRun(100, func() {
+			out, err := enc.EncodeInto(dst[:0], frame)
+			if err != nil {
+				t.Fatalf("EncodeInto P-skip: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 {
+				t.Fatalf("steady P-skip output idr=%v rtp=%d data=%d", out.IDR, len(out.RTPPackets), len(out.Data))
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("annexb steady p-skip EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 12 {
+			t.Fatalf("annexb steady P-skip EncodeInto allocations/run = %.0f, want <= 12", allocs)
+		}
+	})
+
+	t.Run("annexb changed p-intrapcm", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAnnexB
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		a := patternedI420EncoderFrame(16, 16)
+		b := patternedI420EncoderFrame(16, 16)
+		b.Y[0] ^= 0x7f
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), a); err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		dst := make([]byte, 0, 4096)
+		allocs := testing.AllocsPerRun(100, func() {
+			out, err := enc.EncodeInto(dst[:0], b)
+			if err != nil {
+				t.Fatalf("EncodeInto changed P: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 {
+				t.Fatalf("changed P output idr=%v rtp=%d data=%d", out.IDR, len(out.RTPPackets), len(out.Data))
+			}
+			out, err = enc.EncodeInto(dst[:0], a)
+			if err != nil {
+				t.Fatalf("EncodeInto changed P reset: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 {
+				t.Fatalf("changed P reset output idr=%v rtp=%d data=%d", out.IDR, len(out.RTPPackets), len(out.Data))
+			}
+		})
+		t.Logf("annexb changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 80 {
+			t.Fatalf("annexb changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 80", allocs)
+		}
+	})
+
+	t.Run("rtp steady p-skip", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		frame := patternedI420EncoderFrame(16, 16)
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), frame); err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		dst := make([]byte, 0, 4096)
+		allocs := testing.AllocsPerRun(100, func() {
+			out, err := enc.EncodeInto(dst[:0], frame)
+			if err != nil {
+				t.Fatalf("EncodeInto RTP P-skip: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) == 0 || len(out.Data) == 0 {
+				t.Fatalf("steady RTP P-skip output idr=%v rtp=%d data=%d", out.IDR, len(out.RTPPackets), len(out.Data))
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("rtp steady p-skip EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 12 {
+			t.Fatalf("rtp steady P-skip EncodeInto allocations/run = %.0f, want <= 12", allocs)
+		}
+	})
+}
+
 func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	cfgType := reflect.TypeOf(goh264.EncoderConfig{})
 	for _, field := range []string{

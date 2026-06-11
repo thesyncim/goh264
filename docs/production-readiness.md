@@ -144,9 +144,11 @@ optional RTP callback metadata. It also proves identical second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
+It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
+steady P-skip, Annex B changed P IntraPCM, and RTP steady P-skip paths.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and
 Baseline IDR plus P-skip slice syntax. Motion-search P prediction, residual
-CAVLC coding, rate-control feedback, and realtime allocation/performance gates
-remain pending.
+CAVLC coding, rate-control feedback, broader allocation budgets, and realtime
+performance gates remain pending.
