@@ -91,11 +91,12 @@ from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B steady P-skip, Annex B changed P IntraPCM,
 and RTP steady P-skip paths so admitted packetization/output paths cannot
-silently regress while broader allocation budgets are still pending. Cropped
-I420 IDR output is proved through local decode and FFmpeg rawvideo decode of
-the cropped visible frame. Queued IDR requests still emit IDR, and
-motion-search prediction, residual coding, and rate-control decisions remain
-pending.
+silently regress while broader allocation budgets are still pending; the live
+encode path builds RBSP plus raw NAL output directly instead of constructing
+discarded Annex B/AVC copies. Cropped I420 IDR output is proved through local
+decode and FFmpeg rawvideo decode of the cropped visible frame. Queued IDR
+requests still emit IDR, and motion-search prediction, residual coding, and
+rate-control decisions remain pending.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed

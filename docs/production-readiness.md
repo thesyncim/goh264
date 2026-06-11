@@ -145,7 +145,9 @@ CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
-steady P-skip, Annex B changed P IntraPCM, and RTP steady P-skip paths.
+steady P-skip, Annex B changed P IntraPCM, and RTP steady P-skip paths; the
+live encode path writes RBSP plus raw NAL output directly instead of building
+discarded Annex B/AVC copies.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC
 decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax, and

@@ -119,11 +119,12 @@ changed-frame P IntraPCM recovery pictures, forced-keyframe IDR, FFmpeg rawvideo
 decode, `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
 dropped-frame budget behavior, RTP packetization-mode 1 FU-A reassembly,
 STAP-A parameter-set aggregation, RTP payload-type/SSRC/sequence metadata, full
-RTP header bytes, optional RTP callback metadata, and initial `EncodeInto`
-allocation canaries for caller-buffer Annex B and RTP P-frame paths. Internal
-writer proof covers raw bit/Exp-Golomb writing, RBSP trailing bits,
-EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC decoder configuration
-records, baseline SPS/PPS syntax with 4:2:0 crop-unit emission,
+RTP header bytes, optional RTP callback metadata, initial `EncodeInto`
+allocation canaries for caller-buffer Annex B and RTP P-frame paths, and a live
+encode path that avoids discarded Annex B/AVC copies when only raw NAL output is
+needed. Internal writer proof covers raw bit/Exp-Golomb writing, RBSP trailing
+bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC decoder
+configuration records, baseline SPS/PPS syntax with 4:2:0 crop-unit emission,
 recovery-point SEI syntax, and Baseline IDR plus P-skip/P IntraPCM slice syntax
 via decoder-parser and encoded-frame round trips.
 

@@ -453,7 +453,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	sliceRanges := encoderSliceRanges(view.width, view.height, e.cfg.SliceCount)
 	if idr {
 		for _, r := range sliceRanges {
-			slice, err := h264.BuildEncoderI420IntraPCMIDRSlice(h264.EncoderI420IntraPCMIDRConfig{
+			nal, err := buildEncoderI420IntraPCMIDRNAL(h264.EncoderI420IntraPCMIDRConfig{
 				Width:                      view.width,
 				Height:                     view.height,
 				StrideY:                    view.strideY,
@@ -473,11 +473,11 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			if err != nil {
 				return EncodedFrame{}, err
 			}
-			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALIDRSlice), raw: slice.NAL, keyFrame: true})
+			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALIDRSlice), raw: nal, keyFrame: true})
 		}
 	} else if e.referenceMatches(view) {
 		for _, r := range sliceRanges {
-			slice, err := h264.BuildEncoderI420PSkipSlice(h264.EncoderI420PSkipConfig{
+			nal, err := buildEncoderI420PSkipNAL(h264.EncoderI420PSkipConfig{
 				Width:                      view.width,
 				Height:                     view.height,
 				FrameNum:                   e.frameNum & 0xff,
@@ -490,7 +490,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			if err != nil {
 				return EncodedFrame{}, err
 			}
-			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: slice.NAL})
+			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
 		}
 	} else {
 		if e.cfg.RecoveryPointSEI {
@@ -501,7 +501,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSEI), raw: sei.NAL})
 		}
 		for _, r := range sliceRanges {
-			slice, err := h264.BuildEncoderI420IntraPCMPSlice(h264.EncoderI420IntraPCMPConfig{
+			nal, err := buildEncoderI420IntraPCMPNAL(h264.EncoderI420IntraPCMPConfig{
 				Width:                      view.width,
 				Height:                     view.height,
 				StrideY:                    view.strideY,
@@ -520,7 +520,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			if err != nil {
 				return EncodedFrame{}, err
 			}
-			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: slice.NAL})
+			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
 		}
 	}
 
@@ -800,6 +800,30 @@ type encoderReferenceFrame struct {
 type encoderSliceRange struct {
 	firstMB         int
 	macroblockCount int
+}
+
+func buildEncoderI420IntraPCMIDRNAL(cfg h264.EncoderI420IntraPCMIDRConfig) ([]byte, error) {
+	rbsp, err := h264.EncodeI420IntraPCMIDRSliceRBSP(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return h264.AppendNAL(nil, 3, h264.NALIDRSlice, rbsp)
+}
+
+func buildEncoderI420PSkipNAL(cfg h264.EncoderI420PSkipConfig) ([]byte, error) {
+	rbsp, err := h264.EncodeI420PSkipSliceRBSP(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return h264.AppendNAL(nil, 2, h264.NALSlice, rbsp)
+}
+
+func buildEncoderI420IntraPCMPNAL(cfg h264.EncoderI420IntraPCMPConfig) ([]byte, error) {
+	rbsp, err := h264.EncodeI420IntraPCMPSliceRBSP(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return h264.AppendNAL(nil, 2, h264.NALSlice, rbsp)
 }
 
 func (e *Encoder) validateFrame(frame EncoderFrame) error {
