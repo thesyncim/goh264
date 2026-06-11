@@ -197,6 +197,78 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 	}
 }
 
+func TestEncoderFrameRateInvalidUpdatesPreserveLiveState(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 32
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 0
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR || first.RTPTime != 0 {
+		t.Fatalf("first output dropped/id/time = %v/%v/%d, want IDR time 0",
+			first.Dropped, first.IDR, first.RTPTime)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+			firstPacketCount, callbackCalls)
+	}
+	before := enc.Config()
+
+	if err := enc.SetFrameRate(0, 1); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("SetFrameRate invalid error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("invalid SetFrameRate mutated config = %+v, want %+v", got, before)
+	}
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{FrameRateDen: 1}); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Reconfigure zero frame-rate numerator error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("invalid frame-rate Reconfigure mutated config = %+v, want %+v", got, before)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("invalid frame-rate updates queued unexpected IDR")
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("invalid frame-rate updates invoked callbacks = %d, want still %d",
+			callbackCalls, firstPacketCount)
+	}
+
+	second, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode after invalid frame-rate updates: %v", err)
+	}
+	if second.Dropped || second.IDR || second.RTPTime != before.RTPTimestampIncrement {
+		t.Fatalf("post-invalid output dropped/id/time = %v/%v/%d, want P-skip time %d",
+			second.Dropped, second.IDR, second.RTPTime, before.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertEncoderVCLFrameNums(t,
+		append(append([]byte(nil), first.Data...), second.Data...),
+		[]uint8{5, 1},
+		[]uint32{0, 1},
+	)
+	assertRTPPacketMetadata(t, second.RTPPackets, before.RTPPayloadType, before.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(second.RTPPackets) {
+		t.Fatalf("post-invalid callbacks = %d, want %d",
+			callbackCalls, firstPacketCount+len(second.RTPPackets))
+	}
+}
+
 func TestEncoderReconfigureSwitchesWebRTCPacketizationControls(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPMaxPayloadSize = 32
