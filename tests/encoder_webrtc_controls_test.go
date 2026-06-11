@@ -283,6 +283,93 @@ func TestEncoderReconfigureSwitchesWebRTCPacketizationControls(t *testing.T) {
 	assertRTPPacketMetadata(t, third.RTPPackets, payloadType, ssrc, uint16(len(first.RTPPackets)+len(second.RTPPackets)))
 }
 
+func TestEncoderSetRTPMaxPayloadSizeRetargetsLivePacketization(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPMaxPayloadSize = 1200
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 30_000
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first RTP IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	assertEncoderRTPSingleNALPackets(t, first, cfg.RTPMaxPayloadSize)
+	assertRTPPacketMetadata(t, first.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+
+	if err := enc.SetRTPMaxPayloadSize(32); err != nil {
+		t.Fatalf("SetRTPMaxPayloadSize: %v", err)
+	}
+	if got := enc.Config(); got.RTPMaxPayloadSize != 32 {
+		t.Fatalf("RTP max payload size = %d, want 32", got.RTPMaxPayloadSize)
+	}
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y[0] ^= 0x4b
+	secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode small-payload changed P: %v", err)
+	}
+	if second.IDR || second.RTPTime != uint32(secondFrame.PTS) {
+		t.Fatalf("second output idr=%v rtp=%d, want non-IDR RTP time %d",
+			second.IDR, second.RTPTime, secondFrame.PTS)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+	assertEncoderRTPPayloadLimit(t, second.RTPPackets, 32)
+	assertEncoderRTPHasFUA(t, second.RTPPackets)
+	assertRTPPacketTimestamps(t, second.RTPPackets, second.RTPTime)
+	assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)))
+
+	beforeInvalid := enc.Config()
+	if err := enc.SetRTPMaxPayloadSize(2); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("SetRTPMaxPayloadSize invalid error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != beforeInvalid {
+		t.Fatalf("invalid SetRTPMaxPayloadSize mutated config = %+v, want %+v", got, beforeInvalid)
+	}
+
+	thirdFrame := secondFrame
+	thirdFrame.Y = append([]byte(nil), secondFrame.Y...)
+	thirdFrame.Y[1] ^= 0x27
+	thirdFrame.PTS = secondFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode after invalid payload-size update: %v", err)
+	}
+	if third.IDR || third.RTPTime != uint32(thirdFrame.PTS) {
+		t.Fatalf("third output idr=%v rtp=%d, want non-IDR RTP time %d",
+			third.IDR, third.RTPTime, thirdFrame.PTS)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{6, 1})
+	assertEncoderRTPPayloadLimit(t, third.RTPPackets, 32)
+	assertEncoderRTPHasFUA(t, third.RTPPackets)
+	assertRTPPacketTimestamps(t, third.RTPPackets, third.RTPTime)
+	assertRTPPacketMetadata(t, third.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)+len(second.RTPPackets)))
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+	if err != nil {
+		t.Fatalf("DecodeFrames first RTP IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+	decodedSecond, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+	if err != nil {
+		t.Fatalf("DecodeFrames retargeted RTP changed P: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+	decodedThird, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, third.RTPPackets))
+	if err != nil {
+		t.Fatalf("DecodeFrames after invalid payload-size update: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedThird, appendI420FrameBytes(nil, thirdFrame))
+}
+
 func TestEncoderReconfigureSwitchesOutputFormatForForcedIDR(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -5015,6 +5102,43 @@ func assertRTPPacketTimestamps(t *testing.T, packets []goh264.EncoderRTPPacket, 
 			t.Fatalf("packet[%d] RTP header timestamp = %d, want %d",
 				i, binary.BigEndian.Uint32(pkt.Data[4:8]), want)
 		}
+	}
+}
+
+func assertEncoderRTPPayloadLimit(t *testing.T, packets []goh264.EncoderRTPPacket, maxPayloadSize int) {
+	t.Helper()
+	if len(packets) == 0 {
+		t.Fatal("RTP packet list is empty")
+	}
+	for i, pkt := range packets {
+		if len(pkt.Payload) > maxPayloadSize {
+			t.Fatalf("packet[%d] payload size = %d, max %d", i, len(pkt.Payload), maxPayloadSize)
+		}
+		if pkt.Marker != (i == len(packets)-1) {
+			t.Fatalf("packet[%d] marker = %v, want only final marker", i, pkt.Marker)
+		}
+	}
+}
+
+func assertEncoderRTPHasFUA(t *testing.T, packets []goh264.EncoderRTPPacket) {
+	t.Helper()
+	var sawStart, sawEnd bool
+	for i, pkt := range packets {
+		if len(pkt.Payload) < 2 || pkt.Payload[0]&0x1f != 28 {
+			continue
+		}
+		if pkt.Payload[1]&0x80 != 0 {
+			sawStart = true
+		}
+		if pkt.Payload[1]&0x40 != 0 {
+			sawEnd = true
+		}
+		if nalType := pkt.Payload[1] & 0x1f; nalType != 1 && nalType != 5 {
+			t.Fatalf("packet[%d] FU-A NAL type = %d, want VCL type 1 or 5", i, nalType)
+		}
+	}
+	if !sawStart || !sawEnd {
+		t.Fatalf("FU-A start/end = %v/%v, want both true", sawStart, sawEnd)
 	}
 }
 

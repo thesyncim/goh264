@@ -118,6 +118,8 @@ generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
 bounded exact macroblock-aligned P16x16 no-residual prediction with
 single-macroblock enabled/slice-boundary deblock proof, changed-frame P IntraPCM
 recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
+`SetRTPMaxPayloadSize` live RTP FU-A retargeting before the next P-frame with
+sequence/decode continuity and invalid-update rollback,
 `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
 dropped-frame budget behavior including VBV-backed `MaxBitrate` bucket misses,
 deterministic max-bitrate credit consumption/refill across transmitted and
