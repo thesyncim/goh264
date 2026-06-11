@@ -571,6 +571,8 @@ No tag should be treated as production until a release-evidence pass proves:
   accepted as an unset-time alias.
 - `scripts/h264-performance-evidence.sh` creates the local performance bundle
   with JSON benchmark output plus CPU/heap profiles.
+- `scripts/h264-encoder-release-evidence.sh` is green for the admitted
+  realtime/WebRTC encoder contract, writer, allocation, and benchmark gates.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until
@@ -586,6 +588,9 @@ The release-evidence runner writes logs under
 `GOH264_RELEASE_ALLOW_KNOWN_RED=1` is set for a non-release diagnostic run. It
 also requires a clean worktree unless `GOH264_RELEASE_ALLOW_DIRTY=1` is set for
 diagnostics.
+The encoder release-evidence runner writes logs under
+`.artifacts/h264-encoder-release-evidence/` and likewise requires a clean
+worktree unless `GOH264_ENCODER_RELEASE_ALLOW_DIRTY=1` is set for diagnostics.
 
 ## Contributing
 

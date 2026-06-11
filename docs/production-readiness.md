@@ -31,6 +31,7 @@ scripts/h264-real-vector-release-alloc.sh # checked-in Go allocation canary budg
 scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder/encoder canary
 scripts/h264-performance-evidence.sh  # local benchstat, JSON, CPU, and heap profile bundle
 scripts/h264-decoder-release-evidence.sh # full decoder release-evidence runner
+scripts/h264-encoder-release-evidence.sh # admitted encoder contract/writer/bench runner
 go test ./tests -run TestEncoder # realtime/WebRTC encoder control contract
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorKnownRedStrict
@@ -103,6 +104,12 @@ in-process libavcodec baseline.
 as one gate and writes per-command logs plus the local performance bundle under
 `.artifacts/h264-release-evidence/`. It fails by default if the known-red
 failure ledger is non-empty or the worktree is dirty.
+`scripts/h264-encoder-release-evidence.sh` runs the admitted encoder local
+release checklist as one gate: full tests, the external encoder control
+contract, internal writer/header/SEI slice syntax tests, and admitted encoder
+`-benchmem` rows. It writes per-command logs under
+`.artifacts/h264-encoder-release-evidence/` and fails by default if the
+worktree is dirty.
 
 Public API delayed-output coverage includes AVC configured samples and Annex B
 access-unit streaming through `DecodeFrames`, with end-of-stream flush via an
