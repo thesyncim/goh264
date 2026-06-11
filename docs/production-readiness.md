@@ -151,7 +151,7 @@ emit IDR IntraPCM access units that round-trip through local Annex B/AVC decode,
 FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL
 IDR/P-frame reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes and
-optional RTP callback metadata. It also proves identical second frames can emit
+optional RTP callback metadata including P-frame single-NAL packets. It also proves identical second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
 exact shifted macroblock-aligned frames can emit predictive P16x16 no-residual
 slices through stateful local decode, FFmpeg rawvideo decode, configured AVC

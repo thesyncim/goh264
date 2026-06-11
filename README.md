@@ -97,8 +97,8 @@ packetization-mode 0 single-NAL packets, and RTP packetization-mode 1,
 including FU-A fragmentation and STAP-A parameter-set aggregation,
 payload-type/SSRC/sequence metadata, full RTP packet headers, marker-bit
 boundaries, oversize mode-0 rejection, and optional RTP packet callbacks with
-packet index/count, frame timing, payload form, NAL type/count, FU-A start/end,
-and parameter-set metadata. RTP timestamps honor explicit frame PTS and advance
+packet index/count, frame timing, P-frame single-NAL payload form,
+NAL type/count, FU-A start/end, and parameter-set metadata. RTP timestamps honor explicit frame PTS and advance
 zero-PTS frames from frame duration or `RTPTimestampIncrement`. `MaxFrameSize`
 and `SliceMaxBytes` are enforced before frame/reference/packet state advances:
 `FrameDropDisabled` preserves the hard-error path, while
@@ -327,7 +327,8 @@ enabled/slice-boundary deblock frames. Changed-frame P IntraPCM recovery
 pictures carry recovery-point SEI when enabled. RTP output includes payloads
 plus complete RTP
 packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1
-FU-A/STAP-A output, optional per-packet callback metadata, and automatic
+FU-A/STAP-A output, optional per-packet callback metadata including P-frame
+single-NAL packets, and automatic
 timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
 separate in-band keyframe headers, out-of-band headers, and every-IDR emission,
 and runtime reconfiguration can switch output format and RTP packetization

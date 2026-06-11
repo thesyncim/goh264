@@ -98,7 +98,7 @@ payload-type, SSRC, and sequence-number packet metadata. RTP
 packets also carry complete 12-byte RTP headers plus payload bytes, and
 `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
-single-NAL payload form, NAL type/count, FU-A start/end, and parameter-set
+single-NAL payload form including P frames, NAL type/count, FU-A start/end, and parameter-set
 packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
 from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
@@ -167,8 +167,8 @@ in one access unit.
    packetization-mode 1 single NAL/FU-A output, and
    STAP-A parameter-set aggregation with marker-bit boundaries plus
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
-   bytes, callback-style packet metadata, and automatic timestamp progression
-   for frames without explicit PTS, plus explicit SPS/PPS in-band,
+   bytes, callback-style packet metadata including P-frame single-NAL packets,
+   and automatic timestamp progression for frames without explicit PTS, plus explicit SPS/PPS in-band,
    out-of-band, and every-IDR cadence semantics. Runtime reconfiguration now
    switches output format, RTP mode 0/1, STAP-A, payload type, SSRC, SPS/PPS
    mode, RTP timestamp increments, rate-control mode, VBV size,
