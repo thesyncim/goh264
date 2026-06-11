@@ -482,38 +482,64 @@ func TestFrameAppendRawYUVErrorPreservesCallerBuffer(t *testing.T) {
 }
 
 func TestFrameAppendRawYUVHighErrorPreservesCallerBuffer(t *testing.T) {
-	frame := Frame{
-		Width:           2,
-		Height:          2,
-		ChromaFormatIDC: 0,
-		BitDepthLuma:    10,
-		YStride:         2,
-		Y16:             []uint16{1, 2, 3, 1024},
+	tests := []struct {
+		name  string
+		frame Frame
+	}{
+		{
+			name: "luma",
+			frame: Frame{
+				Width:           2,
+				Height:          2,
+				ChromaFormatIDC: 0,
+				BitDepthLuma:    10,
+				YStride:         2,
+				Y16:             []uint16{1, 2, 3, 1024},
+			},
+		},
+		{
+			name: "chroma",
+			frame: Frame{
+				Width:           2,
+				Height:          2,
+				ChromaFormatIDC: 1,
+				BitDepthLuma:    10,
+				BitDepthChroma:  10,
+				YStride:         2,
+				CStride:         1,
+				Y16:             []uint16{1, 2, 3, 4},
+				Cb16:            []uint16{1024},
+				Cr16:            []uint16{512},
+			},
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Run("uint16", func(t *testing.T) {
+				dst, before := decoderPrefilledUint16Buffer()
+				out, err := tt.frame.AppendRawYUV16(dst)
+				if err != ErrInvalidData {
+					t.Fatalf("AppendRawYUV16 bad sample error = %v, want ErrInvalidData", err)
+				}
+				if len(out) != len(dst) {
+					t.Fatalf("AppendRawYUV16 invalid output len = %d, want original len %d", len(out), len(dst))
+				}
+				assertDecoderUint16BufferUnchanged(t, dst, before)
+			})
 
-	t.Run("uint16", func(t *testing.T) {
-		dst, before := decoderPrefilledUint16Buffer()
-		out, err := frame.AppendRawYUV16(dst)
-		if err != ErrInvalidData {
-			t.Fatalf("AppendRawYUV16 bad sample error = %v, want ErrInvalidData", err)
-		}
-		if len(out) != len(dst) {
-			t.Fatalf("AppendRawYUV16 invalid output len = %d, want original len %d", len(out), len(dst))
-		}
-		assertDecoderUint16BufferUnchanged(t, dst, before)
-	})
-
-	t.Run("bytes-le", func(t *testing.T) {
-		dst, before := decoderPrefilledByteBuffer()
-		out, err := frame.AppendRawYUVBytesLE(dst)
-		if err != ErrInvalidData {
-			t.Fatalf("AppendRawYUVBytesLE bad sample error = %v, want ErrInvalidData", err)
-		}
-		if len(out) != len(dst) {
-			t.Fatalf("AppendRawYUVBytesLE invalid output len = %d, want original len %d", len(out), len(dst))
-		}
-		assertDecoderByteBufferUnchanged(t, dst, before)
-	})
+			t.Run("bytes-le", func(t *testing.T) {
+				dst, before := decoderPrefilledByteBuffer()
+				out, err := tt.frame.AppendRawYUVBytesLE(dst)
+				if err != ErrInvalidData {
+					t.Fatalf("AppendRawYUVBytesLE bad sample error = %v, want ErrInvalidData", err)
+				}
+				if len(out) != len(dst) {
+					t.Fatalf("AppendRawYUVBytesLE invalid output len = %d, want original len %d", len(out), len(dst))
+				}
+				assertDecoderByteBufferUnchanged(t, dst, before)
+			})
+		})
+	}
 }
 
 func decoderPrefilledByteBuffer() ([]byte, []byte) {
