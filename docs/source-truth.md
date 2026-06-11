@@ -176,8 +176,9 @@ output is needed plus stack-backed common one-slice NAL, slice-range planning,
 and access-unit full RTP packet buffer stamping with clipped payload views and
 per-packet append isolation.
 Package-level benchmark canaries cover admitted Annex B/RTP IDR and P-frame
-encode paths, including RTP changed P IntraPCM and RTP packetization-mode 0
-IDR/P-frame rows, with `-benchmem`. Internal writer proof covers raw
+encode paths, including 8-pixel exact-P16 edge search, RTP changed P IntraPCM
+and RTP packetization-mode 0 IDR/P-frame rows, with `-benchmem`.
+Internal writer proof covers raw
 bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
 packaging, AVC decoder configuration records, baseline SPS/PPS syntax with

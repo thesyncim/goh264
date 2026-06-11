@@ -16,7 +16,11 @@ var (
 )
 
 func benchmarkEncoderConfig(format EncoderOutputFormat) EncoderConfig {
-	cfg := DefaultEncoderConfig(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	return benchmarkEncoderConfigSize(format, benchmarkEncoderWidth, benchmarkEncoderHeight)
+}
+
+func benchmarkEncoderConfigSize(format EncoderOutputFormat, width int, height int) EncoderConfig {
+	cfg := DefaultEncoderConfig(width, height)
 	cfg.OutputFormat = format
 	cfg.DeblockMode = EncoderDeblockDisabled
 	cfg.GOPSize = 1 << 30
@@ -56,20 +60,28 @@ func benchmarkEncoderI420Frame(width, height int) EncoderFrame {
 }
 
 func benchmarkEncoderExactP16x16ReferenceFrame() EncoderFrame {
-	frame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
-	// Keep the left edge reversible under clamped +/-2 motion so the benchmark
+	return benchmarkEncoderExactP16x16HorizontalReferenceFrame(benchmarkEncoderWidth, benchmarkEncoderHeight, 2)
+}
+
+func benchmarkEncoderExactP16x16HorizontalReferenceFrame(width int, height int, dx int) EncoderFrame {
+	frame := benchmarkEncoderI420Frame(width, height)
+	// Keep the left edge reversible under clamped +/-dx motion so the benchmark
 	// can alternate two frames while staying on the exact P16x16 path.
 	for y := 0; y < frame.Height; y++ {
-		v := frame.Y[y*frame.StrideY+2]
-		frame.Y[y*frame.StrideY] = v
-		frame.Y[y*frame.StrideY+1] = v
+		v := frame.Y[y*frame.StrideY+dx]
+		for x := 0; x < dx; x++ {
+			frame.Y[y*frame.StrideY+x] = v
+		}
 	}
+	chromaDX := dx / 2
 	chromaHeight := frame.Height / 2
 	for y := 0; y < chromaHeight; y++ {
-		cb := frame.Cb[y*frame.StrideCb+1]
-		cr := frame.Cr[y*frame.StrideCr+1]
-		frame.Cb[y*frame.StrideCb] = cb
-		frame.Cr[y*frame.StrideCr] = cr
+		cb := frame.Cb[y*frame.StrideCb+chromaDX]
+		cr := frame.Cr[y*frame.StrideCr+chromaDX]
+		for x := 0; x < chromaDX; x++ {
+			frame.Cb[y*frame.StrideCb+x] = cb
+			frame.Cr[y*frame.StrideCr+x] = cr
+		}
 	}
 	return frame
 }
@@ -119,7 +131,11 @@ func benchmarkEncoderClampCoord(v int, limit int) int {
 }
 
 func benchmarkEncoderInputBytes() int {
-	return benchmarkEncoderWidth * benchmarkEncoderHeight * 3 / 2
+	return benchmarkEncoderFrameBytes(benchmarkEncoderWidth, benchmarkEncoderHeight)
+}
+
+func benchmarkEncoderFrameBytes(width int, height int) int {
+	return width * height * 3 / 2
 }
 
 func BenchmarkEncodeAnnexBI420IDRIntraPCM(b *testing.B) {
@@ -159,6 +175,13 @@ func BenchmarkEncodeAnnexBI420ExactP16x16(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputAnnexB)
 	a := benchmarkEncoderExactP16x16ReferenceFrame()
 	shifted := benchmarkEncoderIntegerMotionFrame(a, 2, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
+}
+
+func BenchmarkEncodeAnnexBI420ExactP16x16EdgeSearch(b *testing.B) {
+	cfg := benchmarkEncoderConfigSize(EncoderOutputAnnexB, 48, 48)
+	a := benchmarkEncoderExactP16x16HorizontalReferenceFrame(cfg.Width, cfg.Height, 8)
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 8, 0)
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
 }
 
@@ -242,6 +265,13 @@ func BenchmarkEncodeRTPI420ExactP16x16(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
 }
 
+func BenchmarkEncodeRTPI420ExactP16x16EdgeSearch(b *testing.B) {
+	cfg := benchmarkEncoderConfigSize(EncoderOutputRTP, 48, 48)
+	a := benchmarkEncoderExactP16x16HorizontalReferenceFrame(cfg.Width, cfg.Height, 8)
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 8, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, true)
+}
+
 func BenchmarkEncodeRTPI420ChangedPIntraPCM(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
 	a := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
@@ -289,7 +319,7 @@ func benchmarkEncodeSteadyPFrame(b *testing.B, cfg EncoderConfig, frames []Encod
 	dst := make([]byte, 0, 4096)
 
 	b.ReportAllocs()
-	b.SetBytes(int64(benchmarkEncoderInputBytes()))
+	b.SetBytes(int64(benchmarkEncoderFrameBytes(cfg.Width, cfg.Height)))
 	b.ResetTimer()
 
 	var out EncodedFrame

@@ -157,9 +157,9 @@ configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR, P-skip, P16x16 no-residual, and P IntraPCM slice payloads.
 Motion-search P prediction, residual CAVLC coding, rate-control feedback, and
 broader realtime allocation/performance evidence remain pending beyond the
-admitted IDR/P-frame Annex B/RTP canaries, including 8-pixel exact-P16 edge
-search, RTP P-IntraPCM, and packetization-mode 0 IDR/P-frame allocation and
-benchmark rows.
+admitted IDR/P-frame Annex B/RTP canaries, which now include 8-pixel exact-P16
+edge-search allocation and benchmark rows, RTP P-IntraPCM, and
+packetization-mode 0 IDR/P-frame allocation and benchmark rows.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock

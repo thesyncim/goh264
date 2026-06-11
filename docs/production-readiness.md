@@ -86,8 +86,9 @@ it runs the CANL4 public vector with defaults of 64,000,000 Go allocation
 bytes/iteration and 10,000 Go allocations/iteration.
 `scripts/h264-benchstat-canary.sh` runs the package-level decoder benchmarks
 for one-shot Annex B decode and stateful Annex B access-unit streaming plus
-the admitted encoder IDR/P-skip/P-IntraPCM and RTP packetization benchmarks
-with `-benchmem`; its output is suitable for `benchstat` trend comparisons.
+the admitted encoder IDR/P-skip/exact-P16 edge-search/P-IntraPCM and RTP
+packetization benchmarks with `-benchmem`; its output is suitable for
+`benchstat` trend comparisons.
 `scripts/h264-performance-evidence.sh` writes a local evidence bundle under
 `.artifacts/h264-performance-evidence/` containing benchstat samples, the JSON
 real-vector benchmark report, CPU and heap profiles, and run metadata. Pending:
@@ -210,8 +211,9 @@ planning backed by stack storage, and stamps full RTP packet data from
 access-unit buffers while exposing clipped payload views and preserving append
 isolation for each public packet slice. Package-level benchmark canary rows now
 cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
-Annex B changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16, RTP steady
-P-skip, and RTP changed P IntraPCM plus RTP packetization-mode 0
+including 8-pixel edge search, Annex B changed P IntraPCM, RTP FU-A IDR
+IntraPCM, RTP exact P16x16 including 8-pixel edge search, RTP steady P-skip,
+and RTP changed P IntraPCM plus RTP packetization-mode 0
 IDR/P-skip/exact-P16x16/P-IntraPCM with `-benchmem`.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, Annex B/AVC NAL packaging, AVC

@@ -150,9 +150,10 @@ silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage. Package-level `-benchmem` canary rows now
-cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16,
-Annex B changed P IntraPCM, RTP FU-A IDR IntraPCM, RTP exact P16x16, RTP
-steady P-skip, and RTP changed P IntraPCM plus RTP packetization-mode 0
+cover Annex B IDR IntraPCM, Annex B steady P-skip, Annex B exact P16x16
+including 8-pixel edge search, Annex B changed P IntraPCM, RTP FU-A IDR
+IntraPCM, RTP exact P16x16 including 8-pixel edge search, RTP steady P-skip,
+and RTP changed P IntraPCM plus RTP packetization-mode 0
 IDR/P-skip/exact-P16x16/P-IntraPCM.
 Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
@@ -256,7 +257,8 @@ in one access unit.
    admitted IDR/P-frame paths including 8-pixel exact-P16 edge search, RTP
    P-IntraPCM, and packetization-mode 0 IDR/P frames with tightened RTP
    allocation budgets, and package-level
-   benchmark canaries for admitted IDR/P-frame and RTP paths.
+   benchmark canaries for admitted IDR/P-frame and RTP paths including
+   8-pixel exact-P16 edge search.
 
 ## Oracles And Gates
 
