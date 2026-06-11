@@ -157,8 +157,8 @@ configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR, P-skip, P16x16 no-residual, and P IntraPCM slice payloads.
 Motion-search P prediction, residual CAVLC coding, rate-control feedback, and
 broader realtime allocation/performance evidence remain pending beyond the
-admitted IDR/P-frame Annex B/RTP canaries, which now include 8-pixel exact-P16
-edge-search allocation and benchmark rows, RTP P-IntraPCM, and
+admitted IDR/P-frame Annex B/AVC/RTP canaries, which now include 8-pixel
+exact-P16 edge-search allocation and benchmark rows, RTP P-IntraPCM, and
 packetization-mode 0 IDR/P-frame allocation and benchmark rows including
 exact-P16 edge search.
 
@@ -480,8 +480,8 @@ the oracle-checked benchmark run; `GOH264_BENCH_CPU_PROFILE` and
 benchmark script.
 For repeated `go test -benchmem` samples covering one-shot Annex B decode,
 stateful Annex B access-unit streaming, and the admitted realtime encoder
-IDR/P-frame/RTP paths, including RTP P-IntraPCM and packetization-mode 0
-IDR/P-frame rows, suitable for `benchstat`, run:
+IDR/P-frame Annex B/AVC/RTP paths, including RTP P-IntraPCM and
+packetization-mode 0 IDR/P-frame rows, suitable for `benchstat`, run:
 
 ```sh
 scripts/h264-benchstat-canary.sh

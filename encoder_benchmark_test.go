@@ -193,6 +193,61 @@ func BenchmarkEncodeAnnexBI420ChangedPIntraPCM(b *testing.B) {
 	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{bFrame, a}, false)
 }
 
+func BenchmarkEncodeAVCI420IDRIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputAVC)
+	frame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	dst := make([]byte, 0, 4096)
+
+	b.ReportAllocs()
+	b.SetBytes(int64(benchmarkEncoderInputBytes()))
+	b.ResetTimer()
+
+	var out EncodedFrame
+	for i := 0; i < b.N; i++ {
+		enc, err := NewEncoder(cfg)
+		if err != nil {
+			b.Fatal(err)
+		}
+		out, err = enc.EncodeInto(dst[:0], frame)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 {
+			b.Fatalf("output idr=%v rtp=%d data=%d, want AVC IDR", out.IDR, len(out.RTPPackets), len(out.Data))
+		}
+	}
+	benchmarkEncodeFrameSink = out
+	benchmarkEncodeBytesSink = len(out.Data)
+}
+
+func BenchmarkEncodeAVCI420PSkip(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputAVC)
+	frame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{frame}, false)
+}
+
+func BenchmarkEncodeAVCI420ExactP16x16(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputAVC)
+	a := benchmarkEncoderExactP16x16ReferenceFrame()
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 2, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
+}
+
+func BenchmarkEncodeAVCI420ExactP16x16EdgeSearch(b *testing.B) {
+	cfg := benchmarkEncoderConfigSize(EncoderOutputAVC, 48, 48)
+	a := benchmarkEncoderExactP16x16HorizontalReferenceFrame(cfg.Width, cfg.Height, 8)
+	shifted := benchmarkEncoderIntegerMotionFrame(a, 8, 0)
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{shifted, a}, false)
+}
+
+func BenchmarkEncodeAVCI420ChangedPIntraPCM(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputAVC)
+	a := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	bFrame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	bFrame.Y[0] ^= 0x7f
+	benchmarkEncodeSteadyPFrame(b, cfg, []EncoderFrame{bFrame, a}, false)
+}
+
 func BenchmarkEncodeRTPI420IDRIntraPCMFUA(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
 	cfg.RTPMaxPayloadSize = 32
@@ -344,7 +399,7 @@ func benchmarkEncodeSteadyPFrame(b *testing.B, cfg EncoderConfig, frames []Encod
 			b.Fatal("RTP steady P frame did not return packets")
 		}
 		if !wantRTP && len(out.RTPPackets) != 0 {
-			b.Fatalf("Annex B steady P frame returned RTP packets: %d", len(out.RTPPackets))
+			b.Fatalf("non-RTP steady P frame returned RTP packets: %d", len(out.RTPPackets))
 		}
 	}
 	benchmarkEncodeFrameSink = out

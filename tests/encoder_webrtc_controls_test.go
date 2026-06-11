@@ -5456,6 +5456,195 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("avc forced idr", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAVC
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		frame := patternedI420EncoderFrame(16, 16)
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), frame); err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		dst := make([]byte, 0, 4096)
+		allocs := testing.AllocsPerRun(100, func() {
+			enc.ForceIDR()
+			out, err := enc.EncodeInto(dst[:0], frame)
+			if err != nil {
+				t.Fatalf("EncodeInto AVC forced IDR: %v", err)
+			}
+			if !out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 3 || out.NALUnits[0].Type != 7 || out.NALUnits[1].Type != 8 || out.NALUnits[2].Type != 5 {
+				t.Fatalf("forced AVC IDR output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("avc forced IDR EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 32 {
+			t.Fatalf("avc forced IDR EncodeInto allocations/run = %.0f, want <= 32", allocs)
+		}
+	})
+
+	t.Run("avc steady p-skip", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAVC
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		frame := patternedI420EncoderFrame(16, 16)
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), frame); err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		dst := make([]byte, 0, 4096)
+		allocs := testing.AllocsPerRun(100, func() {
+			out, err := enc.EncodeInto(dst[:0], frame)
+			if err != nil {
+				t.Fatalf("EncodeInto AVC P-skip: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("steady AVC P-skip output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("avc steady p-skip EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 4 {
+			t.Fatalf("avc steady P-skip EncodeInto allocations/run = %.0f, want <= 4", allocs)
+		}
+	})
+
+	t.Run("avc exact p16x16", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAVC
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		a := patternedI420EncoderFrame(16, 16)
+		b := integerMotionI420EncoderFrame(a, 2, 0)
+		encs := primedI420EncoderPool(t, cfg, a, 128)
+		dst := make([]byte, 0, 4096)
+		var call int
+		allocs := testing.AllocsPerRun(100, func() {
+			if call >= len(encs) {
+				t.Fatalf("encoder pool exhausted after %d calls", call)
+			}
+			out, err := encs[call].EncodeInto(dst[:0], b)
+			call++
+			if err != nil {
+				t.Fatalf("EncodeInto AVC exact P16x16: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("exact AVC P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("avc exact P16x16 EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 4 {
+			t.Fatalf("avc exact P16x16 EncodeInto allocations/run = %.0f, want <= 4", allocs)
+		}
+	})
+
+	t.Run("avc exact p16x16 edge search", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(48, 48)
+		cfg.OutputFormat = goh264.EncoderOutputAVC
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		a := patternedI420EncoderFrame(48, 48)
+		b := integerMotionI420EncoderFrame(a, 8, -8)
+		encs := primedI420EncoderPool(t, cfg, a, 128)
+		dst := make([]byte, 0, 65536)
+		var call int
+		allocs := testing.AllocsPerRun(100, func() {
+			if call >= len(encs) {
+				t.Fatalf("encoder pool exhausted after %d calls", call)
+			}
+			out, err := encs[call].EncodeInto(dst[:0], b)
+			call++
+			if err != nil {
+				t.Fatalf("EncodeInto AVC 8-pixel edge exact P16x16: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("8-pixel edge AVC exact P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("avc 8-pixel edge exact P16x16 EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 4 {
+			t.Fatalf("avc 8-pixel edge exact P16x16 EncodeInto allocations/run = %.0f, want <= 4", allocs)
+		}
+	})
+
+	t.Run("avc changed p-intrapcm", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAVC
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		a := patternedI420EncoderFrame(16, 16)
+		b := patternedI420EncoderFrame(16, 16)
+		b.Y[0] ^= 0x7f
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), a); err != nil {
+			t.Fatalf("prime IDR: %v", err)
+		}
+		dst := make([]byte, 0, 4096)
+		allocs := testing.AllocsPerRun(100, func() {
+			out, err := enc.EncodeInto(dst[:0], b)
+			if err != nil {
+				t.Fatalf("EncodeInto AVC changed P: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 2 || out.NALUnits[0].Type != 6 || out.NALUnits[1].Type != 1 {
+				t.Fatalf("changed AVC P output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			out, err = enc.EncodeInto(dst[:0], a)
+			if err != nil {
+				t.Fatalf("EncodeInto AVC changed P reset: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 2 || out.NALUnits[0].Type != 6 || out.NALUnits[1].Type != 1 {
+				t.Fatalf("changed AVC P reset output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+		})
+		t.Logf("avc changed P IntraPCM EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 44 {
+			t.Fatalf("avc changed P IntraPCM EncodeInto allocations/run = %.0f, want <= 44", allocs)
+		}
+	})
+
 	t.Run("rtp forced idr", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.DeblockMode = goh264.EncoderDeblockDisabled
