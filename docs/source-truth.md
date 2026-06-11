@@ -174,7 +174,8 @@ RTP header bytes with clipped packet payload views over packet data and packet
 storage isolated from `EncodedFrame.Data`, optional
 RTP callback metadata including mode 0/1 IDR/P-frame single-NAL packets with
 P-skip, exact P16x16, odd-pixel constant chroma, and P IntraPCM fallback rows
-and callback packet storage isolated from returned RTP packets, initial
+and callback packet storage isolated from returned RTP packets while preserving
+the clipped payload-over-packet-data shape, initial
 `EncodeInto` allocation canaries for caller-buffer Annex B/AVC/RTP IDR,
 P-skip, exact-P16x16 including odd-pixel constant-chroma across Annex B/AVC/RTP
 and 8-pixel edge search, per-macroblock exact P16x16 across Annex B/AVC/RTP,

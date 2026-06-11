@@ -214,7 +214,8 @@ clipped packet payload views over packet data, packet storage isolated from
 `EncodedFrame.Data`, and optional RTP callback metadata including mode 0/1
 IDR/P-frame single-NAL packets for P-skip, exact P16x16, odd-pixel constant
 chroma, and P IntraPCM fallback rows with callback packet storage isolated from
-returned RTP packets. It also proves identical
+returned RTP packets while preserving the same clipped payload-over-packet-data
+shape. It also proves identical
 second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
 exact shifted macroblock-aligned frames up to 8 pixels, including mixed

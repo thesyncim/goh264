@@ -147,7 +147,8 @@ single-NAL payload form including mode 0/1 IDR/P frames with P-skip, exact
 P16x16, odd-pixel constant chroma, P IntraPCM fallback rows, and changed-P
 STAP-A recovery SEI single-NAL packets, NAL type/count,
 FU-A start/end, parameter-set packets, and callback packet storage isolated from
-returned RTP packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
+returned RTP packets while preserving the clipped payload-over-packet-data
+shape. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
 from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B

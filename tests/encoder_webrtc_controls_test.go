@@ -7931,6 +7931,26 @@ func assertEncoderRTPSingleNALCallbackMetadata(t *testing.T, callbackPackets []g
 
 func assertEncoderRTPCallbackPacketDoesNotAliasReturned(t *testing.T, callbackPkt goh264.EncoderRTPPacket, returnedPkt goh264.EncoderRTPPacket, index int) {
 	t.Helper()
+	if len(callbackPkt.Data) != 12+len(callbackPkt.Payload) {
+		t.Fatalf("callback packet[%d] Data length = %d, want RTP header plus payload %d",
+			index, len(callbackPkt.Data), 12+len(callbackPkt.Payload))
+	}
+	if !bytes.Equal(callbackPkt.Data[12:], callbackPkt.Payload) {
+		t.Fatalf("callback packet[%d] Payload bytes are not backed by Data payload bytes", index)
+	}
+	if cap(callbackPkt.Data) != len(callbackPkt.Data) {
+		t.Fatalf("callback packet[%d] Data cap = %d, want clipped length %d", index, cap(callbackPkt.Data), len(callbackPkt.Data))
+	}
+	if cap(callbackPkt.Payload) != len(callbackPkt.Payload) {
+		t.Fatalf("callback packet[%d] Payload cap = %d, want clipped length %d", index, cap(callbackPkt.Payload), len(callbackPkt.Payload))
+	}
+	if len(callbackPkt.Payload) != 0 {
+		callbackPkt.Payload[0] ^= 0xff
+		if callbackPkt.Data[12] != callbackPkt.Payload[0] {
+			t.Fatalf("callback packet[%d] Payload is not a view over Data payload bytes", index)
+		}
+		callbackPkt.Payload[0] ^= 0xff
+	}
 	if len(callbackPkt.Payload) != 0 {
 		before := append([]byte(nil), returnedPkt.Payload...)
 		callbackPkt.Payload[0] ^= 0xff
