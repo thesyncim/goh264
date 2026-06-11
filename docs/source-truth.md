@@ -103,6 +103,7 @@ Annex B surfaces including single-frame helpers and delayed B-frame
 configuration-record one-shot flush,
 configured AVC and AVC configuration-record empty-packet delayed B-frame flush
 matching `h264_decode_frame()` `buf_size == 0` delayed-output behavior,
+repeated valid packet `NEW_EXTRADATA` preserving delayed B-frame reorder state,
 compressed packet input ownership across configured AVC and Annex B delayed
 B-frame output,
 malformed standalone AVC decoder configuration records preserving the last

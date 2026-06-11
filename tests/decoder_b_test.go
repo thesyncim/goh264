@@ -424,6 +424,37 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	}
 }
 
+func TestDecodePacketFramesRepeatedNewExtradataPreservesDelayedBFrames(t *testing.T) {
+	for _, tt := range bFrameFixtureCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			data := tt.decode(t)
+			config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+			if len(samples) != len(tt.want) {
+				t.Fatalf("samples = %d, want %d", len(samples), len(tt.want))
+			}
+
+			dec := NewDecoder()
+			var frames []*Frame
+			for i, sample := range samples {
+				out, err := dec.DecodePacketFrames(Packet{
+					Data:     sample,
+					SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+				})
+				if err != nil {
+					t.Fatalf("sample[%d]: %v", i, err)
+				}
+				frames = append(frames, out...)
+			}
+			out, err := dec.FlushDelayedFrames()
+			if err != nil {
+				t.Fatalf("flush: %v", err)
+			}
+			frames = append(frames, out...)
+			assertFrameMD5Strings(t, frames, tt.want)
+		})
+	}
+}
+
 func TestDecodeConfiguredAVCBFramesReturnsReorderedPrefixBeforeDamagedSlice(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)

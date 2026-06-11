@@ -133,7 +133,8 @@ drains delayed B-frame output through `DecodeConfiguredAVCFrames(nil)`,
 including the single-frame helper when the empty packet releases exactly one
 frame. AVC-with-configuration-record decode follows the same empty-packet
 delayed flush rule after updating parameter sets, with fixture-matrix coverage
-for 2/3/4-byte AVC length sizes.
+for 2/3/4-byte AVC length sizes. Packet decode with repeated valid
+`NEW_EXTRADATA` also preserves B-frame reorder state through delayed flush.
 
 Malformed-input safety evidence now includes deterministic public-surface
 corruption rows plus `FuzzDecodePublicSurfacesNoPanic`, a bounded fuzz target
