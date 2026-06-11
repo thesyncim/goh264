@@ -175,7 +175,8 @@ with checked budgets of <=8 allocations for Annex B/AVC forced IDR, <=10 for
 RTP forced IDR/FU-A and STAP-A, <=6 for Annex B/AVC odd-patterned fallback, <=8 for RTP
 odd-patterned fallback, <=5 for Annex B/AVC per-macroblock exact P16x16, and
 <=7 for RTP per-macroblock exact P16x16, <=12 for Annex B/AVC changed
-P IntraPCM, and <=16 for RTP changed P IntraPCM.
+P IntraPCM, <=16 for RTP changed P IntraPCM, and <=7 for RTP `EncodeInto`
+max-frame-size drops.
 
 Green coverage includes compact Baseline/Main/High conformance rows, selected
 FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
