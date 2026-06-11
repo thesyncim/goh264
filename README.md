@@ -13,11 +13,11 @@ identical references, exact one-macroblock P16x16 no-residual prediction for a
 16x16 shifted reference, and changed-frame P IntraPCM recovery pictures with
 Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
 single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
-FFmpeg rawvideo decode, recovery-point side data, RTP mode-0 reassembly, RTP
-FU-A reassembly, STAP-A parameter-set aggregation tests, and encode-time
-`MaxFrameSize`/`SliceMaxBytes` budget guards with hard-error and dropped-frame
-paths plus runtime RTP/output, rate-control, QP, GOP/IDR, and deblock
-reconfiguration gates.
+FFmpeg rawvideo decode, configured AVC and RTP exact-P16 decode,
+recovery-point side data, RTP mode-0 reassembly, RTP FU-A reassembly, STAP-A
+parameter-set aggregation tests, and encode-time `MaxFrameSize`/`SliceMaxBytes`
+budget guards with hard-error and dropped-frame paths plus runtime RTP/output,
+rate-control, QP, GOP/IDR, and deblock reconfiguration gates.
 The goal is not a loose rewrite: internal codec paths keep upstream state
 machines, syntax handling, math, and edge cases recognizable, then prove
 behavior against oracle vectors.
@@ -116,12 +116,13 @@ while no RTP packets are emitted, and local decode after RTP re-entry.
 Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
 across disabled, enabled, and slice-boundary deblock controls; a 16x16 frame
 that exactly matches a small even integer-pel shift of the stored reference can
-use a guarded CAVLC P16x16 no-residual slice with local and FFmpeg rawvideo
-decode proof; changed frames can use a guarded CAVLC P IntraPCM slice in the
-same admitted deblock scope with recovery-point SEI emission when enabled,
-while forced keyframe requests still emit IDR; cropped I420 input emits SPS
-crop metadata and local/FFmpeg decode sees the cropped visible frame. Internal
-writer primitives cover raw bit/Exp-Golomb
+use a guarded CAVLC P16x16 no-residual slice with Annex B local/FFmpeg,
+configured AVC, and RTP reassembly decode proof; changed frames can use a
+guarded CAVLC P IntraPCM slice in the same admitted deblock scope with
+recovery-point SEI emission when enabled, while forced keyframe requests still
+emit IDR; cropped I420 input emits SPS crop metadata and local/FFmpeg decode
+sees the cropped visible frame. Internal writer primitives cover raw
+bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR, P-skip, P16x16 no-residual, and P IntraPCM slice payloads.

@@ -87,10 +87,11 @@ CAVLC P IntraPCM slices for changed frames after a reference across disabled,
 enabled, and slice-boundary deblock controls. Changed-frame P IntraPCM recovery
 pictures carry recovery-point SEI when enabled, across Annex B, configured AVC,
 and RTP packetization-mode 1 reassembly. Tests prove
-local raw-frame decode, FFmpeg rawvideo decode, recovery-point side data,
-multi-slice `first_mb_in_slice` ordering, RTP packetization-mode 0 single-NAL
-reassembly and oversize rejection, RTP FU-A reassembly, STAP-A parameter-set
-aggregation, payload-type, SSRC, and sequence-number packet metadata. RTP
+local raw-frame decode, FFmpeg rawvideo decode, configured AVC and RTP
+exact-P16 decode, recovery-point side data, multi-slice `first_mb_in_slice`
+ordering, RTP packetization-mode 0 single-NAL reassembly and oversize
+rejection, RTP FU-A reassembly, STAP-A parameter-set aggregation,
+payload-type, SSRC, and sequence-number packet metadata. RTP
 packets also carry complete 12-byte RTP headers plus payload bytes, and
 `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
@@ -99,7 +100,8 @@ packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
 from frame duration or `RTPTimestampIncrement`, including after runtime
 timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B
-changed P IntraPCM, RTP forced IDR/FU-A, and RTP steady P-skip paths so
+exact P16x16, Annex B changed P IntraPCM, RTP forced IDR/FU-A, RTP exact
+P16x16, and RTP steady P-skip paths so
 admitted packetization/output paths cannot
 silently regress while broader allocation budgets are still pending; the live
 encode path builds RBSP plus raw NAL output directly instead of constructing
@@ -193,7 +195,8 @@ Encoder tests need independent evidence, not only local decode:
   max-payload, RTP, rate-control/QP, frame-drop, GOP/IDR, and deblock changes.
 - Allocation gates for `EncodeInto`/packetization hot paths with caller-owned
   buffers; current canaries cover Annex B forced IDR, Annex B steady P-skip,
-  Annex B changed P IntraPCM, RTP forced IDR/FU-A, and RTP steady P-skip.
+  Annex B exact P16x16, Annex B changed P IntraPCM, RTP forced IDR/FU-A, RTP
+  exact P16x16, and RTP steady P-skip.
 
 ## Production Bar
 

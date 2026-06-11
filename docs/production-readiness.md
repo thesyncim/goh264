@@ -152,12 +152,14 @@ packet payload-type/SSRC/sequence metadata plus full RTP header bytes and
 optional RTP callback metadata. It also proves identical second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
 exact 16x16 shifted second frames can emit predictive P16x16 no-residual slices
-through stateful local decode and FFmpeg rawvideo decode,
+through stateful local decode, FFmpeg rawvideo decode, configured AVC decode,
+and RTP reassembly decode,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B
-forced IDR, Annex B steady P-skip, Annex B changed P IntraPCM, RTP forced
-IDR/FU-A, and RTP steady P-skip paths; the
+forced IDR, Annex B steady P-skip, Annex B exact P16x16, Annex B changed
+P IntraPCM, RTP forced IDR/FU-A, RTP exact P16x16, and RTP steady P-skip paths;
+the
 live encode path writes RBSP plus raw NAL output directly instead of building
 discarded Annex B/AVC copies, with common one-slice NAL and slice-range
 planning backed by stack storage. Package-level benchmark canary rows now

@@ -1242,6 +1242,81 @@ func TestEncoderEncodeExactP16x16NoResidualMotion(t *testing.T) {
 	assertFFmpegRawVideoOracle(t, stream, wantStream)
 }
 
+func TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		format goh264.EncoderOutputFormat
+	}{
+		{name: "avc", format: goh264.EncoderOutputAVC},
+		{name: "rtp", format: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.format
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.format != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+			secondFrame := integerMotionI420EncoderFrame(firstFrame, 2, 0)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode exact P16x16 no-residual motion: %v", err)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+			dec := goh264.NewDecoder()
+			var decodedFirst, decodedSecond []*goh264.Frame
+			switch tt.format {
+			case goh264.EncoderOutputAVC:
+				headers, err := enc.ParameterSets()
+				if err != nil {
+					t.Fatalf("ParameterSets: %v", err)
+				}
+				if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+				}
+				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
+				}
+				decodedSecond, err = dec.DecodeConfiguredAVCFrames(second.Data)
+				if err != nil {
+					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
+				}
+			case goh264.EncoderOutputRTP:
+				decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames first RTP: %v", err)
+				}
+				decodedSecond, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+				if err != nil {
+					t.Fatalf("DecodeFrames second RTP: %v", err)
+				}
+			default:
+				t.Fatalf("unexpected format %v", tt.format)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			if decodedSecond[0].KeyFrame || decodedSecond[0].SideData.RecoveryPoint != nil {
+				t.Fatalf("decoded exact-motion P frame key=%v recovery=%+v, want predictive non-recovery frame",
+					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+			}
+		})
+	}
+}
+
 func TestEncoderEncodeChangedSecondFrameUsesPIntraPCM(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
@@ -2451,6 +2526,42 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("annexb exact p16x16", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.OutputFormat = goh264.EncoderOutputAnnexB
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.RTPMaxPayloadSize = 0
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		a := patternedI420EncoderFrame(16, 16)
+		b := integerMotionI420EncoderFrame(a, 2, 0)
+		encs := primedI420EncoderPool(t, cfg, a, 128)
+		dst := make([]byte, 0, 4096)
+		var call int
+		allocs := testing.AllocsPerRun(100, func() {
+			if call >= len(encs) {
+				t.Fatalf("encoder pool exhausted after %d calls", call)
+			}
+			out, err := encs[call].EncodeInto(dst[:0], b)
+			call++
+			if err != nil {
+				t.Fatalf("EncodeInto exact P16x16: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("exact P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("annexb exact P16x16 EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 4 {
+			t.Fatalf("annexb exact P16x16 EncodeInto allocations/run = %.0f, want <= 4", allocs)
+		}
+	})
+
 	t.Run("annexb changed p-intrapcm", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.OutputFormat = goh264.EncoderOutputAnnexB
@@ -2522,6 +2633,40 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		t.Logf("rtp forced IDR EncodeInto allocations/run = %.0f", allocs)
 		if allocs > 82 {
 			t.Fatalf("rtp forced IDR EncodeInto allocations/run = %.0f, want <= 82", allocs)
+		}
+	})
+
+	t.Run("rtp exact p16x16", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		cfg.GOPSize = 10000
+		cfg.IDRInterval = 10000
+		a := patternedI420EncoderFrame(16, 16)
+		b := integerMotionI420EncoderFrame(a, 2, 0)
+		encs := primedI420EncoderPool(t, cfg, a, 128)
+		dst := make([]byte, 0, 4096)
+		var call int
+		allocs := testing.AllocsPerRun(100, func() {
+			if call >= len(encs) {
+				t.Fatalf("encoder pool exhausted after %d calls", call)
+			}
+			out, err := encs[call].EncodeInto(dst[:0], b)
+			call++
+			if err != nil {
+				t.Fatalf("EncodeInto RTP exact P16x16: %v", err)
+			}
+			if out.IDR || len(out.RTPPackets) == 0 || len(out.Data) == 0 ||
+				len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+				t.Fatalf("exact RTP P16x16 output idr=%v rtp=%d data=%d nals=%+v",
+					out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+			}
+			if cap(out.Data) != cap(dst) {
+				t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+			}
+		})
+		t.Logf("rtp exact P16x16 EncodeInto allocations/run = %.0f", allocs)
+		if allocs > 7 {
+			t.Fatalf("rtp exact P16x16 EncodeInto allocations/run = %.0f, want <= 7", allocs)
 		}
 	})
 
@@ -2671,6 +2816,22 @@ func integerMotionI420EncoderFrame(reference goh264.EncoderFrame, dx int, dy int
 		}
 	}
 	return frame
+}
+
+func primedI420EncoderPool(t *testing.T, cfg goh264.EncoderConfig, frame goh264.EncoderFrame, count int) []*goh264.Encoder {
+	t.Helper()
+	encs := make([]*goh264.Encoder, count)
+	for i := range encs {
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder[%d]: %v", i, err)
+		}
+		if _, err := enc.EncodeInto(make([]byte, 0, 4096), frame); err != nil {
+			t.Fatalf("prime IDR[%d]: %v", i, err)
+		}
+		encs[i] = enc
+	}
+	return encs
 }
 
 func clampEncoderTestCoord(v int, limit int) int {
