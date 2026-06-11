@@ -145,6 +145,9 @@ and restored in-band modes while the stream remains decodable, proves
 RTP-to-configured-AVC output switching forces an out-of-band IDR, stops RTP
 packets/callbacks, preserves RTP timestamp cadence, and decodes the AVC
 IDR/P-skip sequence through the emitted avcC, proves
+configured-AVC-to-RTP output switching forces an every-IDR RTP frame, starts RTP
+sequence numbers and callbacks from the first emitted packet, carries retargeted
+payload metadata, and decodes the RTP IDR/P-skip sequence, proves
 `ParameterSets` emits SPS/PPS NALs,
 Annex B headers, and avcC records accepted by the public decoder parsers,
 proves in-band keyframe, out-of-band, and every-IDR header modes, proves

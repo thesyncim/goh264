@@ -85,7 +85,8 @@ Encoder status: `DefaultEncoderConfig`, `NewEncoder`, `ParameterSets`,
 bitrate/framerate/payload/slice reconfiguration, runtime rate-control, QP,
 frame-drop, GOP/IDR, deblock, SPS/PPS cadence modes, runtime output-format and
 RTP packetization reconfiguration, including RTP-to-configured-AVC forced
-IDR/P-skip decode, and the WebRTC control fields are public and
+IDR/P-skip decode and configured-AVC-to-RTP re-entry, and the WebRTC control
+fields are public and
 covered by
 `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420 constrained-baseline
 realtime configs are admitted as control state; SPS/PPS parameter sets, Annex B
@@ -357,8 +358,9 @@ separate in-band keyframe headers, out-of-band headers, and every-IDR emission,
 and runtime reconfiguration can switch output format and RTP packetization
 controls, including RTP-to-configured-AVC forced IDR/P-skip decode with
 out-of-band parameter sets and paused RTP packets/callbacks, plus
-rate-control/QP/GOP/deblock controls while preserving state on rejected
-updates. Bitrate-budget drops use the configured `MaxBitrate` refill
+configured-AVC-to-RTP forced IDR/P-skip packetization with sequence/callback
+start, plus rate-control/QP/GOP/deblock controls while preserving state on
+rejected updates. Bitrate-budget drops use the configured `MaxBitrate` refill
 rate and `VBVBufferSize` burst capacity, then surface through
 `EncodedFrame.Dropped` when `FrameDropToBitrate` is active.
 Motion search beyond the bounded exact macroblock-aligned inter path, quantized

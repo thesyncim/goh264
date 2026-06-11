@@ -131,6 +131,9 @@ stream remains decodable,
 runtime RTP-to-configured-AVC output switching that forces an out-of-band IDR,
 stops RTP packets/callbacks, preserves RTP timestamp cadence, and decodes the
 AVC IDR/P-skip sequence through the emitted avcC,
+runtime configured-AVC-to-RTP output switching that forces an every-IDR RTP
+frame, starts RTP sequence numbers and callbacks from the first emitted packet,
+carries retargeted payload metadata, and decodes the RTP IDR/P-skip sequence,
 `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
 dropped-frame budget behavior including VBV-backed `MaxBitrate` bucket misses,
 deterministic max-bitrate credit consumption/refill across transmitted and

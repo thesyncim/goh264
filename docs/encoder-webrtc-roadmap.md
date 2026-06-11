@@ -71,6 +71,9 @@ stream remains decodable.
 Runtime RTP-to-configured-AVC output switching forces an out-of-band IDR, stops
 RTP packets/callbacks, preserves RTP timestamp cadence, and decodes the AVC
 IDR/P-skip sequence through the emitted avcC.
+Runtime configured-AVC-to-RTP output switching forces an every-IDR RTP frame,
+starts RTP sequence numbers and callbacks from the first emitted packet, carries
+retargeted payload metadata, and decodes the RTP IDR/P-skip sequence.
 QP updates queue an IDR/PPS refresh. `MaxFrameSize` and `SliceMaxBytes` are now
 enforced as encode-time guards before frame/reference/packet state advances:
 `FrameDropDisabled` keeps the hard-error path, while `FrameDropToBitrate`
@@ -213,6 +216,9 @@ in one access unit.
    Runtime RTP-to-configured-AVC output switching forces an out-of-band IDR,
    stops RTP packets/callbacks, preserves RTP timestamp cadence, and decodes the
    AVC IDR/P-skip sequence through the emitted avcC.
+   Runtime configured-AVC-to-RTP output switching forces an every-IDR RTP frame,
+   starts RTP sequence numbers and callbacks from the first emitted packet,
+   carries retargeted payload metadata, and decodes the RTP IDR/P-skip sequence.
    Configured `SliceCount` output now feeds RTP mode 1 as separate VCL NAL
    packets when each slice fits the payload limit, and configured
    `MaxFrameSize`/`SliceMaxBytes` budgets now reject oversized encoded output

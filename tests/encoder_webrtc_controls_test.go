@@ -497,6 +497,131 @@ func TestEncoderReconfigureSwitchesOutputFormatToAVCForForcedIDR(t *testing.T) {
 	assertDecodedEncoderFrameBytes(t, decodedThird, appendI420FrameBytes(nil, thirdFrame))
 }
 
+func TestEncoderReconfigureSwitchesOutputFormatFromAVCToRTPForForcedIDR(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAVC
+	cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first AVC IDR: %v", err)
+	}
+	if len(first.RTPPackets) != 0 || callbackCalls != 0 {
+		t.Fatalf("initial AVC RTP packets/callbacks = %d/%d, want 0/0",
+			len(first.RTPPackets), callbackCalls)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{5})
+
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets: %v", err)
+	}
+	avcDec := goh264.NewDecoder()
+	if _, err := avcDec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+	decodedFirst, err := avcDec.DecodeConfiguredAVCFrames(first.Data)
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+
+	stapa := true
+	payloadType := uint8(112)
+	ssrc := uint32(0x55667788)
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		OutputFormat:      goh264.EncoderOutputRTP,
+		SPSPPSMode:        goh264.EncoderSPSPPSEveryIDR,
+		RTPMaxPayloadSize: 32,
+		STAPA:             &stapa,
+		RTPPayloadType:    &payloadType,
+		RTPSSRC:           &ssrc,
+		ForceIDR:          true,
+	}); err != nil {
+		t.Fatalf("Reconfigure RTP output: %v", err)
+	}
+	got := enc.Config()
+	if got.OutputFormat != goh264.EncoderOutputRTP ||
+		got.SPSPPSMode != goh264.EncoderSPSPPSEveryIDR ||
+		got.RTPMaxPayloadSize != 32 ||
+		!got.STAPA ||
+		got.RTPPayloadType != payloadType ||
+		got.RTPSSRC != ssrc {
+		t.Fatalf("reconfigured RTP controls = %+v, want RTP/every-IDR/STAP-A/metadata update", got)
+	}
+
+	secondFrame := firstFrame
+	secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode forced RTP IDR: %v", err)
+	}
+	if !second.IDR || second.RTPTime != first.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("forced RTP IDR/time = %v/%d, want IDR/%d",
+			second.IDR, second.RTPTime, first.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, second.RTPPackets, payloadType, ssrc, 0)
+	assertRTPPacketTimestamps(t, second.RTPPackets, second.RTPTime)
+	if callbackCalls != len(second.RTPPackets) {
+		t.Fatalf("RTP re-entry callbacks = %d, want packet count %d", callbackCalls, len(second.RTPPackets))
+	}
+	var sawSTAPA, sawFUA bool
+	for _, pkt := range second.RTPPackets {
+		switch pkt.Payload[0] & 0x1f {
+		case 24:
+			sawSTAPA = true
+		case 28:
+			sawFUA = true
+		}
+	}
+	if !sawSTAPA || !sawFUA {
+		t.Fatalf("RTP re-entry payload forms STAP-A/FU-A = %v/%v, want both", sawSTAPA, sawFUA)
+	}
+
+	rtpDec := goh264.NewDecoder()
+	decodedSecond, err := rtpDec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode RTP re-entry IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+
+	thirdFrame := secondFrame
+	thirdFrame.PTS = secondFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode RTP P-skip after AVC re-entry: %v", err)
+	}
+	if third.Dropped || third.IDR || third.RTPTime != second.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("post-re-entry RTP frame dropped/id/time = %v/%v/%d, want P-skip time %d",
+			third.Dropped, third.IDR, third.RTPTime, second.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{1})
+	assertRTPPacketMetadata(t, third.RTPPackets, payloadType, ssrc, uint16(len(second.RTPPackets)))
+	assertRTPPacketTimestamps(t, third.RTPPackets, third.RTPTime)
+	if callbackCalls != len(second.RTPPackets)+len(third.RTPPackets) {
+		t.Fatalf("post-re-entry RTP callbacks = %d, want %d",
+			callbackCalls, len(second.RTPPackets)+len(third.RTPPackets))
+	}
+	decodedThird, err := rtpDec.DecodeFrames(annexBFromEncoderRTPPackets(t, third.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode RTP P-skip after AVC re-entry: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedThird, appendI420FrameBytes(nil, thirdFrame))
+}
+
 func TestEncoderReconfigureResolutionResetsReferenceAndQueuesIDR(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
