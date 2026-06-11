@@ -68,8 +68,9 @@ state remains stable. Runtime frame-drop mode switches toggle the derived budget
 before the next frame, runtime max-bitrate/VBV lowering resets stale credit,
 `SetBitrate` lowering resets stale frame-budget credit, `SetFrameRate` changes
 reset frame-budget credit and apply the updated RTP cadence across drop/recovery,
-and ConstantQP mode is proved to bypass that derived budget before and after
-runtime switches through CBR. `FrameDropLate` now uses
+`FrameDropLate` bypasses the derived bitrate budget when the encode-time budget
+admits the frame, and ConstantQP mode is proved to bypass that derived budget
+before and after runtime switches through CBR. `FrameDropLate` now uses
 `MaxEncodeTimeUS` as an
 encode-time budget only when that mode is selected; late frames return dropped
 metadata, advance the RTP timestamp timeline, and leave reference, frame-number,
@@ -198,8 +199,9 @@ in one access unit.
    while runtime frame-drop mode switches toggle the derived budget before the
    next frame, `SetBitrate` and `SetFrameRate` also reset stale frame-budget
    credit, and `SetFrameRate` applies the updated RTP cadence across
-   drop/recovery. ConstantQP mode bypasses that derived bitrate budget across
-   runtime rate-control mode switches. `FrameDropLate` now drops frames
+   drop/recovery. `FrameDropLate` bypasses that derived bitrate budget when the
+   encode-time budget admits the frame, and ConstantQP mode bypasses the same
+   budget across runtime rate-control mode switches. `FrameDropLate` now drops frames
    that exceed `MaxEncodeTimeUS`
    without advancing reference/frame/packet state, including after a transmitted
    reference frame.
