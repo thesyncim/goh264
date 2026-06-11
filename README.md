@@ -107,7 +107,8 @@ and `SliceMaxBytes` are enforced before frame/reference/packet state advances:
 packets for explicit byte-budget misses or VBV-backed `MaxBitrate` bucket
 misses, advances the RTP timestamp timeline, and has deterministic
 credit-consumption/refill proof across transmitted IDR/P-skip and dropped
-changed-P frames.
+changed-P frames. ConstantQP mode is proved to bypass the derived bitrate
+budget, including after runtime switches through CBR.
 Runtime reconfiguration now covers SPS/PPS cadence, Annex B/AVC/RTP output
 format, RTP packetization mode 0/1, STAP-A aggregation, payload type, SSRC, and
 custom RTP timestamp increments plus rate-control mode, VBV size,

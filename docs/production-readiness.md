@@ -141,8 +141,10 @@ surfaces accepted by public decode paths, verifies frame-shape validation, and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses and VBV-backed `MaxBitrate` bucket
 misses, including credit consumption/refill across transmitted IDR/P-skip and
-dropped changed-P frames, plus `FrameDropLate` `MaxEncodeTimeUS` budget misses
-that advance RTP time without advancing reference, frame-number,
+dropped changed-P frames, plus ConstantQP bypass of the derived bitrate budget
+before and after runtime rate-control mode switches. `FrameDropLate`
+`MaxEncodeTimeUS` budget misses advance RTP time without advancing reference,
+frame-number,
 packet-sequence, or callback state, including after a transmitted reference
 frame. A combined control-loop stress row now switches
 RTP to Annex B and back through QP refresh, late drop, P-skip recovery, packet
