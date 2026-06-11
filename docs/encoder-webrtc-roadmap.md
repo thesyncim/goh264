@@ -144,7 +144,8 @@ per-packet payload views over packet data and packet storage isolated from
 `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form including mode 0/1 IDR/P frames with P-skip, exact
-P16x16, odd-pixel constant chroma, and P IntraPCM fallback rows, NAL type/count,
+P16x16, odd-pixel constant chroma, P IntraPCM fallback rows, and changed-P
+STAP-A recovery SEI single-NAL packets, NAL type/count,
 FU-A start/end, parameter-set packets, and callback packet storage isolated from
 returned RTP packets. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
 from frame duration or `RTPTimestampIncrement`, including after runtime
@@ -249,7 +250,8 @@ in one access unit.
    recovery SEI left as single-NAL output plus
    payload-type, SSRC, sequence-number packet metadata, complete RTP header
    bytes, clipped per-packet payload views over packet data, callback-style
-   packet metadata including mode 0/1 IDR/P-frame single-NAL packets,
+   packet metadata including mode 0/1 IDR/P-frame single-NAL packets and
+   changed-P STAP-A recovery SEI single-NAL packets,
    and automatic timestamp progression for frames without explicit PTS, plus explicit SPS/PPS in-band,
    out-of-band, and every-IDR cadence semantics. Runtime reconfiguration now
    switches output format, RTP mode 0/1, STAP-A, payload type, SSRC, SPS/PPS

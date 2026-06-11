@@ -4843,6 +4843,12 @@ func TestEncoderEncodeRTPMode1STAPADoesNotAggregateChangedPRecoverySEI(t *testin
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
+	var callbackPackets []goh264.EncoderRTPPacket
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackPackets = append(callbackPackets, pkt)
+		callbackMetadata = append(callbackMetadata, meta)
+	})
 
 	firstFrame := patternedI420EncoderFrame(16, 16)
 	firstFrame.PTS = 10101
@@ -4855,6 +4861,8 @@ func TestEncoderEncodeRTPMode1STAPADoesNotAggregateChangedPRecoverySEI(t *testin
 			len(first.RTPPackets), first.RTPPackets[0].Payload)
 	}
 	assertSTAPANALTypes(t, first.RTPPackets[0].Payload, []uint8{7, 8})
+	callbackPackets = callbackPackets[:0]
+	callbackMetadata = callbackMetadata[:0]
 
 	secondFrame := patternedI420EncoderFrame(16, 16)
 	secondFrame.Y[0] ^= 0x57
@@ -4892,6 +4900,39 @@ func TestEncoderEncodeRTPMode1STAPADoesNotAggregateChangedPRecoverySEI(t *testin
 	}
 	if got := second.RTPPackets[1].Payload[0] & 0x1f; got != 1 {
 		t.Fatalf("changed STAP-A P packet[1] NAL type = %d, want P slice", got)
+	}
+	if len(callbackPackets) != len(second.RTPPackets) || len(callbackMetadata) != len(second.RTPPackets) {
+		t.Fatalf("changed STAP-A P callbacks packets/meta = %d/%d, want RTP packet count %d",
+			len(callbackPackets), len(callbackMetadata), len(second.RTPPackets))
+	}
+	for i, meta := range callbackMetadata {
+		pkt := callbackPackets[i]
+		wantType := []uint8{6, 1}[i]
+		if meta.PacketIndex != i || meta.PacketCount != len(second.RTPPackets) {
+			t.Fatalf("changed STAP-A P callback meta[%d] index/count = %d/%d, want %d/%d",
+				i, meta.PacketIndex, meta.PacketCount, i, len(second.RTPPackets))
+		}
+		if meta.FramePTS != secondFrame.PTS || meta.FrameDTS != secondFrame.PTS ||
+			meta.RTPTime != second.RTPTime || meta.KeyFrame || meta.IDR {
+			t.Fatalf("changed STAP-A P callback meta[%d] frame fields = %+v, want non-IDR P-frame timing", i, meta)
+		}
+		if pkt.SequenceNumber != second.RTPPackets[i].SequenceNumber ||
+			pkt.Timestamp != second.RTPPackets[i].Timestamp ||
+			pkt.PayloadType != cfg.RTPPayloadType ||
+			pkt.SSRC != cfg.RTPSSRC ||
+			pkt.Marker != (i == len(second.RTPPackets)-1) ||
+			!bytes.Equal(pkt.Payload, second.RTPPackets[i].Payload) ||
+			!bytes.Equal(pkt.Data, second.RTPPackets[i].Data) {
+			t.Fatalf("changed STAP-A P callback packet[%d] metadata = %+v, want returned RTP packet fields", i, pkt)
+		}
+		assertEncoderRTPCallbackPacketDoesNotAliasReturned(t, pkt, second.RTPPackets[i], i)
+		if meta.PayloadFormat != goh264.EncoderRTPPayloadSingleNAL ||
+			meta.NALUnitType != wantType ||
+			meta.NALUnitCount != 1 ||
+			!meta.StartOfNAL || !meta.EndOfNAL ||
+			meta.ParameterSet {
+			t.Fatalf("changed STAP-A P callback meta[%d] = %+v, want single-NAL type %d", i, meta, wantType)
+		}
 	}
 
 	dec := goh264.NewDecoder()
