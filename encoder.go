@@ -106,6 +106,11 @@ type EncoderColorConfig struct {
 	ChromaSampleLocTypeBottomField int32
 }
 
+// EncoderConfig controls encoder setup.
+//
+// Start from DefaultEncoderConfig and override the fields needed by the
+// integration. NewEncoder and Validate normalize derived defaults and reject
+// invalid or not-yet-admitted controls.
 type EncoderConfig struct {
 	Width        int
 	Height       int
@@ -284,6 +289,13 @@ type EncoderSEI struct {
 	AVC    []byte
 }
 
+// EncoderReconfigure contains optional runtime encoder updates.
+//
+// Non-zero scalar fields replace the matching EncoderConfig field. Pointer
+// fields update when non-nil, including explicit false or zero values where
+// valid. Reconfigure validates the resulting configuration before changing
+// encoder state; invalid updates leave the encoder unchanged. ForceIDR queues an
+// IDR request even when no config field changes.
 type EncoderReconfigure struct {
 	TargetBitrate         int
 	MaxBitrate            int
@@ -334,6 +346,8 @@ type Encoder struct {
 	rtpPacketCallback  EncoderRTPPacketCallback
 }
 
+// DefaultEncoderConfig returns a realtime 8-bit I420 configuration template for
+// the requested dimensions.
 func DefaultEncoderConfig(width, height int) EncoderConfig {
 	return EncoderConfig{
 		Width:                 width,
@@ -379,6 +393,7 @@ func DefaultEncoderConfig(width, height int) EncoderConfig {
 	}
 }
 
+// NewEncoder validates and normalizes cfg, then returns a fresh encoder.
 func NewEncoder(cfg EncoderConfig) (*Encoder, error) {
 	normalized, err := normalizeEncoderConfig(cfg)
 	if err != nil {
@@ -387,11 +402,13 @@ func NewEncoder(cfg EncoderConfig) (*Encoder, error) {
 	return &Encoder{cfg: normalized}, nil
 }
 
+// Validate reports whether cfg can be used to construct an encoder.
 func (cfg EncoderConfig) Validate() error {
 	_, err := normalizeEncoderConfig(cfg)
 	return err
 }
 
+// Config returns the current normalized encoder configuration.
 func (e *Encoder) Config() EncoderConfig {
 	if e == nil {
 		return EncoderConfig{}
@@ -698,24 +715,30 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	}, nil
 }
 
+// ForceIDR requests that the next successfully encoded frame be an IDR frame.
 func (e *Encoder) ForceIDR() {
 	if e != nil {
 		e.forceIDR = true
 	}
 }
 
+// HandlePLI handles a WebRTC Picture Loss Indication by requesting an IDR.
 func (e *Encoder) HandlePLI() {
 	e.ForceIDR()
 }
 
+// HandleFIR handles a WebRTC Full Intra Request by requesting an IDR.
 func (e *Encoder) HandleFIR() {
 	e.ForceIDR()
 }
 
+// PendingIDR reports whether an IDR request is queued.
 func (e *Encoder) PendingIDR() bool {
 	return e != nil && e.forceIDR
 }
 
+// SetBitrate updates the target and max bitrate and resets bitrate budget
+// accounting after a successful validation.
 func (e *Encoder) SetBitrate(targetBitrate, maxBitrate int) error {
 	if e == nil {
 		return encoderInvalid("nil encoder")
@@ -732,6 +755,8 @@ func (e *Encoder) SetBitrate(targetBitrate, maxBitrate int) error {
 	return nil
 }
 
+// SetFrameRate updates the configured frame rate, derived RTP timestamp
+// increment, and bitrate budget accounting after a successful validation.
 func (e *Encoder) SetFrameRate(num, den int) error {
 	if e == nil {
 		return encoderInvalid("nil encoder")
@@ -749,6 +774,8 @@ func (e *Encoder) SetFrameRate(num, den int) error {
 	return nil
 }
 
+// SetRTPMaxPayloadSize updates the RTP packet payload limit after validating the
+// resulting configuration.
 func (e *Encoder) SetRTPMaxPayloadSize(size int) error {
 	if e == nil {
 		return encoderInvalid("nil encoder")
@@ -773,6 +800,10 @@ func (e *Encoder) SetRTPPacketCallback(callback EncoderRTPPacketCallback) {
 	}
 }
 
+// Reconfigure applies validated runtime updates.
+//
+// Invalid updates return an error without changing encoder state. Resolution and
+// QP changes queue an IDR after they are accepted.
 func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if e == nil {
 		return encoderInvalid("nil encoder")
