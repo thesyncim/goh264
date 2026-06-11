@@ -54,6 +54,7 @@ type AVCDecoderConfiguration struct {
 	StreamInfo    StreamInfo
 }
 
+// PacketSideDataType identifies auxiliary packet metadata accepted by Packet.
 type PacketSideDataType uint8
 
 const (
@@ -73,16 +74,30 @@ const (
 	PacketSideData3DReferenceDisplays       PacketSideDataType = 38
 )
 
+// PacketSideData carries one FFmpeg-compatible packet side-data payload.
+//
+// Data is borrowed only for the duration of DecodePacket or DecodePacketFrames.
+// Decoded FrameSideData byte slices are independent copies and can be mutated
+// without affecting the input packet.
 type PacketSideData struct {
 	Type PacketSideDataType
 	Data []byte
 }
 
+// Packet is one compressed access unit plus optional packet side data.
+//
+// Data and SideData payloads are caller-owned input. The decoder reads them
+// during the call and does not retain their backing storage after returning.
 type Packet struct {
 	Data     []byte
 	SideData []PacketSideData
 }
 
+// FrameSideData contains SEI and packet side-data values attached to a decoded
+// frame.
+//
+// Slice fields are caller-owned output copies. Mutating them does not affect
+// decoder state or packet buffers supplied to DecodePacket/DecodePacketFrames.
 type FrameSideData struct {
 	UserDataUnregistered [][]byte
 	A53ClosedCaptions    []byte
