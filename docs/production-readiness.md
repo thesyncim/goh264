@@ -5,7 +5,7 @@ now in scope, with a tested public control contract in `encoder.go`. Encoder
 bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
 IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
 output, and RTP packetization-mode 1 output, plus guarded identical-reference
-CAVLC P-skip, exact 16x16 P16x16 no-residual prediction, and changed-frame
+CAVLC P-skip, exact single-row P16x16 no-residual prediction, and changed-frame
 P IntraPCM across disabled, enabled, and slice-boundary deblock controls.
 Encoder
 production gates live in `docs/encoder-webrtc-roadmap.md` until broader
@@ -151,9 +151,9 @@ reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes and
 optional RTP callback metadata. It also proves identical second frames can emit
 CAVLC P-skip slices through stateful local decode and FFmpeg rawvideo decode,
-exact 16x16 shifted second frames can emit predictive P16x16 no-residual slices
-through stateful local decode, FFmpeg rawvideo decode, configured AVC decode,
-and RTP reassembly decode,
+exact shifted 16-pixel-high frame rows can emit predictive P16x16 no-residual
+slices through stateful local decode, FFmpeg rawvideo decode, configured AVC
+decode, and RTP reassembly decode,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B

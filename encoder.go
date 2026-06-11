@@ -497,7 +497,9 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
 		}
 	} else if mvdX, mvdY, ok := e.p16x16NoResidualMotion(view); ok {
+		var mvdBuf [64]h264.EncoderMotionVectorDelta
 		for _, r := range sliceRanges {
+			mvds := appendEncoderP16x16NoResidualMVDs(mvdBuf[:0], r.macroblockCount, mvdX, mvdY)
 			nal, err := buildEncoderI420P16x16NoResidualNAL(h264.EncoderI420P16x16NoResidualConfig{
 				Width:                      view.width,
 				Height:                     view.height,
@@ -508,6 +510,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 				MacroblockCount:            uint32(r.macroblockCount),
 				MVDX:                       mvdX,
 				MVDY:                       mvdY,
+				MVDs:                       mvds,
 				NALLengthSize:              4,
 			})
 			if err != nil {
@@ -997,7 +1000,10 @@ func (e *Encoder) referenceMatches(view encoderFrameView) bool {
 }
 
 func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, bool) {
-	if e.cfg.DeblockMode != EncoderDeblockDisabled || view.width != 16 || view.height != 16 {
+	if e.cfg.DeblockMode != EncoderDeblockDisabled ||
+		view.height != 16 ||
+		view.width < 16 ||
+		view.width&15 != 0 {
 		return 0, 0, false
 	}
 	ref := &e.reference
@@ -1028,6 +1034,22 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView) (int32, int32, b
 		}
 	}
 	return 0, 0, false
+}
+
+func appendEncoderP16x16NoResidualMVDs(dst []h264.EncoderMotionVectorDelta, macroblockCount int, mvdX int32, mvdY int32) []h264.EncoderMotionVectorDelta {
+	if cap(dst) < macroblockCount {
+		dst = make([]h264.EncoderMotionVectorDelta, macroblockCount)
+	} else {
+		dst = dst[:macroblockCount]
+	}
+	if macroblockCount == 0 {
+		return dst
+	}
+	dst[0] = h264.EncoderMotionVectorDelta{X: mvdX, Y: mvdY}
+	for i := 1; i < macroblockCount; i++ {
+		dst[i] = h264.EncoderMotionVectorDelta{}
+	}
+	return dst
 }
 
 func encoderI420MatchesIntegerMotion(ref *encoderReferenceFrame, view encoderFrameView, dx int, dy int) bool {

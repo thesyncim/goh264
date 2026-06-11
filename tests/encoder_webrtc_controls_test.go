@@ -1317,6 +1317,79 @@ func TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeWideExactP16x16NoResidualMotion(t *testing.T) {
+	for _, tt := range []struct {
+		name            string
+		sliceCount      int
+		wantFirstNALs   []uint8
+		wantSecondNALs  []uint8
+		wantSecondFirst []uint32
+	}{
+		{
+			name:            "single-slice",
+			sliceCount:      1,
+			wantFirstNALs:   []uint8{7, 8, 5},
+			wantSecondNALs:  []uint8{1},
+			wantSecondFirst: []uint32{0},
+		},
+		{
+			name:            "two-slices",
+			sliceCount:      2,
+			wantFirstNALs:   []uint8{7, 8, 5, 5},
+			wantSecondNALs:  []uint8{1, 1},
+			wantSecondFirst: []uint32{0, 1},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(32, 16)
+			cfg.OutputFormat = goh264.EncoderOutputAnnexB
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.RTPMaxPayloadSize = 0
+			cfg.SliceCount = tt.sliceCount
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
+			firstFrame := patternedI420EncoderFrame(32, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, tt.wantFirstNALs)
+
+			secondFrame := integerMotionI420EncoderFrame(firstFrame, 2, 0)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode wide exact P16x16 no-residual motion: %v", err)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, tt.wantSecondNALs)
+			assertEncoderVCLFirstMBs(t, append(append([]byte(nil), headers.AnnexB...), second.Data...), tt.wantSecondNALs, tt.wantSecondFirst)
+
+			dec := goh264.NewDecoder()
+			decodedFirst, err := dec.DecodeFrames(first.Data)
+			if err != nil {
+				t.Fatalf("Decode first IDR: %v", err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			decodedSecond, err := dec.DecodeFrames(second.Data)
+			if err != nil {
+				t.Fatalf("Decode wide exact P16x16 no-residual motion: %v", err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+
+			stream := append(append([]byte(nil), first.Data...), second.Data...)
+			wantStream := appendI420FrameBytes(nil, firstFrame)
+			wantStream = appendI420FrameBytes(wantStream, secondFrame)
+			assertFFmpegRawVideoOracle(t, stream, wantStream)
+		})
+	}
+}
+
 func TestEncoderEncodeChangedSecondFrameUsesPIntraPCM(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB

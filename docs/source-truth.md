@@ -115,8 +115,8 @@ RTP payload-size, SPS/PPS cadence modes, PLI/FIR/force-IDR, partial
 reconfiguration, public SPS/PPS/Annex B/avcC header generation with crop
 metadata, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
 generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
-exact 16x16 P16x16 no-residual prediction, changed-frame P IntraPCM recovery
-pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
+exact single-row P16x16 no-residual prediction, changed-frame P IntraPCM
+recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
 dropped-frame budget behavior, `FrameDropLate` `MaxEncodeTimeUS` budget drops
 without reference/frame/packet/callback advancement before and after an existing
