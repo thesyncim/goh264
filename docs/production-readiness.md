@@ -142,8 +142,9 @@ proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses and VBV-backed `MaxBitrate` bucket
 misses, including credit consumption/refill across transmitted IDR/P-skip and
 dropped changed-P frames, runtime max-bitrate/VBV lowering that resets stale
-credit before the next frame, plus ConstantQP bypass of the derived bitrate
-budget before and after runtime rate-control mode switches. `FrameDropLate`
+credit before the next frame, `SetBitrate` lowering that resets stale
+frame-budget credit before the next frame, plus ConstantQP bypass of the derived
+bitrate budget before and after runtime rate-control mode switches. `FrameDropLate`
 `MaxEncodeTimeUS` budget misses advance RTP time without advancing reference,
 frame-number,
 packet-sequence, or callback state, including after a transmitted reference

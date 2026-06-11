@@ -122,8 +122,9 @@ recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 dropped-frame budget behavior including VBV-backed `MaxBitrate` bucket misses,
 deterministic max-bitrate credit consumption/refill across transmitted and
 dropped frames, runtime max-bitrate/VBV lowering that resets stale credit before
-the next frame, ConstantQP bitrate-budget bypass across runtime rate-control mode
-switches,
+the next frame, `SetBitrate` lowering that resets stale frame-budget credit
+before the next frame, ConstantQP bitrate-budget bypass across runtime
+rate-control mode switches,
 `FrameDropLate` `MaxEncodeTimeUS` budget drops
 without reference/frame/packet/callback advancement before and after an existing
 reference, RTP/Annex B/RTP control-loop stress across QP refresh, late drop

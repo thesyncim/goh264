@@ -65,8 +65,9 @@ byte-budget misses or VBV-backed `MaxBitrate` bucket misses, and advances the RT
 timestamp timeline, with deterministic proof that transmitted frames consume
 credit, per-frame refill resumes after dropped frames, and reference/packet
 state remains stable. Runtime max-bitrate/VBV lowering resets stale credit
-before the next frame, and ConstantQP mode is proved to bypass that derived
-budget before and after runtime switches through CBR. `FrameDropLate` now uses
+before the next frame, `SetBitrate` lowering resets stale frame-budget credit,
+and ConstantQP mode is proved to bypass that derived budget before and after
+runtime switches through CBR. `FrameDropLate` now uses
 `MaxEncodeTimeUS` as an
 encode-time budget only when that mode is selected; late frames return dropped
 metadata, advance the RTP timestamp timeline, and leave reference, frame-number,
@@ -192,8 +193,9 @@ in one access unit.
    active; low VBV-backed `MaxBitrate` budgets now use the same dropped-frame
    state path, including proof of credit consumption/refill across transmitted
    and dropped frames plus stale-credit reset after runtime max-bitrate/VBV lowering,
-   while ConstantQP mode bypasses that derived bitrate budget across runtime
-   rate-control mode switches. `FrameDropLate` now drops frames
+   while `SetBitrate` also resets stale frame-budget credit and ConstantQP mode
+   bypasses that derived bitrate budget across runtime rate-control mode
+   switches. `FrameDropLate` now drops frames
    that exceed `MaxEncodeTimeUS`
    without advancing reference/frame/packet state, including after a transmitted
    reference frame.
