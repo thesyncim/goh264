@@ -534,6 +534,34 @@ func BenchmarkEncodeRTPI420STAPAChangedPIntraPCM(b *testing.B) {
 	benchmarkEncodeSteadyRTPSTAPAChangedPFrame(b, cfg, []EncoderFrame{bFrame, a})
 }
 
+func BenchmarkEncodeRTPI420MaxFrameSizeDrop(b *testing.B) {
+	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
+	cfg.RTPMaxPayloadSize = 32
+	cfg.MaxFrameSize = 4096
+	a := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	droppedFrame := benchmarkEncoderI420Frame(benchmarkEncoderWidth, benchmarkEncoderHeight)
+	droppedFrame.Y[0] ^= 0x40
+	benchmarkEncodeRTPDropFrame(b, cfg, a, droppedFrame, func(enc *Encoder) {
+		if err := enc.Reconfigure(EncoderReconfigure{MaxFrameSize: 16}); err != nil {
+			b.Fatalf("lower MaxFrameSize: %v", err)
+		}
+	})
+}
+
+func BenchmarkEncodeRTPI420LateDrop(b *testing.B) {
+	cfg := benchmarkEncoderConfigSize(EncoderOutputRTP, 128, 128)
+	cfg.FrameDrop = EncoderFrameDropLate
+	cfg.MaxEncodeTimeUS = 10_000_000
+	a := benchmarkEncoderI420Frame(cfg.Width, cfg.Height)
+	droppedFrame := benchmarkEncoderI420Frame(cfg.Width, cfg.Height)
+	droppedFrame.Y[0] ^= 0x40
+	benchmarkEncodeRTPDropFrame(b, cfg, a, droppedFrame, func(enc *Encoder) {
+		if err := enc.Reconfigure(EncoderReconfigure{MaxEncodeTimeUS: 1}); err != nil {
+			b.Fatalf("lower MaxEncodeTimeUS: %v", err)
+		}
+	})
+}
+
 func BenchmarkEncodeRTPMode0I420PSkip(b *testing.B) {
 	cfg := benchmarkEncoderConfig(EncoderOutputRTP)
 	cfg.RTPPacketizationMode = EncoderRTPPacketizationSingleNAL
@@ -627,6 +655,38 @@ func benchmarkEncodeSteadyPFrame(b *testing.B, cfg EncoderConfig, frames []Encod
 		}
 		if !wantRTP && len(out.RTPPackets) != 0 {
 			b.Fatalf("non-RTP steady P frame returned RTP packets: %d", len(out.RTPPackets))
+		}
+	}
+	benchmarkEncodeFrameSink = out
+	benchmarkEncodeBytesSink = len(out.Data)
+	benchmarkEncodePacketsSink = len(out.RTPPackets)
+}
+
+func benchmarkEncodeRTPDropFrame(b *testing.B, cfg EncoderConfig, reference EncoderFrame, frame EncoderFrame, armDrop func(*Encoder)) {
+	b.Helper()
+	enc, err := NewEncoder(cfg)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if _, err := enc.EncodeInto(make([]byte, 0, 65536), reference); err != nil {
+		b.Fatal(err)
+	}
+	armDrop(enc)
+	dst := make([]byte, 0, 65536)
+
+	b.ReportAllocs()
+	b.SetBytes(int64(benchmarkEncoderFrameBytes(cfg.Width, cfg.Height)))
+	b.ResetTimer()
+
+	var out EncodedFrame
+	for i := 0; i < b.N; i++ {
+		out, err = enc.EncodeInto(dst[:0], frame)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+			b.Fatalf("output dropped=%v data=%d nals=%d rtp=%d, want empty dropped frame",
+				out.Dropped, len(out.Data), len(out.NALUnits), len(out.RTPPackets))
 		}
 	}
 	benchmarkEncodeFrameSink = out
