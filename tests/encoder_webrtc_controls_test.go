@@ -2881,6 +2881,52 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 		}
 	})
 
+	t.Run("annexb exact p16x16 deblock controls", func(t *testing.T) {
+		for _, tt := range []struct {
+			name    string
+			deblock goh264.EncoderDeblockMode
+		}{
+			{name: "enabled", deblock: goh264.EncoderDeblockEnabled},
+			{name: "slice-boundary", deblock: goh264.EncoderDeblockSliceBoundary},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				cfg := goh264.DefaultEncoderConfig(16, 16)
+				cfg.OutputFormat = goh264.EncoderOutputAnnexB
+				cfg.DeblockMode = tt.deblock
+				cfg.RTPMaxPayloadSize = 0
+				cfg.GOPSize = 10000
+				cfg.IDRInterval = 10000
+				a := patternedI420EncoderFrame(16, 16)
+				b := integerMotionI420EncoderFrame(a, 2, 0)
+				encs := primedI420EncoderPool(t, cfg, a, 128)
+				dst := make([]byte, 0, 4096)
+				var call int
+				allocs := testing.AllocsPerRun(100, func() {
+					if call >= len(encs) {
+						t.Fatalf("encoder pool exhausted after %d calls", call)
+					}
+					out, err := encs[call].EncodeInto(dst[:0], b)
+					call++
+					if err != nil {
+						t.Fatalf("EncodeInto exact P16x16 deblock %s: %v", tt.name, err)
+					}
+					if out.IDR || len(out.RTPPackets) != 0 || len(out.Data) == 0 ||
+						len(out.NALUnits) != 1 || out.NALUnits[0].Type != 1 {
+						t.Fatalf("exact P16x16 deblock %s output idr=%v rtp=%d data=%d nals=%+v",
+							tt.name, out.IDR, len(out.RTPPackets), len(out.Data), out.NALUnits)
+					}
+					if cap(out.Data) != cap(dst) {
+						t.Fatalf("EncodeInto did not reuse caller output capacity: got cap %d want %d", cap(out.Data), cap(dst))
+					}
+				})
+				t.Logf("annexb exact P16x16 deblock %s EncodeInto allocations/run = %.0f", tt.name, allocs)
+				if allocs > 4 {
+					t.Fatalf("annexb exact P16x16 deblock %s EncodeInto allocations/run = %.0f, want <= 4", tt.name, allocs)
+				}
+			})
+		}
+	})
+
 	t.Run("annexb exact p16x16 macroblock-aligned", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(160, 128)
 		cfg.OutputFormat = goh264.EncoderOutputAnnexB
