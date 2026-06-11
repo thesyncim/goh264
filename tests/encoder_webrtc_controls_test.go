@@ -1672,6 +1672,64 @@ func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 	}
 }
 
+func TestEncoderParameterSetsReturnCallerOwnedSurfaces(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(638, 478)
+	cfg.FrameRateNum = 30000
+	cfg.FrameRateDen = 1001
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets: %v", err)
+	}
+	originalAnnexB := append([]byte(nil), headers.AnnexB...)
+	originalAVCC := append([]byte(nil), headers.AVCDecoderConfigurationRecord...)
+	originalSPS := append([]byte(nil), headers.SPS...)
+	originalPPS := append([]byte(nil), headers.PPS...)
+
+	headers.SPS[0] ^= 0x1f
+	headers.PPS[0] ^= 0x1f
+	headers.SPS = append(headers.SPS, 0xaa)
+	headers.PPS = append(headers.PPS, 0xbb)
+	if !bytes.Equal(headers.AnnexB, originalAnnexB) ||
+		!bytes.Equal(headers.AVCDecoderConfigurationRecord, originalAVCC) {
+		t.Fatalf("raw parameter-set mutation aliased packaged headers:\nAnnexB %x want %x\navcC %x want %x",
+			headers.AnnexB, originalAnnexB,
+			headers.AVCDecoderConfigurationRecord, originalAVCC)
+	}
+	headers.AnnexB[0] ^= 0xff
+	headers.AVCDecoderConfigurationRecord[0] ^= 0xff
+	headers.AnnexB = append(headers.AnnexB, 0xcc)
+	headers.AVCDecoderConfigurationRecord = append(headers.AVCDecoderConfigurationRecord, 0xdd)
+
+	again, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets after caller mutation: %v", err)
+	}
+	if !bytes.Equal(again.SPS, originalSPS) ||
+		!bytes.Equal(again.PPS, originalPPS) ||
+		!bytes.Equal(again.AnnexB, originalAnnexB) ||
+		!bytes.Equal(again.AVCDecoderConfigurationRecord, originalAVCC) {
+		t.Fatalf("ParameterSets aliases caller mutation:\nSPS %x want %x\nPPS %x want %x\nAnnexB %x want %x\navcC %x want %x",
+			again.SPS, originalSPS,
+			again.PPS, originalPPS,
+			again.AnnexB, originalAnnexB,
+			again.AVCDecoderConfigurationRecord, originalAVCC)
+	}
+	if !bytes.Contains(again.AnnexB, again.SPS) || !bytes.Contains(again.AnnexB, again.PPS) {
+		t.Fatalf("regenerated Annex B headers do not contain SPS/PPS: %x", again.AnnexB)
+	}
+	if _, err := goh264.NewDecoder().ParseHeadersAnnexB(again.AnnexB); err != nil {
+		t.Fatalf("ParseHeadersAnnexB regenerated headers: %v", err)
+	}
+	if _, err := goh264.NewDecoder().ParseAVCDecoderConfigurationRecord(again.AVCDecoderConfigurationRecord); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord regenerated headers: %v", err)
+	}
+}
+
 func TestEncoderParameterSetsExposeWebRTCCrop(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(640, 480)
 	cfg.Crop = goh264.EncoderCrop{Left: 2, Right: 4, Top: 6, Bottom: 8}
@@ -1721,13 +1779,31 @@ func TestEncoderRecoveryPointSEIExposesWebRTCRecoverySignal(t *testing.T) {
 	if !bytes.Contains(sei.AnnexB, sei.NAL) || !bytes.Contains(sei.AVC, sei.NAL) {
 		t.Fatalf("SEI packet surfaces do not contain raw NAL: annexb=%x avc=%x nal=%x", sei.AnnexB, sei.AVC, sei.NAL)
 	}
+	originalNAL := append([]byte(nil), sei.NAL...)
+	originalAnnexB := append([]byte(nil), sei.AnnexB...)
+	originalAVC := append([]byte(nil), sei.AVC...)
 	sei.NAL[0] = 0
+	sei.NAL = append(sei.NAL, 0xaa)
+	if !bytes.Equal(sei.AnnexB, originalAnnexB) || !bytes.Equal(sei.AVC, originalAVC) {
+		t.Fatalf("raw SEI mutation aliased packaged surfaces:\nAnnexB %x want %x\nAVC %x want %x",
+			sei.AnnexB, originalAnnexB,
+			sei.AVC, originalAVC)
+	}
+	sei.AnnexB[0] ^= 0xff
+	sei.AVC[0] ^= 0xff
+	sei.AnnexB = append(sei.AnnexB, 0xbb)
+	sei.AVC = append(sei.AVC, 0xcc)
 	again, err := enc.RecoveryPointSEI(0)
 	if err != nil {
 		t.Fatalf("RecoveryPointSEI after caller mutation: %v", err)
 	}
-	if len(again.NAL) == 0 || again.NAL[0]&0x1f != 6 {
-		t.Fatalf("SEI NAL aliases caller mutation: %x", again.NAL)
+	if !bytes.Equal(again.NAL, originalNAL) ||
+		!bytes.Equal(again.AnnexB, originalAnnexB) ||
+		!bytes.Equal(again.AVC, originalAVC) {
+		t.Fatalf("SEI aliases caller mutation:\nNAL %x want %x\nAnnexB %x want %x\nAVC %x want %x",
+			again.NAL, originalNAL,
+			again.AnnexB, originalAnnexB,
+			again.AVC, originalAVC)
 	}
 	sei = again
 

@@ -155,9 +155,11 @@ sequence numbers and callbacks from the first emitted packet, carries retargeted
 payload metadata, and decodes the RTP IDR/P-skip sequence, proves
 `ParameterSets` emits SPS/PPS NALs,
 Annex B headers, and avcC records accepted by the public decoder parsers,
+with caller mutation/append isolation proved across repeated helper calls,
 proves in-band keyframe, out-of-band, and every-IDR header modes, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL
-surfaces accepted by public decode paths, verifies frame-shape validation returns
+surfaces accepted by public decode paths with the same mutation/append isolation,
+verifies frame-shape validation returns
 empty output and leaves RTP sequence, callback, frame-number, timestamp, and
 reference state untouched before the next valid P-skip, and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for

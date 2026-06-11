@@ -91,7 +91,8 @@ and covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
 constrained-baseline realtime configs are admitted as control state; SPS/PPS
 parameter sets, Annex B sequence headers, avcC records, crop metadata,
 in-band/out-of-band/every-IDR cadence, and recovery-point SEI Annex B/AVC NAL
-surfaces are generated and parser-proved.
+surfaces are generated and parser-proved, with caller mutation/append isolation
+proved across repeated header and SEI helper calls.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
 Annex B, AVC, configured `SliceCount` multi-slice VCL output, RTP
 packetization-mode 0 single-NAL packets, and RTP packetization-mode 1,

@@ -105,12 +105,14 @@ QP refresh, Annex B late drop, Annex B P-skip recovery, and RTP re-entry with
 retargeted packet metadata while preserving decode, reference, callback, RTP
 sequence, and timestamp semantics.
 `ParameterSets`
-generates SPS/PPS NALs, crop metadata, Annex B sequence headers, and avcC
-records accepted by the decoder parsers. IDR header cadence is explicit for
-in-band keyframes, out-of-band headers, and every-IDR emission.
-`RecoveryPointSEI` generates Annex B and AVC recovery-point
-SEI NAL surfaces and is proved by injecting the encoder output before a P-frame
-and checking the public decoder recovery side data. `Encode` and `EncodeInto`
+generates caller-owned SPS/PPS NALs, crop metadata, Annex B sequence headers,
+and avcC records accepted by the decoder parsers. IDR header cadence is explicit
+for in-band keyframes, out-of-band headers, and every-IDR emission.
+`RecoveryPointSEI` generates caller-owned Annex B and AVC recovery-point
+SEI NAL surfaces, and caller mutation/append isolation is proved across repeated
+header and SEI helper calls. SEI side data is also proved by injecting the
+encoder output before a P-frame and checking the public decoder recovery side
+data. `Encode` and `EncodeInto`
 now validate frame shape before bitstream work, returning empty output for
 invalid frames without advancing RTP sequence, callback, frame-number,
 timestamp, or reference state, then emit the first admitted frame bitstream
