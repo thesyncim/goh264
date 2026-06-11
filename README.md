@@ -86,11 +86,10 @@ bitrate/framerate/payload/slice reconfiguration, runtime rate-control, QP,
 frame-drop, GOP/IDR, deblock, SPS/PPS cadence modes, runtime output-format and
 RTP packetization reconfiguration, including RTP-to-configured-AVC forced
 IDR/P-skip decode and configured-AVC-to-RTP re-entry, and the WebRTC control
-fields are public and
-covered by
-`tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420 constrained-baseline
-realtime configs are admitted as control state; SPS/PPS parameter sets, Annex B
-sequence headers, avcC records, crop metadata,
+fields plus encoded-frame/NAL/RTP packet/callback result surfaces are public
+and covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
+constrained-baseline realtime configs are admitted as control state; SPS/PPS
+parameter sets, Annex B sequence headers, avcC records, crop metadata,
 in-band/out-of-band/every-IDR cadence, and recovery-point SEI Annex B/AVC NAL
 surfaces are generated and parser-proved.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for

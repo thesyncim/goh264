@@ -131,7 +131,8 @@ AVC or mixed configured-AVC/Annex B public decode paths.
 Encoder readiness evidence currently covers controls, parameter-set headers,
 recovery-point SEI packaging, and the first IDR frame writer:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
-rejects invalid or not-yet-admitted realtime controls, validates runtime
+guards public input/result/callback surfaces for integration-facing encoder
+structs, rejects invalid or not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
 partial reconfiguration paths, proves invalid runtime rate, output/header/preset,
 RTP re-entry payload-size, and packetization updates leave config and queued-IDR

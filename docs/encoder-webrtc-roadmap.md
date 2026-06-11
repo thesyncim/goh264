@@ -48,10 +48,12 @@ defaults:
   frame-drop, GOP/IDR, deblock, and latency/quality preset changes.
 
 Current safe point: the public control contract is present in `encoder.go` and
-covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
-constrained-baseline realtime/WebRTC configs can be constructed, invalid
-controls are rejected, including I420 crop offsets that H.264 cannot represent,
-and runtime bitrate, framerate, payload-size, slice-count/byte-target,
+covered by `tests/encoder_webrtc_controls_test.go`, including public
+input/result/callback surface guards for integration-facing encoder structs.
+Valid 8-bit I420 constrained-baseline realtime/WebRTC configs can be
+constructed, invalid controls are rejected, including I420 crop offsets that
+H.264 cannot represent, and runtime bitrate, framerate, payload-size,
+slice-count/byte-target,
 rate-control mode, VBV size, initial/min/max QP, frame-drop mode, GOP/IDR
 cadence, deblock mode, SPS/PPS cadence, RTP output format, packetization-mode
 0/1, STAP-A, payload type, SSRC, timestamp increment, PLI/FIR, force-IDR, and

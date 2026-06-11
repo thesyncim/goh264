@@ -5494,6 +5494,90 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 }
 
+func TestEncoderRealtimeWebRTCResultSurfaceCoversRoadmap(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		typ    reflect.Type
+		fields []string
+	}{
+		{
+			name: "EncoderCrop",
+			typ:  reflect.TypeOf(goh264.EncoderCrop{}),
+			fields: []string{
+				"Left", "Right", "Top", "Bottom",
+			},
+		},
+		{
+			name: "EncoderColorConfig",
+			typ:  reflect.TypeOf(goh264.EncoderColorConfig{}),
+			fields: []string{
+				"SARNum", "SARDen", "VideoFormat", "FullRange", "ColorPrimaries",
+				"ColorTransfer", "ColorMatrix", "ChromaSampleLocTypeTopField",
+				"ChromaSampleLocTypeBottomField",
+			},
+		},
+		{
+			name: "EncoderFrame",
+			typ:  reflect.TypeOf(goh264.EncoderFrame{}),
+			fields: []string{
+				"Y", "Cb", "Cr", "StrideY", "StrideCb", "StrideCr",
+				"Width", "Height", "PTS", "Duration", "ForceIDR", "Color",
+			},
+		},
+		{
+			name: "EncoderNALUnit",
+			typ:  reflect.TypeOf(goh264.EncoderNALUnit{}),
+			fields: []string{
+				"Type", "Offset", "Size", "KeyFrame", "ParameterSet",
+			},
+		},
+		{
+			name: "EncoderRTPPacket",
+			typ:  reflect.TypeOf(goh264.EncoderRTPPacket{}),
+			fields: []string{
+				"Data", "Payload", "PayloadType", "SequenceNumber", "Timestamp", "SSRC", "Marker",
+			},
+		},
+		{
+			name: "EncoderRTPPacketMetadata",
+			typ:  reflect.TypeOf(goh264.EncoderRTPPacketMetadata{}),
+			fields: []string{
+				"PacketIndex", "PacketCount", "FramePTS", "FrameDTS", "RTPTime", "KeyFrame", "IDR",
+				"PayloadFormat", "NALUnitType", "NALUnitCount", "StartOfNAL", "EndOfNAL", "ParameterSet",
+			},
+		},
+		{
+			name: "EncodedFrame",
+			typ:  reflect.TypeOf(goh264.EncodedFrame{}),
+			fields: []string{
+				"Data", "NALUnits", "RTPPackets", "KeyFrame", "IDR", "PTS", "DTS", "RTPTime", "Dropped",
+			},
+		},
+		{
+			name: "EncoderParameterSets",
+			typ:  reflect.TypeOf(goh264.EncoderParameterSets{}),
+			fields: []string{
+				"SPS", "PPS", "AnnexB", "AVCDecoderConfigurationRecord",
+			},
+		},
+		{
+			name: "EncoderSEI",
+			typ:  reflect.TypeOf(goh264.EncoderSEI{}),
+			fields: []string{
+				"NAL", "AnnexB", "AVC",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, field := range tt.fields {
+				if _, ok := tt.typ.FieldByName(field); !ok {
+					t.Fatalf("%s missing public field %s", tt.name, field)
+				}
+			}
+		})
+	}
+}
+
 func frameKeyFlags(frames []*goh264.Frame) []bool {
 	out := make([]bool, len(frames))
 	for i, frame := range frames {

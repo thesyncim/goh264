@@ -136,6 +136,8 @@ AVC IDR/P-skip sequence through the emitted avcC,
 runtime configured-AVC-to-RTP output switching that forces an every-IDR RTP
 frame, starts RTP sequence numbers and callbacks from the first emitted packet,
 carries retargeted payload metadata, and decodes the RTP IDR/P-skip sequence,
+public input/result/callback surface guards for integration-facing encoder
+structs,
 invalid-frame validation that returns empty output and leaves RTP sequence,
 callback, frame-number, timestamp, and reference state untouched before the next
 valid P-skip,
