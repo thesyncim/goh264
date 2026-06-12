@@ -443,6 +443,60 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
+	tests := []struct {
+		name   string
+		update goh264.EncoderReconfigure
+	}{
+		{name: "bad bitrate", update: goh264.EncoderReconfigure{MaxBitrate: 1}},
+		{name: "bad frame rate", update: goh264.EncoderReconfigure{FrameRateNum: 0, FrameRateDen: 1}},
+		{name: "bad payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 2}},
+		{name: "bad deblock", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockMode(99)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+			}
+
+			enc.ForceIDR()
+			if !enc.PendingIDR() {
+				t.Fatalf("%s ForceIDR did not queue IDR", tt.name)
+			}
+			before := enc.Config()
+			if err := enc.Reconfigure(tt.update); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("%s invalid reconfigure error = %v, want ErrInvalidData", tt.name, err)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("%s invalid reconfigure mutated config = %+v, want %+v", tt.name, got, before)
+			}
+			if !enc.PendingIDR() {
+				t.Fatalf("%s invalid reconfigure cleared pending IDR", tt.name)
+			}
+
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.Y[0] ^= 0x21
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("%s Encode after invalid reconfigure: %v", tt.name, err)
+			}
+			if !second.IDR || enc.PendingIDR() {
+				t.Fatalf("%s post-invalid-reconfigure frame idr=%v pending=%v, want delivered IDR",
+					tt.name, second.IDR, enc.PendingIDR())
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+		})
+	}
+}
+
 func TestEncoderFrameRateInvalidUpdatesPreserveLiveState(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
