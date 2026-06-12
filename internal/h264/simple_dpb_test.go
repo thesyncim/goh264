@@ -113,6 +113,22 @@ func TestSimpleFrameDPBRejectsOverflowedFieldRefEntryCapacity(t *testing.T) {
 	}
 }
 
+func TestSimpleFrameRefEntryAdaptersRejectOverflowedLists(t *testing.T) {
+	entries := fakeSimpleRefEntrySliceLen(maxInt/32 + 1)
+	if got := cloneSimpleRefEntries(entries); got != nil {
+		t.Fatalf("overflowed cloned ref entries = len %d, want nil", len(got))
+	}
+	if got := simpleFrameEntryPlanesRefs(entries); got != nil {
+		t.Fatalf("overflowed low ref planes = len %d, want nil", len(got))
+	}
+	if got := simpleFrameEntryPlanesRefsHigh(entries); got != nil {
+		t.Fatalf("overflowed high ref planes = len %d, want nil", len(got))
+	}
+	if got := simpleFrameEntryFrames(entries); got != nil {
+		t.Fatalf("overflowed ref frames = len %d, want nil", len(got))
+	}
+}
+
 func TestSimpleFrameDPBReordersShortRefs(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	newest := simpleDPBTestFrame(sps, 2)
@@ -1357,6 +1373,18 @@ func fakeDecodedFrameSliceLen(n int) []*DecodedFrame {
 	var frame *DecodedFrame
 	return *(*[]*DecodedFrame)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(&frame)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeSimpleRefEntrySliceLen(n int) []simpleRefEntry {
+	if n <= 0 {
+		return nil
+	}
+	var entry simpleRefEntry
+	return *(*[]simpleRefEntry)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&entry)),
 		Len:  n,
 		Cap:  n,
 	}))

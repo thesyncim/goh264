@@ -563,7 +563,7 @@ func (f *DecodedFrame) saveRefEntries(entries [2][]simpleRefEntry, pictureStruct
 }
 
 func cloneSimpleRefEntries(entries []simpleRefEntry) []simpleRefEntry {
-	if len(entries) == 0 {
+	if len(entries) == 0 || len(entries) > maxInt/32 {
 		return nil
 	}
 	out := make([]simpleRefEntry, len(entries))
@@ -572,6 +572,9 @@ func cloneSimpleRefEntries(entries []simpleRefEntry) []simpleRefEntry {
 }
 
 func simpleFrameEntryPlanesRefs(list []simpleRefEntry) []*h264PicturePlanes {
+	if len(list) == 0 || len(list) > maxInt/32 {
+		return nil
+	}
 	planes := make([]h264PicturePlanes, len(list))
 	refs := make([]*h264PicturePlanes, len(list))
 	for i, entry := range list {
@@ -583,6 +586,9 @@ func simpleFrameEntryPlanesRefs(list []simpleRefEntry) []*h264PicturePlanes {
 }
 
 func simpleFrameEntryPlanesRefsHigh(list []simpleRefEntry) []*h264PicturePlanesHigh {
+	if len(list) == 0 || len(list) > maxInt/32 {
+		return nil
+	}
 	planes := make([]h264PicturePlanesHigh, len(list))
 	refs := make([]*h264PicturePlanesHigh, len(list))
 	for i, entry := range list {
@@ -594,6 +600,9 @@ func simpleFrameEntryPlanesRefsHigh(list []simpleRefEntry) []*h264PicturePlanesH
 }
 
 func simpleFrameEntryFrames(list []simpleRefEntry) []*DecodedFrame {
+	if len(list) == 0 || len(list) > maxInt/32 {
+		return nil
+	}
 	frames := make([]*DecodedFrame, len(list))
 	for i, entry := range list {
 		frames[i] = entry.frame
