@@ -217,6 +217,20 @@ func TestAppendEncoderSTAPARejectsOverflowedDestination(t *testing.T) {
 	}
 }
 
+func TestEncoderSTAPASizeRejectsMalformedParameterSets(t *testing.T) {
+	if _, _, err := encoderSTAPASize([]encoderRawNAL{
+		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
+		{parameterSet: true},
+	}, 1200); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("encoderSTAPASize empty parameter-set NAL error = %v, want ErrInvalidData", err)
+	}
+	if _, _, err := encoderSTAPASize([]encoderRawNAL{
+		{raw: fakeEncoderBytesLen(0x10000), parameterSet: true},
+	}, 0x10010); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("encoderSTAPASize oversized parameter-set NAL error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestAppendEncoderSTAPADoesNotMutateWhenNotAggregating(t *testing.T) {
 	dst := []byte{0xaa}
 	nals := []encoderRawNAL{
