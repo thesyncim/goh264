@@ -11,9 +11,13 @@ type bitReader struct {
 	buf     []byte
 	bitPos  uint32
 	numBits uint32
+	invalid bool
 }
 
 func newBitReader(buf []byte) bitReader {
+	if len(buf) > maxBitReaderByteLen {
+		return bitReader{buf: buf, numBits: uint32(maxBitReaderByteLen) * 8, invalid: true}
+	}
 	return bitReader{
 		buf:     buf,
 		numBits: uint32(len(buf)) * 8,
@@ -32,6 +36,9 @@ func newRBSPBitReader(buf []byte) (bitReader, error) {
 }
 
 func rbspBitLength(buf []byte) (uint32, error) {
+	if len(buf) > maxBitReaderByteLen {
+		return 0, ErrInvalidData
+	}
 	size := len(buf)
 	for size > 0 && buf[size-1] == 0 {
 		size--
@@ -49,10 +56,16 @@ func rbspBitLength(buf []byte) (uint32, error) {
 }
 
 func (gb *bitReader) bitsLeft() int32 {
+	if gb == nil || gb.invalid {
+		return -1
+	}
 	return int32(gb.numBits) - int32(gb.bitPos)
 }
 
 func (gb *bitReader) readBit() (uint32, error) {
+	if gb == nil || gb.invalid {
+		return 0, ErrInvalidData
+	}
 	if gb.bitsLeft() < 1 {
 		return 0, ErrInvalidData
 	}
@@ -65,6 +78,9 @@ func (gb *bitReader) readBit() (uint32, error) {
 }
 
 func (gb *bitReader) readBits(n uint32) (uint32, error) {
+	if gb == nil || gb.invalid {
+		return 0, ErrInvalidData
+	}
 	if n > 32 || int32(n) > gb.bitsLeft() {
 		return 0, ErrInvalidData
 	}
@@ -81,6 +97,9 @@ func (gb *bitReader) readBits(n uint32) (uint32, error) {
 }
 
 func (gb *bitReader) showBits(n uint32) (uint32, error) {
+	if gb == nil || gb.invalid {
+		return 0, ErrInvalidData
+	}
 	if n > 32 || int32(n) > gb.bitsLeft() {
 		return 0, ErrInvalidData
 	}
@@ -92,6 +111,9 @@ func (gb *bitReader) showBits(n uint32) (uint32, error) {
 }
 
 func (gb *bitReader) showBitsPadded(n uint32) uint32 {
+	if gb == nil || gb.invalid {
+		return 0
+	}
 	if n > 32 {
 		n = 32
 	}
@@ -116,6 +138,9 @@ func (gb *bitReader) showBitsPadded(n uint32) uint32 {
 }
 
 func (gb *bitReader) skipBits(n uint32) error {
+	if gb == nil || gb.invalid {
+		return ErrInvalidData
+	}
 	if int32(n) > gb.bitsLeft() {
 		return ErrInvalidData
 	}
@@ -124,6 +149,9 @@ func (gb *bitReader) skipBits(n uint32) error {
 }
 
 func (gb *bitReader) alignToByte() error {
+	if gb == nil || gb.invalid {
+		return ErrInvalidData
+	}
 	aligned := (gb.bitPos + 7) &^ 7
 	if aligned > gb.numBits {
 		return ErrInvalidData
@@ -133,6 +161,9 @@ func (gb *bitReader) alignToByte() error {
 }
 
 func (gb *bitReader) readAlignedBytes(n int) ([]byte, error) {
+	if gb == nil || gb.invalid {
+		return nil, ErrInvalidData
+	}
 	if n < 0 {
 		return nil, ErrInvalidData
 	}
@@ -170,7 +201,7 @@ func (gb *bitReader) remainingAlignedBytes() ([]byte, error) {
 // CABAC is initialized from FFmpeg's raw aligned byte tail, including
 // rbsp_trailing_bits; non-CABAC syntax readers stay bounded by numBits.
 func (gb *bitReader) remainingAlignedRawBytes() ([]byte, error) {
-	if gb == nil {
+	if gb == nil || gb.invalid {
 		return nil, ErrInvalidData
 	}
 	aligned := (gb.bitPos + 7) &^ 7
@@ -184,3 +215,5 @@ func (gb *bitReader) remainingAlignedRawBytes() ([]byte, error) {
 	}
 	return gb.buf[start:], nil
 }
+
+const maxBitReaderByteLen = int((^uint32(0) >> 1) / 8)

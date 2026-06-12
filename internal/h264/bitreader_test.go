@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestBitReaderReadAlignedBytes(t *testing.T) {
 	gb := newBitReader([]byte{0b10100000, 0x11, 0x22, 0x33})
@@ -81,5 +84,39 @@ func TestBitReaderRemainingAlignedRawBytesKeepsRBSPTrailingByte(t *testing.T) {
 	}
 	if len(raw) != 3 || raw[0] != 0x2a || raw[1] != 0x40 || raw[2] != 0x80 {
 		t.Fatalf("raw remaining bytes = % x, want 2a 40 80", raw)
+	}
+}
+
+func TestBitReaderRejectsOverflowedBitLength(t *testing.T) {
+	gb := newBitReader(fakeRBSPBytesLen(maxBitReaderByteLen + 1))
+	if got := gb.bitsLeft(); got >= 0 {
+		t.Fatalf("overflowed reader bitsLeft = %d, want invalid negative state", got)
+	}
+	if _, err := gb.readBit(); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed reader readBit err = %v, want ErrInvalidData", err)
+	}
+	if _, err := gb.readBits(1); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed reader readBits err = %v, want ErrInvalidData", err)
+	}
+	if _, err := gb.showBits(1); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed reader showBits err = %v, want ErrInvalidData", err)
+	}
+	if got := gb.showBitsPadded(1); got != 0 {
+		t.Fatalf("overflowed reader padded bits = %d, want 0", got)
+	}
+	if err := gb.skipBits(1); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed reader skipBits err = %v, want ErrInvalidData", err)
+	}
+	if _, err := gb.readAlignedBytes(1); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed reader aligned bytes err = %v, want ErrInvalidData", err)
+	}
+	if _, err := gb.remainingAlignedBytes(); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed reader remaining bytes err = %v, want ErrInvalidData", err)
+	}
+	if _, err := gb.remainingAlignedRawBytes(); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed reader raw bytes err = %v, want ErrInvalidData", err)
+	}
+	if _, err := newRBSPBitReader(fakeRBSPBytesLen(maxBitReaderByteLen + 1)); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed RBSP reader err = %v, want ErrInvalidData", err)
 	}
 }
