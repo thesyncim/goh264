@@ -266,6 +266,10 @@ accessUnit, err := out.AccessUnitData()
 nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
 packet0, err := out.RTPPacketData(0)
 payload0, err := out.RTPPayloadData(0)
+ownedAccessUnit, err := out.AppendAccessUnitData(nil)
+ownedNAL0, err := out.AppendNALData(nil, 0)
+ownedPacket0, err := out.AppendRTPPacketData(nil, 0)
+ownedPayload0, err := out.AppendRTPPayloadData(nil, 0)
 owned, err := out.Clone()   // deep-owned snapshot for async retention
 err = enc.Reset()           // clear encoder coding state, keep config/callback
 ```
@@ -304,6 +308,8 @@ RTP output currently covers:
 - accurate fallback-IDR and post-fallback P-skip callback payload metadata;
 - RTP packet storage isolated from `EncodedFrame.Data`;
 - public `EncodedFrame.RTPPacketData` and `EncodedFrame.RTPPayloadData` helpers;
+- caller-owned append helpers for access-unit, NAL, RTP packet, and RTP payload
+  bytes;
 - deep-owned `EncodedFrame.Clone` snapshots for retained results;
 - optional per-packet callback metadata for mode 0/1 IDR/P-frame single-NAL
   packets, including multi-slice IDR, P-skip, exact P16x16, odd-pixel constant

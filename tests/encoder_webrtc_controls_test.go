@@ -8739,6 +8739,46 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 	}
 }
 
+func TestEncodedFrameAppendNALAndAccessUnitDataReturnCallerOwnedBytes(t *testing.T) {
+	valid := goh264.EncodedFrame{
+		Data:     []byte{0xaa, 0xbb, 0, 0, 0, 1, 0x67, 0x42, 0x00, 0, 0, 0, 1, 0x68, 0xce},
+		NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 6, Size: 3}, {Type: 8, Offset: 13, Size: 1}},
+	}
+
+	nalPrefix := []byte{0xde, 0xad}
+	nal, err := valid.AppendNALData(append([]byte(nil), nalPrefix...), 0)
+	if err != nil {
+		t.Fatalf("AppendNALData: %v", err)
+	}
+	if want := []byte{0xde, 0xad, 0x67, 0x42, 0x00}; !bytes.Equal(nal, want) {
+		t.Fatalf("AppendNALData = %x, want %x", nal, want)
+	}
+
+	accessUnitPrefix := []byte{0xca, 0xfe}
+	accessUnit, err := valid.AppendAccessUnitData(append([]byte(nil), accessUnitPrefix...))
+	if err != nil {
+		t.Fatalf("AppendAccessUnitData: %v", err)
+	}
+	if want := []byte{0xca, 0xfe, 0, 0, 0, 1, 0x67, 0x42, 0x00, 0, 0, 0, 1, 0x68}; !bytes.Equal(accessUnit, want) {
+		t.Fatalf("AppendAccessUnitData = %x, want %x", accessUnit, want)
+	}
+
+	valid.Data[6] = 0xff
+	if !bytes.Equal(nal, []byte{0xde, 0xad, 0x67, 0x42, 0x00}) {
+		t.Fatalf("AppendNALData output aliases source after mutation: %x", nal)
+	}
+	if !bytes.Equal(accessUnit, []byte{0xca, 0xfe, 0, 0, 0, 1, 0x67, 0x42, 0x00, 0, 0, 0, 1, 0x68}) {
+		t.Fatalf("AppendAccessUnitData output aliases source after mutation: %x", accessUnit)
+	}
+
+	if got, err := (goh264.EncodedFrame{}).AppendNALData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+		t.Fatalf("AppendNALData invalid = %x/%v, want nil ErrInvalidData", got, err)
+	}
+	if got, err := (goh264.EncodedFrame{}).AppendAccessUnitData([]byte{1, 2}); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+		t.Fatalf("AppendAccessUnitData invalid = %x/%v, want nil ErrInvalidData", got, err)
+	}
+}
+
 func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 	packetData := []byte{
 		0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd,
@@ -8790,6 +8830,54 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 				t.Fatalf("RTPPayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
 			}
 		})
+	}
+}
+
+func TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes(t *testing.T) {
+	packetData := []byte{
+		0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd,
+		0x65, 0x88, 0x99,
+	}
+	valid := goh264.EncodedFrame{
+		RTPPackets: []goh264.EncoderRTPPacket{{
+			Data:    packetData,
+			Payload: packetData[12:],
+		}},
+	}
+
+	packetPrefix := []byte{0xde, 0xad}
+	packet, err := valid.AppendRTPPacketData(append([]byte(nil), packetPrefix...), 0)
+	if err != nil {
+		t.Fatalf("AppendRTPPacketData: %v", err)
+	}
+	if want := append(packetPrefix, packetData...); !bytes.Equal(packet, want) {
+		t.Fatalf("AppendRTPPacketData = %x, want %x", packet, want)
+	}
+
+	payloadPrefix := []byte{0xca, 0xfe}
+	payload, err := valid.AppendRTPPayloadData(append([]byte(nil), payloadPrefix...), 0)
+	if err != nil {
+		t.Fatalf("AppendRTPPayloadData: %v", err)
+	}
+	if want := []byte{0xca, 0xfe, 0x65, 0x88, 0x99}; !bytes.Equal(payload, want) {
+		t.Fatalf("AppendRTPPayloadData = %x, want %x", payload, want)
+	}
+
+	packetData[12] = 0xff
+	if !bytes.Equal(packet, append(packetPrefix, []byte{
+		0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd, 0x65, 0x88, 0x99,
+	}...)) {
+		t.Fatalf("AppendRTPPacketData output aliases source after mutation: %x", packet)
+	}
+	if !bytes.Equal(payload, []byte{0xca, 0xfe, 0x65, 0x88, 0x99}) {
+		t.Fatalf("AppendRTPPayloadData output aliases source after mutation: %x", payload)
+	}
+
+	if got, err := (goh264.EncodedFrame{}).AppendRTPPacketData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+		t.Fatalf("AppendRTPPacketData invalid = %x/%v, want nil ErrInvalidData", got, err)
+	}
+	if got, err := (goh264.EncodedFrame{}).AppendRTPPayloadData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+		t.Fatalf("AppendRTPPayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
 	}
 }
 
@@ -12100,14 +12188,26 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("NALData"); !ok {
 		t.Fatal("EncodedFrame missing NALData convenience method")
 	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AppendNALData"); !ok {
+		t.Fatal("EncodedFrame missing AppendNALData convenience method")
+	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AccessUnitData"); !ok {
 		t.Fatal("EncodedFrame missing AccessUnitData convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AppendAccessUnitData"); !ok {
+		t.Fatal("EncodedFrame missing AppendAccessUnitData convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("RTPPacketData"); !ok {
 		t.Fatal("EncodedFrame missing RTPPacketData convenience method")
 	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AppendRTPPacketData"); !ok {
+		t.Fatal("EncodedFrame missing AppendRTPPacketData convenience method")
+	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("RTPPayloadData"); !ok {
 		t.Fatal("EncodedFrame missing RTPPayloadData convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AppendRTPPayloadData"); !ok {
+		t.Fatal("EncodedFrame missing AppendRTPPayloadData convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("Clone"); !ok {
 		t.Fatal("EncodedFrame missing Clone convenience method")

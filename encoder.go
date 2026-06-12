@@ -324,6 +324,15 @@ func (frame EncodedFrame) NALData(index int) ([]byte, error) {
 	return frame.Data[unit.Offset:end:end], nil
 }
 
+// AppendNALData appends a caller-owned copy of NALData(index) to dst.
+func (frame EncodedFrame) AppendNALData(dst []byte, index int) ([]byte, error) {
+	data, err := frame.NALData(index)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, data...), nil
+}
+
 // AccessUnitData returns the encoded access-unit bytes described by NALUnits.
 //
 // The returned slice is clipped to its length. For EncodeInto calls that append
@@ -362,6 +371,15 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 	return frame.Data[start:end:end], nil
 }
 
+// AppendAccessUnitData appends a caller-owned copy of AccessUnitData to dst.
+func (frame EncodedFrame) AppendAccessUnitData(dst []byte) ([]byte, error) {
+	data, err := frame.AccessUnitData()
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, data...), nil
+}
+
 // RTPPacketData returns the complete RTP packet bytes for RTPPackets[index].
 //
 // The returned slice is clipped to its length, so appending to it cannot
@@ -375,6 +393,15 @@ func (frame EncodedFrame) RTPPacketData(index int) ([]byte, error) {
 		return nil, ErrInvalidData
 	}
 	return packet.Data[:len(packet.Data):len(packet.Data)], nil
+}
+
+// AppendRTPPacketData appends a caller-owned copy of RTPPacketData(index) to dst.
+func (frame EncodedFrame) AppendRTPPacketData(dst []byte, index int) ([]byte, error) {
+	data, err := frame.RTPPacketData(index)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, data...), nil
 }
 
 // RTPPayloadData returns the RTP payload bytes for RTPPackets[index].
@@ -398,6 +425,15 @@ func (frame EncodedFrame) RTPPayloadData(index int) ([]byte, error) {
 		return nil, ErrInvalidData
 	}
 	return packet.Payload[:len(packet.Payload):len(packet.Payload)], nil
+}
+
+// AppendRTPPayloadData appends a caller-owned copy of RTPPayloadData(index) to dst.
+func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, error) {
+	data, err := frame.RTPPayloadData(index)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, data...), nil
 }
 
 // Clone returns a deep-owned copy of the encoded result.
