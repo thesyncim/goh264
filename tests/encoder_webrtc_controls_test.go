@@ -2834,6 +2834,7 @@ func TestEncoderEncodeExactP16x16NoResidualMotion(t *testing.T) {
 	}
 
 	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 	wantStream := appendI420FrameBytes(nil, firstFrame)
 	wantStream = appendI420FrameBytes(wantStream, secondFrame)
 	assertFFmpegRawVideoOracle(t, stream, wantStream)
@@ -2875,6 +2876,7 @@ func TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
 
 			dec := goh264.NewDecoder()
 			var decodedFirst, decodedSecond []*goh264.Frame
+			var stream []byte
 			switch tt.format {
 			case goh264.EncoderOutputAVC:
 				headers, err := enc.ParameterSets()
@@ -2892,6 +2894,9 @@ func TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
 				if err != nil {
 					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
 				}
+				stream = append([]byte(nil), headers.AnnexB...)
+				stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
+				stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
 			case goh264.EncoderOutputRTP:
 				decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
 				if err != nil {
@@ -2901,6 +2906,8 @@ func TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
 				if err != nil {
 					t.Fatalf("DecodeFrames second RTP: %v", err)
 				}
+				stream = annexBFromEncoderRTPPackets(t, first.RTPPackets)
+				stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
 			default:
 				t.Fatalf("unexpected format %v", tt.format)
 			}
@@ -2910,6 +2917,7 @@ func TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
 				t.Fatalf("decoded exact-motion P frame key=%v recovery=%+v, want predictive non-recovery frame",
 					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
 			}
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 		})
 	}
 }
@@ -2973,6 +2981,7 @@ func TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControls(t *testing.
 			}
 
 			stream := append(append([]byte(nil), first.Data...), second.Data...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 			wantStream := appendI420FrameBytes(nil, firstFrame)
 			wantStream = appendI420FrameBytes(wantStream, secondFrame)
 			assertFFmpegRawVideoOracle(t, stream, wantStream)
@@ -3023,6 +3032,7 @@ func TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControlsForAVCAndRTP
 
 				dec := goh264.NewDecoder()
 				var decodedFirst, decodedSecond []*goh264.Frame
+				var stream []byte
 				switch tt.format {
 				case goh264.EncoderOutputAVC:
 					headers, err := enc.ParameterSets()
@@ -3040,6 +3050,9 @@ func TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControlsForAVCAndRTP
 					if err != nil {
 						t.Fatalf("DecodeConfiguredAVCFrames second %s: %v", deblock.name, err)
 					}
+					stream = append([]byte(nil), headers.AnnexB...)
+					stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
+					stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
 				case goh264.EncoderOutputRTP:
 					decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
 					if err != nil {
@@ -3049,6 +3062,8 @@ func TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControlsForAVCAndRTP
 					if err != nil {
 						t.Fatalf("DecodeFrames second RTP %s: %v", deblock.name, err)
 					}
+					stream = annexBFromEncoderRTPPackets(t, first.RTPPackets)
+					stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
 				default:
 					t.Fatalf("unexpected format %v", tt.format)
 				}
@@ -3058,6 +3073,7 @@ func TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControlsForAVCAndRTP
 					t.Fatalf("decoded exact-motion %s/%s P frame key=%v recovery=%+v, want predictive non-recovery frame",
 						tt.name, deblock.name, decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
 				}
+				assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 			})
 		}
 	}
