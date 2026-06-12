@@ -808,6 +808,16 @@ func TestFrameAppendRawYUVMetadataErrorsPreserveCallerBuffer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			rawDst, rawBefore := decoderPrefilledByteBuffer()
+			rawOut, err := tt.frame.AppendRawYUV(rawDst)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("AppendRawYUV error = %v, want %v", err, tt.want)
+			}
+			if len(rawOut) != len(rawDst) {
+				t.Fatalf("AppendRawYUV output len = %d, want original len %d", len(rawOut), len(rawDst))
+			}
+			assertDecoderByteBufferUnchanged(t, rawDst, rawBefore)
+
 			byteDst, byteBefore := decoderPrefilledByteBuffer()
 			byteOut, err := tt.frame.AppendRawYUVBytesLE(byteDst)
 			if !errors.Is(err, tt.want) {
