@@ -7435,18 +7435,44 @@ func TestEncoderSetLimitsUpdatesBudgetsAtomically(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SetLimits restore budgets: %v", err)
 	}
-	beforeInvalid := enc.Config()
-	if err := enc.SetLimits(goh264.EncoderLimits{
-		MaxFrameSize:    2048,
-		SliceMaxBytes:   -1,
-		MaxEncodeTimeUS: 20_000,
-	}); !errors.Is(err, goh264.ErrInvalidData) {
-		t.Fatalf("SetLimits invalid = %v, want ErrInvalidData", err)
-	}
-	if got := enc.Config(); got.MaxFrameSize != beforeInvalid.MaxFrameSize ||
-		got.SliceMaxBytes != beforeInvalid.SliceMaxBytes ||
-		got.MaxEncodeTimeUS != beforeInvalid.MaxEncodeTimeUS {
-		t.Fatalf("post-invalid SetLimits config = %+v, want rollback to %+v", got, beforeInvalid)
+	for _, tt := range []struct {
+		name   string
+		limits goh264.EncoderLimits
+	}{
+		{
+			name: "negative max frame size",
+			limits: goh264.EncoderLimits{
+				MaxFrameSize:    -1,
+				SliceMaxBytes:   2048,
+				MaxEncodeTimeUS: 20_000,
+			},
+		},
+		{
+			name: "negative slice max bytes",
+			limits: goh264.EncoderLimits{
+				MaxFrameSize:    2048,
+				SliceMaxBytes:   -1,
+				MaxEncodeTimeUS: 20_000,
+			},
+		},
+		{
+			name: "negative max encode time",
+			limits: goh264.EncoderLimits{
+				MaxFrameSize:    2048,
+				SliceMaxBytes:   2048,
+				MaxEncodeTimeUS: -1,
+			},
+		},
+	} {
+		beforeInvalid := enc.Config()
+		if err := enc.SetLimits(tt.limits); !errors.Is(err, goh264.ErrInvalidData) {
+			t.Fatalf("SetLimits %s = %v, want ErrInvalidData", tt.name, err)
+		}
+		if got := enc.Config(); got.MaxFrameSize != beforeInvalid.MaxFrameSize ||
+			got.SliceMaxBytes != beforeInvalid.SliceMaxBytes ||
+			got.MaxEncodeTimeUS != beforeInvalid.MaxEncodeTimeUS {
+			t.Fatalf("post-invalid SetLimits %s config = %+v, want rollback to %+v", tt.name, got, beforeInvalid)
+		}
 	}
 
 	if err := ((*goh264.Encoder)(nil)).SetLimits(goh264.EncoderLimits{}); !errors.Is(err, goh264.ErrInvalidData) {
