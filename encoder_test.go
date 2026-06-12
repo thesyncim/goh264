@@ -206,6 +206,34 @@ func TestPacketizeEncoderRTPRejectsEmptyNALWithoutPackets(t *testing.T) {
 	}
 }
 
+func TestPacketizeEncoderRTPMode1RejectsMalformedSTAPAWithoutPackets(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		nals []encoderRawNAL
+	}{
+		{
+			name: "empty",
+			nals: []encoderRawNAL{
+				{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
+				{parameterSet: true},
+			},
+		},
+		{
+			name: "oversized",
+			nals: []encoderRawNAL{
+				{raw: fakeEncoderBytesLen(0x10000), parameterSet: true},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			packets, err := packetizeEncoderRTPMode1(tt.nals, 0x10010, 0, true)
+			if !errors.Is(err, ErrInvalidData) || packets != nil {
+				t.Fatalf("packetizeEncoderRTPMode1 malformed STAP-A packets=%v err=%v, want nil packets and ErrInvalidData", packets, err)
+			}
+		})
+	}
+}
+
 func TestAppendEncoderSTAPARejectsOverflowedDestination(t *testing.T) {
 	nals := []encoderRawNAL{
 		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
