@@ -159,9 +159,10 @@ packetization updates that leave config, queued-IDR state, RTP cadence, packets,
 callbacks, and rejected bundled ForceIDR requests intact,
 accepted bitrate, rate-control, VBV, frame-drop, QP, frame-rate, deblock,
 RTP timestamp increment, GOP/IDR cadence, resolution, RTP payload-size,
-max-frame-size, slice-byte, encode-time, grouped limits, output/cadence, RTP
-packetization, RTP metadata, and reconfigure updates, including SPS/PPS cadence
-and recovery-point toggles, preserving a queued IDR until an IDR is emitted,
+max-frame-size, slice-byte, encode-time, `SetLimits` grouped budgets, grouped
+reconfigure limits, output/cadence, RTP packetization, RTP metadata, and
+reconfigure updates, including SPS/PPS cadence and recovery-point toggles,
+preserving a queued IDR until an IDR is emitted,
 public `Encoder.Reset` preserving configuration and RTP callback while clearing
 reference, pending-IDR, frame-budget, RTP timestamp, and RTP sequence state
 before fresh-IDR reuse,

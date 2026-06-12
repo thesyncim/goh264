@@ -1340,6 +1340,23 @@ func TestEncoderValidSetterPreservesPendingIDR(t *testing.T) {
 			}
 			return enc.SetMaxEncodeTimeUS(0)
 		}},
+		{name: "SetLimits", call: func(enc *goh264.Encoder) error {
+			return enc.SetLimits(goh264.EncoderLimits{
+				MaxFrameSize:    4096,
+				SliceMaxBytes:   2048,
+				MaxEncodeTimeUS: 10_000,
+			})
+		}},
+		{name: "SetLimits zero", call: func(enc *goh264.Encoder) error {
+			if err := enc.SetLimits(goh264.EncoderLimits{
+				MaxFrameSize:    4096,
+				SliceMaxBytes:   2048,
+				MaxEncodeTimeUS: 10_000,
+			}); err != nil {
+				return err
+			}
+			return enc.SetLimits(goh264.EncoderLimits{})
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

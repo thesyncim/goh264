@@ -311,9 +311,10 @@ resets stale frame-budget credit before the next frame, `SetFrameRate` changes
 that reset frame-budget credit and apply the updated RTP cadence across
 drop/recovery, including rollback when derived RTP timestamp arithmetic
 overflows or underflows to zero, explicit runtime setters for max-frame-size,
-slice-byte, encode-time budgets plus grouped `EncoderReconfigure.Limits`,
-preset, slice count, SPS/PPS-before-IDR cadence, and accepted disabled-state
-intra refresh including zero-valued budget disablement and unsupported enablement preservation,
+slice-byte, encode-time budgets, `SetLimits` grouped budgets, plus grouped
+`EncoderReconfigure.Limits`, preset, slice count, SPS/PPS-before-IDR cadence,
+and accepted disabled-state intra refresh including zero-valued budget
+disablement and unsupported enablement preservation,
 `FrameDropLate` bypass of the derived bitrate
 budget when the encode-time budget admits the frame, plus ConstantQP bypass of the derived
 bitrate budget before and after runtime rate-control mode switches. `FrameDropLate`
