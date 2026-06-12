@@ -11521,17 +11521,20 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 		t.Fatal("mutating cloned RTP payload changed source")
 	}
 
+	badVersionPacketData := append([]byte(nil), packetData...)
+	badVersionPacketData[0] = 0x40
 	for _, tt := range []struct {
 		name   string
 		packet goh264.EncoderRTPPacket
 	}{
 		{name: "short packet", packet: goh264.EncoderRTPPacket{Data: packetData[:11], Payload: packetData[12:]}},
+		{name: "bad version", packet: goh264.EncoderRTPPacket{Data: badVersionPacketData, Payload: badVersionPacketData[12:]}},
 		{name: "empty payload", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: nil}},
 		{name: "payload before header", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: packetData[8:12]}},
 		{name: "foreign payload", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: []byte{0x65, 0x88, 0x99}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := tt.packet.PacketData(); tt.name == "short packet" {
+			if _, err := tt.packet.PacketData(); tt.name == "short packet" || tt.name == "bad version" {
 				if !errors.Is(err, goh264.ErrInvalidData) {
 					t.Fatalf("PacketData error = %v, want ErrInvalidData", err)
 				}

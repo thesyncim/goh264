@@ -258,7 +258,7 @@ type EncoderRTPPacket struct {
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (packet EncoderRTPPacket) PacketData() ([]byte, error) {
-	if len(packet.Data) < 12 {
+	if len(packet.Data) < 12 || packet.Data[0]>>6 != 2 {
 		return nil, ErrInvalidData
 	}
 	return packet.Data[:len(packet.Data):len(packet.Data)], nil
@@ -278,7 +278,7 @@ func (packet EncoderRTPPacket) AppendPacketData(dst []byte) ([]byte, error) {
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (packet EncoderRTPPacket) PayloadData() ([]byte, error) {
-	if len(packet.Data) < 12 || len(packet.Payload) == 0 {
+	if len(packet.Data) < 12 || packet.Data[0]>>6 != 2 || len(packet.Payload) == 0 {
 		return nil, ErrInvalidData
 	}
 	dataStart := unsafeSliceOffset(packet.Data, packet.Payload)
