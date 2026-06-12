@@ -10661,7 +10661,7 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 				t.Fatalf("lower MaxEncodeTimeUS: %v", err)
 			}
 			b := patternedI420EncoderFrame(128, 128)
-			b.PTS = 0
+			b.PTS = 1234
 			b.Y[0] ^= 0x40
 			dst := make([]byte, 0, 65536)
 			allocs := testing.AllocsPerRun(100, func() {
@@ -10671,6 +10671,10 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 				}
 				if !out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
 					t.Fatalf("%s output = %+v, want empty dropped metadata", tt.name, out)
+				}
+				if out.PTS != b.PTS || out.DTS != b.PTS || out.RTPTime != uint32(b.PTS) {
+					t.Fatalf("%s dropped timing pts=%d dts=%d rtp=%d, want %d/%d/%d",
+						tt.name, out.PTS, out.DTS, out.RTPTime, b.PTS, b.PTS, uint32(b.PTS))
 				}
 			})
 			t.Logf("%s EncodeInto allocations/run = %.0f", tt.name, allocs)
@@ -10823,7 +10827,7 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			t.Fatalf("lower MaxEncodeTimeUS: %v", err)
 		}
 		b := patternedI420EncoderFrame(128, 128)
-		b.PTS = 0
+		b.PTS = 1234
 		b.Y[0] ^= 0x40
 		dst := make([]byte, 0, 65536)
 		allocs := testing.AllocsPerRun(100, func() {
@@ -10833,6 +10837,10 @@ func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
 			}
 			if !out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
 				t.Fatalf("RTP late drop output = %+v, want empty dropped metadata", out)
+			}
+			if out.PTS != b.PTS || out.DTS != b.PTS || out.RTPTime != uint32(b.PTS) {
+				t.Fatalf("RTP late drop timing pts=%d dts=%d rtp=%d, want %d/%d/%d",
+					out.PTS, out.DTS, out.RTPTime, b.PTS, b.PTS, uint32(b.PTS))
 			}
 			if callbackCalls != firstPacketCount {
 				t.Fatalf("RTP late drop invoked callbacks = %d, want still %d", callbackCalls, firstPacketCount)
