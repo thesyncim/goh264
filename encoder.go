@@ -270,6 +270,25 @@ type EncodedFrame struct {
 	Dropped    bool
 }
 
+// NALData returns the raw NAL bytes described by NALUnits[index].
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in EncodedFrame.Data.
+func (frame EncodedFrame) NALData(index int) ([]byte, error) {
+	if frame.Dropped || index < 0 || index >= len(frame.NALUnits) {
+		return nil, ErrInvalidData
+	}
+	unit := frame.NALUnits[index]
+	if unit.Offset < 0 || unit.Size <= 0 {
+		return nil, ErrInvalidData
+	}
+	end, err := checkedAddInt(unit.Offset, unit.Size)
+	if err != nil || end > len(frame.Data) {
+		return nil, ErrInvalidData
+	}
+	return frame.Data[unit.Offset:end:end], nil
+}
+
 // EncoderParameterSets contains caller-owned SPS/PPS helper surfaces.
 //
 // Each byte slice returned by ParameterSets is isolated from later calls and may

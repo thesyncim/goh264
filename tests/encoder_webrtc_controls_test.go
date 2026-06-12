@@ -8174,6 +8174,34 @@ func TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData(t *testing.T) {
 	}
 }
 
+func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
+	valid := goh264.EncodedFrame{
+		Data:     []byte{0x67, 0x42, 0x00, 0x68},
+		NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 0, Size: 3}},
+	}
+	if got, err := valid.NALData(0); err != nil || !bytes.Equal(got, []byte{0x67, 0x42, 0x00}) || cap(got) != len(got) {
+		t.Fatalf("valid NALData = %x cap=%d err=%v, want clipped SPS bytes", got, cap(got), err)
+	}
+	for _, tt := range []struct {
+		name  string
+		frame goh264.EncodedFrame
+		index int
+	}{
+		{name: "negative index", frame: valid, index: -1},
+		{name: "past end", frame: valid, index: 1},
+		{name: "dropped", frame: goh264.EncodedFrame{Dropped: true, Data: valid.Data, NALUnits: valid.NALUnits}},
+		{name: "negative offset", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: -1, Size: 1}}}},
+		{name: "zero size", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 0}}}},
+		{name: "past data", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 2, Size: 3}}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, err := tt.frame.NALData(tt.index); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("NALData invalid = %x/%v, want nil ErrInvalidData", got, err)
+			}
+		})
+	}
+}
+
 func TestEncoderDoesNotRetainInputFramePlanes(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
@@ -11296,6 +11324,9 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCC"); !ok {
 		t.Fatal("EncoderParameterSets missing AVCC convenience method")
 	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("NALData"); !ok {
+		t.Fatal("EncodedFrame missing NALData convenience method")
+	}
 
 	reconfigType := reflect.TypeOf(goh264.EncoderReconfigure{})
 	for _, field := range []string{
@@ -11681,6 +11712,16 @@ func assertEncodedFrameNALUnitIndexesFrom(t *testing.T, out goh264.EncodedFrame,
 			t.Fatalf("NAL[%d] offset/size = %d/%d outside access unit range [%d,%d)", i, unit.Offset, unit.Size, dataStart, len(out.Data))
 		}
 		raw := out.Data[unit.Offset : unit.Offset+unit.Size]
+		publicRaw, err := out.NALData(i)
+		if err != nil {
+			t.Fatalf("NALData(%d): %v", i, err)
+		}
+		if !bytes.Equal(publicRaw, raw) {
+			t.Fatalf("NALData(%d) does not match indexed EncodedFrame.Data", i)
+		}
+		if cap(publicRaw) != len(publicRaw) {
+			t.Fatalf("NALData(%d) cap = %d, want clipped length %d", i, cap(publicRaw), len(publicRaw))
+		}
 		if !bytes.Equal(raw, parsed[i].Raw) {
 			t.Fatalf("NAL[%d] raw bytes do not match indexed EncodedFrame.Data", i)
 		}
