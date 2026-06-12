@@ -308,13 +308,13 @@ frames, err := dec.DecodeAnnexBFrames(annexB)          // Annex B bytestream
 frames, err := dec.DecodeAVCFrames(packet, lengthSize) // length-prefixed NAL units
 frames, err := dec.DecodeConfiguredAVCFrames(packet)   // after parsing avcC
 frames, err := dec.DecodeConfiguredAVCFrames(nil)      // delayed configured-AVC output
-frames, err := dec.DecodeAVCFramesWithConfigurationRecord(avcc, packet)
-frames, err := dec.DecodeAVCFramesWithConfigurationRecord(avcc, nil) // delayed config-record AVC output
+frames, err := dec.DecodeAVCCFrames(avcc, packet)
+frames, err := dec.DecodeAVCCFrames(avcc, nil) // delayed avcC output
 frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
 ```
 
 Single-frame helpers (`Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`,
-`DecodeConfiguredAVC`, and `DecodeAVCWithConfigurationRecord`) return
+`DecodeConfiguredAVC`, and `DecodeAVCC`) return
 `ErrUnsupported` when a packet produces zero or multiple frames. If a damaged
 packet produces exactly one valid frame before a later decode error, the helper
 returns that frame with the error. For stream processing, prefer `DecodeFrames` or
@@ -322,7 +322,7 @@ returns that frame with the error. For stream processing, prefer `DecodeFrames` 
 flush delayed output when called with empty data. `DecodeConfiguredAVCFrames`
 does the same after an AVC configuration record has been parsed. Annex B
 access-unit streams use the same retained reference and delayed B-frame output path.
-`DecodeAVCFramesWithConfigurationRecord` updates the decoder's AVC
+`DecodeAVCCFrames` updates the decoder's AVC
 configuration without resetting retained references, then drains delayed output
 for the supplied AVC packet. Passing an empty AVC packet with a configuration
 record drains delayed output without reporting an invalid packet.
@@ -332,7 +332,7 @@ Parse headers without decoding full frames:
 ```go
 info, err := dec.ParseHeadersAnnexB(data)
 info, err := dec.ParseHeadersAVC(packet, nalLengthSize)
-cfg, err := dec.ParseAVCDecoderConfigurationRecord(avcc)
+cfg, err := dec.ParseAVCC(avcc)
 ```
 
 Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are transactional:
@@ -386,6 +386,7 @@ enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRT
 	// Optional per-packet WebRTC metadata hook.
 })
 headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
+avcc := headers.AVCC()
 sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
 out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if out.Dropped {

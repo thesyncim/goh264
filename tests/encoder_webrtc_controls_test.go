@@ -2890,6 +2890,9 @@ func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
 	}
+	if !bytes.Equal(headers.AVCC(), headers.AVCDecoderConfigurationRecord) {
+		t.Fatalf("AVCC() = %x, want %x", headers.AVCC(), headers.AVCDecoderConfigurationRecord)
+	}
 	if avcc.NALLengthSize != 4 || avcc.StreamInfo.Width != 638 || avcc.StreamInfo.Height != 478 ||
 		avcc.StreamInfo.Profile != "Constrained Baseline" {
 		t.Fatalf("avcC = %+v", avcc)
@@ -11289,6 +11292,9 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 		if _, ok := encType.MethodByName(method); !ok {
 			t.Fatalf("Encoder missing runtime control method %s", method)
 		}
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCC"); !ok {
+		t.Fatal("EncoderParameterSets missing AVCC convenience method")
 	}
 
 	reconfigType := reflect.TypeOf(goh264.EncoderReconfigure{})

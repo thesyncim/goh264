@@ -54,6 +54,10 @@ type AVCDecoderConfiguration struct {
 	StreamInfo    StreamInfo
 }
 
+// AVCConfig is a short alias for AVC decoder configuration metadata returned
+// after parsing an avcC record.
+type AVCConfig = AVCDecoderConfiguration
+
 // PacketSideDataType identifies auxiliary packet metadata accepted by Packet.
 type PacketSideDataType uint8
 
@@ -530,6 +534,12 @@ func (d *Decoder) DecodeAVCWithConfigurationRecord(config []byte, data []byte) (
 	return singleFrameFromFrames(frames, err)
 }
 
+// DecodeAVCC updates the stored AVC configuration from an avcC record, decodes
+// data, and returns the single output frame.
+func (d *Decoder) DecodeAVCC(config []byte, data []byte) (*Frame, error) {
+	return d.DecodeAVCWithConfigurationRecord(config, data)
+}
+
 // DecodeAVCFramesWithConfigurationRecord updates the stored AVC configuration
 // from config and decodes data with that configuration.
 //
@@ -546,6 +556,12 @@ func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []b
 	}
 	d.updateAVCDecoderConfiguration(cfg)
 	return d.decodeAVCFramesWithConfig(data, cfg)
+}
+
+// DecodeAVCCFrames updates the stored AVC configuration from an avcC record and
+// decodes data with that configuration.
+func (d *Decoder) DecodeAVCCFrames(config []byte, data []byte) ([]*Frame, error) {
+	return d.DecodeAVCFramesWithConfigurationRecord(config, data)
 }
 
 func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConfigurationRecord) ([]*Frame, error) {
@@ -645,6 +661,12 @@ func (d *Decoder) ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderCon
 		NALLengthSize: cfg.NALLengthSize,
 		StreamInfo:    streamInfoFromSPS(sps),
 	}, nil
+}
+
+// ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,
+// and returns stream metadata.
+func (d *Decoder) ParseAVCC(data []byte) (AVCConfig, error) {
+	return d.ParseAVCDecoderConfigurationRecord(data)
 }
 
 func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {

@@ -281,6 +281,11 @@ type EncoderParameterSets struct {
 	AVCDecoderConfigurationRecord []byte
 }
 
+// AVCC returns the AVC decoder configuration record form of the parameter sets.
+func (sets EncoderParameterSets) AVCC() []byte {
+	return sets.AVCDecoderConfigurationRecord
+}
+
 // EncoderSEI contains caller-owned recovery-point SEI helper surfaces.
 //
 // Each byte slice returned by RecoveryPointSEI is isolated from later calls and

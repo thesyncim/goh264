@@ -272,12 +272,24 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 			_, err := dec.DecodeAVCWithConfigurationRecord([]byte{1}, []byte{0, 0, 0, 1, 0x65})
 			return err
 		}},
+		{name: "DecodeAVCC", call: func() error {
+			_, err := dec.DecodeAVCC([]byte{1}, []byte{0, 0, 0, 1, 0x65})
+			return err
+		}},
 		{name: "DecodeAVCFramesWithConfigurationRecord", call: func() error {
 			_, err := dec.DecodeAVCFramesWithConfigurationRecord([]byte{1}, []byte{0, 0, 0, 1, 0x65})
 			return err
 		}},
+		{name: "DecodeAVCCFrames", call: func() error {
+			_, err := dec.DecodeAVCCFrames([]byte{1}, []byte{0, 0, 0, 1, 0x65})
+			return err
+		}},
 		{name: "ParseAVCDecoderConfigurationRecord", call: func() error {
 			_, err := dec.ParseAVCDecoderConfigurationRecord([]byte{1})
+			return err
+		}},
+		{name: "ParseAVCC", call: func() error {
+			_, err := dec.ParseAVCC([]byte{1})
 			return err
 		}},
 	}
@@ -608,6 +620,52 @@ func TestDecodeAVCWithConfigurationRecordEmptyPacketStoresConfiguration(t *testi
 	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
 	if err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames after single-frame empty configuration-record AVC packet mutation: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestAVCCConvenienceAPIsMatchConfigurationRecordBehavior(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	cfg, err := dec.ParseAVCC(config)
+	if err != nil {
+		t.Fatalf("ParseAVCC: %v", err)
+	}
+	if cfg.NALLengthSize != 4 || cfg.StreamInfo.Width != 16 || cfg.StreamInfo.Height != 16 {
+		t.Fatalf("ParseAVCC config = %+v", cfg)
+	}
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after ParseAVCC: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	dec = NewDecoder()
+	frames, err = dec.DecodeAVCCFrames(config, samples[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after DecodeAVCCFrames: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	dec = NewDecoder()
+	frame, err := dec.DecodeAVCC(config, samples[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCC: %v", err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after DecodeAVCC: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
