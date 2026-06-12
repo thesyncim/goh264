@@ -38,6 +38,64 @@ func TestDecodeConfiguredAVCFramesRecoversAfterDamagedSlicePacket(t *testing.T) 
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeConfiguredAVCFramesDoesNotAliasCallerBuffer(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	firstSample := append([]byte(nil), samples[0]...)
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	frames, err := dec.DecodeConfiguredAVCFrames(firstSample)
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames first sample: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	for i := range firstSample {
+		firstSample[i] = 0xff
+	}
+
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after caller mutation: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodeConfiguredAVCDoesNotAliasCallerBuffer(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	firstSample := append([]byte(nil), samples[0]...)
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	frame, err := dec.DecodeConfiguredAVC(firstSample)
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVC first sample: %v", err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	for i := range firstSample {
+		firstSample[i] = 0xff
+	}
+
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after single-frame caller mutation: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeAVCWithConfigurationRecordRecoversAfterDamagedSlicePacket(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
