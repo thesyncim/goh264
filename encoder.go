@@ -729,12 +729,12 @@ func (sei EncoderSEI) Clone() EncoderSEI {
 //
 // Non-zero scalar fields replace the matching EncoderConfig field. Pointer
 // fields update when non-nil, including explicit false or zero values where
-// valid. MaxFrameSizeLimit, MaxEncodeTimeUSLimit, and SliceMaxBytesLimit are the
-// zero-capable forms for the legacy MaxFrameSize, MaxEncodeTimeUS, and
-// SliceMaxBytes scalar fields. Reconfigure validates the resulting
-// configuration before changing encoder state; invalid updates leave the
-// encoder unchanged. ForceIDR queues an IDR request even when no config field
-// changes.
+// valid. Limits is the preferred zero-capable grouped budget update. The legacy
+// MaxFrameSizeLimit, MaxEncodeTimeUSLimit, and SliceMaxBytesLimit fields remain
+// zero-capable forms for the MaxFrameSize, MaxEncodeTimeUS, and SliceMaxBytes
+// scalar fields. Reconfigure validates the resulting configuration before
+// changing encoder state; invalid updates leave the encoder unchanged. ForceIDR
+// queues an IDR request even when no config field changes.
 type EncoderReconfigure struct {
 	TargetBitrate         int
 	MaxBitrate            int
@@ -750,6 +750,7 @@ type EncoderReconfigure struct {
 	Height                int
 	DeblockMode           EncoderDeblockMode
 	RTPMaxPayloadSize     int
+	Limits                *EncoderLimits
 	MaxFrameSize          int
 	MaxFrameSizeLimit     *int
 	MaxEncodeTimeUS       int
@@ -1696,6 +1697,11 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	}
 	if update.SliceMaxBytesLimit != nil {
 		cfg.SliceMaxBytes = *update.SliceMaxBytesLimit
+	}
+	if update.Limits != nil {
+		cfg.MaxFrameSize = update.Limits.MaxFrameSize
+		cfg.SliceMaxBytes = update.Limits.SliceMaxBytes
+		cfg.MaxEncodeTimeUS = update.Limits.MaxEncodeTimeUS
 	}
 	if update.Preset != 0 {
 		cfg.Preset = update.Preset

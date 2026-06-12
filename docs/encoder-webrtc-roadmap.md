@@ -68,9 +68,9 @@ timestamp increment, GOP/IDR cadence, resolution, deblock, payload-size,
 size/latency budget, preset, slice count, SPS/PPS cadence, output/cadence, RTP
 packetization, and RTP payload metadata controls now have explicit setter
 helpers; `EncoderReconfigure` remains the grouped update path for bundled
-multi-field changes and explicit ForceIDR requests. `SetIntraRefresh(false)`
-is accepted as an explicit disabled-state setter; enabling intra refresh still
-returns `ErrUnsupported`.
+multi-field changes, grouped `Limits`, and explicit ForceIDR requests.
+`SetIntraRefresh(false)` is accepted as an explicit disabled-state setter;
+enabling intra refresh still returns `ErrUnsupported`.
 Runtime resolution reset rejects stale-size frames without consuming the queued
 IDR, then emits/decodes a new-size IDR and resumes P-skip references at the new
 dimensions.

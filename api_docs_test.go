@@ -131,6 +131,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"RTPPacketData",
 		"RTPPayloadData",
 		"AVCC",
+		"Limits",
 		"MaxFrameSizeLimit",
 		"SliceMaxBytesLimit",
 		"MaxEncodeTimeUSLimit",

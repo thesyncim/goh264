@@ -20,8 +20,8 @@
 //     an Encoder with NewEncoder.
 //   - Use explicit runtime setters for ordinary bitrate, frame-rate, GOP,
 //     geometry, slice, header, packetization, RTP, and recovery-SEI controls.
-//   - Use Reconfigure only for grouped low-level updates or fields that do not
-//     have a dedicated setter yet.
+//   - Use Reconfigure only for grouped low-level updates, grouped Limits, or
+//     fields that do not have a dedicated setter yet.
 //   - Use EncodeInto when the caller owns access-unit storage, and Encode when
 //     encoder-owned storage is sufficient.
 //

@@ -371,8 +371,10 @@ that are currently intended to be stable enough for integration work:
   late-frame time budget atomically; passing zero disables the corresponding
   budget. `SetMaxFrameSize`, `SetSliceMaxBytes`, and `SetMaxEncodeTimeUS`
   remain explicit single-limit setters. For grouped updates through
-  `EncoderReconfigure`, use `MaxFrameSizeLimit`, `SliceMaxBytesLimit`, and
-  `MaxEncodeTimeUSLimit` when the update must explicitly set a budget to zero.
+  `EncoderReconfigure`, prefer `Limits` when budget updates must be applied
+  atomically with other runtime controls or explicitly set a budget to zero.
+  `MaxFrameSizeLimit`, `SliceMaxBytesLimit`, and `MaxEncodeTimeUSLimit` remain
+  compatibility fields for zero-capable single-budget updates.
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
   `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
   `SetDeblockMode`, `SetPreset`, `SetSliceCount`, `SetSPSPPSMode`,
@@ -384,7 +386,8 @@ that are currently intended to be stable enough for integration work:
   update. `SetIntraRefresh(true)` returns `ErrUnsupported` until intra refresh
   is admitted.
 - `EncoderReconfigure` remains the grouped low-level update surface for
-  bundled multi-field changes and explicit force-IDR requests.
+  bundled multi-field changes, grouped `Limits`, and explicit force-IDR
+  requests.
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP

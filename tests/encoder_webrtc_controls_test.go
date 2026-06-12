@@ -7527,6 +7527,70 @@ func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 	}
 }
 
+func TestEncoderReconfigureLimitsGroupUpdatesBudgetsAtomically(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.FrameDrop = goh264.EncoderFrameDropLate
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		Limits: &goh264.EncoderLimits{
+			MaxFrameSize:    4096,
+			SliceMaxBytes:   2048,
+			MaxEncodeTimeUS: 10_000,
+		},
+	}); err != nil {
+		t.Fatalf("Reconfigure grouped limits: %v", err)
+	}
+	if got := enc.Config(); got.MaxFrameSize != 4096 || got.SliceMaxBytes != 2048 || got.MaxEncodeTimeUS != 10_000 {
+		t.Fatalf("post-Reconfigure grouped limits config = %+v, want 4096/2048/10000", got)
+	}
+
+	zeroLimits := goh264.EncoderLimits{}
+	legacyMaxFrameSize := 8192
+	legacySliceMaxBytes := 8192
+	legacyMaxEncodeTimeUS := 20_000
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		MaxFrameSize:         8192,
+		SliceMaxBytes:        8192,
+		MaxEncodeTimeUS:      20_000,
+		MaxFrameSizeLimit:    &legacyMaxFrameSize,
+		SliceMaxBytesLimit:   &legacySliceMaxBytes,
+		MaxEncodeTimeUSLimit: &legacyMaxEncodeTimeUS,
+		Limits:               &zeroLimits,
+	}); err != nil {
+		t.Fatalf("Reconfigure grouped limits with legacy fields: %v", err)
+	}
+	if got := enc.Config(); got.MaxFrameSize != 0 || got.SliceMaxBytes != 0 || got.MaxEncodeTimeUS != 0 {
+		t.Fatalf("post-Reconfigure grouped zero limits config = %+v, want all budgets disabled", got)
+	}
+
+	restoreLimits := goh264.EncoderLimits{MaxFrameSize: 4096, SliceMaxBytes: 2048, MaxEncodeTimeUS: 10_000}
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{Limits: &restoreLimits}); err != nil {
+		t.Fatalf("restore grouped limits: %v", err)
+	}
+	beforeInvalid := enc.Config()
+	invalidLimits := goh264.EncoderLimits{MaxFrameSize: -1, SliceMaxBytes: 2048, MaxEncodeTimeUS: 10_000}
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		TargetBitrate: 777_000,
+		ForceIDR:      true,
+		Limits:        &invalidLimits,
+	}); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Reconfigure invalid grouped limits = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != beforeInvalid {
+		t.Fatalf("invalid grouped limits mutated config = %+v, want %+v", got, beforeInvalid)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("invalid grouped limits queued an IDR")
+	}
+}
+
 func TestEncoderSetLimitsUpdatesBudgetsAtomically(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
@@ -15419,7 +15483,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	reconfigType := reflect.TypeOf(goh264.EncoderReconfigure{})
 	for _, field := range []string{
 		"TargetBitrate", "MaxBitrate", "FrameRateNum", "FrameRateDen", "Width", "Height",
-		"RTPMaxPayloadSize", "MaxFrameSize", "MaxEncodeTimeUS", "SliceCount", "SliceMaxBytes",
+		"RTPMaxPayloadSize", "Limits", "MaxFrameSize", "MaxEncodeTimeUS", "SliceCount", "SliceMaxBytes",
 		"Preset", "ForceIDR", "SPSPPSMode", "SPSPPSBeforeIDR", "RecoveryPointSEI",
 		"OutputFormat", "RTPPacketizationMode", "STAPA", "RTPPayloadType", "RTPSSRC",
 		"RTPTimestampIncrement", "RateControl", "VBVBufferSize", "InitialQP", "MinQP",
