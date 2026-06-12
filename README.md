@@ -630,8 +630,8 @@ No tag should be treated as production until a release-evidence pass proves:
 - The source-truth and translation-ledger docs match the committed tests.
 
 The combined release-evidence runner writes logs under
-`.artifacts/h264-full-release-evidence/` by default, drives the decoder and
-admitted encoder runners, and requires a clean worktree unless
+`.artifacts/h264-full-release-evidence/` by default, drives the race, decoder,
+and admitted encoder runners, and requires a clean worktree unless
 `GOH264_FULL_RELEASE_ALLOW_DIRTY=1` is set for diagnostics.
 The decoder release-evidence runner writes logs under
 `.artifacts/h264-release-evidence/` by default and fails while
