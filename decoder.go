@@ -458,11 +458,7 @@ func (d *Decoder) DecodeAnnexBFrames(data []byte) ([]*Frame, error) {
 	if err != nil {
 		return framesFromH264WithError(frames, err)
 	}
-	out := make([]*Frame, len(frames))
-	for i, frame := range frames {
-		out[i] = frameFromH264(frame)
-	}
-	return out, nil
+	return framesFromH264(frames), nil
 }
 
 // DecodeAVC decodes a complete AVC packet stream with the supplied NAL length
@@ -485,11 +481,7 @@ func (d *Decoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*Frame, err
 	if err != nil {
 		return framesFromH264WithError(frames, err)
 	}
-	out := make([]*Frame, len(frames))
-	for i, frame := range frames {
-		out[i] = frameFromH264(frame)
-	}
-	return out, nil
+	return framesFromH264(frames), nil
 }
 
 // DecodeConfiguredAVC decodes data using the stored AVC configuration and
@@ -595,6 +587,9 @@ func singleFrameFromFrames(frames []*Frame, err error) (*Frame, error) {
 }
 
 func framesFromH264(frames []*h264.DecodedFrame) []*Frame {
+	if len(frames) == 0 || len(frames) > maxInt/8 {
+		return nil
+	}
 	out := make([]*Frame, len(frames))
 	for i, frame := range frames {
 		out[i] = frameFromH264(frame)

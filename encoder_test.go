@@ -291,6 +291,28 @@ func TestFrameFromH264RejectsOverflowedPublicPlaneClones(t *testing.T) {
 	}
 }
 
+func TestFramesFromH264ConvertsFrames(t *testing.T) {
+	got := framesFromH264([]*h264.DecodedFrame{{Width: 1}, nil, {Height: 2}})
+	if len(got) != 3 {
+		t.Fatalf("converted frame count = %d, want 3", len(got))
+	}
+	if got[0] == nil || got[0].Width != 1 {
+		t.Fatalf("first converted frame = %+v, want width 1", got[0])
+	}
+	if got[1] != nil {
+		t.Fatalf("nil source frame converted to %+v, want nil", got[1])
+	}
+	if got[2] == nil || got[2].Height != 2 {
+		t.Fatalf("third converted frame = %+v, want height 2", got[2])
+	}
+}
+
+func TestFramesFromH264RejectsOverflowedFrameList(t *testing.T) {
+	if got := framesFromH264(fakeDecodedFramesLen(maxInt/8 + 1)); got != nil {
+		t.Fatalf("overflowed frame list converted to len %d, want nil", len(got))
+	}
+}
+
 func TestPacketFrameSideDataFromPacketClonesBytePayloads(t *testing.T) {
 	captions := []byte{0x01, 0x02}
 	icc := []byte{0x03}
@@ -462,6 +484,18 @@ func fakeReferenceDisplaysLen(n int) []h264.AV3DReferenceDisplay {
 	var display h264.AV3DReferenceDisplay
 	return *(*[]h264.AV3DReferenceDisplay)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(&display)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeDecodedFramesLen(n int) []*h264.DecodedFrame {
+	if n <= 0 {
+		return nil
+	}
+	var frame *h264.DecodedFrame
+	return *(*[]*h264.DecodedFrame)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&frame)),
 		Len:  n,
 		Cap:  n,
 	}))
