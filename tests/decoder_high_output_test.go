@@ -5,7 +5,6 @@ package goh264_test
 import (
 	"bytes"
 	"errors"
-	"reflect"
 	"testing"
 	"unsafe"
 )
@@ -991,11 +990,7 @@ func fakeDecoderRawBytesLen(n int) []byte {
 		return nil
 	}
 	var b byte
-	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&b)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeDecoderRawSliceLen(&b, n)
 }
 
 func fakeDecoderRawUint16Len(n int) []uint16 {
@@ -1003,11 +998,21 @@ func fakeDecoderRawUint16Len(n int) []uint16 {
 		return nil
 	}
 	var v uint16
-	return *(*[]uint16)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&v)),
+	return fakeDecoderRawSliceLen(&v, n)
+}
+
+// fakeDecoderRawSliceLen preserves impossible slice lengths for overflow guards.
+func fakeDecoderRawSliceLen[T any](ptr *T, n int) []T {
+	h := struct {
+		Data unsafe.Pointer
+		Len  int
+		Cap  int
+	}{
+		Data: unsafe.Pointer(ptr),
 		Len:  n,
 		Cap:  n,
-	}))
+	}
+	return *(*[]T)(unsafe.Pointer(&h))
 }
 
 func assertDecoderByteBufferUnchanged(t *testing.T, dst []byte, before []byte) {

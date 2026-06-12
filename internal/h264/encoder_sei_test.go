@@ -5,9 +5,7 @@ package h264
 import (
 	"bytes"
 	"errors"
-	"reflect"
 	"testing"
-	"unsafe"
 )
 
 func TestBuildEncoderRecoveryPointSEIRoundTripsThroughParsers(t *testing.T) {
@@ -194,9 +192,5 @@ func fakeEncoderSEIPayloadLen(n uint64) []byte {
 		return nil
 	}
 	var b byte
-	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&b)),
-		Len:  int(n),
-		Cap:  int(n),
-	}))
+	return fakeH264SliceLen(&b, int(n))
 }

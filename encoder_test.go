@@ -5,7 +5,6 @@ package goh264
 import (
 	"bytes"
 	"errors"
-	"reflect"
 	"testing"
 	"unsafe"
 
@@ -903,11 +902,7 @@ func fakeEncoderBytesLen(n int) []byte {
 		return nil
 	}
 	var b byte
-	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&b)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeEncoderSliceLen(&b, n)
 }
 
 func fakeEncoderRawNALLen(n int) []encoderRawNAL {
@@ -915,11 +910,7 @@ func fakeEncoderRawNALLen(n int) []encoderRawNAL {
 		return nil
 	}
 	raw := encoderRawNAL{raw: []byte{1}}
-	return *(*[]encoderRawNAL)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&raw)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeEncoderSliceLen(&raw, n)
 }
 
 func fakeByteSlicesLen(n int) [][]byte {
@@ -927,11 +918,7 @@ func fakeByteSlicesLen(n int) [][]byte {
 		return nil
 	}
 	var b []byte
-	return *(*[][]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&b)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeEncoderSliceLen(&b, n)
 }
 
 func fakeUint32SliceLen(n int) []uint32 {
@@ -939,11 +926,7 @@ func fakeUint32SliceLen(n int) []uint32 {
 		return nil
 	}
 	var v uint32
-	return *(*[]uint32)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&v)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeEncoderSliceLen(&v, n)
 }
 
 func fakeUint16SliceLen(n int) []uint16 {
@@ -951,11 +934,7 @@ func fakeUint16SliceLen(n int) []uint16 {
 		return nil
 	}
 	var v uint16
-	return *(*[]uint16)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&v)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeEncoderSliceLen(&v, n)
 }
 
 func fakeReferenceDisplaysLen(n int) []h264.AV3DReferenceDisplay {
@@ -963,11 +942,7 @@ func fakeReferenceDisplaysLen(n int) []h264.AV3DReferenceDisplay {
 		return nil
 	}
 	var display h264.AV3DReferenceDisplay
-	return *(*[]h264.AV3DReferenceDisplay)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&display)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeEncoderSliceLen(&display, n)
 }
 
 func fakeDecodedFramesLen(n int) []*h264.DecodedFrame {
@@ -975,11 +950,21 @@ func fakeDecodedFramesLen(n int) []*h264.DecodedFrame {
 		return nil
 	}
 	var frame *h264.DecodedFrame
-	return *(*[]*h264.DecodedFrame)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&frame)),
+	return fakeEncoderSliceLen(&frame, n)
+}
+
+// fakeEncoderSliceLen preserves impossible slice lengths for overflow guards.
+func fakeEncoderSliceLen[T any](ptr *T, n int) []T {
+	h := struct {
+		Data unsafe.Pointer
+		Len  int
+		Cap  int
+	}{
+		Data: unsafe.Pointer(ptr),
 		Len:  n,
 		Cap:  n,
-	}))
+	}
+	return *(*[]T)(unsafe.Pointer(&h))
 }
 
 func TestEncoderBitrateFrameBudgetBytes(t *testing.T) {

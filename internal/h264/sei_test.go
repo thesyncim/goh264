@@ -5,9 +5,7 @@ package h264
 import (
 	"bytes"
 	"math/bits"
-	"reflect"
 	"testing"
-	"unsafe"
 )
 
 func TestH264SEIContextResetInitializesX264BuildLikeFFmpeg(t *testing.T) {
@@ -361,11 +359,7 @@ func fakeBytesLen(n int) []uint8 {
 		return nil
 	}
 	var v uint8
-	return *(*[]uint8)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&v)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeH264SliceLen(&v, n)
 }
 
 func fakeByteSlicesLen(n int) [][]uint8 {
@@ -373,11 +367,7 @@ func fakeByteSlicesLen(n int) [][]uint8 {
 		return nil
 	}
 	var v []uint8
-	return *(*[][]uint8)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&v)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeH264SliceLen(&v, n)
 }
 
 func fakeUint32sLen(n int) []uint32 {
@@ -385,11 +375,7 @@ func fakeUint32sLen(n int) []uint32 {
 		return nil
 	}
 	var v uint32
-	return *(*[]uint32)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&v)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeH264SliceLen(&v, n)
 }
 
 func fakeReferenceDisplaysLen(n int) []AV3DReferenceDisplay {
@@ -397,11 +383,7 @@ func fakeReferenceDisplaysLen(n int) []AV3DReferenceDisplay {
 		return nil
 	}
 	var display AV3DReferenceDisplay
-	return *(*[]AV3DReferenceDisplay)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&display)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeH264SliceLen(&display, n)
 }
 
 type seiTestMessage struct {

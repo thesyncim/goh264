@@ -5,7 +5,6 @@ package h264
 import (
 	"bytes"
 	"errors"
-	"reflect"
 	"testing"
 	"unsafe"
 )
@@ -262,11 +261,21 @@ func fakeRBSPBytesLen(n int) []byte {
 		return nil
 	}
 	var b byte
-	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&b)),
+	return fakeH264SliceLen(&b, n)
+}
+
+// fakeH264SliceLen preserves impossible slice lengths for overflow guards.
+func fakeH264SliceLen[T any](ptr *T, n int) []T {
+	h := struct {
+		Data unsafe.Pointer
+		Len  int
+		Cap  int
+	}{
+		Data: unsafe.Pointer(ptr),
 		Len:  n,
 		Cap:  n,
-	}))
+	}
+	return *(*[]T)(unsafe.Pointer(&h))
 }
 
 func testEncoderBaselineSPSRBSP(t *testing.T) []byte {

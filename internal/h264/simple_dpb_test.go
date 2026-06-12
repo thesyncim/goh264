@@ -4,9 +4,7 @@ package h264
 
 import (
 	"math"
-	"reflect"
 	"testing"
-	"unsafe"
 )
 
 func TestApplySimpleFieldRefPlaneBuildsValidHalfHeightViews(t *testing.T) {
@@ -1371,11 +1369,7 @@ func fakeDecodedFrameSliceLen(n int) []*DecodedFrame {
 		return nil
 	}
 	var frame *DecodedFrame
-	return *(*[]*DecodedFrame)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&frame)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeH264SliceLen(&frame, n)
 }
 
 func fakeSimpleRefEntrySliceLen(n int) []simpleRefEntry {
@@ -1383,11 +1377,7 @@ func fakeSimpleRefEntrySliceLen(n int) []simpleRefEntry {
 		return nil
 	}
 	var entry simpleRefEntry
-	return *(*[]simpleRefEntry)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&entry)),
-		Len:  n,
-		Cap:  n,
-	}))
+	return fakeH264SliceLen(&entry, n)
 }
 
 func simpleDPBTestPHeader(sps *SPS, frameNum uint32, refCount uint32) *SliceHeader {
