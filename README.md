@@ -362,24 +362,28 @@ if out.Dropped {
 switch out.OutputFormat {
 case goh264.EncoderOutputAnnexB, goh264.EncoderOutputAVC:
 	// Use the access-unit helpers below.
+	accessUnit, err := out.AccessUnitData()
+	if err != nil {
+		log.Fatal(err)
+	}
+	nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = accessUnit
+	_ = nal0
 case goh264.EncoderOutputRTP:
 	// Use RTPPackets or the RTP helper methods below.
-}
-accessUnit, err := out.AccessUnitData()
-if err != nil {
-	log.Fatal(err)
-}
-nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
-if err != nil {
-	log.Fatal(err)
-}
-packet0, err := out.RTPPacketData(0)
-if err != nil {
-	log.Fatal(err)
-}
-payload0, err := out.RTPPayloadData(0)
-if err != nil {
-	log.Fatal(err)
+	packet0, err := out.RTPPacketData(0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	payload0, err := out.RTPPayloadData(0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = packet0
+	_ = payload0
 }
 owned, err := out.Clone()   // deep-owned snapshot for async retention
 if err != nil {

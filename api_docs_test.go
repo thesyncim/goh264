@@ -191,6 +191,22 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 	}
 }
 
+func TestREADMEEncoderSampleKeepsRTPHelpersInRTPBranch(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+	rtpCase := "case goh264.EncoderOutputRTP:\n\t// Use RTPPackets or the RTP helper methods below.\n\tpacket0, err := out.RTPPacketData(0)"
+	if !strings.Contains(readme, rtpCase) {
+		t.Fatal("README.md encoder sample should call RTPPacketData only inside the RTP output branch")
+	}
+	accessUnitCase := "case goh264.EncoderOutputAnnexB, goh264.EncoderOutputAVC:\n\t// Use the access-unit helpers below.\n\taccessUnit, err := out.AccessUnitData()"
+	if !strings.Contains(readme, accessUnitCase) {
+		t.Fatal("README.md encoder sample should call AccessUnitData inside the Annex B/AVC output branch")
+	}
+}
+
 func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	data, err := os.ReadFile("examples_test.go")
 	if err != nil {
