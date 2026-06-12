@@ -656,6 +656,76 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 	}
 }
 
+func TestEncoderNonRTPConfigsRejectInvalidRTPControls(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*goh264.EncoderConfig)
+		wantErr error
+	}{
+		{
+			name: "negative payload size",
+			mutate: func(c *goh264.EncoderConfig) {
+				c.RTPMaxPayloadSize = -1
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+		{
+			name: "undersized mode 1 payload",
+			mutate: func(c *goh264.EncoderConfig) {
+				c.RTPMaxPayloadSize = 2
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+		{
+			name: "unknown packetization mode",
+			mutate: func(c *goh264.EncoderConfig) {
+				c.RTPPacketizationMode = goh264.EncoderRTPPacketizationMode(99)
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+		{
+			name: "mode 0 stap-a",
+			mutate: func(c *goh264.EncoderConfig) {
+				c.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+				c.STAPA = true
+			},
+			wantErr: goh264.ErrUnsupported,
+		},
+		{
+			name: "payload type too large",
+			mutate: func(c *goh264.EncoderConfig) {
+				c.RTPPayloadType = 128
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+	}
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+	} {
+		for _, tt := range tests {
+			t.Run(format.name+"/"+tt.name, func(t *testing.T) {
+				cfg := goh264.DefaultEncoderConfig(16, 16)
+				cfg.OutputFormat = format.fmt
+				cfg.RTPMaxPayloadSize = 0
+				tt.mutate(&cfg)
+				if err := cfg.Validate(); !errors.Is(err, tt.wantErr) {
+					t.Fatalf("Validate error = %v, want %v", err, tt.wantErr)
+				}
+				if _, err := cfg.Normalize(); !errors.Is(err, tt.wantErr) {
+					t.Fatalf("Normalize error = %v, want %v", err, tt.wantErr)
+				}
+				if _, err := goh264.NewEncoder(cfg); !errors.Is(err, tt.wantErr) {
+					t.Fatalf("NewEncoder error = %v, want %v", err, tt.wantErr)
+				}
+			})
+		}
+	}
+}
+
 func TestEncoderReconfigureRejectsBitrateBudgetOverflowWithoutMutation(t *testing.T) {
 	testEncoderInvalidFrameRateBudgetPreservesQueuedIDRAcrossOutputs(t, "bitrate-budget Reconfigure", func(enc *goh264.Encoder, before goh264.EncoderConfig) error {
 		return enc.Reconfigure(goh264.EncoderReconfigure{
@@ -2804,6 +2874,130 @@ func TestEncoderSetOutputFormatQueuesIDRBoundary(t *testing.T) {
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 }
 
+func TestEncoderReconfigureOutputFormatQueuesIDRBoundary(t *testing.T) {
+	tests := []struct {
+		name           string
+		cfg            goh264.EncoderConfig
+		update         goh264.EncoderReconfigure
+		wantFormat     goh264.EncoderOutputFormat
+		wantSecondNALs []uint8
+		wantRTP        bool
+	}{
+		{
+			name: "rtp to avc",
+			cfg: func() goh264.EncoderConfig {
+				cfg := goh264.DefaultEncoderConfig(16, 16)
+				cfg.DeblockMode = goh264.EncoderDeblockDisabled
+				return cfg
+			}(),
+			update: goh264.EncoderReconfigure{
+				OutputFormat: goh264.EncoderOutputAVC,
+				SPSPPSMode:   goh264.EncoderSPSPPSOutOfBand,
+			},
+			wantFormat:     goh264.EncoderOutputAVC,
+			wantSecondNALs: []uint8{5},
+		},
+		{
+			name: "avc to rtp",
+			cfg: func() goh264.EncoderConfig {
+				cfg := goh264.DefaultEncoderConfig(16, 16)
+				cfg.OutputFormat = goh264.EncoderOutputAVC
+				cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
+				cfg.RTPMaxPayloadSize = 0
+				cfg.DeblockMode = goh264.EncoderDeblockDisabled
+				return cfg
+			}(),
+			update: goh264.EncoderReconfigure{
+				OutputFormat: goh264.EncoderOutputRTP,
+				SPSPPSMode:   goh264.EncoderSPSPPSEveryIDR,
+			},
+			wantFormat:     goh264.EncoderOutputRTP,
+			wantSecondNALs: []uint8{7, 8, 5},
+			wantRTP:        true,
+		},
+		{
+			name: "rtp to annexb",
+			cfg: func() goh264.EncoderConfig {
+				cfg := goh264.DefaultEncoderConfig(16, 16)
+				cfg.DeblockMode = goh264.EncoderDeblockDisabled
+				return cfg
+			}(),
+			update: goh264.EncoderReconfigure{
+				OutputFormat: goh264.EncoderOutputAnnexB,
+				SPSPPSMode:   goh264.EncoderSPSPPSEveryIDR,
+			},
+			wantFormat:     goh264.EncoderOutputAnnexB,
+			wantSecondNALs: []uint8{7, 8, 5},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enc, err := goh264.NewEncoder(tt.cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			var callbackCalls int
+			enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+				callbackCalls++
+			})
+
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first frame: %v", err)
+			}
+			if first.Dropped || !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first frame dropped=%v idr=%v pending=%v, want delivered IDR",
+					first.Dropped, first.IDR, enc.PendingIDR())
+			}
+			firstPacketCount := len(first.RTPPackets)
+
+			if err := enc.Reconfigure(tt.update); err != nil {
+				t.Fatalf("Reconfigure output format: %v", err)
+			}
+			got := enc.Config()
+			if got.OutputFormat != tt.wantFormat || !enc.PendingIDR() {
+				t.Fatalf("post-reconfigure output format=%v pending=%v, want %v and queued IDR",
+					got.OutputFormat, enc.PendingIDR(), tt.wantFormat)
+			}
+
+			secondFrame := firstFrame
+			secondFrame.PTS = int64(got.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode output-format IDR: %v", err)
+			}
+			if second.Dropped || !second.IDR || enc.PendingIDR() {
+				t.Fatalf("second frame dropped=%v idr=%v pending=%v, want delivered IDR",
+					second.Dropped, second.IDR, enc.PendingIDR())
+			}
+			assertEncoderNALTypes(t, second.NALUnits, tt.wantSecondNALs)
+			if tt.wantRTP {
+				if len(second.RTPPackets) == 0 {
+					t.Fatal("second RTP output packets = 0, want packets")
+				}
+				assertRTPPacketMetadata(t, second.RTPPackets, got.RTPPayloadType, got.RTPSSRC, 0)
+			} else if len(second.RTPPackets) != 0 {
+				t.Fatalf("second non-RTP output packets = %d, want 0", len(second.RTPPackets))
+			}
+			if callbackCalls != firstPacketCount+len(second.RTPPackets) {
+				t.Fatalf("callback calls = %d, want %d", callbackCalls, firstPacketCount+len(second.RTPPackets))
+			}
+
+			stream := annexBFromEncodedFrame(t, first, first.OutputFormat)
+			if tt.cfg.OutputFormat == goh264.EncoderOutputAVC && tt.cfg.SPSPPSMode == goh264.EncoderSPSPPSOutOfBand {
+				headers, err := tt.cfg.ParameterSets()
+				if err != nil {
+					t.Fatalf("ParameterSets: %v", err)
+				}
+				stream = append(headers.AnnexB, stream...)
+			}
+			stream = append(stream, annexBFromEncodedFrame(t, second, got.OutputFormat)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
+		})
+	}
+}
+
 func TestEncoderReconfigureSwitchesOutputFormatToAVCForForcedIDR(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -4394,6 +4588,150 @@ func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutatio
 	if callbackCalls != firstPacketCount+len(second.RTPPackets) {
 		t.Fatalf("post-invalid callbacks = %d, want %d",
 			callbackCalls, firstPacketCount+len(second.RTPPackets))
+	}
+}
+
+func TestEncoderInvalidRTPControlsRejectForNonRTPOutputsWithoutMutation(t *testing.T) {
+	mode0 := goh264.EncoderRTPPacketizationSingleNAL
+	stapa := true
+	badPayloadType := uint8(128)
+	tests := []struct {
+		name    string
+		call    func(*goh264.Encoder) error
+		wantErr error
+	}{
+		{
+			name: "SetRTPMaxPayloadSize negative",
+			call: func(enc *goh264.Encoder) error {
+				return enc.SetRTPMaxPayloadSize(-1)
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+		{
+			name: "SetRTPMaxPayloadSize undersized mode 1",
+			call: func(enc *goh264.Encoder) error {
+				return enc.SetRTPMaxPayloadSize(2)
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+		{
+			name: "SetRTPPacketizationMode unknown",
+			call: func(enc *goh264.Encoder) error {
+				return enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationMode(99), false)
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+		{
+			name: "SetRTPPacketizationMode mode 0 stap-a",
+			call: func(enc *goh264.Encoder) error {
+				return enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, true)
+			},
+			wantErr: goh264.ErrUnsupported,
+		},
+		{
+			name: "SetRTPMetadata bad payload type",
+			call: func(enc *goh264.Encoder) error {
+				return enc.SetRTPMetadata(128, 0x11223344)
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+		{
+			name: "Reconfigure negative payload size",
+			call: func(enc *goh264.Encoder) error {
+				return enc.Reconfigure(goh264.EncoderReconfigure{
+					RTPMaxPayloadSize: -1,
+					ForceIDR:          true,
+				})
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+		{
+			name: "Reconfigure undersized mode 1 payload",
+			call: func(enc *goh264.Encoder) error {
+				return enc.Reconfigure(goh264.EncoderReconfigure{
+					RTPMaxPayloadSize: 2,
+					ForceIDR:          true,
+				})
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+		{
+			name: "Reconfigure mode 0 stap-a",
+			call: func(enc *goh264.Encoder) error {
+				return enc.Reconfigure(goh264.EncoderReconfigure{
+					RTPPacketizationMode: &mode0,
+					STAPA:                &stapa,
+					ForceIDR:             true,
+				})
+			},
+			wantErr: goh264.ErrUnsupported,
+		},
+		{
+			name: "Reconfigure bad payload type",
+			call: func(enc *goh264.Encoder) error {
+				return enc.Reconfigure(goh264.EncoderReconfigure{
+					RTPPayloadType: &badPayloadType,
+					ForceIDR:       true,
+				})
+			},
+			wantErr: goh264.ErrInvalidData,
+		},
+	}
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+	} {
+		for _, tt := range tests {
+			t.Run(format.name+"/"+tt.name, func(t *testing.T) {
+				cfg := goh264.DefaultEncoderConfig(16, 16)
+				cfg.OutputFormat = format.fmt
+				cfg.RTPMaxPayloadSize = 0
+				cfg.DeblockMode = goh264.EncoderDeblockDisabled
+				if format.fmt == goh264.EncoderOutputAVC {
+					cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
+				}
+				enc, err := goh264.NewEncoder(cfg)
+				if err != nil {
+					t.Fatalf("NewEncoder: %v", err)
+				}
+
+				firstFrame := patternedI420EncoderFrame(16, 16)
+				first, err := enc.Encode(firstFrame)
+				if err != nil {
+					t.Fatalf("Encode first frame: %v", err)
+				}
+				if first.Dropped || !first.IDR || enc.PendingIDR() {
+					t.Fatalf("first frame dropped=%v idr=%v pending=%v, want delivered IDR",
+						first.Dropped, first.IDR, enc.PendingIDR())
+				}
+
+				before := enc.Config()
+				if err := tt.call(enc); !errors.Is(err, tt.wantErr) {
+					t.Fatalf("%s invalid RTP control error = %v, want %v", tt.name, err, tt.wantErr)
+				}
+				if got := enc.Config(); got != before {
+					t.Fatalf("%s invalid RTP control mutated config = %+v, want %+v", tt.name, got, before)
+				}
+				if enc.PendingIDR() {
+					t.Fatalf("%s invalid RTP control queued unexpected IDR", tt.name)
+				}
+
+				secondFrame := firstFrame
+				secondFrame.PTS = int64(before.RTPTimestampIncrement)
+				second, err := enc.Encode(secondFrame)
+				if err != nil {
+					t.Fatalf("%s Encode after invalid RTP control: %v", tt.name, err)
+				}
+				if second.Dropped || second.IDR || second.KeyFrame || enc.PendingIDR() {
+					t.Fatalf("%s post-invalid frame dropped=%v idr=%v key=%v pending=%v, want P-skip",
+						tt.name, second.Dropped, second.IDR, second.KeyFrame, enc.PendingIDR())
+				}
+				assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			})
+		}
 	}
 }
 

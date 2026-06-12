@@ -1712,7 +1712,7 @@ func (e *Encoder) SetRTPPacketCallback(callback EncoderRTPPacketCallback) {
 // Reconfigure applies validated runtime updates.
 //
 // Invalid updates return an error without changing encoder state. Resolution and
-// QP changes queue an IDR after they are accepted.
+// QP and output-format changes queue an IDR after they are accepted.
 func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if e == nil {
 		return encoderInvalid("nil encoder")
@@ -1730,6 +1730,7 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	cfg := e.cfg
 	oldWidth := cfg.Width
 	oldHeight := cfg.Height
+	oldOutputFormat := cfg.OutputFormat
 	qpRefresh := update.InitialQP != nil || update.MinQP != nil || update.MaxQP != nil
 	if update.TargetBitrate != 0 {
 		cfg.TargetBitrate = update.TargetBitrate
@@ -1858,6 +1859,9 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if normalized.Width != oldWidth || normalized.Height != oldHeight {
 		e.reference = encoderReferenceFrame{}
 		e.framesSinceIDR = 0
+		e.forceIDR = true
+	}
+	if normalized.OutputFormat != oldOutputFormat {
 		e.forceIDR = true
 	}
 	if qpRefresh {
@@ -3492,33 +3496,21 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	default:
 		return cfg, encoderInvalid("unknown encoder output format")
 	}
+	if err := validateEncoderRTPControlEnvelope(cfg); err != nil {
+		return cfg, err
+	}
 	if cfg.OutputFormat == EncoderOutputRTP {
 		if cfg.RTPMaxPayloadSize == 0 {
 			cfg.RTPMaxPayloadSize = 1200
 		}
-		switch cfg.RTPPacketizationMode {
-		case EncoderRTPPacketizationSingleNAL:
-			if cfg.RTPMaxPayloadSize < 2 {
-				return cfg, encoderInvalid("RTP packetization-mode 0 max payload size must fit a NAL header and payload byte")
-			}
-			if cfg.STAPA {
-				return cfg, encoderUnsupported("STAP-A aggregation requires RTP packetization-mode 1")
-			}
-		case EncoderRTPPacketizationNonInterleaved:
-			if cfg.RTPMaxPayloadSize < 3 {
-				return cfg, encoderInvalid("RTP max payload size must leave room for FU-A headers")
-			}
-		default:
-			return cfg, encoderInvalid("unknown RTP packetization mode")
+		if err := validateEncoderRTPPacketPayloadBudget(cfg); err != nil {
+			return cfg, err
 		}
 		if !cfg.DONDisabled {
 			return cfg, encoderUnsupported("interleaved DON mode is not part of WebRTC RTP packetization")
 		}
 		if cfg.RTPPayloadType == 0 {
 			cfg.RTPPayloadType = 96
-		}
-		if cfg.RTPPayloadType > 127 {
-			return cfg, encoderInvalid("RTP payload type must fit in seven bits")
 		}
 	}
 	if cfg.RTPTimestampIncrement == 0 {
@@ -3534,6 +3526,43 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		}
 	}
 	return cfg, nil
+}
+
+func validateEncoderRTPControlEnvelope(cfg EncoderConfig) error {
+	if cfg.RTPMaxPayloadSize < 0 {
+		return encoderInvalid("RTP max payload size cannot be negative")
+	}
+	switch cfg.RTPPacketizationMode {
+	case EncoderRTPPacketizationSingleNAL, EncoderRTPPacketizationNonInterleaved:
+	default:
+		return encoderInvalid("unknown RTP packetization mode")
+	}
+	if cfg.STAPA && cfg.RTPPacketizationMode == EncoderRTPPacketizationSingleNAL {
+		return encoderUnsupported("STAP-A aggregation requires RTP packetization-mode 1")
+	}
+	if cfg.RTPPayloadType > 127 {
+		return encoderInvalid("RTP payload type must fit in seven bits")
+	}
+	if cfg.RTPMaxPayloadSize != 0 {
+		return validateEncoderRTPPacketPayloadBudget(cfg)
+	}
+	return nil
+}
+
+func validateEncoderRTPPacketPayloadBudget(cfg EncoderConfig) error {
+	switch cfg.RTPPacketizationMode {
+	case EncoderRTPPacketizationSingleNAL:
+		if cfg.RTPMaxPayloadSize < 2 {
+			return encoderInvalid("RTP packetization-mode 0 max payload size must fit a NAL header and payload byte")
+		}
+	case EncoderRTPPacketizationNonInterleaved:
+		if cfg.RTPMaxPayloadSize < 3 {
+			return encoderInvalid("RTP max payload size must leave room for FU-A headers")
+		}
+	default:
+		return encoderInvalid("unknown RTP packetization mode")
+	}
+	return nil
 }
 
 func validateEncoderColorConfig(color EncoderColorConfig) error {

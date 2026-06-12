@@ -449,7 +449,7 @@ must(enc.Reset()) // clear encoder coding state, keep config/callback
 ```
 
 The admitted encoder contract is deliberately narrow, and these are the pieces
-that are currently intended to be stable enough for integration work:
+with the strongest public API coverage for integration work:
 
 - `EncoderConfig.Normalize` exposes the exact validated configuration stored by
   `NewEncoder`.
@@ -479,9 +479,11 @@ that are currently intended to be stable enough for integration work:
   `SetRecoveryPointSEI`, `SetOutputFormat`, `SetRTPPacketizationMode`, and
   `SetRTPMetadata` cover admitted control, budget, geometry, output, cadence,
   packetization, and RTP header changes without constructing an
-  `EncoderReconfigure` value. `SetQP`, `SetResolution`, and `SetOutputFormat`
-  queue an IDR boundary after a valid update. `SetIntraRefresh(true)` returns
-  `ErrUnsupported` until intra refresh is admitted.
+  `EncoderReconfigure` value. `SetQP`, `SetResolution`, and output-format
+  changes queue an IDR boundary after a valid update. RTP packetization and
+  metadata are validated even before switching output to RTP, so invalid RTP
+  state cannot be parked behind Annex B or AVC output. `SetIntraRefresh(true)`
+  returns `ErrUnsupported` until intra refresh is admitted.
 - `EncoderReconfigure` remains the grouped low-level update surface for
   bundled multi-field changes, grouped `Limits`, and explicit force-IDR
   requests. Zero scalar fields in `EncoderReconfigure` mean unchanged; use
@@ -685,8 +687,8 @@ caller-buffer zero-allocation guards. A checked-in public-vector allocation
 canary, profile-output hooks, a benchstat-compatible decoder/encoder canary,
 and a local performance-evidence bundle runner now exist, while checked-in
 reviewed profile artifacts, a larger performance corpus, and an in-process
-libavcodec baseline are still pending. Treat the decoder as
-pre-production for throughput-sensitive use until
+libavcodec baseline are still pending. Treat the decoder as still under
+hardening for throughput-sensitive use until
 [docs/production-readiness.md](docs/production-readiness.md) has those release
 artifacts.
 

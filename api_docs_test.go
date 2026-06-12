@@ -165,6 +165,7 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 	}
 	for _, forbidden := range []string{
 		"pre" + "-release",
+		"pre" + "-production",
 		"release " + "tag",
 		"release " + "readiness",
 		"de" + "precate",
@@ -238,6 +239,9 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData",
 		"TestEncoderReconfigureZeroScalarFieldsAreNoOps",
 		"TestEncoderZeroValueExplicitSettersRejectWithoutMutation",
+		"TestEncoderNonRTPConfigsRejectInvalidRTPControls",
+		"TestEncoderInvalidRTPControlsRejectForNonRTPOutputsWithoutMutation",
+		"TestEncoderReconfigureOutputFormatQueuesIDRBoundary",
 		"TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata",
 		"TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata",
 		"encoder-writers",
