@@ -385,6 +385,41 @@ func TestFramesFromH264WithErrorRejectsOverflowedFrameList(t *testing.T) {
 	}
 }
 
+func TestSingleFrameFromFramesClassifiesCardinalityAndPreservesErrors(t *testing.T) {
+	wantFrame := &Frame{Width: 16}
+	wantErr := errors.New("decode failed after output")
+
+	got, err := singleFrameFromFrames([]*Frame{wantFrame}, wantErr)
+	if !errors.Is(err, wantErr) || got != wantFrame {
+		t.Fatalf("single frame with error = %+v/%v, want original frame and error", got, err)
+	}
+
+	got, err = singleFrameFromFrames(nil, wantErr)
+	if !errors.Is(err, wantErr) || got != nil {
+		t.Fatalf("zero frames with error = %+v/%v, want nil and original error", got, err)
+	}
+
+	got, err = singleFrameFromFrames([]*Frame{{Width: 1}, {Width: 2}}, wantErr)
+	if !errors.Is(err, wantErr) || got != nil {
+		t.Fatalf("multiple frames with error = %+v/%v, want nil and original error", got, err)
+	}
+
+	for _, tt := range []struct {
+		name   string
+		frames []*Frame
+	}{
+		{name: "zero", frames: nil},
+		{name: "multiple", frames: []*Frame{{Width: 1}, {Width: 2}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := singleFrameFromFrames(tt.frames, nil)
+			if !errors.Is(err, ErrUnsupported) || got != nil {
+				t.Fatalf("%s frames without decode error = %+v/%v, want nil ErrUnsupported", tt.name, got, err)
+			}
+		})
+	}
+}
+
 func TestPacketFrameSideDataFromPacketClonesBytePayloads(t *testing.T) {
 	captions := []byte{0x01, 0x02}
 	icc := []byte{0x03}
