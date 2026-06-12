@@ -306,6 +306,36 @@ func TestDecodeAutoAVCDoesNotAliasCallerBuffer(t *testing.T) {
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketFramesDoesNotAliasCallerBuffer(t *testing.T) {
+	packet := decodeHexFixture(t, black16IPAnnexBHex)
+	frames, err := NewDecoder().DecodePacketFrames(Packet{Data: packet})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames: %v", err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("frames = %d, want 2", len(frames))
+	}
+	for i := range packet {
+		packet[i] = 0xff
+	}
+	assertFrameMD5Strings(t, frames, []string{
+		"8aaefe0adcea094cfb5161a060bab4e2",
+		"8aaefe0adcea094cfb5161a060bab4e2",
+	})
+}
+
+func TestDecodePacketDoesNotAliasCallerBuffer(t *testing.T) {
+	packet := decodeHexFixture(t, black16AnnexBHex)
+	frame, err := NewDecoder().DecodePacket(Packet{Data: packet})
+	if err != nil {
+		t.Fatalf("DecodePacket: %v", err)
+	}
+	for i := range packet {
+		packet[i] = 0xff
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestParseAVCDecoderConfigurationRecordRejectPreservesStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
