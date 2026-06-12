@@ -4,6 +4,7 @@ package goh264_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -330,6 +331,43 @@ func TestDecoderResetClearsDelayedFrames(t *testing.T) {
 		"36f5a9b9064709ee891652e8f4e06992",
 		"aa778b981f96d21489196f6a0faa0959",
 	})
+}
+
+func TestFlushDelayedFrameReturnsSingleDelayedFrame(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+	var frames []*Frame
+	for i, sample := range samples {
+		out, err := dec.DecodeConfiguredAVCFrames(sample)
+		if err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+		frames = append(frames, out...)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("pre-flush frames = %d, want 2", len(frames))
+	}
+	flushed, err := dec.FlushDelayedFrame()
+	if err != nil {
+		t.Fatalf("FlushDelayedFrame: %v", err)
+	}
+	frames = append(frames, flushed)
+	assertFrameMD5Strings(t, frames, []string{
+		"4296e3dc95829cc27071a8685a428494",
+		"36f5a9b9064709ee891652e8f4e06992",
+		"aa778b981f96d21489196f6a0faa0959",
+	})
+	if got, err := dec.FlushDelayedFrame(); got != nil || !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("second FlushDelayedFrame = %+v/%v, want nil ErrUnsupported", got, err)
+	}
 }
 
 func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesOnEmptyPacket(t *testing.T) {

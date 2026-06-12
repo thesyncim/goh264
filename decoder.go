@@ -538,6 +538,15 @@ func (d *Decoder) FlushDelayedFrames() ([]*Frame, error) {
 	return framesFromH264(frames), nil
 }
 
+// FlushDelayedFrame drains delayed output and returns the single delayed frame.
+//
+// It returns ErrUnsupported when the flush produces zero or multiple frames
+// without another decode error.
+func (d *Decoder) FlushDelayedFrame() (*Frame, error) {
+	frames, err := d.FlushDelayedFrames()
+	return singleFrameFromFrames(frames, err)
+}
+
 // DecodeAVCWithConfigurationRecord updates the stored AVC configuration, decodes
 // data, and returns the single output frame.
 func (d *Decoder) DecodeAVCWithConfigurationRecord(config []byte, data []byte) (*Frame, error) {

@@ -314,12 +314,13 @@ frames, err := dec.DecodeConfiguredAVCFrames(nil)      // delayed configured-AVC
 frames, err := dec.DecodeAVCCFrames(avcc, packet)
 frames, err := dec.DecodeAVCCFrames(avcc, nil) // delayed avcC output
 frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
+frame, err := dec.FlushDelayedFrame()                  // single delayed B-frame
 cfg, err := dec.AVCConfig()                            // current configured-AVC metadata
 err = dec.Reset()                                      // clear decoder state
 ```
 
 Single-frame helpers (`Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`,
-`DecodeConfiguredAVC`, and `DecodeAVCC`) return
+`DecodeConfiguredAVC`, `DecodeAVCC`, and `FlushDelayedFrame`) return
 `ErrUnsupported` when a packet produces zero or multiple frames. If a damaged
 packet produces exactly one valid frame before a later decode error, the helper
 returns that frame with the error. For stream processing, prefer `DecodeFrames` or

@@ -268,6 +268,10 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 			_, err := dec.FlushDelayedFrames()
 			return err
 		}},
+		{name: "FlushDelayedFrame", call: func() error {
+			_, err := dec.FlushDelayedFrame()
+			return err
+		}},
 		{name: "Reset", call: func() error {
 			return dec.Reset()
 		}},
