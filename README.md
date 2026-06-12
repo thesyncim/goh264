@@ -166,12 +166,13 @@ writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR, P-skip, P16x16 no-residual, and P IntraPCM slice payloads.
 Internal P16x16 residual slice proofs now cover bounded per-macroblock
-luma CAVLC coefficient positions and multi-coefficient luma blocks, chroma-DC,
-chroma-AC, and combined chroma-DC+AC CAVLC coefficients, plus bounded
-chroma-DC and chroma-AC coefficient positions, through syntax decode and frame
-macroblock table writeback, including nonzero `first_mb_in_slice` range
-isolation, per-macroblock QP deltas, and stateful residual nonzero-count
-context across consecutive macroblocks.
+luma CAVLC coefficient positions, multi-coefficient luma blocks, chroma-DC,
+chroma-AC including multi-coefficient AC blocks, and combined chroma-DC+AC
+CAVLC coefficients, plus bounded chroma-DC and chroma-AC coefficient
+positions, through syntax decode and frame macroblock table writeback,
+including nonzero `first_mb_in_slice` range isolation, per-macroblock QP
+deltas, and stateful residual nonzero-count context across consecutive
+macroblocks.
 Motion-search P prediction, residual CAVLC coding, rate-control feedback, and
 broader realtime allocation/performance evidence remain pending beyond the
 admitted IDR/P-frame Annex B/AVC/RTP canaries, which now include odd-pixel

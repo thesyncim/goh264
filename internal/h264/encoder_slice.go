@@ -82,6 +82,11 @@ type encoderResidualCoefficient struct {
 	Value int32
 }
 
+type encoderChromaResidualCoefficients struct {
+	Cb []encoderResidualCoefficient
+	Cr []encoderResidualCoefficient
+}
+
 type encoderI420P16x16ResidualConfig struct {
 	Width  int
 	Height int
@@ -109,6 +114,7 @@ type encoderI420P16x16ResidualConfig struct {
 	ChromaACCoeffCb            int32
 	ChromaACCoeffCr            int32
 	ChromaACCoeffs             [][2]int32
+	ChromaACCoefficients       []encoderChromaResidualCoefficients
 	ChromaACCoeffPos           int
 	ChromaACCoeffPositions     []int
 }
@@ -454,6 +460,7 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		if len(cfg.ChromaACCoeffs) > 0 {
 			chromaACCb, chromaACCr = cfg.ChromaACCoeffs[i][0], cfg.ChromaACCoeffs[i][1]
 		}
+		chromaACCoefficients := cfg.ChromaACCoefficients
 		chromaACPos := int(h264ZigzagScanCAVLC[1])
 		if cfg.ChromaACCoeffPos != 0 {
 			chromaACPos = cfg.ChromaACCoeffPos
@@ -462,7 +469,7 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 			chromaACPos = cfg.ChromaACCoeffPositions[i]
 		}
 		cbp := 1
-		if chromaACCb != 0 || chromaACCr != 0 {
+		if len(chromaACCoefficients) > 0 || chromaACCb != 0 || chromaACCr != 0 {
 			cbp |= 0x20
 		} else if chromaDCCb != 0 || chromaDCCr != 0 {
 			cbp |= 0x10
@@ -498,8 +505,17 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		}
 		residual.MB[256+chromaDCPos] = chromaDCCb
 		residual.MB[512+chromaDCPos] = chromaDCCr
-		residual.MB[256+chromaACPos] = chromaACCb
-		residual.MB[512+chromaACPos] = chromaACCr
+		if len(chromaACCoefficients) > 0 {
+			for _, coeff := range chromaACCoefficients[i].Cb {
+				residual.MB[256+coeff.Pos] = coeff.Value
+			}
+			for _, coeff := range chromaACCoefficients[i].Cr {
+				residual.MB[512+coeff.Pos] = coeff.Value
+			}
+		} else {
+			residual.MB[256+chromaACPos] = chromaACCb
+			residual.MB[512+chromaACPos] = chromaACCr
+		}
 		if _, err := writeCAVLCInterPBoundedMacroblock(&bw, &residual, pps, sps, mb, [2]uint32{1, 0}, qscale, nextQP); err != nil {
 			return nil, err
 		}
@@ -788,6 +804,9 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	if len(cfg.ChromaACCoeffs) > 0 && len(cfg.ChromaACCoeffs) != macroblockCount {
 		return ErrInvalidData
 	}
+	if len(cfg.ChromaACCoefficients) > 0 && len(cfg.ChromaACCoefficients) != macroblockCount {
+		return ErrInvalidData
+	}
 	if len(cfg.ChromaACCoeffPositions) > 0 && len(cfg.ChromaACCoeffPositions) != macroblockCount {
 		return ErrInvalidData
 	}
@@ -796,15 +815,8 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 			return ErrInvalidData
 		}
 		for _, coeffs := range cfg.LumaCoefficients {
-			if len(coeffs) == 0 || len(coeffs) > 16 {
+			if !validEncoderResidualCoefficients(coeffs, 0, 16) {
 				return ErrInvalidData
-			}
-			var seen [16]bool
-			for _, coeff := range coeffs {
-				if coeff.Pos < 0 || coeff.Pos >= 16 || coeff.Value == 0 || seen[coeff.Pos] {
-					return ErrInvalidData
-				}
-				seen[coeff.Pos] = true
 			}
 		}
 	} else if len(cfg.CoeffPositions) > 0 {
@@ -848,7 +860,18 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	} else if cfg.ChromaDCCoeffPos < 0 || cfg.ChromaDCCoeffPos >= len(h264ChromaDCScan) {
 		return ErrInvalidData
 	}
-	if len(cfg.ChromaACCoeffs) > 0 {
+	if len(cfg.ChromaACCoefficients) > 0 {
+		if len(cfg.ChromaACCoeffs) > 0 || len(cfg.ChromaACCoeffPositions) > 0 ||
+			cfg.ChromaACCoeffCb != 0 || cfg.ChromaACCoeffCr != 0 || cfg.ChromaACCoeffPos != 0 {
+			return ErrInvalidData
+		}
+		for _, coeffs := range cfg.ChromaACCoefficients {
+			if !validEncoderResidualCoefficients(coeffs.Cb, 1, 16) ||
+				!validEncoderResidualCoefficients(coeffs.Cr, 1, 16) {
+				return ErrInvalidData
+			}
+		}
+	} else if len(cfg.ChromaACCoeffs) > 0 {
 		for _, coeff := range cfg.ChromaACCoeffs {
 			if coeff[0] == 0 || coeff[1] == 0 {
 				return ErrInvalidData
@@ -867,6 +890,20 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 		return ErrInvalidData
 	}
 	return nil
+}
+
+func validEncoderResidualCoefficients(coeffs []encoderResidualCoefficient, minPos int, maxPos int) bool {
+	if len(coeffs) == 0 || len(coeffs) > maxPos-minPos || minPos < 0 || maxPos > 16 || minPos >= maxPos {
+		return false
+	}
+	var seen [16]bool
+	for _, coeff := range coeffs {
+		if coeff.Pos < minPos || coeff.Pos >= maxPos || coeff.Value == 0 || seen[coeff.Pos] {
+			return false
+		}
+		seen[coeff.Pos] = true
+	}
+	return true
 }
 
 func validateEncoderI420PSkipConfig(cfg EncoderI420PSkipConfig) error {

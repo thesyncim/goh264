@@ -1448,6 +1448,155 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaACPositions(
 	}
 }
 
+func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaACCoefficients(t *testing.T) {
+	pps, sps := encoderResidualSliceTestPPS(20)
+	wantMVDs := []EncoderMotionVectorDelta{
+		{X: 2, Y: -1},
+		{X: -3, Y: 4},
+	}
+	wantCoeffs := []int32{1, -2}
+	wantChromaAC := []encoderChromaResidualCoefficients{
+		{
+			Cb: []encoderResidualCoefficient{
+				{Pos: int(h264ZigzagScanCAVLC[1]), Value: 2},
+				{Pos: int(h264ZigzagScanCAVLC[2]), Value: -1},
+			},
+			Cr: []encoderResidualCoefficient{
+				{Pos: int(h264ZigzagScanCAVLC[1]), Value: -2},
+				{Pos: int(h264ZigzagScanCAVLC[3]), Value: 1},
+			},
+		},
+		{
+			Cb: []encoderResidualCoefficient{
+				{Pos: int(h264ZigzagScanCAVLC[1]), Value: -3},
+				{Pos: int(h264ZigzagScanCAVLC[4]), Value: 1},
+				{Pos: int(h264ZigzagScanCAVLC[5]), Value: -1},
+			},
+			Cr: []encoderResidualCoefficient{
+				{Pos: int(h264ZigzagScanCAVLC[1]), Value: 3},
+				{Pos: int(h264ZigzagScanCAVLC[4]), Value: -1},
+				{Pos: int(h264ZigzagScanCAVLC[6]), Value: 1},
+			},
+		},
+	}
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+		Width:                      32,
+		Height:                     16,
+		FrameNum:                   21,
+		InitialQP:                  20,
+		NextQP:                     23,
+		DisableDeblockingFilterIDC: 1,
+		MVDs:                       wantMVDs,
+		Coeffs:                     wantCoeffs,
+		ChromaACCoefficients:       wantChromaAC,
+	}, pps, sps)
+	if err != nil {
+		t.Fatalf("encode per-macroblock chroma AC-coefficient residual slice rbsp: %v", err)
+	}
+
+	var ppsList [maxPPSCount]*PPS
+	ppsList[0] = pps
+	sh, payload, err := parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("parse per-macroblock chroma AC-coefficient residual P slice header: %v", err)
+	}
+	syntaxTables, err := newMacroblockTables(2, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qscale := int(sh.QScale)
+	for i := range wantMVDs {
+		skipRun, err := payload.readUEGolombLong()
+		if err != nil {
+			t.Fatalf("read per-macroblock chroma AC-coefficient residual skip run[%d]: %v", i, err)
+		}
+		if skipRun != 0 {
+			t.Fatalf("skip run[%d] = %d, want 0", i, skipRun)
+		}
+		var decoded cavlcResidualContext
+		neighbors, err := syntaxTables.fillDecodeNeighborsFrame(i, 25, MBType16x16|MBTypeP0L0)
+		if err != nil {
+			t.Fatalf("fill chroma AC-coefficient residual syntax neighbors[%d]: %v", i, err)
+		}
+		if _, err := syntaxTables.fillResidualDecodeCaches(&decoded, neighbors.residualNeighbors(MBType16x16|MBTypeP0L0, false)); err != nil {
+			t.Fatalf("fill chroma AC-coefficient residual syntax caches[%d]: %v", i, err)
+		}
+		got, err := decoded.decodeCAVLCInterPMacroblock(&payload, pps, sps, qscale, [2]uint32{1, 0}, false)
+		if err != nil {
+			t.Fatalf("decode per-macroblock chroma AC-coefficient residual macroblock[%d]: %v", i, err)
+		}
+		if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 0x21 ||
+			got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != 0x1021 {
+			t.Fatalf("decoded chroma AC-coefficient mb[%d] type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x",
+				i, got.MBType, got.CBP, got.QScale, got.ChromaQP, got.CBPTable)
+		}
+		if got.MVD[0][0] != ([2]int32{wantMVDs[i].X, wantMVDs[i].Y}) || decoded.MB[0] != wantCoeffs[i] {
+			t.Fatalf("decoded chroma AC-coefficient mb[%d] motion/luma = %v/%d",
+				i, got.MVD[0][0], decoded.MB[0])
+		}
+		for _, coeff := range wantChromaAC[i].Cb {
+			if decoded.MB[256+coeff.Pos] != coeff.Value {
+				t.Fatalf("decoded chroma AC-coefficient mb[%d] cb[%d] = %d, want %d",
+					i, coeff.Pos, decoded.MB[256+coeff.Pos], coeff.Value)
+			}
+		}
+		for _, coeff := range wantChromaAC[i].Cr {
+			if decoded.MB[512+coeff.Pos] != coeff.Value {
+				t.Fatalf("decoded chroma AC-coefficient mb[%d] cr[%d] = %d, want %d",
+					i, coeff.Pos, decoded.MB[512+coeff.Pos], coeff.Value)
+			}
+		}
+		if decoded.NonZeroCountCache[h264Scan8[16]] != uint8(len(wantChromaAC[i].Cb)) ||
+			decoded.NonZeroCountCache[h264Scan8[32]] != uint8(len(wantChromaAC[i].Cr)) {
+			t.Fatalf("decoded chroma AC-coefficient mb[%d] nnz cb/cr = %d/%d, want %d/%d",
+				i, decoded.NonZeroCountCache[h264Scan8[16]], decoded.NonZeroCountCache[h264Scan8[32]],
+				len(wantChromaAC[i].Cb), len(wantChromaAC[i].Cr))
+		}
+		if err := syntaxTables.writeBackMacroblockTables(i, got.MBType, got.CBPTable, got.QScale, 25); err != nil {
+			t.Fatalf("write back chroma AC-coefficient syntax tables[%d]: %v", i, err)
+		}
+		if err := syntaxTables.writeBackNonZeroCount(i, &decoded.NonZeroCountCache); err != nil {
+			t.Fatalf("write back chroma AC-coefficient syntax nnz[%d]: %v", i, err)
+		}
+		qscale = got.QScale
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("per-macroblock chroma AC-coefficient residual payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+
+	sh, payload, err = parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("reparse per-macroblock chroma AC-coefficient residual P slice header: %v", err)
+	}
+	m, err := newMacroblockTables(2, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	for mbXY := 0; mbXY < 2; mbXY++ {
+		got, err := m.decodeCAVLCFrameSliceMacroblock(&payload, sh, &state, mbXY, 25)
+		if err != nil {
+			t.Fatalf("decode per-macroblock chroma AC-coefficient residual frame macroblock[%d]: %v", mbXY, err)
+		}
+		if got.CBP != 0x21 || got.CBPTable != 0x1021 || got.QScale != 23 ||
+			m.CBPTable[mbXY] != 0x1021 || m.QScaleTable[mbXY] != 23 || m.SliceTable[mbXY] != 25 {
+			t.Fatalf("frame chroma AC-coefficient mb[%d] result/table cbp/cbpTable/q = %#x/%#x/%d table %#x/%d/%d",
+				mbXY, got.CBP, got.CBPTable, got.QScale,
+				m.CBPTable[mbXY], m.QScaleTable[mbXY], m.SliceTable[mbXY])
+		}
+		if m.NonZeroCount[mbXY][0] != 1 ||
+			m.NonZeroCount[mbXY][16] != uint8(len(wantChromaAC[mbXY].Cb)) ||
+			m.NonZeroCount[mbXY][32] != uint8(len(wantChromaAC[mbXY].Cr)) {
+			t.Fatalf("frame chroma AC-coefficient mb[%d] nnz luma/cb/cr = %d/%d/%d, want 1/%d/%d",
+				mbXY, m.NonZeroCount[mbXY][0], m.NonZeroCount[mbXY][16], m.NonZeroCount[mbXY][32],
+				len(wantChromaAC[mbXY].Cb), len(wantChromaAC[mbXY].Cr))
+		}
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("per-macroblock chroma AC-coefficient frame residual payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+}
+
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDCAC(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 	chromaACPos := int(h264ZigzagScanCAVLC[1])
@@ -1842,6 +1991,62 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			next := valid
 			next.Width = 32
 			next.ChromaACCoeffs = [][2]int32{{1, -1}, {1, 0}}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad chroma ac coefficient count", run: func() error {
+			next := valid
+			next.Width = 32
+			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
+				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 1}},
+				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			}}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "empty chroma ac coefficient plane", run: func() error {
+			next := valid
+			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
+				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 1}},
+			}}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad chroma ac coefficient position", run: func() error {
+			next := valid
+			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
+				Cb: []encoderResidualCoefficient{{Pos: 0, Value: 1}},
+				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			}}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "zero chroma ac coefficient value", run: func() error {
+			next := valid
+			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
+				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 0}},
+				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			}}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "duplicate chroma ac coefficient position", run: func() error {
+			next := valid
+			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
+				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 1}, {Pos: 1, Value: -1}},
+				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			}}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "mixed chroma ac coefficient forms", run: func() error {
+			next := valid
+			next.ChromaACCoeffCb = 1
+			next.ChromaACCoeffCr = -1
+			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
+				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 1}},
+				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
