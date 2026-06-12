@@ -246,6 +246,8 @@ func TestREADMEEncoderAdmittedValuesTableDocumentsUnsupportedKnobs(t *testing.T)
 		"CABAC",
 		"multiple refs",
 		"B-frames",
+		"Workers>1` only with `Deterministic=false`",
+		"no parallel throughput guarantee yet",
 		"IntraRefresh=false",
 		"enabled intra refresh",
 		"packetization-mode 0 with payload size >= 2",

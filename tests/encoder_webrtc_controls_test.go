@@ -136,6 +136,32 @@ func TestEncoderConfigNormalizeAppliesDerivedDefaults(t *testing.T) {
 	}
 }
 
+func TestEncoderConfigAdmitsNonDeterministicMultiWorkerMode(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(64, 32)
+	cfg.Deterministic = false
+	cfg.Workers = 2
+
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize non-deterministic multi-worker config: %v", err)
+	}
+	if normalized.Deterministic || normalized.Workers != 2 {
+		t.Fatalf("normalized worker mode = deterministic %v workers %d, want false/2", normalized.Deterministic, normalized.Workers)
+	}
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder non-deterministic multi-worker config: %v", err)
+	}
+	out, err := enc.Encode(patternedI420EncoderFrame(64, 32))
+	if err != nil {
+		t.Fatalf("Encode non-deterministic multi-worker config: %v", err)
+	}
+	if out.Dropped || len(out.Data) == 0 {
+		t.Fatalf("Encode output dropped=%v data=%d, want emitted access unit", out.Dropped, len(out.Data))
+	}
+}
+
 func TestEncoderI420FrameHelpersPopulateConfigFields(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.StrideY = 20
