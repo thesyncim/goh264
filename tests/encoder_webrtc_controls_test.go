@@ -502,13 +502,15 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 	spsPPSBeforeIDR := false
 	recoveryPointSEI := false
 	tests := []struct {
-		name     string
-		update   goh264.EncoderReconfigure
-		wantNALs []uint8
+		name             string
+		update           goh264.EncoderReconfigure
+		wantNALs         []uint8
+		wantRTPIncrement uint32
 	}{
 		{name: "bitrate", update: goh264.EncoderReconfigure{TargetBitrate: 800_000, MaxBitrate: 900_000}, wantNALs: []uint8{7, 8, 5}},
 		{name: "frame rate", update: goh264.EncoderReconfigure{FrameRateNum: 60, FrameRateDen: 1}, wantNALs: []uint8{7, 8, 5}},
 		{name: "payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 1000}, wantNALs: []uint8{7, 8, 5}},
+		{name: "timestamp increment", update: goh264.EncoderReconfigure{RTPTimestampIncrement: 1234}, wantNALs: []uint8{7, 8, 5}, wantRTPIncrement: 1234},
 		{name: "deblock", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockDisabled}, wantNALs: []uint8{7, 8, 5}},
 		{name: "sps pps cadence", update: goh264.EncoderReconfigure{
 			SPSPPSMode:       goh264.EncoderSPSPPSEveryIDR,
@@ -544,9 +546,18 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 			if !enc.PendingIDR() {
 				t.Fatalf("%s valid reconfigure cleared pending IDR", tt.name)
 			}
+			if tt.wantRTPIncrement != 0 {
+				if got := enc.Config().RTPTimestampIncrement; got != tt.wantRTPIncrement {
+					t.Fatalf("%s RTP timestamp increment = %d, want %d", tt.name, got, tt.wantRTPIncrement)
+				}
+			}
 
 			secondFrame := patternedI420EncoderFrame(16, 16)
 			secondFrame.Y[0] ^= 0x41
+			if tt.wantRTPIncrement != 0 {
+				secondFrame.PTS = 0
+				secondFrame.Duration = 0
+			}
 			second, err := enc.Encode(secondFrame)
 			if err != nil {
 				t.Fatalf("%s Encode after valid reconfigure: %v", tt.name, err)
@@ -556,6 +567,20 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 					tt.name, second.IDR, enc.PendingIDR())
 			}
 			assertEncoderNALTypes(t, second.NALUnits, tt.wantNALs)
+			if tt.wantRTPIncrement != 0 {
+				thirdFrame := secondFrame
+				thirdFrame.PTS = 0
+				thirdFrame.Duration = 0
+				thirdFrame.Y[1] ^= 0x11
+				third, err := enc.Encode(thirdFrame)
+				if err != nil {
+					t.Fatalf("%s Encode after forced IDR: %v", tt.name, err)
+				}
+				if third.RTPTime != second.RTPTime+tt.wantRTPIncrement {
+					t.Fatalf("%s post-reconfigure RTP time = %d, want %d",
+						tt.name, third.RTPTime, second.RTPTime+tt.wantRTPIncrement)
+				}
+			}
 		})
 	}
 }
