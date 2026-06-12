@@ -85,9 +85,11 @@ Allocation evidence: `tests/decoder_high_output_test.go` guards
 with exact-capacity caller-owned buffers and requires zero steady-state
 allocations for 8-bit and high-bit-depth output paths, including caller-buffer
 preservation on invalid 8-bit chroma geometry and high-bit-depth luma/chroma
-sample errors. `Frame.RawYUVSize` and the raw-output appenders reject
-overflowed caller-constructed frame geometry instead of returning wrapped byte
-counts or panicking during plane slicing. Internal low/high motion and
+sample errors. `Frame.RawYUVBytesLE` is guarded as an exact-size caller-owned
+convenience buffer over the same validated raw-output path. `Frame.RawYUVSize`
+and the raw-output appenders reject overflowed caller-constructed frame
+geometry instead of returning wrapped byte counts or panicking during plane
+slicing. Internal low/high motion and
 reconstruction plane-span checks reject overflowed geometry before indexing.
 Public SEI `FrameSideData` byte slices are guarded as caller-owned by mutating
 decoded unregistered-user-data, A53, and LCEVC slices and re-decoding the same
@@ -203,7 +205,9 @@ Encoder readiness evidence currently covers controls, parameter-set headers,
 recovery-point SEI packaging, and the first IDR frame writer:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 guards public input/result/callback surfaces for integration-facing encoder
-structs, rejects invalid or not-yet-admitted realtime controls, validates runtime
+structs, including `EncoderConfig.I420Frame`, `Encoder.I420Frame`,
+`EncodedFrame.NALData`, and `EncodedFrame.AccessUnitData`, rejects invalid or
+not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
 partial reconfiguration paths, proves invalid frame-rate helper/reconfigure,
 runtime rate, latency/slice, output/header/preset, RTP re-entry payload-size,
@@ -284,8 +288,8 @@ small-payload STAP-A fallback to non-aggregated mode-1 packets with decode and
 sequence continuity and accurate non-STAP-A callback payload metadata plus
 callback packet isolation for the fallback IDR and next P-skip, plus RTP
 public NAL-unit metadata indexing back into encoded access-unit bytes for Annex
-B, AVC, and RTP output,
-including `EncodeInto` calls that append after an existing caller-buffer prefix,
+B, AVC, and RTP output, including clipped raw-NAL views and prefix-aware
+access-unit views that exclude an existing caller-buffer `EncodeInto` prefix,
 and preserves caller-owned `EncodeInto` storage on RTP mode-0 rejection and
 proves mode-0 oversize queued-IDR and P-frame packetization failures leave
 pending-IDR, reference, RTP sequence, and callback state recoverable, plus

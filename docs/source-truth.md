@@ -167,7 +167,7 @@ carries retargeted payload metadata, and decodes the RTP IDR/P-skip sequence,
 caller-owned parameter-set and recovery-point SEI surfaces with mutation/append
 isolation across repeated helper calls,
 public input/result/callback surface guards for integration-facing encoder
-structs,
+structs, including I420 frame construction and clipped encoded-result helpers,
 input-frame plane ownership guards proving post-call caller mutation does not
 change the next Annex B, AVC, or RTP encode,
 returned `Encode` result lifetime guards across later Annex B, AVC, and RTP
@@ -198,8 +198,9 @@ without reference/frame/packet/callback advancement before and after an existing
 reference, RTP/Annex B/RTP control-loop stress across QP refresh, late drop
 recovery, packet metadata retargeting, paused RTP sequence/callback state, and
 local decode after RTP re-entry, public NAL-unit metadata indexing back into
-encoded access-unit bytes for Annex B/AVC/RTP output including non-empty
-caller-buffer prefixes, caller-buffer preservation on RTP mode-0 rejection and
+encoded access-unit bytes for Annex B/AVC/RTP output including clipped raw-NAL
+views and prefix-aware access-unit views for non-empty caller-buffer prefixes,
+caller-buffer preservation on RTP mode-0 rejection and
 mode-0 oversize queued-IDR/P-frame packetization rollback, Annex B/AVC/RTP
 bitrate-drop and late-drop non-output paths, checked
 access-unit and RTP packet storage-size overflow rejection, RTP packetization-mode 0 single-NAL IDR/P-frame
