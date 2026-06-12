@@ -338,6 +338,40 @@ func TestDecodeAVCWithConfigurationRecordBFrameReturnsDelayedFrameOnEmptyPacket(
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"aa778b981f96d21489196f6a0faa0959"})
 }
 
+func TestDecodeAVCFramesWithConfigurationRecordRejectPreservesDelayedFlush(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	for i, sample := range samples {
+		if _, err := dec.DecodeConfiguredAVCFrames(sample); err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+	}
+
+	damagedConfig := append([]byte(nil), config...)
+	damagedConfig = damagedConfig[:len(damagedConfig)-1]
+	out, err := dec.DecodeAVCFramesWithConfigurationRecord(damagedConfig, nil)
+	if err == nil {
+		t.Fatal("malformed configuration-record empty AVC packet flush returned nil error")
+	}
+	if len(out) != 0 {
+		t.Fatalf("malformed configuration-record empty AVC packet flush returned %d frames, want 0", len(out))
+	}
+
+	out, err = dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("FlushDelayedFrames after malformed configuration record: %v", err)
+	}
+	assertFrameMD5Strings(t, out, []string{"aa778b981f96d21489196f6a0faa0959"})
+}
+
 func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
