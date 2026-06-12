@@ -772,6 +772,17 @@ type EncoderReconfigure struct {
 	RTPTimestampIncrement uint32
 }
 
+// EncoderLimits groups runtime output and latency budgets.
+//
+// Zero disables the corresponding budget. Negative values are invalid. Use
+// SetLimits when multiple limits must change together and either all updates
+// should be accepted or none should be applied.
+type EncoderLimits struct {
+	MaxFrameSize    int
+	SliceMaxBytes   int
+	MaxEncodeTimeUS int
+}
+
 type Encoder struct {
 	cfg                EncoderConfig
 	forceIDR           bool
@@ -1406,6 +1417,26 @@ func (e *Encoder) SetRTPMaxPayloadSize(size int) error {
 	}
 	cfg := e.cfg
 	cfg.RTPMaxPayloadSize = size
+	normalized, err := normalizeEncoderConfig(cfg)
+	if err != nil {
+		return err
+	}
+	e.cfg = normalized
+	return nil
+}
+
+// SetLimits updates output byte and late-frame time budgets atomically.
+//
+// Passing zero for a field disables that budget. Invalid updates leave the
+// encoder configuration and coding state unchanged.
+func (e *Encoder) SetLimits(limits EncoderLimits) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	cfg := e.cfg
+	cfg.MaxFrameSize = limits.MaxFrameSize
+	cfg.SliceMaxBytes = limits.SliceMaxBytes
+	cfg.MaxEncodeTimeUS = limits.MaxEncodeTimeUS
 	normalized, err := normalizeEncoderConfig(cfg)
 	if err != nil {
 		return err

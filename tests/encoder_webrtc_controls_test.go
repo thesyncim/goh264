@@ -7399,6 +7399,61 @@ func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 	}
 }
 
+func TestEncoderSetLimitsUpdatesBudgetsAtomically(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.FrameDrop = goh264.EncoderFrameDropLate
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	if err := enc.SetLimits(goh264.EncoderLimits{
+		MaxFrameSize:    4096,
+		SliceMaxBytes:   4096,
+		MaxEncodeTimeUS: 10_000,
+	}); err != nil {
+		t.Fatalf("SetLimits enable budgets: %v", err)
+	}
+	if got := enc.Config(); got.MaxFrameSize != 4096 || got.SliceMaxBytes != 4096 || got.MaxEncodeTimeUS != 10_000 {
+		t.Fatalf("post-SetLimits config = %+v, want grouped budget values", got)
+	}
+
+	if err := enc.SetLimits(goh264.EncoderLimits{}); err != nil {
+		t.Fatalf("SetLimits disable budgets: %v", err)
+	}
+	if got := enc.Config(); got.MaxFrameSize != 0 || got.SliceMaxBytes != 0 || got.MaxEncodeTimeUS != 0 {
+		t.Fatalf("post-disable SetLimits config = %+v, want disabled budgets", got)
+	}
+
+	if err := enc.SetLimits(goh264.EncoderLimits{
+		MaxFrameSize:    4096,
+		SliceMaxBytes:   4096,
+		MaxEncodeTimeUS: 10_000,
+	}); err != nil {
+		t.Fatalf("SetLimits restore budgets: %v", err)
+	}
+	beforeInvalid := enc.Config()
+	if err := enc.SetLimits(goh264.EncoderLimits{
+		MaxFrameSize:    2048,
+		SliceMaxBytes:   -1,
+		MaxEncodeTimeUS: 20_000,
+	}); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("SetLimits invalid = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got.MaxFrameSize != beforeInvalid.MaxFrameSize ||
+		got.SliceMaxBytes != beforeInvalid.SliceMaxBytes ||
+		got.MaxEncodeTimeUS != beforeInvalid.MaxEncodeTimeUS {
+		t.Fatalf("post-invalid SetLimits config = %+v, want rollback to %+v", got, beforeInvalid)
+	}
+
+	if err := ((*goh264.Encoder)(nil)).SetLimits(goh264.EncoderLimits{}); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("nil SetLimits = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestEncoderSetMaxEncodeTimeUSTogglesLateDropBudget(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(128, 128)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -15116,7 +15171,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetRateControl", "SetVBVBufferSize",
 		"SetFrameDropMode", "SetQP", "SetFrameRate", "SetRTPTimestampIncrement",
 		"SetGOP", "SetResolution", "SetDeblockMode", "SetRTPMaxPayloadSize",
-		"SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
+		"SetLimits", "SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
 		"SetPreset", "SetSliceCount", "SetSPSPPSMode", "SetSPSPPSBeforeIDR", "SetIntraRefresh", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
 		"SetRTPMetadata", "SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",
 	} {
@@ -15218,6 +15273,13 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	} {
 		if _, ok := reconfigType.FieldByName(field); !ok {
 			t.Fatalf("EncoderReconfigure missing roadmap control field %s", field)
+		}
+	}
+
+	limitsType := reflect.TypeOf(goh264.EncoderLimits{})
+	for _, field := range []string{"MaxFrameSize", "SliceMaxBytes", "MaxEncodeTimeUS"} {
+		if _, ok := limitsType.FieldByName(field); !ok {
+			t.Fatalf("EncoderLimits missing limit field %s", field)
 		}
 	}
 }

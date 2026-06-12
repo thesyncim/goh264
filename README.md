@@ -301,11 +301,13 @@ err = enc.SetGOP(60, 60)
 err = enc.SetResolution(640, 480)
 err = enc.SetDeblockMode(goh264.EncoderDeblockDisabled)
 err = enc.SetRTPMaxPayloadSize(1200)
-err = enc.SetMaxFrameSize(0)    // disable the access-unit byte budget
+err = enc.SetLimits(goh264.EncoderLimits{
+	MaxFrameSize:    0, // disable the access-unit byte budget
+	SliceMaxBytes:   0, // disable the per-slice byte budget
+	MaxEncodeTimeUS: 0, // disable the late-frame time budget
+})
 err = enc.SetPreset(goh264.EncoderPresetRealtime)
 err = enc.SetSliceCount(2)
-err = enc.SetSliceMaxBytes(0)   // disable the per-slice byte budget
-err = enc.SetMaxEncodeTimeUS(0) // disable the late-frame time budget
 err = enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand)
 err = enc.SetSPSPPSBeforeIDR(false)
 err = enc.SetIntraRefresh(false) // enabling intra refresh is not admitted yet
@@ -354,11 +356,12 @@ that are currently intended to be stable enough for integration work:
   RTP sequence, callback, frame-number, timestamp, or reference state. The next
   valid input resumes as P-skip, or as the queued IDR when an IDR request was
   already pending.
-- `SetMaxFrameSize`, `SetSliceMaxBytes`, and `SetMaxEncodeTimeUS` provide
-  explicit runtime setters for size and latency budgets; passing zero disables
-  the corresponding budget. For grouped updates through `EncoderReconfigure`,
-  use `MaxFrameSizeLimit`, `SliceMaxBytesLimit`, and `MaxEncodeTimeUSLimit`
-  when the update must explicitly set a budget to zero.
+- `SetLimits` updates the access-unit byte budget, per-slice byte budget, and
+  late-frame time budget atomically; passing zero disables the corresponding
+  budget. `SetMaxFrameSize`, `SetSliceMaxBytes`, and `SetMaxEncodeTimeUS`
+  remain explicit single-limit setters. For grouped updates through
+  `EncoderReconfigure`, use `MaxFrameSizeLimit`, `SliceMaxBytesLimit`, and
+  `MaxEncodeTimeUSLimit` when the update must explicitly set a budget to zero.
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
   `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
   `SetDeblockMode`, `SetPreset`, `SetSliceCount`, `SetSPSPPSMode`,
