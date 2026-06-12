@@ -2468,6 +2468,44 @@ func TestDecodeAnnexBTestsrc16DeblockFrame(t *testing.T) {
 	}
 }
 
+func TestFrameRawYUVBytesLEReturnsOwnedExactBuffer(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16DeblockAnnexBHex)
+	frame, err := NewDecoder().DecodeAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appended, err := frame.AppendRawYUVBytesLE(nil)
+	if err != nil {
+		t.Fatalf("AppendRawYUVBytesLE: %v", err)
+	}
+	raw, err := frame.RawYUVBytesLE()
+	if err != nil {
+		t.Fatalf("RawYUVBytesLE: %v", err)
+	}
+	if !bytes.Equal(raw, appended) {
+		t.Fatal("RawYUVBytesLE bytes differ from AppendRawYUVBytesLE")
+	}
+	if len(raw) != cap(raw) {
+		t.Fatalf("RawYUVBytesLE len/cap = %d/%d, want exact capacity", len(raw), cap(raw))
+	}
+	if got, want := len(raw), mustRawYUVSize(t, frame); got != want {
+		t.Fatalf("RawYUVBytesLE length = %d, want %d", got, want)
+	}
+	raw[0] ^= 0xff
+	again, err := frame.RawYUVBytesLE()
+	if err != nil {
+		t.Fatalf("RawYUVBytesLE after caller mutation: %v", err)
+	}
+	if !bytes.Equal(again, appended) {
+		t.Fatal("mutating RawYUVBytesLE output changed frame-backed raw output")
+	}
+
+	var nilFrame *Frame
+	if raw, err := nilFrame.RawYUVBytesLE(); err != ErrInvalidData || raw != nil {
+		t.Fatalf("nil RawYUVBytesLE = %v, %v; want nil and ErrInvalidData", raw, err)
+	}
+}
+
 func TestDecodeAnnexBTestsrc16IPDeblockFrames(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16IPDeblockAnnexBHex)
 	frames, err := NewDecoder().DecodeAnnexBFrames(data)
@@ -4248,6 +4286,15 @@ func assertFrameMD5Strings(t *testing.T, frames []*Frame, want []string) {
 			t.Fatalf("frame[%d] md5 = %x, want %s", i, got, want[i])
 		}
 	}
+}
+
+func mustRawYUVSize(t *testing.T, frame *Frame) int {
+	t.Helper()
+	size, err := frame.RawYUVSize()
+	if err != nil {
+		t.Fatalf("RawYUVSize: %v", err)
+	}
+	return size
 }
 
 func assertHigh422FrameMD5Strings(t *testing.T, frames []*Frame, want []string) {

@@ -1318,6 +1318,17 @@ func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
 	return dst, nil
 }
 
+// RawYUVBytesLE returns the visible frame as a new planar YUV byte slice.
+//
+// The output order and sample representation match AppendRawYUVBytesLE.
+func (f *Frame) RawYUVBytesLE() ([]byte, error) {
+	size, err := f.RawYUVSize()
+	if err != nil {
+		return nil, err
+	}
+	return f.AppendRawYUVBytesLE(make([]byte, 0, size))
+}
+
 func (f *Frame) appendRawYUVBytes8(dst []byte) ([]byte, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
 		return dst, ErrInvalidData

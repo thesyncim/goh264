@@ -287,6 +287,7 @@ func main() {
 }
 ```
 
+`RawYUVBytesLE` returns a caller-owned rawvideo buffer for one frame.
 `AppendRawYUV` is available for 8-bit output. `AppendRawYUVBytesLE` handles both
 8-bit and high-bit-depth output, using little-endian samples for 9-bit and
 higher formats. `RawPixelFormat` returns names such as `yuv420p`, `yuv422p10le`,
