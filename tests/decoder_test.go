@@ -1279,6 +1279,8 @@ func TestDecodePacketFramesBytePacketSideDataFirstEntryWins(t *testing.T) {
 	frame, err := NewDecoder().DecodePacket(Packet{
 		Data: decodeHexFixture(t, black16AnnexBHex),
 		SideData: []PacketSideData{
+			{Type: PacketSideDataA53ClosedCaptions, Data: nil},
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0x01, 0x02, 0x03}},
 			{Type: PacketSideDataICCProfile, Data: nil},
 			{Type: PacketSideDataICCProfile, Data: []byte{0x00, 0x00, 0x02, 0x10, 'a', 'c', 's', 'p'}},
 			{Type: PacketSideDataDynamicHDR10Plus, Data: nil},
@@ -1291,7 +1293,8 @@ func TestDecodePacketFramesBytePacketSideDataFirstEntryWins(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
-	if len(frame.SideData.ICCProfile) != 0 ||
+	if len(frame.SideData.A53ClosedCaptions) != 0 ||
+		len(frame.SideData.ICCProfile) != 0 ||
 		len(frame.SideData.DynamicHDR10Plus) != 0 ||
 		len(frame.SideData.LCEVC) != 0 {
 		t.Fatalf("later duplicate byte packet side data overrode empty first entry: %+v", frame.SideData)
