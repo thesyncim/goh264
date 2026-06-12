@@ -5909,6 +5909,7 @@ func TestEncoderEncodeRTPMode1FragmentsIDRAccessUnit(t *testing.T) {
 	}
 
 	annexB := annexBFromEncoderRTPPackets(t, out.RTPPackets)
+	assertEncoderVCLFrameNums(t, annexB, []uint8{5}, []uint32{0})
 	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
 	if err != nil {
 		t.Fatalf("DecodeAnnexBFrames reassembled RTP: %v", err)
