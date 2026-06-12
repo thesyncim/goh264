@@ -4,7 +4,9 @@ package h264
 
 import (
 	"math"
+	"reflect"
 	"testing"
+	"unsafe"
 )
 
 func TestApplySimpleFieldRefPlaneBuildsValidHalfHeightViews(t *testing.T) {
@@ -97,6 +99,17 @@ func TestSimpleFrameDPBPadsMissingActiveRefsWithDefault(t *testing.T) {
 	}
 	if len(list) != 2 || list[0] != ref || list[1] != ref {
 		t.Fatalf("padded list = %p/%p, want default/default %p", list[0], list[1], ref)
+	}
+}
+
+func TestSimpleFrameDPBRejectsOverflowedFieldRefEntryCapacity(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	sh := simpleDPBTestPHeader(sps, 1, 1)
+	sh.PictureStructure = PictureTopField
+	var dpb simpleFrameDPB
+
+	if _, err := dpb.buildDefaultEntriesFromFrames(fakeDecodedFrameSliceLen(maxInt/2+1), sh, false); err != ErrInvalidData {
+		t.Fatalf("field ref entries overflow error = %v, want ErrInvalidData", err)
 	}
 }
 
@@ -1335,6 +1348,18 @@ func recoverSimpleDPBTestFrames(frames ...*DecodedFrame) {
 	for _, frame := range frames {
 		frame.recovered |= simpleFrameRecoveredIDR
 	}
+}
+
+func fakeDecodedFrameSliceLen(n int) []*DecodedFrame {
+	if n <= 0 {
+		return nil
+	}
+	var frame *DecodedFrame
+	return *(*[]*DecodedFrame)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&frame)),
+		Len:  n,
+		Cap:  n,
+	}))
 }
 
 func simpleDPBTestPHeader(sps *SPS, frameNum uint32, refCount uint32) *SliceHeader {

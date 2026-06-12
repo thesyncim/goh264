@@ -757,6 +757,9 @@ func simpleRefListsSameFrames(a []simpleRefEntry, b []simpleRefEntry) bool {
 }
 
 func (d *simpleFrameDPB) buildDefaultEntriesFromFrames(frames []*DecodedFrame, sh *SliceHeader, long bool) ([]simpleRefEntry, error) {
+	if len(frames) > simpleMaxShortRefs {
+		return nil, ErrInvalidData
+	}
 	if sh.PictureStructure == PictureFrame {
 		entries := make([]simpleRefEntry, 0, len(frames))
 		for i, frame := range frames {
@@ -781,7 +784,8 @@ func (d *simpleFrameDPB) buildDefaultEntriesFromFrames(frames []*DecodedFrame, s
 		return entries, nil
 	}
 
-	entries := make([]simpleRefEntry, 0, len(frames)*2)
+	entryCap := len(frames) * 2
+	entries := make([]simpleRefEntry, 0, entryCap)
 	index := [2]int{}
 	sel := sh.PictureStructure
 	other := simpleOppositeField(sel)
