@@ -2169,9 +2169,21 @@ func frameChromaSize(width int, height int, chromaFormatIDC uint32) (int, int, e
 	case 0:
 		return 0, 0, nil
 	case 1:
-		return (width + 1) >> 1, (height + 1) >> 1, nil
+		chromaWidth, err := checkedAddInt(width, 1)
+		if err != nil {
+			return 0, 0, err
+		}
+		chromaHeight, err := checkedAddInt(height, 1)
+		if err != nil {
+			return 0, 0, err
+		}
+		return chromaWidth >> 1, chromaHeight >> 1, nil
 	case 2:
-		return (width + 1) >> 1, height, nil
+		chromaWidth, err := checkedAddInt(width, 1)
+		if err != nil {
+			return 0, 0, err
+		}
+		return chromaWidth >> 1, height, nil
 	case 3:
 		return width, height, nil
 	default:

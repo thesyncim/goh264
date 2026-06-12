@@ -472,6 +472,19 @@ func TestFrameRawYUVSizeRejectsOverflow(t *testing.T) {
 	if _, err := frame.RawYUVSize(); err != ErrInvalidData {
 		t.Fatalf("RawYUVSize overflow error = %v, want ErrInvalidData", err)
 	}
+
+	for _, chromaFormatIDC := range []uint32{1, 2} {
+		frame := Frame{
+			Width:           maxIntForTest,
+			Height:          1,
+			ChromaFormatIDC: chromaFormatIDC,
+			BitDepthLuma:    8,
+			BitDepthChroma:  8,
+		}
+		if _, err := frame.RawYUVSize(); err != ErrInvalidData {
+			t.Fatalf("RawYUVSize chroma %d overflow error = %v, want ErrInvalidData", chromaFormatIDC, err)
+		}
+	}
 }
 
 func TestFrameAppendRawYUVRejectsOverflowedDestination(t *testing.T) {
