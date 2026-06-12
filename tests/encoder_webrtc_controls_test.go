@@ -705,6 +705,34 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 	if got := enc.Config(); got.TargetBitrate != 600_000 || got.MaxBitrate != 600_000 {
 		t.Fatalf("defaulted max bitrate config = %d/%d, want 600000/600000", got.TargetBitrate, got.MaxBitrate)
 	}
+	if err := enc.SetRateControl(goh264.EncoderRateControlConstantQP); err != nil {
+		t.Fatalf("SetRateControl valid: %v", err)
+	}
+	if err := enc.SetVBVBufferSize(0); err != nil {
+		t.Fatalf("SetVBVBufferSize valid: %v", err)
+	}
+	if err := enc.SetFrameDropMode(goh264.EncoderFrameDropDisabled); err != nil {
+		t.Fatalf("SetFrameDropMode valid: %v", err)
+	}
+	if got := enc.Config(); got.RateControl != goh264.EncoderRateControlConstantQP ||
+		got.VBVBufferSize != 0 ||
+		got.FrameDrop != goh264.EncoderFrameDropDisabled {
+		t.Fatalf("rate controls = mode %v vbv %d drop %v, want ConstantQP/0/disabled",
+			got.RateControl, got.VBVBufferSize, got.FrameDrop)
+	}
+	if err := enc.SetQP(24, 12, 36); err != nil {
+		t.Fatalf("SetQP valid: %v", err)
+	}
+	if got := enc.Config(); got.InitialQP != 24 || got.MinQP != 12 || got.MaxQP != 36 || !enc.PendingIDR() {
+		t.Fatalf("QP controls = initial/min/max %d/%d/%d pending %v, want 24/12/36 and queued IDR",
+			got.InitialQP, got.MinQP, got.MaxQP, enc.PendingIDR())
+	}
+	if err := enc.SetDeblockMode(goh264.EncoderDeblockDisabled); err != nil {
+		t.Fatalf("SetDeblockMode valid: %v", err)
+	}
+	if got := enc.Config(); got.DeblockMode != goh264.EncoderDeblockDisabled {
+		t.Fatalf("deblock mode = %v, want disabled", got.DeblockMode)
+	}
 
 	before := enc.Config()
 	if err := enc.SetBitrate(0, 0); !errors.Is(err, goh264.ErrInvalidData) {
@@ -844,8 +872,23 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 		{name: "SetBitrate", call: func(enc *goh264.Encoder) error {
 			return enc.SetBitrate(0, 0)
 		}},
+		{name: "SetRateControl", call: func(enc *goh264.Encoder) error {
+			return enc.SetRateControl(goh264.EncoderRateControlMode(99))
+		}},
+		{name: "SetVBVBufferSize", call: func(enc *goh264.Encoder) error {
+			return enc.SetVBVBufferSize(-1)
+		}},
+		{name: "SetFrameDropMode", call: func(enc *goh264.Encoder) error {
+			return enc.SetFrameDropMode(goh264.EncoderFrameDropMode(99))
+		}},
+		{name: "SetQP", call: func(enc *goh264.Encoder) error {
+			return enc.SetQP(40, 30, 20)
+		}},
 		{name: "SetFrameRate", call: func(enc *goh264.Encoder) error {
 			return enc.SetFrameRate(0, 1)
+		}},
+		{name: "SetDeblockMode", call: func(enc *goh264.Encoder) error {
+			return enc.SetDeblockMode(goh264.EncoderDeblockMode(99))
 		}},
 		{name: "SetRTPMaxPayloadSize", call: func(enc *goh264.Encoder) error {
 			return enc.SetRTPMaxPayloadSize(2)
@@ -13021,7 +13064,8 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	encType := reflect.TypeOf(&goh264.Encoder{})
 	for _, method := range []string{
 		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
-		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize",
+		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetRateControl", "SetVBVBufferSize",
+		"SetFrameDropMode", "SetQP", "SetFrameRate", "SetDeblockMode", "SetRTPMaxPayloadSize",
 		"SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
 		"SetSPSPPSMode", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
 		"SetRTPMetadata", "SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",

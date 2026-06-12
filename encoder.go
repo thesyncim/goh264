@@ -1208,6 +1208,40 @@ func (e *Encoder) SetBitrate(targetBitrate, maxBitrate int) error {
 	return nil
 }
 
+// SetRateControl updates the runtime rate-control mode.
+//
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetRateControl(mode EncoderRateControlMode) error {
+	return e.Reconfigure(EncoderReconfigure{RateControl: mode})
+}
+
+// SetVBVBufferSize updates the VBV burst-capacity budget in bits.
+//
+// Passing zero disables the VBV cap. Invalid updates leave the encoder
+// configuration and coding state unchanged.
+func (e *Encoder) SetVBVBufferSize(size int) error {
+	return e.Reconfigure(EncoderReconfigure{VBVBufferSize: &size})
+}
+
+// SetFrameDropMode updates runtime drop behavior.
+//
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetFrameDropMode(mode EncoderFrameDropMode) error {
+	return e.Reconfigure(EncoderReconfigure{FrameDrop: mode})
+}
+
+// SetQP updates the runtime QP range.
+//
+// A valid QP update queues an IDR through the same path as EncoderReconfigure.
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetQP(initial, min, max int) error {
+	return e.Reconfigure(EncoderReconfigure{
+		InitialQP: &initial,
+		MinQP:     &min,
+		MaxQP:     &max,
+	})
+}
+
 // SetFrameRate updates the configured frame rate, derived RTP timestamp
 // increment, and bitrate budget accounting after a successful validation.
 func (e *Encoder) SetFrameRate(num, den int) error {
@@ -1299,6 +1333,13 @@ func (e *Encoder) SetMaxEncodeTimeUS(us int) error {
 	}
 	e.cfg = normalized
 	return nil
+}
+
+// SetDeblockMode updates the runtime deblocking mode.
+//
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetDeblockMode(mode EncoderDeblockMode) error {
+	return e.Reconfigure(EncoderReconfigure{DeblockMode: mode})
 }
 
 // SetSPSPPSMode updates in-band/out-of-band SPS/PPS emission policy.

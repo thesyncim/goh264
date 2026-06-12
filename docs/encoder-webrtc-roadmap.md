@@ -63,11 +63,11 @@ RTP re-entry payload-size, RTP metadata, and packetization updates that leave
 the prior config, queued-IDR state, callbacks, packet metadata, RTP cadence, and
 VCL frame-number continuity intact across Annex B, AVC, and RTP where the
 controls apply, including rejected updates bundled with ForceIDR requests.
-Common runtime bitrate, frame-rate, payload-size, size/latency budget,
-output/cadence, RTP packetization, and RTP payload metadata controls now have
-explicit setter helpers; `EncoderReconfigure` remains the grouped update path
-for resolution, QP/GOP/deblock, RTP timestamp increments, and bundled
-ForceIDR changes.
+Common runtime bitrate, rate-control, VBV, frame-drop, QP, frame-rate, deblock,
+payload-size, size/latency budget, output/cadence, RTP packetization, and RTP
+payload metadata controls now have explicit setter helpers; `EncoderReconfigure`
+remains the grouped update path for resolution, GOP/IDR cadence, RTP timestamp
+increments, and bundled ForceIDR changes.
 Runtime resolution reset rejects stale-size frames without consuming the queued
 IDR, then emits/decodes a new-size IDR and resumes P-skip references at the new
 dimensions.
