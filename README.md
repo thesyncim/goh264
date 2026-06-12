@@ -289,49 +289,73 @@ cfg.TargetBitrate = 800_000
 cfg.MaxBitrate = 1_000_000
 cfg.SliceCount = 2
 cfg, err := cfg.Normalize()
+if err != nil {
+	log.Fatal(err)
+}
 headers, err := cfg.ParameterSets()
+if err != nil {
+	log.Fatal(err)
+}
 sei, err := cfg.RecoveryPointSEIMessage(0)
+if err != nil {
+	log.Fatal(err)
+}
 
 enc, err := goh264.NewEncoder(cfg)
 if err != nil {
-	// Invalid controls return ErrInvalidData; unsupported future tools return ErrUnsupported.
+	log.Fatal(err)
+}
+must := func(err error) {
+	if err != nil {
+		// Invalid controls return ErrInvalidData; unsupported future tools return ErrUnsupported.
+		log.Fatal(err)
+	}
 }
 enc.HandlePLI() // queues the next frame as an IDR request
-err = enc.SetBitrate(700_000, 900_000)
-err = enc.SetRateControl(goh264.EncoderRateControlCBR)
-err = enc.SetVBVBufferSize(1_000_000)
-err = enc.SetFrameDropMode(goh264.EncoderFrameDropToBitrate)
-err = enc.SetQP(26, 10, 42)
-err = enc.SetFrameRate(30, 1)
-err = enc.SetRTPTimestampIncrement(3000)
-err = enc.SetGOP(60, 60)
-err = enc.SetResolution(640, 480)
-err = enc.SetDeblockMode(goh264.EncoderDeblockDisabled)
-err = enc.SetRTPMaxPayloadSize(1200)
-err = enc.SetLimits(goh264.EncoderLimits{
+must(enc.SetBitrate(700_000, 900_000))
+must(enc.SetRateControl(goh264.EncoderRateControlCBR))
+must(enc.SetVBVBufferSize(1_000_000))
+must(enc.SetFrameDropMode(goh264.EncoderFrameDropToBitrate))
+must(enc.SetQP(26, 10, 42))
+must(enc.SetFrameRate(30, 1))
+must(enc.SetRTPTimestampIncrement(3000))
+must(enc.SetGOP(60, 60))
+must(enc.SetResolution(640, 480))
+must(enc.SetDeblockMode(goh264.EncoderDeblockDisabled))
+must(enc.SetRTPMaxPayloadSize(1200))
+must(enc.SetLimits(goh264.EncoderLimits{
 	MaxFrameSize:    0, // disable the access-unit byte budget
 	SliceMaxBytes:   0, // disable the per-slice byte budget
 	MaxEncodeTimeUS: 0, // disable the late-frame time budget
-})
-err = enc.SetPreset(goh264.EncoderPresetRealtime)
-err = enc.SetSliceCount(2)
-err = enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand)
-err = enc.SetSPSPPSBeforeIDR(false)
-err = enc.SetIntraRefresh(false) // enabling intra refresh is not admitted yet
-err = enc.SetRecoveryPointSEI(true)
-err = enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false)
-err = enc.SetRTPMetadata(110, 0x11223344)
-err = enc.SetOutputFormat(goh264.EncoderOutputAVC) // queues an IDR boundary
+}))
+must(enc.SetPreset(goh264.EncoderPresetRealtime))
+must(enc.SetSliceCount(2))
+must(enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand))
+must(enc.SetSPSPPSBeforeIDR(false))
+must(enc.SetIntraRefresh(false)) // enabling intra refresh is not admitted yet
+must(enc.SetRecoveryPointSEI(true))
+must(enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false))
+must(enc.SetRTPMetadata(110, 0x11223344))
+must(enc.SetOutputFormat(goh264.EncoderOutputAVC)) // queues an IDR boundary
 enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
 	// Optional per-packet WebRTC metadata hook.
 })
 headers, err = enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
+if err != nil {
+	log.Fatal(err)
+}
 avcc := headers.AVCC()
 sei, err = enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
+if err != nil {
+	log.Fatal(err)
+}
 frame := enc.I420Frame(y, cb, cr, pts)
-err = cfg.ValidateFrame(frame)
-err = enc.ValidateFrame(frame)
+must(cfg.ValidateFrame(frame))
+must(enc.ValidateFrame(frame))
 out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
+if err != nil {
+	log.Fatal(err)
+}
 if out.Dropped {
 	// Realtime budget drop: no bytes or RTP packets were emitted.
 }
@@ -342,11 +366,26 @@ case goh264.EncoderOutputRTP:
 	// Use RTPPackets or the RTP helper methods below.
 }
 accessUnit, err := out.AccessUnitData()
+if err != nil {
+	log.Fatal(err)
+}
 nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
+if err != nil {
+	log.Fatal(err)
+}
 packet0, err := out.RTPPacketData(0)
+if err != nil {
+	log.Fatal(err)
+}
 payload0, err := out.RTPPayloadData(0)
+if err != nil {
+	log.Fatal(err)
+}
 owned, err := out.Clone()   // deep-owned snapshot for async retention
-err = enc.Reset()           // clear encoder coding state, keep config/callback
+if err != nil {
+	log.Fatal(err)
+}
+must(enc.Reset()) // clear encoder coding state, keep config/callback
 ```
 
 The admitted encoder contract is deliberately narrow, and these are the pieces
@@ -376,7 +415,7 @@ that are currently intended to be stable enough for integration work:
   `SetDeblockMode`, `SetPreset`, `SetSliceCount`, `SetSPSPPSMode`,
   `SetSPSPPSBeforeIDR`, `SetIntraRefresh`, `SetRecoveryPointSEI`,
   `SetOutputFormat`, `SetRTPPacketizationMode`, and `SetRTPMetadata` cover
-  common quality, budget, geometry, output, cadence, packetization, and RTP
+  admitted control, budget, geometry, output, cadence, packetization, and RTP
   header changes without constructing an `EncoderReconfigure` value. `SetQP`,
   `SetResolution`, and `SetOutputFormat` queue an IDR boundary after a valid
   update. `SetIntraRefresh(true)` returns `ErrUnsupported` until intra refresh

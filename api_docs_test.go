@@ -160,6 +160,37 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 	}
 }
 
+func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+	for _, forbidden := range []string{
+		"err = enc.Set",
+		"err = cfg.ValidateFrame",
+		"err = enc.ValidateFrame",
+		"err = enc.Reset",
+		"common quality, budget",
+	} {
+		if strings.Contains(readme, forbidden) {
+			t.Fatalf("README.md encoder sample still contains unchecked or overbroad phrase %q", forbidden)
+		}
+	}
+	for _, required := range []string{
+		"must(enc.SetBitrate",
+		"must(enc.SetLimits",
+		"must(cfg.ValidateFrame",
+		"must(enc.ValidateFrame",
+		"must(enc.Reset",
+		"admitted control, budget",
+	} {
+		if !strings.Contains(readme, required) {
+			t.Fatalf("README.md encoder sample missing checked-control phrase %q", required)
+		}
+	}
+}
+
 func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	data, err := os.ReadFile("examples_test.go")
 	if err != nil {
