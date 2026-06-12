@@ -7314,6 +7314,50 @@ func TestEncoderRTPPacketCallbackCanBeClearedAndSkipsNonRTPOutput(t *testing.T) 
 	if calls != firstPacketCount {
 		t.Fatalf("cleared callback calls = %d, want still %d", calls, firstPacketCount)
 	}
+
+	var firstCallbackCalls, replacementCallbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		firstCallbackCalls++
+	})
+	thirdFrame := secondFrame
+	thirdFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode RTP before replacing callback: %v", err)
+	}
+	thirdPacketCount := len(third.RTPPackets)
+	if thirdPacketCount == 0 || firstCallbackCalls != thirdPacketCount {
+		t.Fatalf("pre-replacement RTP packets/callbacks = %d/%d, want nonzero matching count",
+			thirdPacketCount, firstCallbackCalls)
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before replacing callback did not queue IDR")
+	}
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		replacementCallbackCalls++
+	})
+	if !enc.PendingIDR() {
+		t.Fatal("replacing RTP callback cleared pending IDR")
+	}
+	fourthFrame := thirdFrame
+	fourthFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	fourthFrame.Y[0] ^= 0x44
+	fourth, err := enc.Encode(fourthFrame)
+	if err != nil {
+		t.Fatalf("Encode RTP after replacing callback: %v", err)
+	}
+	if fourth.Dropped || !fourth.IDR || enc.PendingIDR() {
+		t.Fatalf("post-replace frame dropped=%v idr=%v pending=%v, want delivered IDR",
+			fourth.Dropped, fourth.IDR, enc.PendingIDR())
+	}
+	assertRTPPacketMetadata(t, fourth.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount+len(second.RTPPackets)+thirdPacketCount))
+	if firstCallbackCalls != thirdPacketCount {
+		t.Fatalf("replaced callback calls = %d, want still %d", firstCallbackCalls, thirdPacketCount)
+	}
+	if replacementCallbackCalls != len(fourth.RTPPackets) {
+		t.Fatalf("replacement callback calls = %d, want forced-IDR packet count %d", replacementCallbackCalls, len(fourth.RTPPackets))
+	}
 }
 
 func TestEncoderRTPAutoTimestampAdvancesWithoutExplicitPTS(t *testing.T) {
