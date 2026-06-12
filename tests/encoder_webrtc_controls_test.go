@@ -6671,34 +6671,76 @@ func TestEncoderEncodeForceIDRBypassesPSkipReference(t *testing.T) {
 		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := goh264.DefaultEncoderConfig(16, 16)
-			cfg.OutputFormat = goh264.EncoderOutputAnnexB
-			cfg.DeblockMode = goh264.EncoderDeblockDisabled
-			cfg.RTPMaxPayloadSize = 0
-			enc, err := goh264.NewEncoder(cfg)
-			if err != nil {
-				t.Fatalf("NewEncoder: %v", err)
+			for _, format := range []struct {
+				name string
+				fmt  goh264.EncoderOutputFormat
+			}{
+				{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+				{name: "avc", fmt: goh264.EncoderOutputAVC},
+				{name: "rtp", fmt: goh264.EncoderOutputRTP},
+			} {
+				t.Run(format.name, func(t *testing.T) {
+					cfg := goh264.DefaultEncoderConfig(16, 16)
+					cfg.OutputFormat = format.fmt
+					cfg.DeblockMode = goh264.EncoderDeblockDisabled
+					if format.fmt == goh264.EncoderOutputRTP {
+						cfg.RTPMaxPayloadSize = 32
+					} else {
+						cfg.RTPMaxPayloadSize = 0
+					}
+					enc, err := goh264.NewEncoder(cfg)
+					if err != nil {
+						t.Fatalf("NewEncoder: %v", err)
+					}
+					var callbackCalls int
+					enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+						callbackCalls++
+					})
+					frame := patternedI420EncoderFrame(16, 16)
+					frame.PTS = 0
+					first, err := enc.Encode(frame)
+					if err != nil {
+						t.Fatalf("Encode first IDR: %v", err)
+					}
+					if first.Dropped || !first.IDR || first.RTPTime != 0 || enc.PendingIDR() {
+						t.Fatalf("first frame dropped/id/time/pending = %v/%v/%d/%v, want IDR time 0",
+							first.Dropped, first.IDR, first.RTPTime, enc.PendingIDR())
+					}
+					firstPacketCount := len(first.RTPPackets)
+					if format.fmt == goh264.EncoderOutputRTP {
+						if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+							t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+								firstPacketCount, callbackCalls)
+						}
+					} else if firstPacketCount != 0 || callbackCalls != 0 {
+						t.Fatalf("non-RTP first packets/callbacks = %d/%d, want none", firstPacketCount, callbackCalls)
+					}
+
+					frame.PTS += int64(cfg.RTPTimestampIncrement)
+					tt.request(enc, &frame)
+					out, err := enc.Encode(frame)
+					if err != nil {
+						t.Fatalf("Encode forced IDR: %v", err)
+					}
+					if out.Dropped || !out.KeyFrame || !out.IDR || out.RTPTime != uint32(frame.PTS) || enc.PendingIDR() {
+						t.Fatalf("forced frame dropped/key/idr/time/pending = %v/%v/%v/%d/%v, want completed IDR time %d",
+							out.Dropped, out.KeyFrame, out.IDR, out.RTPTime, enc.PendingIDR(), frame.PTS)
+					}
+					assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+					stream := annexBFromEncodedFrame(t, first, cfg.OutputFormat)
+					stream = append(stream, annexBFromEncodedFrame(t, out, cfg.OutputFormat)...)
+					assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
+					if format.fmt == goh264.EncoderOutputRTP {
+						assertRTPPacketMetadata(t, out.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+					} else if len(out.RTPPackets) != 0 {
+						t.Fatalf("non-RTP forced packets = %d, want none", len(out.RTPPackets))
+					}
+					if callbackCalls != firstPacketCount+len(out.RTPPackets) {
+						t.Fatalf("post-forced callbacks = %d, want %d",
+							callbackCalls, firstPacketCount+len(out.RTPPackets))
+					}
+				})
 			}
-			frame := patternedI420EncoderFrame(16, 16)
-			first, err := enc.Encode(frame)
-			if err != nil {
-				t.Fatalf("Encode first IDR: %v", err)
-			}
-			frame.PTS += int64(cfg.RTPTimestampIncrement)
-			tt.request(enc, &frame)
-			out, err := enc.Encode(frame)
-			if err != nil {
-				t.Fatalf("Encode forced IDR: %v", err)
-			}
-			if !out.KeyFrame || !out.IDR || enc.PendingIDR() {
-				t.Fatalf("forced frame key=%v idr=%v pending=%v, want completed IDR", out.KeyFrame, out.IDR, enc.PendingIDR())
-			}
-			assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
-			assertEncoderVCLFrameNums(t,
-				append(append([]byte(nil), first.Data...), out.Data...),
-				[]uint8{5, 5},
-				[]uint32{0, 1},
-			)
 		})
 	}
 }
