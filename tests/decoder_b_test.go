@@ -387,9 +387,17 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 		}
 		frames = append(frames, out...)
 	}
-	out, err := dec.FlushDelayedFrames()
+	out, err := dec.DecodePacketFrames(Packet{
+		SideData: []PacketSideData{
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0xfe}},
+			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(999, 99)},
+			{Type: PacketSideDataDisplayMatrix, Data: decoderPacketDisplayMatrixSideData([9]int32{0xfe, 0, 0, 0, 65536, 0, 0, 0, 1 << 30})},
+			{Type: PacketSideDataDynamicHDR10Plus, Data: []byte{0xfe, 0xed}},
+			{Type: PacketSideDataLCEVC, Data: []byte{0xba, 0xad}},
+		},
+	})
 	if err != nil {
-		t.Fatalf("flush: %v", err)
+		t.Fatalf("empty packet flush with side data: %v", err)
 	}
 	frames = append(frames, out...)
 	assertFrameMD5Strings(t, frames, []string{
