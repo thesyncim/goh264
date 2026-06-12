@@ -482,6 +482,56 @@ func TestFrameSideDataFromH264RejectsOverflowedReferenceDisplaysClone(t *testing
 	}
 }
 
+func TestFrameSideDataFromH264ClonesReferenceDisplays(t *testing.T) {
+	src := h264.DecodedFrameSideData{
+		ReferenceDisplays: h264.AV3DReferenceDisplaysInfo{
+			Present:                1,
+			PrecRefDisplayWidth:    12,
+			RefViewingDistanceFlag: 1,
+			PrecRefViewingDist:     9,
+			Displays: []h264.AV3DReferenceDisplay{
+				{
+					LeftViewID:                 3,
+					RightViewID:                4,
+					ExponentRefDisplayWidth:    5,
+					MantissaRefDisplayWidth:    6,
+					ExponentRefViewingDistance: 7,
+					MantissaRefViewingDistance: 8,
+					AdditionalShiftPresentFlag: 1,
+					NumSampleShift:             -11,
+				},
+			},
+		},
+	}
+	got := frameSideDataFromH264(src, 0, 0)
+	if got.ReferenceDisplays == nil {
+		t.Fatal("reference displays = nil, want converted display")
+	}
+	if got.ReferenceDisplays.PrecRefDisplayWidth != 12 ||
+		!got.ReferenceDisplays.RefViewingDistanceFlag ||
+		got.ReferenceDisplays.PrecRefViewingDist != 9 ||
+		len(got.ReferenceDisplays.Displays) != 1 {
+		t.Fatalf("reference displays header = %+v, want converted header with one display", got.ReferenceDisplays)
+	}
+	display := got.ReferenceDisplays.Displays[0]
+	if display.LeftViewID != 3 ||
+		display.RightViewID != 4 ||
+		display.ExponentRefDisplayWidth != 5 ||
+		display.MantissaRefDisplayWidth != 6 ||
+		display.ExponentRefViewingDistance != 7 ||
+		display.MantissaRefViewingDistance != 8 ||
+		!display.AdditionalShiftPresentFlag ||
+		display.NumSampleShift != -11 {
+		t.Fatalf("reference display = %+v, want converted source fields", display)
+	}
+
+	src.ReferenceDisplays.Displays[0].LeftViewID = 99
+	src.ReferenceDisplays.Displays[0].NumSampleShift = 22
+	if got.ReferenceDisplays.Displays[0].LeftViewID != 3 || got.ReferenceDisplays.Displays[0].NumSampleShift != -11 {
+		t.Fatalf("reference displays alias source after mutation = %+v", got.ReferenceDisplays.Displays[0])
+	}
+}
+
 func TestCloneEncoderRTPPacketClonesSharedPayloadStorage(t *testing.T) {
 	data := []byte{0x80, 0x60, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0x65, 0xaa}
 	pkt := EncoderRTPPacket{Data: data, Payload: data[12:]}
