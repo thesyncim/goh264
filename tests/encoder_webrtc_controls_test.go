@@ -11268,6 +11268,26 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "bad prefix", frame: goh264.EncodedFrame{Data: []byte{9, 9, 9, 9, 0x67}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}},
 		{name: "zero size", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 4}}}},
 		{name: "past data", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 6, Size: 3}}}},
+		{
+			name: "gap between nal units",
+			frame: goh264.EncodedFrame{
+				Data: []byte{0, 0, 0, 1, 0x67, 0x42, 0x99, 0, 0, 0, 1, 0x68},
+				NALUnits: []goh264.EncoderNALUnit{
+					{Offset: 4, Size: 2},
+					{Offset: 11, Size: 1},
+				},
+			},
+		},
+		{
+			name: "out of order nal units",
+			frame: goh264.EncodedFrame{
+				Data: []byte{0, 0, 0, 1, 0x67, 0x42, 0, 0, 0, 1, 0x68},
+				NALUnits: []goh264.EncoderNALUnit{
+					{Offset: 10, Size: 1},
+					{Offset: 4, Size: 2},
+				},
+			},
+		},
 	} {
 		t.Run("access-unit-"+tt.name, func(t *testing.T) {
 			if got, err := tt.frame.AccessUnitData(); !errors.Is(err, goh264.ErrInvalidData) || got != nil {

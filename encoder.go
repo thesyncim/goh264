@@ -409,7 +409,7 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 	if frame.Dropped || len(frame.NALUnits) == 0 {
 		return nil, ErrInvalidData
 	}
-	start := maxInt
+	start := -1
 	end := 0
 	for _, unit := range frame.NALUnits {
 		if unit.Offset < 4 || unit.Size <= 0 {
@@ -426,12 +426,12 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 		if !annexBPrefix && !avcPrefix {
 			return nil, ErrInvalidData
 		}
-		if prefixStart < start {
+		if start < 0 {
 			start = prefixStart
+		} else if prefixStart != end {
+			return nil, ErrInvalidData
 		}
-		if unitEnd > end {
-			end = unitEnd
-		}
+		end = unitEnd
 	}
 	if start >= end {
 		return nil, ErrInvalidData
