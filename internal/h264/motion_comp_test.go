@@ -44,6 +44,24 @@ func TestH264HLMotionFrameBipredUsesAvgForSecondList(t *testing.T) {
 	}
 }
 
+func TestH264EmulatedEdgeMCRejectsOverflowedGeometry(t *testing.T) {
+	if err := h264EmulatedEdgeMC(nil, maxInt-1, maxInt, []uint8{0, 1}, 1, 1, 2, 0, 0, 1, 2); err != ErrInvalidData {
+		t.Fatalf("overflowed edge buffer geometry error = %v, want ErrInvalidData", err)
+	}
+	if err := h264EmulatedEdgeMC(make([]uint8, 2), 0, 1, nil, maxInt, 1, 2, 0, 0, 1, 2); err != ErrInvalidData {
+		t.Fatalf("overflowed edge source geometry error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestH264EmulatedEdgeMCHighRejectsOverflowedGeometry(t *testing.T) {
+	if err := h264EmulatedEdgeMCHigh(nil, maxInt-1, maxInt, []uint16{0, 1}, 1, 1, 2, 0, 0, 1, 2); err != ErrInvalidData {
+		t.Fatalf("overflowed high edge buffer geometry error = %v, want ErrInvalidData", err)
+	}
+	if err := h264EmulatedEdgeMCHigh(make([]uint16, 2), 0, 1, nil, maxInt, 1, 2, 0, 0, 1, 2); err != ErrInvalidData {
+		t.Fatalf("overflowed high edge source geometry error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestH264HLMotionFrameList1OnlyUsesPut(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
 	ref1 := makeH264MotionCompPicture(1, 99)

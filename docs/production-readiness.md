@@ -82,7 +82,8 @@ allocations for 8-bit and high-bit-depth output paths, including caller-buffer
 preservation on invalid 8-bit chroma geometry and high-bit-depth luma/chroma
 sample errors. `Frame.RawYUVSize` and the raw-output appenders reject
 overflowed caller-constructed frame geometry instead of returning wrapped byte
-counts or panicking during plane slicing.
+counts or panicking during plane slicing. Internal low/high motion and
+reconstruction plane-span checks reject overflowed geometry before indexing.
 Public SEI `FrameSideData` byte slices are guarded as caller-owned by mutating
 decoded unregistered-user-data, A53, and LCEVC slices and re-decoding the same
 input bytes.

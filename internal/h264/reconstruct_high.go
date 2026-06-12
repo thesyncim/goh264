@@ -232,7 +232,8 @@ func h264ReadIntraPCMPlaneHigh(gb *bitReader, dst []uint16, offset int, stride i
 	if gb == nil || offset < 0 || stride <= 0 || width <= 0 || height <= 0 {
 		return ErrInvalidData
 	}
-	if len(dst) < offset+(height-1)*stride+width {
+	dstEnd, err := h264PlaneSpanEnd(offset, stride, height, width)
+	if err != nil || len(dst) < dstEnd {
 		return ErrInvalidData
 	}
 	for y := 0; y < height; y++ {
@@ -1015,16 +1016,25 @@ func (p *h264PicturePlanesHigh) validate() error {
 	if p == nil || p.MBWidth <= 0 || p.MBHeight <= 0 || p.LumaStride <= 0 || p.ChromaFormatIDC < 0 || p.ChromaFormatIDC > 3 {
 		return ErrInvalidData
 	}
-	lumaWidth := p.MBWidth * 16
-	lumaHeight := p.MBHeight * 16
-	if p.LumaStride < lumaWidth || len(p.Y) < (lumaHeight-1)*p.LumaStride+lumaWidth {
+	lumaWidth, err := checkedMulInt(p.MBWidth, 16)
+	if err != nil {
+		return ErrInvalidData
+	}
+	lumaHeight, err := checkedMulInt(p.MBHeight, 16)
+	if err != nil {
+		return ErrInvalidData
+	}
+	if p.LumaStride < lumaWidth || !h264PlaneHasHigh(p.Y, p.LumaStride, lumaHeight, lumaWidth) {
 		return ErrInvalidData
 	}
 	if p.ChromaFormatIDC == 0 {
 		return nil
 	}
-	chromaWidth, chromaHeight := h264ChromaFrameSize(p.MBWidth, p.MBHeight, p.ChromaFormatIDC)
-	if p.ChromaStride < chromaWidth || len(p.Cb) < (chromaHeight-1)*p.ChromaStride+chromaWidth || len(p.Cr) < (chromaHeight-1)*p.ChromaStride+chromaWidth {
+	chromaWidth, chromaHeight, err := h264ChromaFrameSizeChecked(p.MBWidth, p.MBHeight, p.ChromaFormatIDC)
+	if err != nil {
+		return ErrInvalidData
+	}
+	if p.ChromaStride < chromaWidth || !h264PlaneHasHigh(p.Cb, p.ChromaStride, chromaHeight, chromaWidth) || !h264PlaneHasHigh(p.Cr, p.ChromaStride, chromaHeight, chromaWidth) {
 		return ErrInvalidData
 	}
 	return nil

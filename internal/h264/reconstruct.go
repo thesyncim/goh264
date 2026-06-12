@@ -194,10 +194,15 @@ func h264HLDecodeFrameIntraPCM(dst *h264PicturePlanes, dstY int, dstCb int, dstC
 }
 
 func h264CopyRows(dst []uint8, offset int, stride int, width int, height int, src []byte, srcStride int) error {
-	if offset < 0 || stride <= 0 || width <= 0 || height <= 0 || srcStride < width || len(src) < (height-1)*srcStride+width {
+	if offset < 0 || stride <= 0 || width <= 0 || height <= 0 || srcStride < width {
 		return ErrInvalidData
 	}
-	if len(dst) < offset+(height-1)*stride+width {
+	srcNeed, err := h264PlaneSpanLength(srcStride, height, width)
+	if err != nil || len(src) < srcNeed {
+		return ErrInvalidData
+	}
+	dstEnd, err := h264PlaneSpanEnd(offset, stride, height, width)
+	if err != nil || len(dst) < dstEnd {
 		return ErrInvalidData
 	}
 	for y := 0; y < height; y++ {

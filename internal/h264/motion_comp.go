@@ -326,7 +326,8 @@ func h264PlaneHas(p []uint8, stride int, height int, width int) bool {
 	if width == 0 || stride < width {
 		return false
 	}
-	return len(p) >= (height-1)*stride+width
+	need, err := h264PlaneSpanLength(stride, height, width)
+	return err == nil && len(p) >= need
 }
 
 func h264EdgeStride(stride int, blockW int) int {
@@ -363,8 +364,15 @@ func h264EmulatedEdgeMC(buf []uint8, bufOffset int, bufStride int, src []uint8, 
 	if bufStride < blockW || srcStride < width {
 		return ErrInvalidData
 	}
-	bufMax := bufOffset + (blockH-1)*bufStride + blockW - 1
-	if bufMax >= len(buf) || len(src) < (height-1)*srcStride+width {
+	bufEnd, err := h264PlaneSpanEnd(bufOffset, bufStride, blockH, blockW)
+	if err != nil {
+		return ErrInvalidData
+	}
+	srcNeed, err := h264PlaneSpanLength(srcStride, height, width)
+	if err != nil {
+		return ErrInvalidData
+	}
+	if bufEnd > len(buf) || len(src) < srcNeed {
 		return ErrInvalidData
 	}
 	for y := 0; y < blockH; y++ {
@@ -659,31 +667,98 @@ func (p *h264PicturePlanes) validate() error {
 	if p == nil || p.MBWidth <= 0 || p.MBHeight <= 0 || p.LumaStride <= 0 || p.ChromaFormatIDC < 0 || p.ChromaFormatIDC > 3 {
 		return ErrInvalidData
 	}
-	lumaWidth := p.MBWidth * 16
-	lumaHeight := p.MBHeight * 16
-	if p.LumaStride < lumaWidth || len(p.Y) < (lumaHeight-1)*p.LumaStride+lumaWidth {
+	lumaWidth, err := checkedMulInt(p.MBWidth, 16)
+	if err != nil {
+		return ErrInvalidData
+	}
+	lumaHeight, err := checkedMulInt(p.MBHeight, 16)
+	if err != nil {
+		return ErrInvalidData
+	}
+	if p.LumaStride < lumaWidth || !h264PlaneHas(p.Y, p.LumaStride, lumaHeight, lumaWidth) {
 		return ErrInvalidData
 	}
 	if p.ChromaFormatIDC == 0 {
 		return nil
 	}
-	chromaWidth, chromaHeight := h264ChromaFrameSize(p.MBWidth, p.MBHeight, p.ChromaFormatIDC)
-	if p.ChromaStride < chromaWidth || len(p.Cb) < (chromaHeight-1)*p.ChromaStride+chromaWidth || len(p.Cr) < (chromaHeight-1)*p.ChromaStride+chromaWidth {
+	chromaWidth, chromaHeight, err := h264ChromaFrameSizeChecked(p.MBWidth, p.MBHeight, p.ChromaFormatIDC)
+	if err != nil {
+		return ErrInvalidData
+	}
+	if p.ChromaStride < chromaWidth || !h264PlaneHas(p.Cb, p.ChromaStride, chromaHeight, chromaWidth) || !h264PlaneHas(p.Cr, p.ChromaStride, chromaHeight, chromaWidth) {
 		return ErrInvalidData
 	}
 	return nil
 }
 
+func h264PlaneSpanLength(stride int, height int, width int) (int, error) {
+	return h264PlaneSpanEnd(0, stride, height, width)
+}
+
+func h264PlaneSpanEnd(offset int, stride int, height int, width int) (int, error) {
+	if offset < 0 || stride <= 0 || height < 0 || width < 0 {
+		return 0, ErrInvalidData
+	}
+	if height == 0 {
+		return offset, nil
+	}
+	lastRow, err := checkedMulInt(height-1, stride)
+	if err != nil {
+		return 0, ErrInvalidData
+	}
+	end, err := checkedAddInt(offset, lastRow)
+	if err != nil {
+		return 0, ErrInvalidData
+	}
+	end, err = checkedAddInt(end, width)
+	if err != nil {
+		return 0, ErrInvalidData
+	}
+	return end, nil
+}
+
 func h264ChromaFrameSize(mbWidth int, mbHeight int, chromaFormatIDC int) (int, int) {
+	width, height, err := h264ChromaFrameSizeChecked(mbWidth, mbHeight, chromaFormatIDC)
+	if err != nil {
+		return 0, 0
+	}
+	return width, height
+}
+
+func h264ChromaFrameSizeChecked(mbWidth int, mbHeight int, chromaFormatIDC int) (int, int, error) {
 	switch chromaFormatIDC {
 	case 1:
-		return mbWidth * 8, mbHeight * 8
+		width, err := checkedMulInt(mbWidth, 8)
+		if err != nil {
+			return 0, 0, ErrInvalidData
+		}
+		height, err := checkedMulInt(mbHeight, 8)
+		if err != nil {
+			return 0, 0, ErrInvalidData
+		}
+		return width, height, nil
 	case 2:
-		return mbWidth * 8, mbHeight * 16
+		width, err := checkedMulInt(mbWidth, 8)
+		if err != nil {
+			return 0, 0, ErrInvalidData
+		}
+		height, err := checkedMulInt(mbHeight, 16)
+		if err != nil {
+			return 0, 0, ErrInvalidData
+		}
+		return width, height, nil
 	case 3:
-		return mbWidth * 16, mbHeight * 16
+		width, err := checkedMulInt(mbWidth, 16)
+		if err != nil {
+			return 0, 0, ErrInvalidData
+		}
+		height, err := checkedMulInt(mbHeight, 16)
+		if err != nil {
+			return 0, 0, ErrInvalidData
+		}
+		return width, height, nil
 	default:
-		return 0, 0
+		return 0, 0, ErrInvalidData
 	}
 }
 

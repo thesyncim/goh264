@@ -277,7 +277,8 @@ func h264PlaneHasHigh(p []uint16, stride int, height int, width int) bool {
 	if width == 0 || stride < width {
 		return false
 	}
-	return len(p) >= (height-1)*stride+width
+	need, err := h264PlaneSpanLength(stride, height, width)
+	return err == nil && len(p) >= need
 }
 
 func h264EdgeScratchHigh(s *h264MotionCompScratchHigh, stride int, blockW int, blockH int) ([]uint16, int, error) {
@@ -302,8 +303,15 @@ func h264EmulatedEdgeMCHigh(buf []uint16, bufOffset int, bufStride int, src []ui
 	if bufStride < blockW || srcStride < width {
 		return ErrInvalidData
 	}
-	bufMax := bufOffset + (blockH-1)*bufStride + blockW - 1
-	if bufMax >= len(buf) || len(src) < (height-1)*srcStride+width {
+	bufEnd, err := h264PlaneSpanEnd(bufOffset, bufStride, blockH, blockW)
+	if err != nil {
+		return ErrInvalidData
+	}
+	srcNeed, err := h264PlaneSpanLength(srcStride, height, width)
+	if err != nil {
+		return ErrInvalidData
+	}
+	if bufEnd > len(buf) || len(src) < srcNeed {
 		return ErrInvalidData
 	}
 	for y := 0; y < blockH; y++ {

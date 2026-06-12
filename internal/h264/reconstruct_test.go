@@ -191,6 +191,27 @@ func TestH264HLDecodeFrameMacroblockIntraPCMReconstructs420(t *testing.T) {
 	assertH264Rows(t, "pcm cr", dst.Cr, crOff, dst.ChromaStride, 8, 8, pcm[256+8*8:], 8)
 }
 
+func TestH264CopyRowsRejectsOverflowedGeometry(t *testing.T) {
+	if err := h264CopyRows(nil, maxInt-1, maxInt, 1, 2, []byte{0, 1}, 1); err != ErrInvalidData {
+		t.Fatalf("overflowed destination geometry error = %v, want ErrInvalidData", err)
+	}
+	if err := h264CopyRows(make([]byte, 2), 0, 1, 1, 2, nil, maxInt); err != ErrInvalidData {
+		t.Fatalf("overflowed source geometry error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestH264PicturePlaneValidationRejectsOverflowedGeometry(t *testing.T) {
+	pic := &h264PicturePlanes{
+		MBWidth:         maxInt/16 + 1,
+		MBHeight:        1,
+		LumaStride:      maxInt,
+		ChromaFormatIDC: 0,
+	}
+	if err := pic.validate(); err != ErrInvalidData {
+		t.Fatalf("overflowed picture geometry error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestH264HLDecodeFrameMacroblockIntraPCMReconstructs422(t *testing.T) {
 	dst := makeH264MotionCompPicture(2, 21)
 	pcm := h264ReconstructIntraPCM(2, 49)
@@ -254,6 +275,25 @@ func TestH264HLDecodeFrameIntraPCMHighReconstructs444(t *testing.T) {
 	assertH264RowsHigh(t, "high pcm444 cr", dst.Cr, crOff, dst.ChromaStride, 16, 16, samples[512:], 16)
 	if err := h264HLDecodeFrameIntraPCMHigh(dst, yOff, cbOff, crOff, pcm[:len(pcm)-1], bitDepth); err != ErrInvalidData {
 		t.Fatalf("truncated high pcm error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestH264ReadIntraPCMPlaneHighRejectsOverflowedGeometry(t *testing.T) {
+	gb := &bitReader{}
+	if err := h264ReadIntraPCMPlaneHigh(gb, nil, maxInt-1, maxInt, 1, 2, 10); err != ErrInvalidData {
+		t.Fatalf("overflowed high destination geometry error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestH264HighPicturePlaneValidationRejectsOverflowedGeometry(t *testing.T) {
+	pic := &h264PicturePlanesHigh{
+		MBWidth:         maxInt/16 + 1,
+		MBHeight:        1,
+		LumaStride:      maxInt,
+		ChromaFormatIDC: 0,
+	}
+	if err := pic.validate(); err != ErrInvalidData {
+		t.Fatalf("overflowed high picture geometry error = %v, want ErrInvalidData", err)
 	}
 }
 

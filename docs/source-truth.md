@@ -115,7 +115,8 @@ packet side-data byte-slice ownership across delayed B-frame output,
 raw-output caller-buffer preservation on invalid 8-bit chroma geometry and
 high-bit-depth luma/chroma sample errors, `RawYUVSize` overflow rejection, and
 raw-output appender no-panic rejection for overflowed caller-constructed frame
-geometry,
+geometry, checked low/high internal motion and reconstruction plane-span
+overflow rejection,
 public SEI side-data byte-slice ownership against caller mutation,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.
 
