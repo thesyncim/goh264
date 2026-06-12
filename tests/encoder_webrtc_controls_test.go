@@ -173,6 +173,9 @@ func TestEncoderI420FrameHelpersPopulateConfigFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
+	if err := enc.ValidateFrame(frame); err != nil {
+		t.Fatalf("ValidateFrame I420Frame helper: %v", err)
+	}
 	encoded, err := enc.Encode(enc.I420Frame(y, cb, cr, 9000))
 	if err != nil {
 		t.Fatalf("Encode I420Frame helper: %v", err)
@@ -321,6 +324,9 @@ func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 		{name: "EncodeInto", call: func() error {
 			_, err := enc.EncodeInto(nil, goh264.EncoderFrame{})
 			return err
+		}},
+		{name: "ValidateFrame", call: func() error {
+			return enc.ValidateFrame(goh264.EncoderFrame{})
 		}},
 		{name: "SetBitrate", call: func() error {
 			return enc.SetBitrate(1, 1)
@@ -9927,6 +9933,20 @@ func TestEncoderEncodeIntoInvalidFramePreservesPendingIDR(t *testing.T) {
 					bad.PTS = int64(cfg.RTPTimestampIncrement)
 					tt.mutate(&bad)
 
+					if err := enc.ValidateFrame(bad); !errors.Is(err, goh264.ErrInvalidData) {
+						t.Fatalf("%s ValidateFrame error = %v, want ErrInvalidData", tt.name, err)
+					}
+					if got := enc.Config(); got != beforeCfg {
+						t.Fatalf("%s invalid ValidateFrame mutated config = %+v, want %+v", tt.name, got, beforeCfg)
+					}
+					if !enc.PendingIDR() {
+						t.Fatalf("%s invalid ValidateFrame cleared pending IDR", tt.name)
+					}
+					if callbackCalls != firstPacketCount {
+						t.Fatalf("%s invalid ValidateFrame callbacks = %d, want still %d",
+							tt.name, callbackCalls, firstPacketCount)
+					}
+
 					dst, beforeDst := encoderPrefilledCallerBuffer()
 					out, err := enc.EncodeInto(dst, bad)
 					if !errors.Is(err, goh264.ErrInvalidData) {
@@ -11765,7 +11785,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	for _, method := range []string{
 		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
 		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize",
-		"SetRTPPacketCallback", "Reconfigure", "I420Frame", "Reset",
+		"SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
 			t.Fatalf("Encoder missing runtime control method %s", method)

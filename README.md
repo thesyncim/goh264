@@ -82,7 +82,8 @@ contract that keeps the inventory, manifest, exclusions, and failure ledger in
 lockstep.
 
 Encoder status: `DefaultEncoderConfig`, `EncoderConfig.Normalize`,
-`NewEncoder`, `ParameterSets`, `RecoveryPointSEI`, `Encode`/`EncodeInto`, PLI/FIR/force-IDR,
+`NewEncoder`, `ParameterSets`, `RecoveryPointSEI`, `ValidateFrame`,
+`Encode`/`EncodeInto`, PLI/FIR/force-IDR,
 bitrate/framerate/payload/slice reconfiguration, runtime rate-control, QP,
 frame-drop, GOP/IDR, deblock, SPS/PPS cadence modes, runtime output-format and
 RTP packetization reconfiguration, including RTP-to-configured-AVC forced
@@ -397,6 +398,7 @@ headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC header
 avcc := headers.AVCC()
 sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
 frame := enc.I420Frame(y, cb, cr, pts)
+err = enc.ValidateFrame(frame)
 out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if out.Dropped {
 	// Realtime budget drop: no bytes or RTP packets were emitted.
@@ -409,7 +411,7 @@ owned, err := out.Clone()   // deep-owned snapshot for async retention
 err = enc.Reset()           // clear encoder coding state, keep config/callback
 ```
 
-`Encode` and `EncodeInto` validate frame shape before bitstream work; invalid
+`ValidateFrame`, `Encode`, and `EncodeInto` validate frame shape before bitstream work; invalid
 frames return empty output without advancing RTP sequence, callback,
 frame-number, timestamp, or reference state, then valid input resumes as the
 expected P-skip, or as the queued IDR when a prior IDR request was pending.

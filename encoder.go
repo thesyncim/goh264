@@ -637,6 +637,15 @@ func (e *Encoder) I420Frame(y, cb, cr []byte, pts int64) EncoderFrame {
 	return e.cfg.I420Frame(y, cb, cr, pts)
 }
 
+// ValidateFrame reports whether frame can be encoded with the current
+// configuration without changing encoder state.
+func (e *Encoder) ValidateFrame(frame EncoderFrame) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	return e.validateFrame(frame)
+}
+
 // ParameterSets returns SPS/PPS headers for the current encoder configuration.
 //
 // All returned byte slices are caller-owned and isolated from the encoder.

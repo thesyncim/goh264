@@ -147,7 +147,7 @@ recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 runtime resolution reset that rejects stale-size frames without consuming the
 queued IDR before emitting/decoding a new-size IDR and resuming P-skip
 references at the new dimensions,
-invalid frame-rate helper/reconfigure plus invalid runtime rate,
+public encoder frame preflight, invalid frame-rate helper/reconfigure plus invalid runtime rate,
 latency/slice, output/header/preset, RTP re-entry payload-size, and
 packetization updates that leave config, queued-IDR state, RTP cadence, packets,
 and callbacks intact,
