@@ -145,6 +145,8 @@ access-unit bytes for Annex B/AVC/RTP output including non-empty caller-buffer
 prefixes, caller-buffer preservation on RTP mode-0 rejection, live-state
 rollback for mode-0 oversize queued-IDR and P-frame packetization failures, and
 Annex B/AVC/RTP bitrate-drop and late-drop non-output paths, RTP FU-A reassembly, STAP-A parameter-set aggregation,
+small-payload STAP-A fallback to non-aggregated mode-1 packets with decode and
+sequence continuity,
 changed-P recovery SEI single-NAL output when STAP-A is enabled,
 payload-type, SSRC, and sequence-number packet metadata. RTP
 packets also carry complete 12-byte RTP headers plus payload bytes with clipped

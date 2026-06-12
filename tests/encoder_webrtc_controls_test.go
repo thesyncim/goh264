@@ -5896,6 +5896,111 @@ func TestEncoderRTPMode0OversizeRejectPreservesLiveState(t *testing.T) {
 	}
 }
 
+func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationNonInterleaved
+	cfg.RTPMaxPayloadSize = 128
+	cfg.STAPA = true
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder STAP-A: %v", err)
+	}
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 0
+	first, err := enc.EncodeInto(make([]byte, 0, 4096), frame)
+	if err != nil {
+		t.Fatalf("Encode first STAP-A IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first STAP-A frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	if len(first.RTPPackets) < 2 || callbackCalls != len(first.RTPPackets) {
+		t.Fatalf("first STAP-A packets/callbacks = %d/%d, want multiple matching packets",
+			len(first.RTPPackets), callbackCalls)
+	}
+	if first.RTPPackets[0].Payload[0]&0x1f != 24 {
+		t.Fatalf("first STAP-A payload type = %d, want STAP-A", first.RTPPackets[0].Payload[0]&0x1f)
+	}
+	firstPacketCount := len(first.RTPPackets)
+
+	if err := enc.SetRTPMaxPayloadSize(3); err != nil {
+		t.Fatalf("lower RTP payload size for STAP-A fallback: %v", err)
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR did not queue IDR before STAP-A fallback")
+	}
+	nextFrame := frame
+	nextFrame.PTS = int64(cfg.RTPTimestampIncrement)
+	fallback, err := enc.EncodeInto(make([]byte, 0, 4096), nextFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto STAP-A small-payload fallback: %v", err)
+	}
+	if fallback.Dropped || !fallback.IDR || enc.PendingIDR() {
+		t.Fatalf("STAP-A fallback output dropped=%v idr=%v pending=%v, want delivered IDR",
+			fallback.Dropped, fallback.IDR, enc.PendingIDR())
+	}
+	if fallback.RTPTime != uint32(nextFrame.PTS) {
+		t.Fatalf("STAP-A fallback RTP time = %d, want %d", fallback.RTPTime, nextFrame.PTS)
+	}
+	assertEncoderNALTypes(t, fallback.NALUnits, []uint8{7, 8, 5})
+	if len(fallback.RTPPackets) <= len(first.RTPPackets) {
+		t.Fatalf("STAP-A fallback packet count = %d, want more than aggregated count %d", len(fallback.RTPPackets), len(first.RTPPackets))
+	}
+	for i, pkt := range fallback.RTPPackets {
+		if len(pkt.Payload) > 3 {
+			t.Fatalf("STAP-A fallback packet[%d] payload size = %d, want <= 3", i, len(pkt.Payload))
+		}
+		if len(pkt.Payload) != 0 && pkt.Payload[0]&0x1f == 24 {
+			t.Fatalf("STAP-A fallback packet[%d] unexpectedly used STAP-A payload: %x", i, pkt.Payload)
+		}
+	}
+	assertRTPPacketMetadata(t, fallback.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(fallback.RTPPackets) {
+		t.Fatalf("STAP-A fallback callbacks = %d, want %d", callbackCalls, firstPacketCount+len(fallback.RTPPackets))
+	}
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode first STAP-A IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, frame))
+	decodedFallback, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, fallback.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode STAP-A fallback IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFallback, appendI420FrameBytes(nil, nextFrame))
+
+	if err := enc.SetRTPMaxPayloadSize(128); err != nil {
+		t.Fatalf("restore RTP payload size after STAP-A fallback: %v", err)
+	}
+	pFrame := nextFrame
+	pFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	recovered, err := enc.EncodeInto(make([]byte, 0, 4096), pFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto after STAP-A fallback: %v", err)
+	}
+	if recovered.Dropped || recovered.IDR || enc.PendingIDR() {
+		t.Fatalf("post-STAP-A-fallback output dropped=%v idr=%v pending=%v, want delivered P-skip",
+			recovered.Dropped, recovered.IDR, enc.PendingIDR())
+	}
+	if recovered.RTPTime != uint32(pFrame.PTS) {
+		t.Fatalf("post-STAP-A-fallback RTP time = %d, want %d", recovered.RTPTime, pFrame.PTS)
+	}
+	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
+	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount+len(fallback.RTPPackets)))
+	if callbackCalls != firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets) {
+		t.Fatalf("post-STAP-A-fallback callbacks = %d, want %d",
+			callbackCalls, firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets))
+	}
+}
+
 func TestEncoderEncodeIntoLateDropPreservesCallerBuffer(t *testing.T) {
 	for _, tt := range []struct {
 		name         string

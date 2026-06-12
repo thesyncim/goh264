@@ -255,6 +255,8 @@ sequence numbers and callbacks pause when no RTP packets are emitted. It proves
 emit IDR IntraPCM access units that round-trip through local Annex B/AVC decode,
 FFmpeg rawvideo decode, RTP FU-A reassembly, RTP packetization-mode 0 single-NAL
 IDR/P-frame reassembly and oversize rejection, STAP-A parameter-set aggregation, and RTP
+small-payload STAP-A fallback to non-aggregated mode-1 packets with decode and
+sequence continuity, plus RTP
 public NAL-unit metadata indexing back into encoded access-unit bytes for Annex
 B, AVC, and RTP output,
 including `EncodeInto` calls that append after an existing caller-buffer prefix,
