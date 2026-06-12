@@ -1121,6 +1121,68 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	}
 }
 
+func TestDecodeFrameStructuredSideDataIsCallerOwned(t *testing.T) {
+	matrix := [9]int32{65536, 0, 0, 0, -65536, 0, 123, 456, 1 << 30}
+	sideData := []PacketSideData{
+		{Type: PacketSideDataDisplayMatrix, Data: decoderPacketDisplayMatrixSideData(matrix)},
+		{Type: PacketSideDataStereo3D, Data: decoderPacketStereo3DSideData(
+			int32(Stereo3DTypeTopBottom), 1, int32(Stereo3DViewLeft), int32(Stereo3DPrimaryEyeRight), 65000,
+			Rational{Num: -1, Den: 2}, Rational{Num: 90, Den: 1},
+		)},
+		{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(4000, 300)},
+		{Type: PacketSideData3DReferenceDisplays, Data: decoderPacketReferenceDisplaysSideData(
+			12, true, 9,
+			[]ReferenceDisplay{{
+				LeftViewID:                 3,
+				RightViewID:                4,
+				ExponentRefDisplayWidth:    2,
+				MantissaRefDisplayWidth:    33,
+				ExponentRefViewingDistance: 5,
+				MantissaRefViewingDistance: 44,
+				AdditionalShiftPresentFlag: true,
+				NumSampleShift:             -7,
+			}},
+		)},
+	}
+	packet := Packet{Data: decodeHexFixture(t, black16AnnexBHex), SideData: sideData}
+
+	frame, err := NewDecoder().DecodePacket(packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side := frame.SideData
+	if side.DisplayOrientation == nil || side.Stereo3D == nil ||
+		side.ContentLight == nil || side.ReferenceDisplays == nil ||
+		len(side.ReferenceDisplays.Displays) != 1 {
+		t.Fatalf("structured side data missing before mutation: %+v", side)
+	}
+
+	side.DisplayOrientation.Matrix[0] = 0
+	side.Stereo3D.Baseline = 0
+	side.ContentLight.MaxContentLightLevel = 0
+	side.ReferenceDisplays.Displays[0].LeftViewID = 0
+
+	frame, err = NewDecoder().DecodePacket(packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side = frame.SideData
+	if side.DisplayOrientation == nil || side.DisplayOrientation.Matrix != matrix {
+		t.Fatalf("display orientation after caller mutation = %+v, want %v", side.DisplayOrientation, matrix)
+	}
+	if side.Stereo3D == nil || side.Stereo3D.Baseline != 65000 {
+		t.Fatalf("stereo3d after caller mutation = %+v, want baseline 65000", side.Stereo3D)
+	}
+	if side.ContentLight == nil || side.ContentLight.MaxContentLightLevel != 4000 ||
+		side.ContentLight.MaxPicAverageLightLevel != 300 {
+		t.Fatalf("content light after caller mutation = %+v, want 4000/300", side.ContentLight)
+	}
+	if side.ReferenceDisplays == nil || len(side.ReferenceDisplays.Displays) != 1 ||
+		side.ReferenceDisplays.Displays[0].LeftViewID != 3 {
+		t.Fatalf("reference displays after caller mutation = %+v, want left view 3", side.ReferenceDisplays)
+	}
+}
+
 func TestDecodePacketFramesIgnoresMalformedStructuredPacketSideData(t *testing.T) {
 	frame, err := NewDecoder().DecodePacket(Packet{
 		Data: decodeHexFixture(t, black16AnnexBHex),
