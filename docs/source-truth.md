@@ -176,7 +176,7 @@ structs, including I420 frame construction and clipped encoded-result helpers,
 input-frame plane ownership guards proving post-call caller mutation does not
 change the next Annex B, AVC, or RTP encode,
 returned `Encode` result lifetime guards across later Annex B, AVC, and RTP
-encodes,
+encodes plus `EncodedFrame.Clone` deep-owned result snapshots,
 invalid-frame validation that returns empty output and leaves RTP sequence,
 callback, frame-number, timestamp, and reference state untouched before the next
 valid P-skip,

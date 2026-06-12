@@ -385,6 +385,55 @@ func (frame EncodedFrame) RTPPayloadData(index int) ([]byte, error) {
 	return packet.Payload[:len(packet.Payload):len(packet.Payload)], nil
 }
 
+// Clone returns a deep-owned copy of the encoded result.
+//
+// The cloned Data, NALUnits, RTPPackets, and RTP packet payload views are
+// independent from frame and safe to retain after caller-owned EncodeInto
+// buffers are reused.
+func (frame EncodedFrame) Clone() (EncodedFrame, error) {
+	if frame.Dropped {
+		return EncodedFrame{
+			KeyFrame: frame.KeyFrame,
+			IDR:      frame.IDR,
+			PTS:      frame.PTS,
+			DTS:      frame.DTS,
+			RTPTime:  frame.RTPTime,
+			Dropped:  true,
+		}, nil
+	}
+	for i := range frame.NALUnits {
+		if _, err := frame.NALData(i); err != nil {
+			return EncodedFrame{}, err
+		}
+	}
+	for i := range frame.RTPPackets {
+		if _, err := frame.RTPPacketData(i); err != nil {
+			return EncodedFrame{}, err
+		}
+		if _, err := frame.RTPPayloadData(i); err != nil {
+			return EncodedFrame{}, err
+		}
+	}
+	clone := EncodedFrame{
+		Data:       cloneByteSlice(frame.Data),
+		NALUnits:   append([]EncoderNALUnit(nil), frame.NALUnits...),
+		RTPPackets: make([]EncoderRTPPacket, len(frame.RTPPackets)),
+		KeyFrame:   frame.KeyFrame,
+		IDR:        frame.IDR,
+		PTS:        frame.PTS,
+		DTS:        frame.DTS,
+		RTPTime:    frame.RTPTime,
+	}
+	for i, packet := range frame.RTPPackets {
+		data := cloneByteSlice(packet.Data)
+		payloadOffset := unsafeSliceOffset(packet.Data, packet.Payload)
+		clone.RTPPackets[i] = packet
+		clone.RTPPackets[i].Data = data
+		clone.RTPPackets[i].Payload = data[payloadOffset : payloadOffset+len(packet.Payload) : payloadOffset+len(packet.Payload)]
+	}
+	return clone, nil
+}
+
 func unsafeSliceOffset(base []byte, sub []byte) int {
 	if len(base) == 0 || len(sub) == 0 {
 		return -1

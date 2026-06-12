@@ -8550,6 +8550,150 @@ func TestEncoderEncodeResultsSurviveLaterEncode(t *testing.T) {
 	}
 }
 
+func TestEncodedFrameCloneDeepCopiesResultStorage(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", outputFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc", outputFormat: goh264.EncoderOutputAVC},
+		{name: "rtp", outputFormat: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.RTPMaxPayloadSize = 32
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			prefix := []byte{0xde, 0xad, 0xbe, 0xef}
+			dst := append(make([]byte, 0, 4096), prefix...)
+			out, err := enc.EncodeInto(dst, patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("EncodeInto: %v", err)
+			}
+			clone, err := out.Clone()
+			if err != nil {
+				t.Fatalf("Clone: %v", err)
+			}
+			if !reflect.DeepEqual(clone.NALUnits, out.NALUnits) ||
+				clone.KeyFrame != out.KeyFrame || clone.IDR != out.IDR ||
+				clone.PTS != out.PTS || clone.DTS != out.DTS || clone.RTPTime != out.RTPTime ||
+				clone.Dropped != out.Dropped {
+				t.Fatalf("clone metadata = %+v, want %+v", clone, out)
+			}
+			if !bytes.Equal(clone.Data, out.Data) || len(clone.RTPPackets) != len(out.RTPPackets) {
+				t.Fatalf("clone payloads do not match original")
+			}
+			for i := range clone.RTPPackets {
+				if !reflect.DeepEqual(clone.RTPPackets[i], out.RTPPackets[i]) {
+					t.Fatalf("clone RTP packet[%d] = %+v, want %+v", i, clone.RTPPackets[i], out.RTPPackets[i])
+				}
+			}
+			if len(clone.Data) != 0 && &clone.Data[0] == &out.Data[0] {
+				t.Fatal("clone Data aliases original Data")
+			}
+			for i := range clone.RTPPackets {
+				if len(clone.RTPPackets[i].Data) != 0 && &clone.RTPPackets[i].Data[0] == &out.RTPPackets[i].Data[0] {
+					t.Fatalf("clone RTP packet[%d] Data aliases original", i)
+				}
+				if len(clone.RTPPackets[i].Payload) != 0 {
+					packetOffset := bytes.Index(clone.RTPPackets[i].Data, clone.RTPPackets[i].Payload)
+					if packetOffset < 12 {
+						t.Fatalf("clone RTP packet[%d] payload not found after RTP header", i)
+					}
+					if &clone.RTPPackets[i].Payload[0] != &clone.RTPPackets[i].Data[packetOffset] {
+						t.Fatalf("clone RTP packet[%d] Payload does not point into cloned Data", i)
+					}
+					if &clone.RTPPackets[i].Payload[0] == &out.RTPPackets[i].Payload[0] {
+						t.Fatalf("clone RTP packet[%d] Payload aliases original", i)
+					}
+				}
+			}
+
+			for i := range out.Data {
+				out.Data[i] ^= 0xff
+			}
+			for i := range out.RTPPackets {
+				if len(out.RTPPackets[i].Data) != 0 {
+					out.RTPPackets[i].Data[0] ^= 0xff
+				}
+				if len(out.RTPPackets[i].Payload) != 0 {
+					out.RTPPackets[i].Payload[0] ^= 0xff
+				}
+			}
+			for i := range dst {
+				dst[i] ^= 0xff
+			}
+			assertEncodedFrameNALUnitIndexesFrom(t, clone, cfg.OutputFormat, len(prefix))
+			if tt.outputFormat == goh264.EncoderOutputRTP {
+				for i := range clone.RTPPackets {
+					packetData, err := clone.RTPPacketData(i)
+					if err != nil {
+						t.Fatalf("clone RTPPacketData(%d): %v", i, err)
+					}
+					payloadData, err := clone.RTPPayloadData(i)
+					if err != nil {
+						t.Fatalf("clone RTPPayloadData(%d): %v", i, err)
+					}
+					if !bytes.Equal(packetData[12:], payloadData) {
+						t.Fatalf("clone RTP packet[%d] payload helper mismatch", i)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
+	validPacket := []byte{0x80, 0xe0, 0, 1, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd, 0x65}
+	for _, tt := range []struct {
+		name  string
+		frame goh264.EncodedFrame
+	}{
+		{
+			name: "bad nal metadata",
+			frame: goh264.EncodedFrame{
+				Data:     []byte{0, 0, 0, 1, 0x65},
+				NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 2}},
+			},
+		},
+		{
+			name: "short rtp packet",
+			frame: goh264.EncodedFrame{
+				RTPPackets: []goh264.EncoderRTPPacket{{Data: validPacket[:11], Payload: validPacket[12:]}},
+			},
+		},
+		{
+			name: "foreign rtp payload",
+			frame: goh264.EncodedFrame{
+				RTPPackets: []goh264.EncoderRTPPacket{{Data: validPacket, Payload: []byte{0x65}}},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, err := tt.frame.Clone(); !errors.Is(err, goh264.ErrInvalidData) ||
+				len(got.Data) != 0 || len(got.NALUnits) != 0 || len(got.RTPPackets) != 0 ||
+				got.KeyFrame || got.IDR || got.PTS != 0 || got.DTS != 0 || got.RTPTime != 0 || got.Dropped {
+				t.Fatalf("Clone invalid = %+v/%v, want zero ErrInvalidData", got, err)
+			}
+		})
+	}
+	dropped := goh264.EncodedFrame{Dropped: true, KeyFrame: true, IDR: true, Data: []byte{1}, NALUnits: []goh264.EncoderNALUnit{{Offset: 0, Size: 1}}}
+	clone, err := dropped.Clone()
+	if err != nil {
+		t.Fatalf("Clone dropped: %v", err)
+	}
+	if !clone.Dropped || !clone.KeyFrame || !clone.IDR || len(clone.Data) != 0 || len(clone.NALUnits) != 0 || len(clone.RTPPackets) != 0 {
+		t.Fatalf("dropped clone = %+v, want metadata-only dropped result", clone)
+	}
+}
+
 func TestEncoderEncodeNALUnitsAppendDoesNotAliasLaterResult(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
@@ -11563,6 +11707,9 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("RTPPayloadData"); !ok {
 		t.Fatal("EncodedFrame missing RTPPayloadData convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("Clone"); !ok {
+		t.Fatal("EncodedFrame missing Clone convenience method")
 	}
 
 	reconfigType := reflect.TypeOf(goh264.EncoderReconfigure{})
