@@ -561,14 +561,24 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 }
 
 func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
+	mode0 := goh264.EncoderRTPPacketizationSingleNAL
+	stapa := true
+	badPayloadType := uint8(128)
 	tests := []struct {
-		name   string
-		update goh264.EncoderReconfigure
+		name    string
+		update  goh264.EncoderReconfigure
+		wantErr error
 	}{
-		{name: "bad bitrate", update: goh264.EncoderReconfigure{MaxBitrate: 1}},
-		{name: "bad frame rate", update: goh264.EncoderReconfigure{FrameRateNum: 0, FrameRateDen: 1}},
-		{name: "bad payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 2}},
-		{name: "bad deblock", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockMode(99)}},
+		{name: "bad bitrate", update: goh264.EncoderReconfigure{MaxBitrate: 1}, wantErr: goh264.ErrInvalidData},
+		{name: "bad frame rate", update: goh264.EncoderReconfigure{FrameRateNum: 0, FrameRateDen: 1}, wantErr: goh264.ErrInvalidData},
+		{name: "bad payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 2}, wantErr: goh264.ErrInvalidData},
+		{name: "bad deblock", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockMode(99)}, wantErr: goh264.ErrInvalidData},
+		{name: "bad output format", update: goh264.EncoderReconfigure{OutputFormat: goh264.EncoderOutputFormat(99)}, wantErr: goh264.ErrInvalidData},
+		{name: "mode-0 STAP-A", update: goh264.EncoderReconfigure{
+			RTPPacketizationMode: &mode0,
+			STAPA:                &stapa,
+		}, wantErr: goh264.ErrUnsupported},
+		{name: "bad RTP payload type", update: goh264.EncoderReconfigure{RTPPayloadType: &badPayloadType}, wantErr: goh264.ErrInvalidData},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -589,8 +599,8 @@ func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 				t.Fatalf("%s ForceIDR did not queue IDR", tt.name)
 			}
 			before := enc.Config()
-			if err := enc.Reconfigure(tt.update); !errors.Is(err, goh264.ErrInvalidData) {
-				t.Fatalf("%s invalid reconfigure error = %v, want ErrInvalidData", tt.name, err)
+			if err := enc.Reconfigure(tt.update); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("%s invalid reconfigure error = %v, want %v", tt.name, err, tt.wantErr)
 			}
 			if got := enc.Config(); got != before {
 				t.Fatalf("%s invalid reconfigure mutated config = %+v, want %+v", tt.name, got, before)
