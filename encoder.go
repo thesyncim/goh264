@@ -658,6 +658,9 @@ type EncoderParameterSets struct {
 
 // AVCC returns the AVC decoder configuration record form of the parameter sets.
 func (sets EncoderParameterSets) AVCC() []byte {
+	if len(sets.AVCDecoderConfigurationRecord) == 0 {
+		return nil
+	}
 	return sets.AVCDecoderConfigurationRecord[:len(sets.AVCDecoderConfigurationRecord):len(sets.AVCDecoderConfigurationRecord)]
 }
 

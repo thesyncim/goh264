@@ -4582,6 +4582,13 @@ func TestEncoderParameterSetsAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 }
 
 func TestEncoderParameterSetsAVCCReturnsClippedView(t *testing.T) {
+	if got := (goh264.EncoderParameterSets{}).AVCC(); got != nil {
+		t.Fatalf("zero-value AVCC = %x, want nil", got)
+	}
+	if got := (goh264.EncoderParameterSets{AVCDecoderConfigurationRecord: []byte{}}).AVCC(); got != nil {
+		t.Fatalf("empty AVCC = %x, want nil", got)
+	}
+
 	backing := []byte{0x01, 0x42, 0x00, 0x1f, 0xff, 0xee}
 	headers := goh264.EncoderParameterSets{
 		AVCDecoderConfigurationRecord: backing[:5],
