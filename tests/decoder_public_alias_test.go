@@ -34,6 +34,39 @@ var (
 
 var _ = (*Decoder).ConfigureAVCDecoderConfigurationRecord
 var _ = (*Decoder).ConfigureAVCC
+var _ = (*Decoder).Reset
+var _ = (*Decoder).Decode
+var _ = (*Decoder).DecodeFrames
+var _ = (*Decoder).DecodePacket
+var _ = (*Decoder).DecodePacketFrames
+var _ = (*Decoder).DecodeAnnexB
+var _ = (*Decoder).DecodeAnnexBFrames
+var _ = (*Decoder).DecodeAVC
+var _ = (*Decoder).DecodeAVCFrames
+var _ = (*Decoder).DecodeConfiguredAVC
+var _ = (*Decoder).DecodeConfiguredAVCFrames
+var _ = (*Decoder).FlushDelayedFrames
+var _ = (*Decoder).FlushDelayedFrame
+var _ = (*Decoder).DecodeAVCWithConfigurationRecord
+var _ = (*Decoder).DecodeAVCC
+var _ = (*Decoder).DecodeAVCFramesWithConfigurationRecord
+var _ = (*Decoder).DecodeAVCCFrames
+var _ = (*Decoder).ParseHeadersAnnexB
+var _ = (*Decoder).ParseHeadersAVC
+var _ = (*Decoder).ParseAVCDecoderConfigurationRecord
+var _ = (*Decoder).AVCConfig
+
+var _ = (PacketSideData).Clone
+var _ = (Packet).Clone
+var _ = (FrameSideData).Clone
+var _ = (*Frame).Clone
+var _ = (*Frame).RawPixelFormat
+var _ = (*Frame).AppendRawYUV
+var _ = (*Frame).RawYUVSize
+var _ = (*Frame).AppendRawYUV16
+var _ = (*Frame).RawYUV16
+var _ = (*Frame).AppendRawYUVBytesLE
+var _ = (*Frame).RawYUVBytesLE
 
 type (
 	Decoder                   = goh264.Decoder
