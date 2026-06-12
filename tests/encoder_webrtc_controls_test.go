@@ -2479,45 +2479,85 @@ func TestEncoderSPSPPSCadenceModesControlIDRHeaders(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := goh264.DefaultEncoderConfig(16, 16)
-			cfg.OutputFormat = goh264.EncoderOutputAnnexB
-			cfg.RTPMaxPayloadSize = 0
-			cfg.DeblockMode = goh264.EncoderDeblockDisabled
-			cfg.SPSPPSMode = tt.mode
-			cfg.SPSPPSBeforeIDR = tt.beforeIDR
-			enc, err := goh264.NewEncoder(cfg)
-			if err != nil {
-				t.Fatalf("NewEncoder: %v", err)
-			}
-			headers, err := enc.ParameterSets()
-			if err != nil {
-				t.Fatalf("ParameterSets: %v", err)
-			}
+			for _, format := range []struct {
+				name string
+				fmt  goh264.EncoderOutputFormat
+			}{
+				{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+				{name: "avc", fmt: goh264.EncoderOutputAVC},
+				{name: "rtp", fmt: goh264.EncoderOutputRTP},
+			} {
+				t.Run(format.name, func(t *testing.T) {
+					cfg := goh264.DefaultEncoderConfig(16, 16)
+					cfg.OutputFormat = format.fmt
+					if format.fmt == goh264.EncoderOutputRTP {
+						cfg.RTPMaxPayloadSize = 32
+					} else {
+						cfg.RTPMaxPayloadSize = 0
+					}
+					cfg.DeblockMode = goh264.EncoderDeblockDisabled
+					cfg.SPSPPSMode = tt.mode
+					cfg.SPSPPSBeforeIDR = tt.beforeIDR
+					enc, err := goh264.NewEncoder(cfg)
+					if err != nil {
+						t.Fatalf("NewEncoder: %v", err)
+					}
+					headers, err := enc.ParameterSets()
+					if err != nil {
+						t.Fatalf("ParameterSets: %v", err)
+					}
+					var callbackCalls int
+					enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+						callbackCalls++
+					})
 
-			frame := patternedI420EncoderFrame(16, 16)
-			first, err := enc.Encode(frame)
-			if err != nil {
-				t.Fatalf("Encode first IDR: %v", err)
-			}
-			if !first.IDR || !first.KeyFrame {
-				t.Fatalf("first frame IDR/key = %v/%v, want IDR keyframe", first.IDR, first.KeyFrame)
-			}
-			assertEncoderNALTypes(t, first.NALUnits, tt.wantIDRNAL)
+					frame := patternedI420EncoderFrame(16, 16)
+					frame.PTS = 0
+					first, err := enc.Encode(frame)
+					if err != nil {
+						t.Fatalf("Encode first IDR: %v", err)
+					}
+					if first.Dropped || !first.IDR || !first.KeyFrame || first.RTPTime != 0 {
+						t.Fatalf("first frame dropped/IDR/key/time = %v/%v/%v/%d, want IDR keyframe time 0",
+							first.Dropped, first.IDR, first.KeyFrame, first.RTPTime)
+					}
+					assertEncoderNALTypes(t, first.NALUnits, tt.wantIDRNAL)
+					firstPacketCount := len(first.RTPPackets)
+					if format.fmt == goh264.EncoderOutputRTP {
+						if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+							t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+								firstPacketCount, callbackCalls)
+						}
+					} else if firstPacketCount != 0 || callbackCalls != 0 {
+						t.Fatalf("non-RTP first packets/callbacks = %d/%d, want none", firstPacketCount, callbackCalls)
+					}
 
-			frame.PTS += int64(cfg.RTPTimestampIncrement)
-			enc.ForceIDR()
-			forced, err := enc.Encode(frame)
-			if err != nil {
-				t.Fatalf("Encode forced IDR: %v", err)
+					frame.PTS += int64(cfg.RTPTimestampIncrement)
+					enc.ForceIDR()
+					forced, err := enc.Encode(frame)
+					if err != nil {
+						t.Fatalf("Encode forced IDR: %v", err)
+					}
+					if forced.Dropped || !forced.IDR || !forced.KeyFrame || forced.RTPTime != uint32(frame.PTS) {
+						t.Fatalf("forced frame dropped/IDR/key/time = %v/%v/%v/%d, want IDR keyframe time %d",
+							forced.Dropped, forced.IDR, forced.KeyFrame, forced.RTPTime, frame.PTS)
+					}
+					assertEncoderNALTypes(t, forced.NALUnits, tt.wantIDRNAL)
+					stream := append([]byte(nil), headers.AnnexB...)
+					stream = append(stream, annexBFromEncodedFrame(t, first, cfg.OutputFormat)...)
+					stream = append(stream, annexBFromEncodedFrame(t, forced, cfg.OutputFormat)...)
+					assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
+					if format.fmt == goh264.EncoderOutputRTP {
+						assertRTPPacketMetadata(t, forced.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+					} else if len(forced.RTPPackets) != 0 {
+						t.Fatalf("non-RTP forced packets = %d, want none", len(forced.RTPPackets))
+					}
+					if callbackCalls != firstPacketCount+len(forced.RTPPackets) {
+						t.Fatalf("post-forced callbacks = %d, want %d",
+							callbackCalls, firstPacketCount+len(forced.RTPPackets))
+					}
+				})
 			}
-			if !forced.IDR || !forced.KeyFrame {
-				t.Fatalf("forced frame IDR/key = %v/%v, want IDR keyframe", forced.IDR, forced.KeyFrame)
-			}
-			assertEncoderNALTypes(t, forced.NALUnits, tt.wantIDRNAL)
-			stream := append([]byte(nil), headers.AnnexB...)
-			stream = append(stream, first.Data...)
-			stream = append(stream, forced.Data...)
-			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 		})
 	}
 }
