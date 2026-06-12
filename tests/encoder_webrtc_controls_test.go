@@ -7933,48 +7933,65 @@ func TestEncoderEncodeInvalidFramePreservesPendingIDR(t *testing.T) {
 			firstPacketCount, callbackCalls)
 	}
 
-	enc.ForceIDR()
-	if !enc.PendingIDR() {
-		t.Fatal("ForceIDR did not queue IDR")
-	}
-	beforeCfg := enc.Config()
-	bad := frame
-	bad.PTS = int64(cfg.RTPTimestampIncrement)
-	bad.Width = 32
-	out, err := enc.Encode(bad)
-	if !errors.Is(err, goh264.ErrInvalidData) {
-		t.Fatalf("Encode invalid frame error = %v, want ErrInvalidData", err)
-	}
-	if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
-		t.Fatalf("invalid Encode output = %+v, want empty output", out)
-	}
-	if got := enc.Config(); got != beforeCfg {
-		t.Fatalf("invalid Encode mutated config = %+v, want %+v", got, beforeCfg)
-	}
-	if !enc.PendingIDR() {
-		t.Fatal("invalid Encode cleared pending IDR")
-	}
-	if callbackCalls != firstPacketCount {
-		t.Fatalf("invalid Encode callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+	tests := []struct {
+		name   string
+		mutate func(*goh264.EncoderFrame)
+	}{
+		{name: "missing luma", mutate: func(f *goh264.EncoderFrame) { f.Y = nil }},
+		{name: "mismatched width", mutate: func(f *goh264.EncoderFrame) { f.Width = 32 }},
+		{name: "invalid frame color", mutate: func(f *goh264.EncoderFrame) { f.Color.SARNum = 1 }},
+		{name: "negative pts", mutate: func(f *goh264.EncoderFrame) { f.PTS = -1 }},
+		{name: "overflow duration", mutate: func(f *goh264.EncoderFrame) { f.Duration = int64(^uint32(0)) + 1 }},
 	}
 
-	next := frame
-	next.PTS = int64(cfg.RTPTimestampIncrement)
-	next.Y = append([]byte(nil), frame.Y...)
-	next.Y[0] ^= 0x55
-	recovered, err := enc.Encode(next)
-	if err != nil {
-		t.Fatalf("Encode after invalid frame: %v", err)
-	}
-	if recovered.Dropped || !recovered.IDR || enc.PendingIDR() {
-		t.Fatalf("post-invalid output dropped=%v idr=%v pending=%v, want delivered IDR",
-			recovered.Dropped, recovered.IDR, enc.PendingIDR())
-	}
-	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{7, 8, 5})
-	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
-	if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
-		t.Fatalf("post-invalid callbacks = %d, want %d",
-			callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enc.ForceIDR()
+			if !enc.PendingIDR() {
+				t.Fatalf("%s ForceIDR did not queue IDR", tt.name)
+			}
+			beforeCfg := enc.Config()
+			bad := frame
+			bad.PTS = int64(cfg.RTPTimestampIncrement)
+			tt.mutate(&bad)
+			out, err := enc.Encode(bad)
+			if !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("%s Encode error = %v, want ErrInvalidData", tt.name, err)
+			}
+			if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+				t.Fatalf("%s invalid Encode output = %+v, want empty output", tt.name, out)
+			}
+			if got := enc.Config(); got != beforeCfg {
+				t.Fatalf("%s invalid Encode mutated config = %+v, want %+v", tt.name, got, beforeCfg)
+			}
+			if !enc.PendingIDR() {
+				t.Fatalf("%s invalid Encode cleared pending IDR", tt.name)
+			}
+			if callbackCalls != firstPacketCount {
+				t.Fatalf("%s invalid Encode callbacks = %d, want still %d",
+					tt.name, callbackCalls, firstPacketCount)
+			}
+
+			next := frame
+			next.PTS = int64(cfg.RTPTimestampIncrement)
+			next.Y = append([]byte(nil), frame.Y...)
+			next.Y[0] ^= 0x55
+			recovered, err := enc.Encode(next)
+			if err != nil {
+				t.Fatalf("%s Encode after invalid frame: %v", tt.name, err)
+			}
+			if recovered.Dropped || !recovered.IDR || enc.PendingIDR() {
+				t.Fatalf("%s post-invalid output dropped=%v idr=%v pending=%v, want delivered IDR",
+					tt.name, recovered.Dropped, recovered.IDR, enc.PendingIDR())
+			}
+			assertEncoderNALTypes(t, recovered.NALUnits, []uint8{7, 8, 5})
+			assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+			if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+				t.Fatalf("%s post-invalid callbacks = %d, want %d",
+					tt.name, callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+			}
+			firstPacketCount = callbackCalls
+		})
 	}
 }
 
