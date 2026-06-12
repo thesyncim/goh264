@@ -216,7 +216,11 @@ func EncodeI420IntraPCMIDRSliceRBSP(cfg EncoderI420IntraPCMIDRConfig) ([]byte, e
 	}
 
 	firstMB, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
-	bw := NewBitWriter(make([]byte, 0, 32+macroblockCount*384))
+	rbspCap, err := encoderSliceRBSPCapacity(macroblockCount, 384)
+	if err != nil {
+		return nil, err
+	}
+	bw := NewBitWriter(make([]byte, 0, rbspCap))
 	if err := writeEncoderI420IDRSliceHeader(&bw, cfg); err != nil {
 		return nil, err
 	}
@@ -255,7 +259,11 @@ func EncodeI420IntraPCMPSliceRBSP(cfg EncoderI420IntraPCMPConfig) ([]byte, error
 	}
 
 	firstMB, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
-	bw := NewBitWriter(make([]byte, 0, 32+macroblockCount*384))
+	rbspCap, err := encoderSliceRBSPCapacity(macroblockCount, 384)
+	if err != nil {
+		return nil, err
+	}
+	bw := NewBitWriter(make([]byte, 0, rbspCap))
 	if err := writeEncoderI420PSliceHeader(&bw, EncoderI420PSkipConfig{
 		Width:                      cfg.Width,
 		Height:                     cfg.Height,
@@ -305,7 +313,11 @@ func EncodeI420P16x16NoResidualSliceRBSP(cfg EncoderI420P16x16NoResidualConfig) 
 	}
 
 	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
-	bw := NewBitWriter(make([]byte, 0, 32+macroblockCount*8))
+	rbspCap, err := encoderSliceRBSPCapacity(macroblockCount, 8)
+	if err != nil {
+		return nil, err
+	}
+	bw := NewBitWriter(make([]byte, 0, rbspCap))
 	if err := writeEncoderI420PSliceHeader(&bw, EncoderI420PSkipConfig{
 		Width:                      cfg.Width,
 		Height:                     cfg.Height,
@@ -645,6 +657,21 @@ func encoderI420MacroblockCountChecked(width int, height int) (int, error) {
 		return 0, ErrInvalidData
 	}
 	return total, nil
+}
+
+func encoderSliceRBSPCapacity(macroblockCount int, bytesPerMacroblock int) (int, error) {
+	if macroblockCount < 0 || bytesPerMacroblock < 0 {
+		return 0, ErrInvalidData
+	}
+	payload, err := checkedMulInt(macroblockCount, bytesPerMacroblock)
+	if err != nil {
+		return 0, ErrInvalidData
+	}
+	capacity, err := checkedAddInt(32, payload)
+	if err != nil {
+		return 0, ErrInvalidData
+	}
+	return capacity, nil
 }
 
 const maxInt = int(^uint(0) >> 1)

@@ -73,6 +73,29 @@ func TestBuildEncoderI420IntraPCMIDRSliceWritesParseableHeader(t *testing.T) {
 	}
 }
 
+func TestEncoderSliceRBSPCapacityChecksOverflow(t *testing.T) {
+	if got, err := encoderSliceRBSPCapacity(2, 384); err != nil || got != 800 {
+		t.Fatalf("encoderSliceRBSPCapacity(2,384) = %d/%v, want 800/nil", got, err)
+	}
+	for _, tt := range []struct {
+		name               string
+		macroblockCount    int
+		bytesPerMacroblock int
+	}{
+		{name: "negative macroblocks", macroblockCount: -1, bytesPerMacroblock: 384},
+		{name: "negative byte estimate", macroblockCount: 1, bytesPerMacroblock: -1},
+		{name: "payload multiply", macroblockCount: maxInt/384 + 1, bytesPerMacroblock: 384},
+		{name: "header add", macroblockCount: maxInt - 31, bytesPerMacroblock: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := encoderSliceRBSPCapacity(tt.macroblockCount, tt.bytesPerMacroblock); err != ErrInvalidData {
+				t.Fatalf("encoderSliceRBSPCapacity(%d,%d) error = %v, want ErrInvalidData",
+					tt.macroblockCount, tt.bytesPerMacroblock, err)
+			}
+		})
+	}
+}
+
 func TestBuildEncoderI420IntraPCMIDRSliceWritesMacroblockRange(t *testing.T) {
 	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
 		ProfileIDC:         66,
