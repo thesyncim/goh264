@@ -892,22 +892,38 @@ func newH264MotionCompScratchForFrame(f *DecodedFrame) *h264MotionCompScratch {
 	lumaStride := f.LumaStride
 	chromaStride := f.ChromaStride
 	if f.frameMBSOnlyFlag == 0 {
+		if lumaStride > maxInt/2 || chromaStride > maxInt/2 {
+			return nil
+		}
 		lumaStride *= 2
 		chromaStride *= 2
 	}
-	edge := h264EdgeScratchSize(lumaStride, 16+5, 16+5)
+	yLen, err := checkedMulInt(16, lumaStride)
+	if err != nil || len(f.Cb) > maxInt/2 || len(f.Cr) > maxInt/2 {
+		return nil
+	}
+	edge, ok := checkedH264EdgeScratchSize(lumaStride, 16+5, 16+5)
+	if !ok {
+		return nil
+	}
 	if f.ChromaFormatIDC != 0 {
 		chromaBlockH := 8*f.ChromaFormatIDC + 1
-		chromaEdge := h264EdgeScratchSize(chromaStride, 9, chromaBlockH)
+		chromaEdge, ok := checkedH264EdgeScratchSize(chromaStride, 9, chromaBlockH)
+		if !ok {
+			return nil
+		}
 		if f.ChromaFormatIDC == 3 {
-			chromaEdge = h264EdgeScratchSize(chromaStride, 16+5, 16+5)
+			chromaEdge, ok = checkedH264EdgeScratchSize(chromaStride, 16+5, 16+5)
+			if !ok {
+				return nil
+			}
 		}
 		if chromaEdge > edge {
 			edge = chromaEdge
 		}
 	}
 	return &h264MotionCompScratch{
-		Y:    make([]uint8, 16*lumaStride),
+		Y:    make([]uint8, yLen),
 		Cb:   make([]uint8, len(f.Cb)),
 		Cr:   make([]uint8, len(f.Cr)),
 		Edge: make([]uint8, edge),
@@ -921,26 +937,54 @@ func newH264MotionCompScratchHighForFrame(f *DecodedFrame) *h264MotionCompScratc
 	lumaStride := f.LumaStride
 	chromaStride := f.ChromaStride
 	if f.frameMBSOnlyFlag == 0 {
+		if lumaStride > maxInt/2 || chromaStride > maxInt/2 {
+			return nil
+		}
 		lumaStride *= 2
 		chromaStride *= 2
 	}
-	edge := h264EdgeScratchSize(lumaStride, 16+5, 16+5)
+	yLen, err := checkedMulInt(16, lumaStride)
+	if err != nil || len(f.Cb16) > maxInt/2 || len(f.Cr16) > maxInt/2 {
+		return nil
+	}
+	edge, ok := checkedH264EdgeScratchSize(lumaStride, 16+5, 16+5)
+	if !ok {
+		return nil
+	}
 	if f.ChromaFormatIDC != 0 {
 		chromaBlockH := 8*f.ChromaFormatIDC + 1
-		chromaEdge := h264EdgeScratchSize(chromaStride, 9, chromaBlockH)
+		chromaEdge, ok := checkedH264EdgeScratchSize(chromaStride, 9, chromaBlockH)
+		if !ok {
+			return nil
+		}
 		if f.ChromaFormatIDC == 3 {
-			chromaEdge = h264EdgeScratchSize(chromaStride, 16+5, 16+5)
+			chromaEdge, ok = checkedH264EdgeScratchSize(chromaStride, 16+5, 16+5)
+			if !ok {
+				return nil
+			}
 		}
 		if chromaEdge > edge {
 			edge = chromaEdge
 		}
 	}
 	return &h264MotionCompScratchHigh{
-		Y:    make([]uint16, 16*lumaStride),
+		Y:    make([]uint16, yLen),
 		Cb:   make([]uint16, len(f.Cb16)),
 		Cr:   make([]uint16, len(f.Cr16)),
 		Edge: make([]uint16, edge),
 	}
+}
+
+func checkedH264EdgeScratchSize(stride int, blockW int, blockH int) (int, bool) {
+	if stride <= 0 || blockW <= 0 || blockH <= 0 {
+		return 0, false
+	}
+	edgeStride := h264EdgeStride(stride, blockW)
+	rows, err := checkedMulInt(blockH-1, edgeStride)
+	if err != nil || rows > maxInt-blockW {
+		return 0, false
+	}
+	return rows + blockW, true
 }
 
 func validateSimpleFrameReferenceSyntax(sh *SliceHeader) error {

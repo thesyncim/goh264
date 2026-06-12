@@ -242,6 +242,56 @@ func TestNewH264MotionCompScratchHighForFrame(t *testing.T) {
 	}
 }
 
+func TestNewH264MotionCompScratchForFrameRejectsOverflowedGeometry(t *testing.T) {
+	if scratch := newH264MotionCompScratchForFrame(&DecodedFrame{
+		LumaStride:      maxInt/16 + 1,
+		ChromaStride:    8,
+		ChromaFormatIDC: 1,
+	}); scratch != nil {
+		t.Fatalf("overflowed luma scratch = %+v, want nil", scratch)
+	}
+	if scratch := newH264MotionCompScratchForFrame(&DecodedFrame{
+		LumaStride:      16,
+		ChromaStride:    maxInt/8 + 1,
+		ChromaFormatIDC: 1,
+	}); scratch != nil {
+		t.Fatalf("overflowed chroma edge scratch = %+v, want nil", scratch)
+	}
+	if scratch := newH264MotionCompScratchForFrame(&DecodedFrame{
+		LumaStride:       maxInt/2 + 1,
+		ChromaStride:     8,
+		ChromaFormatIDC:  1,
+		frameMBSOnlyFlag: 0,
+	}); scratch != nil {
+		t.Fatalf("overflowed field luma stride scratch = %+v, want nil", scratch)
+	}
+}
+
+func TestNewH264MotionCompScratchHighForFrameRejectsOverflowedGeometry(t *testing.T) {
+	if scratch := newH264MotionCompScratchHighForFrame(&DecodedFrame{
+		LumaStride:      maxInt/16 + 1,
+		ChromaStride:    8,
+		ChromaFormatIDC: 1,
+	}); scratch != nil {
+		t.Fatalf("overflowed high luma scratch = %+v, want nil", scratch)
+	}
+	if scratch := newH264MotionCompScratchHighForFrame(&DecodedFrame{
+		LumaStride:      16,
+		ChromaStride:    maxInt/8 + 1,
+		ChromaFormatIDC: 1,
+	}); scratch != nil {
+		t.Fatalf("overflowed high chroma edge scratch = %+v, want nil", scratch)
+	}
+	if scratch := newH264MotionCompScratchHighForFrame(&DecodedFrame{
+		LumaStride:       maxInt/2 + 1,
+		ChromaStride:     8,
+		ChromaFormatIDC:  1,
+		frameMBSOnlyFlag: 0,
+	}); scratch != nil {
+		t.Fatalf("overflowed high field luma stride scratch = %+v, want nil", scratch)
+	}
+}
+
 func TestNewH264MotionCompScratchForFieldCapableFrameUsesFieldStrides(t *testing.T) {
 	sps := simpleDecodeFrameStorageTestSPS(8, 8, 1)
 	sps.FrameMBSOnlyFlag = 0
