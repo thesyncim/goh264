@@ -44,6 +44,14 @@ encoder coverage. The detailed status lives in:
 - [docs/translation-ledger.md](docs/translation-ledger.md)
 - [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md)
 
+## Maturity At A Glance
+
+| Area | Current state | Use it for | Do not assume |
+| --- | --- | --- | --- |
+| Decoder API | Mature public surface with broad oracle coverage | Annex B/AVC decode experiments, corpus validation, raw-frame export, side-data inspection | Final production release evidence, exact parity on every unselected field/MBAFF edge |
+| Encoder API | Experimental but intentionally shaped for realtime/WebRTC integration | Exercising admitted Baseline IDR/P-skip/P16x16/P-IntraPCM paths, RTP packetization, control-loop integration | General-purpose H.264 encoding, broad motion search, residual coding, mature rate control |
+| Performance | Harnesses and allocation canaries exist | Local trend checks and regression detection | Reviewed release-grade throughput claims |
+
 ## Install
 
 ```sh
@@ -91,7 +99,7 @@ edge behavior. Intentionally unsupported at the pinned FFmpeg parity boundary:
 FMO, 11/13-bit luma depths, `chroma_format_idc > 3`, separate color planes, and
 mixed chroma/luma bit depths.
 
-## Quick Start
+## Quick Start: Decode
 
 Decode an Annex B or automatically detected H.264 packet and append raw YUV
 bytes in FFmpeg-compatible plane order:
@@ -147,7 +155,7 @@ higher formats. `AppendRawYUV16` is the caller-buffer form for high-bit-depth
 uint16 output. `RawPixelFormat` returns names such as `yuv420p`,
 `yuv422p10le`, or `yuv444p`.
 
-## API Surface
+## Decoder API
 
 Create a decoder with:
 
@@ -222,6 +230,8 @@ profile, HDR10+, and LCEVC side data.
 Duplicate packet side data follows first-entry semantics: empty or malformed
 first active-format, S12M timecode, ICC profile, HDR10+, and LCEVC entries
 suppress later duplicates.
+
+## Encoder API (Experimental)
 
 The encoder API is a WebRTC/realtime control contract while implementation is
 still landing:
@@ -358,7 +368,7 @@ Still future: motion search beyond the bounded 8-pixel exact
 macroblock-aligned inter path, quantized residual coding, and adaptive
 rate-control feedback.
 
-## Supported Inputs
+## Decoder Coverage At A Glance
 
 | Area | Status |
 | --- | --- |
