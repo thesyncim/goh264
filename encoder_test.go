@@ -157,6 +157,16 @@ func TestEncoderRTPStorageHelpersRejectOverflowedNALCount(t *testing.T) {
 	}
 }
 
+func TestEncoderRawNALPayloadStorageSizeRejectsEmptyNAL(t *testing.T) {
+	nals := []encoderRawNAL{
+		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
+		{},
+	}
+	if _, err := encoderRawNALPayloadStorageSize(nals); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("encoderRawNALPayloadStorageSize empty NAL error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestPacketizeEncoderRTPSingleNALRejectsStorageOverflow(t *testing.T) {
 	nals := []encoderRawNAL{
 		{raw: fakeEncoderBytesLen(maxInt - 4)},

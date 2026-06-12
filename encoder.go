@@ -2071,6 +2071,9 @@ func encoderRawNALPayloadStorageSize(nals []encoderRawNAL) (int, error) {
 	}
 	size := 0
 	for _, nal := range nals {
+		if len(nal.raw) == 0 {
+			return 0, encoderInvalid("empty encoder NAL")
+		}
 		next, err := checkedAddInt(size, len(nal.raw))
 		if err != nil {
 			return 0, encoderInvalid("RTP payload storage size overflows")
