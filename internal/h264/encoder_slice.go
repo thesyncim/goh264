@@ -93,6 +93,8 @@ type encoderI420P16x16ResidualConfig struct {
 	MVDs                       []EncoderMotionVectorDelta
 	Coeff                      int32
 	Coeffs                     []int32
+	CoeffPos                   int
+	CoeffPositions             []int
 	ChromaDCCoeffCb            int32
 	ChromaDCCoeffCr            int32
 	ChromaDCCoeffs             [][2]int32
@@ -414,6 +416,10 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		if len(cfg.Coeffs) > 0 {
 			coeff = cfg.Coeffs[i]
 		}
+		coeffPos := cfg.CoeffPos
+		if len(cfg.CoeffPositions) > 0 {
+			coeffPos = cfg.CoeffPositions[i]
+		}
 		nextQP := cfg.NextQP
 		if len(cfg.NextQPs) > 0 {
 			nextQP = cfg.NextQPs[i]
@@ -446,7 +452,7 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		mb.MVD[0][0] = [2]int32{mvdX, mvdY}
 		var residual cavlcResidualContext
 		chromaACPos := int(h264ZigzagScanCAVLC[1])
-		residual.MB[0] = coeff
+		residual.MB[coeffPos] = coeff
 		residual.MB[256] = chromaDCCb
 		residual.MB[512] = chromaDCCr
 		residual.MB[256+chromaACPos] = chromaACCb
@@ -713,10 +719,22 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	if len(cfg.NextQPs) > 0 && len(cfg.NextQPs) != macroblockCount {
 		return ErrInvalidData
 	}
+	if len(cfg.CoeffPositions) > 0 && len(cfg.CoeffPositions) != macroblockCount {
+		return ErrInvalidData
+	}
 	for _, qp := range cfg.NextQPs {
 		if qp < 0 || qp > 51 {
 			return ErrInvalidData
 		}
+	}
+	if len(cfg.CoeffPositions) > 0 {
+		for _, pos := range cfg.CoeffPositions {
+			if pos < 0 || pos >= 16 {
+				return ErrInvalidData
+			}
+		}
+	} else if cfg.CoeffPos < 0 || cfg.CoeffPos >= 16 {
+		return ErrInvalidData
 	}
 	if len(cfg.ChromaDCCoeffs) > 0 && len(cfg.ChromaDCCoeffs) != macroblockCount {
 		return ErrInvalidData

@@ -685,6 +685,100 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockQP(t *testing.T) {
 	}
 }
 
+func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockLumaPositions(t *testing.T) {
+	pps, sps := encoderResidualSliceTestPPS(20)
+	wantMVDs := []EncoderMotionVectorDelta{
+		{X: 2, Y: -1},
+		{X: -3, Y: 4},
+	}
+	wantCoeffs := []int32{1, -2}
+	wantPositions := []int{
+		int(h264ZigzagScanCAVLC[1]),
+		int(h264ZigzagScanCAVLC[5]),
+	}
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+		Width:                      32,
+		Height:                     16,
+		FrameNum:                   17,
+		InitialQP:                  20,
+		NextQP:                     23,
+		DisableDeblockingFilterIDC: 1,
+		MVDs:                       wantMVDs,
+		Coeffs:                     wantCoeffs,
+		CoeffPositions:             wantPositions,
+	}, pps, sps)
+	if err != nil {
+		t.Fatalf("encode per-macroblock luma-position residual slice rbsp: %v", err)
+	}
+
+	var ppsList [maxPPSCount]*PPS
+	ppsList[0] = pps
+	sh, payload, err := parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("parse per-macroblock luma-position residual P slice header: %v", err)
+	}
+	qscale := int(sh.QScale)
+	for i := range wantMVDs {
+		skipRun, err := payload.readUEGolombLong()
+		if err != nil {
+			t.Fatalf("read per-macroblock luma-position residual skip run[%d]: %v", i, err)
+		}
+		if skipRun != 0 {
+			t.Fatalf("skip run[%d] = %d, want 0", i, skipRun)
+		}
+		var decoded cavlcResidualContext
+		got, err := decoded.decodeCAVLCInterPMacroblock(&payload, pps, sps, qscale, [2]uint32{1, 0}, false)
+		if err != nil {
+			t.Fatalf("decode per-macroblock luma-position residual macroblock[%d]: %v", i, err)
+		}
+		if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 1 ||
+			got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != 0x1001 {
+			t.Fatalf("decoded luma-position mb[%d] type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x",
+				i, got.MBType, got.CBP, got.QScale, got.ChromaQP, got.CBPTable)
+		}
+		if got.MVD[0][0] != ([2]int32{wantMVDs[i].X, wantMVDs[i].Y}) ||
+			decoded.MB[wantPositions[i]] != wantCoeffs[i] {
+			t.Fatalf("decoded luma-position mb[%d] motion/residual = %v/%d at %d",
+				i, got.MVD[0][0], decoded.MB[wantPositions[i]], wantPositions[i])
+		}
+		if decoded.MB[0] != 0 {
+			t.Fatalf("decoded luma-position mb[%d] coeff[0] = %d, want untouched", i, decoded.MB[0])
+		}
+		qscale = got.QScale
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("per-macroblock luma-position residual payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+
+	sh, payload, err = parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("reparse per-macroblock luma-position residual P slice header: %v", err)
+	}
+	m, err := newMacroblockTables(2, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	for mbXY := 0; mbXY < 2; mbXY++ {
+		got, err := m.decodeCAVLCFrameSliceMacroblock(&payload, sh, &state, mbXY, 20)
+		if err != nil {
+			t.Fatalf("decode per-macroblock luma-position residual frame macroblock[%d]: %v", mbXY, err)
+		}
+		if got.CBP != 1 || got.CBPTable != 0x1001 || got.QScale != 23 ||
+			m.CBPTable[mbXY] != 0x1001 || m.QScaleTable[mbXY] != 23 || m.SliceTable[mbXY] != 20 {
+			t.Fatalf("frame luma-position mb[%d] result/table cbp/cbpTable/q = %#x/%#x/%d table %#x/%d/%d",
+				mbXY, got.CBP, got.CBPTable, got.QScale,
+				m.CBPTable[mbXY], m.QScaleTable[mbXY], m.SliceTable[mbXY])
+		}
+		if m.NonZeroCount[mbXY][0] != 1 {
+			t.Fatalf("frame luma-position mb[%d] nnz[0] = %d, want 1", mbXY, m.NonZeroCount[mbXY][0])
+		}
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("per-macroblock luma-position frame residual payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+}
+
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesChromaDCThroughFramePath(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
@@ -1276,6 +1370,26 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			next := valid
 			next.Width = 32
 			next.Coeffs = []int32{1}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad coeff position scalar", run: func() error {
+			next := valid
+			next.CoeffPos = 16
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad coeff position count", run: func() error {
+			next := valid
+			next.Width = 32
+			next.CoeffPositions = []int{1}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad per-macroblock coeff position", run: func() error {
+			next := valid
+			next.Width = 32
+			next.CoeffPositions = []int{1, -1}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
