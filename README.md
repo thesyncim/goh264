@@ -326,6 +326,12 @@ out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if out.Dropped {
 	// Realtime budget drop: no bytes or RTP packets were emitted.
 }
+switch out.OutputFormat {
+case goh264.EncoderOutputAnnexB, goh264.EncoderOutputAVC:
+	// Use the access-unit helpers below.
+case goh264.EncoderOutputRTP:
+	// Use RTPPackets or the RTP helper methods below.
+}
 accessUnit, err := out.AccessUnitData()
 nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
 packet0, err := out.RTPPacketData(0)
@@ -370,6 +376,8 @@ that are currently intended to be stable enough for integration work:
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
   payload helpers have `Append...` forms for caller-owned retention buffers and
   `Clone` forms for async snapshots.
+- `EncodedFrame.OutputFormat` records the emitted result format, including
+  dropped frames, so callers do not need to infer format from packet presence.
 - Overflowed caller-owned `EncodeInto` destination growth is rejected across
   Annex B, AVC, and RTP without consuming queued IDR state or advancing
   RTP/callback state. The same hard-error path preserves P-frame reference and

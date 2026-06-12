@@ -227,7 +227,8 @@ guards public input/result/callback surfaces for integration-facing encoder
 structs, including `EncoderConfig.Normalize`, `EncoderConfig.I420Frame`,
 `EncoderConfig.ValidateFrame`, `EncoderConfig.ParameterSets`,
 `EncoderConfig.RecoveryPointSEIMessage`, `EncoderFrame.Clone`, `Encoder.I420Frame`, `Encoder.ValidateFrame`,
-`EncodedFrame.NALData`, `EncodedFrame.AccessUnitData`, and packet-level
+`EncodedFrame.OutputFormat`, `EncodedFrame.NALData`,
+`EncodedFrame.AccessUnitData`, and packet-level
 `EncoderRTPPacket` byte helpers, rejects invalid or
 not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
@@ -276,9 +277,9 @@ proves encoded input-frame planes are not retained after `Encode` returns by
 mutating caller-owned first-frame storage before a matching second frame across
 Annex B, AVC, and RTP output,
 proves returned `Encode` results remain stable after later encodes across
-access-unit bytes, NAL metadata, and RTP packets, proves `EncodedFrame.Clone`
-creates deep-owned snapshots with RTP payloads retargeted into cloned packet
-data, and proves returned RTP packets do not alias caller-backed `EncodeInto`
+output-format metadata, access-unit bytes, NAL metadata, and RTP packets,
+proves `EncodedFrame.Clone` creates deep-owned snapshots with RTP payloads
+retargeted into cloned packet data, and proves returned RTP packets do not alias caller-backed `EncodeInto`
 access-unit data,
 verifies public `Encoder.ValidateFrame` and encode-time frame-shape validation return
 empty output and leaves RTP sequence, callback, frame-number, timestamp, and

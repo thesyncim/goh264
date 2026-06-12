@@ -114,6 +114,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"DefaultEncoderConfig",
 		"Clone",
 		"Append",
+		"OutputFormat",
 		"AccessUnitData",
 		"NALData",
 		"RTPPacketData",

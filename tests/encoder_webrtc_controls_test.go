@@ -11751,6 +11751,7 @@ func TestEncodedFrameCloneDeepCopiesResultStorage(t *testing.T) {
 				t.Fatalf("Clone: %v", err)
 			}
 			if !reflect.DeepEqual(clone.NALUnits, out.NALUnits) ||
+				clone.OutputFormat != out.OutputFormat ||
 				clone.KeyFrame != out.KeyFrame || clone.IDR != out.IDR ||
 				clone.PTS != out.PTS || clone.DTS != out.DTS || clone.RTPTime != out.RTPTime ||
 				clone.Dropped != out.Dropped {
@@ -11845,6 +11846,68 @@ func TestEncodedFrameCloneDeepCopiesResultStorage(t *testing.T) {
 						t.Fatalf("clone RTP packet[%d] payload helper mismatch", i)
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestEncodedFrameReportsOutputFormat(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", outputFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc", outputFormat: goh264.EncoderOutputAVC},
+		{name: "rtp", outputFormat: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.MaxFrameSize = 0
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			frame := patternedI420EncoderFrame(16, 16)
+			out, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode: %v", err)
+			}
+			if out.OutputFormat != tt.outputFormat {
+				t.Fatalf("OutputFormat = %v, want %v", out.OutputFormat, tt.outputFormat)
+			}
+			clone, err := out.Clone()
+			if err != nil {
+				t.Fatalf("Clone: %v", err)
+			}
+			if clone.OutputFormat != tt.outputFormat {
+				t.Fatalf("clone OutputFormat = %v, want %v", clone.OutputFormat, tt.outputFormat)
+			}
+
+			if err := enc.SetMaxFrameSize(1); err != nil {
+				t.Fatalf("SetMaxFrameSize: %v", err)
+			}
+			droppedFrame := patternedI420EncoderFrame(16, 16)
+			droppedFrame.PTS = frame.PTS + int64(cfg.RTPTimestampIncrement)
+			dropped, err := enc.Encode(droppedFrame)
+			if err != nil {
+				t.Fatalf("Encode dropped: %v", err)
+			}
+			if !dropped.Dropped || dropped.OutputFormat != tt.outputFormat {
+				t.Fatalf("dropped frame = dropped:%v format:%v, want dropped format %v",
+					dropped.Dropped, dropped.OutputFormat, tt.outputFormat)
+			}
+			droppedClone, err := dropped.Clone()
+			if err != nil {
+				t.Fatalf("Clone dropped: %v", err)
+			}
+			if !droppedClone.Dropped || droppedClone.OutputFormat != tt.outputFormat {
+				t.Fatalf("dropped clone = dropped:%v format:%v, want dropped format %v",
+					droppedClone.Dropped, droppedClone.OutputFormat, tt.outputFormat)
 			}
 		})
 	}
@@ -15107,7 +15170,7 @@ func TestEncoderRealtimeWebRTCResultSurfaceCoversRoadmap(t *testing.T) {
 			name: "EncodedFrame",
 			typ:  reflect.TypeOf(goh264.EncodedFrame{}),
 			fields: []string{
-				"Data", "NALUnits", "RTPPackets", "KeyFrame", "IDR", "PTS", "DTS", "RTPTime", "Dropped",
+				"OutputFormat", "Data", "NALUnits", "RTPPackets", "KeyFrame", "IDR", "PTS", "DTS", "RTPTime", "Dropped",
 			},
 		},
 		{

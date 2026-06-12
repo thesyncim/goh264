@@ -400,20 +400,21 @@ type EncoderRTPPacketCallback func(packet EncoderRTPPacket, metadata EncoderRTPP
 
 // EncodedFrame is the result of one encoder call.
 //
-// Data contains the encoded access unit in the configured output format. NALUnits
-// index into Data. RTPPackets is populated only for EncoderOutputRTP and owns
-// storage separate from Data. When Dropped is true, no bytes, NAL units, or RTP
-// packets were emitted.
+// OutputFormat records the format requested for this result. Data contains the
+// encoded access unit in OutputFormat. NALUnits index into Data. RTPPackets is
+// populated only for EncoderOutputRTP and owns storage separate from Data. When
+// Dropped is true, no bytes, NAL units, or RTP packets were emitted.
 type EncodedFrame struct {
-	Data       []byte
-	NALUnits   []EncoderNALUnit
-	RTPPackets []EncoderRTPPacket
-	KeyFrame   bool
-	IDR        bool
-	PTS        int64
-	DTS        int64
-	RTPTime    uint32
-	Dropped    bool
+	OutputFormat EncoderOutputFormat
+	Data         []byte
+	NALUnits     []EncoderNALUnit
+	RTPPackets   []EncoderRTPPacket
+	KeyFrame     bool
+	IDR          bool
+	PTS          int64
+	DTS          int64
+	RTPTime      uint32
+	Dropped      bool
 }
 
 // NALData returns the raw NAL bytes described by NALUnits[index].
@@ -562,12 +563,13 @@ func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, e
 func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 	if frame.Dropped {
 		return EncodedFrame{
-			KeyFrame: frame.KeyFrame,
-			IDR:      frame.IDR,
-			PTS:      frame.PTS,
-			DTS:      frame.DTS,
-			RTPTime:  frame.RTPTime,
-			Dropped:  true,
+			OutputFormat: frame.OutputFormat,
+			KeyFrame:     frame.KeyFrame,
+			IDR:          frame.IDR,
+			PTS:          frame.PTS,
+			DTS:          frame.DTS,
+			RTPTime:      frame.RTPTime,
+			Dropped:      true,
 		}, nil
 	}
 	if len(frame.NALUnits) != 0 {
@@ -584,14 +586,15 @@ func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 		}
 	}
 	clone := EncodedFrame{
-		Data:       cloneByteSlice(frame.Data),
-		NALUnits:   append([]EncoderNALUnit(nil), frame.NALUnits...),
-		RTPPackets: make([]EncoderRTPPacket, len(frame.RTPPackets)),
-		KeyFrame:   frame.KeyFrame,
-		IDR:        frame.IDR,
-		PTS:        frame.PTS,
-		DTS:        frame.DTS,
-		RTPTime:    frame.RTPTime,
+		OutputFormat: frame.OutputFormat,
+		Data:         cloneByteSlice(frame.Data),
+		NALUnits:     append([]EncoderNALUnit(nil), frame.NALUnits...),
+		RTPPackets:   make([]EncoderRTPPacket, len(frame.RTPPackets)),
+		KeyFrame:     frame.KeyFrame,
+		IDR:          frame.IDR,
+		PTS:          frame.PTS,
+		DTS:          frame.DTS,
+		RTPTime:      frame.RTPTime,
 	}
 	for i, packet := range frame.RTPPackets {
 		clonePacket, err := packet.Clone()
@@ -1159,10 +1162,11 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			e.advanceEncoderRTPTime(frame, rtpTime)
 			e.advanceEncoderBitrateBudget(0)
 			return EncodedFrame{
-				PTS:     frame.PTS,
-				DTS:     frame.PTS,
-				RTPTime: rtpTime,
-				Dropped: true,
+				OutputFormat: e.cfg.OutputFormat,
+				PTS:          frame.PTS,
+				DTS:          frame.PTS,
+				RTPTime:      rtpTime,
+				Dropped:      true,
 			}, nil
 		}
 		return EncodedFrame{}, err
@@ -1171,10 +1175,11 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		e.advanceEncoderRTPTime(frame, rtpTime)
 		e.advanceEncoderBitrateBudget(0)
 		return EncodedFrame{
-			PTS:     frame.PTS,
-			DTS:     frame.PTS,
-			RTPTime: rtpTime,
-			Dropped: true,
+			OutputFormat: e.cfg.OutputFormat,
+			PTS:          frame.PTS,
+			DTS:          frame.PTS,
+			RTPTime:      rtpTime,
+			Dropped:      true,
 		}, nil
 	}
 	var packets []EncoderRTPPacket
@@ -1193,19 +1198,21 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		if encoderLateBudgetMiss(lateStart, e.cfg) {
 			e.advanceEncoderRTPTime(frame, rtpTime)
 			return EncodedFrame{
-				PTS:     frame.PTS,
-				DTS:     frame.PTS,
-				RTPTime: rtpTime,
-				Dropped: true,
+				OutputFormat: e.cfg.OutputFormat,
+				PTS:          frame.PTS,
+				DTS:          frame.PTS,
+				RTPTime:      rtpTime,
+				Dropped:      true,
 			}, nil
 		}
 	} else if encoderLateBudgetMiss(lateStart, e.cfg) {
 		e.advanceEncoderRTPTime(frame, rtpTime)
 		return EncodedFrame{
-			PTS:     frame.PTS,
-			DTS:     frame.PTS,
-			RTPTime: rtpTime,
-			Dropped: true,
+			OutputFormat: e.cfg.OutputFormat,
+			PTS:          frame.PTS,
+			DTS:          frame.PTS,
+			RTPTime:      rtpTime,
+			Dropped:      true,
 		}, nil
 	}
 	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
@@ -1229,14 +1236,15 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		e.framesSinceIDR++
 	}
 	return EncodedFrame{
-		Data:       data,
-		NALUnits:   units,
-		RTPPackets: packets,
-		KeyFrame:   idr,
-		IDR:        idr,
-		PTS:        frame.PTS,
-		DTS:        frame.PTS,
-		RTPTime:    rtpTime,
+		OutputFormat: e.cfg.OutputFormat,
+		Data:         data,
+		NALUnits:     units,
+		RTPPackets:   packets,
+		KeyFrame:     idr,
+		IDR:          idr,
+		PTS:          frame.PTS,
+		DTS:          frame.PTS,
+		RTPTime:      rtpTime,
 	}, nil
 }
 
