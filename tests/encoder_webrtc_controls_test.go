@@ -11309,7 +11309,7 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 
 func TestEncodedFrameAppendNALAndAccessUnitDataReturnCallerOwnedBytes(t *testing.T) {
 	valid := goh264.EncodedFrame{
-		Data:     []byte{0xaa, 0xbb, 0, 0, 0, 1, 0x67, 0x42, 0x00, 0, 0, 0, 1, 0x68, 0xce},
+		Data: []byte{0xaa, 0xbb, 0, 0, 0, 1, 0x67, 0x42, 0x00, 0, 0, 0, 1, 0x68, 0xce},
 		NALUnits: []goh264.EncoderNALUnit{
 			{Type: 7, Offset: 6, Size: 3, KeyFrame: true, ParameterSet: true},
 			{Type: 8, Offset: 13, Size: 1, KeyFrame: true, ParameterSet: true},
@@ -11387,6 +11387,20 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 	forbiddenPayloadPacketData[12] = 0xe5
 	zeroTypePayloadPacketData := append([]byte(nil), packetData...)
 	zeroTypePayloadPacketData[12] = 0x00
+	rtpPacketWithPayload := func(payload ...byte) []byte {
+		data := append([]byte(nil), packetData[:12]...)
+		return append(data, payload...)
+	}
+	truncatedSTAPAPacketData := rtpPacketWithPayload(24, 0)
+	zeroSTAPAPacketData := rtpPacketWithPayload(24, 0, 0)
+	oversizedSTAPAPacketData := rtpPacketWithPayload(24, 0, 2, 0x67)
+	forbiddenInnerSTAPAPacketData := rtpPacketWithPayload(24, 0, 1, 0xe7)
+	zeroInnerSTAPAPacketData := rtpPacketWithPayload(24, 0, 1, 0x00)
+	shortFUAPacketData := rtpPacketWithPayload(28)
+	emptyFragmentFUAPacketData := rtpPacketWithPayload(28, 0x85)
+	zeroFUAPacketData := rtpPacketWithPayload(28, 0x80)
+	reservedFUAPacketData := rtpPacketWithPayload(28, 0xa5)
+	invalidStartEndFUAPacketData := rtpPacketWithPayload(28, 0xc5, 0x99)
 	for _, tt := range []struct {
 		name  string
 		frame goh264.EncodedFrame
@@ -11400,6 +11414,16 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "payload before header", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: packetData[8:12]}}}},
 		{name: "payload forbidden zero bit", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: forbiddenPayloadPacketData, Payload: forbiddenPayloadPacketData[12:]}}}},
 		{name: "payload zero nal type", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: zeroTypePayloadPacketData, Payload: zeroTypePayloadPacketData[12:]}}}},
+		{name: "truncated stapa length", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: truncatedSTAPAPacketData, Payload: truncatedSTAPAPacketData[12:]}}}},
+		{name: "zero stapa nal size", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: zeroSTAPAPacketData, Payload: zeroSTAPAPacketData[12:]}}}},
+		{name: "oversized stapa nal", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: oversizedSTAPAPacketData, Payload: oversizedSTAPAPacketData[12:]}}}},
+		{name: "stapa inner forbidden zero bit", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: forbiddenInnerSTAPAPacketData, Payload: forbiddenInnerSTAPAPacketData[12:]}}}},
+		{name: "stapa inner zero nal type", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: zeroInnerSTAPAPacketData, Payload: zeroInnerSTAPAPacketData[12:]}}}},
+		{name: "short fua", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: shortFUAPacketData, Payload: shortFUAPacketData[12:]}}}},
+		{name: "empty fragment fua", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: emptyFragmentFUAPacketData, Payload: emptyFragmentFUAPacketData[12:]}}}},
+		{name: "fua zero nal type", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: zeroFUAPacketData, Payload: zeroFUAPacketData[12:]}}}},
+		{name: "fua reserved bit", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: reservedFUAPacketData, Payload: reservedFUAPacketData[12:]}}}},
+		{name: "fua start and end", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: invalidStartEndFUAPacketData, Payload: invalidStartEndFUAPacketData[12:]}}}},
 		{name: "foreign payload", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: []byte{0x65, 0x88, 0x99}}}}},
 	} {
 		t.Run("payload-"+tt.name, func(t *testing.T) {
@@ -11533,6 +11557,12 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 	badPayloadPacketData[12] = 0xe5
 	zeroPayloadPacketData := append([]byte(nil), packetData...)
 	zeroPayloadPacketData[12] = 0x00
+	rtpPacketWithPayload := func(payload ...byte) []byte {
+		data := append([]byte(nil), packetData[:12]...)
+		return append(data, payload...)
+	}
+	malformedSTAPAPacketData := rtpPacketWithPayload(24, 0, 2, 0x67)
+	malformedFUAPacketData := rtpPacketWithPayload(28, 0x85)
 	for _, tt := range []struct {
 		name   string
 		packet goh264.EncoderRTPPacket
@@ -11543,6 +11573,8 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 		{name: "payload before header", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: packetData[8:12]}},
 		{name: "payload forbidden zero bit", packet: goh264.EncoderRTPPacket{Data: badPayloadPacketData, Payload: badPayloadPacketData[12:]}},
 		{name: "payload zero nal type", packet: goh264.EncoderRTPPacket{Data: zeroPayloadPacketData, Payload: zeroPayloadPacketData[12:]}},
+		{name: "malformed stapa", packet: goh264.EncoderRTPPacket{Data: malformedSTAPAPacketData, Payload: malformedSTAPAPacketData[12:]}},
+		{name: "malformed fua", packet: goh264.EncoderRTPPacket{Data: malformedFUAPacketData, Payload: malformedFUAPacketData[12:]}},
 		{name: "foreign payload", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: []byte{0x65, 0x88, 0x99}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

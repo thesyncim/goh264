@@ -289,10 +289,50 @@ func (packet EncoderRTPPacket) PayloadData() ([]byte, error) {
 	if err != nil || dataEnd > len(packet.Data) {
 		return nil, ErrInvalidData
 	}
-	if packet.Payload[0]&0x80 != 0 || packet.Payload[0]&0x1f == 0 {
-		return nil, ErrInvalidData
+	if err := validateEncoderRTPPayload(packet.Payload); err != nil {
+		return nil, err
 	}
 	return packet.Payload[:len(packet.Payload):len(packet.Payload)], nil
+}
+
+func validateEncoderRTPPayload(payload []byte) error {
+	if len(payload) == 0 || payload[0]&0x80 != 0 {
+		return ErrInvalidData
+	}
+	typ := payload[0] & 0x1f
+	if typ == 0 {
+		return ErrInvalidData
+	}
+	switch typ {
+	case 24:
+		pos := 1
+		if pos == len(payload) {
+			return ErrInvalidData
+		}
+		for pos < len(payload) {
+			if pos+2 > len(payload) {
+				return ErrInvalidData
+			}
+			size := int(payload[pos])<<8 | int(payload[pos+1])
+			pos += 2
+			if size == 0 || pos+size > len(payload) {
+				return ErrInvalidData
+			}
+			if payload[pos]&0x80 != 0 || payload[pos]&0x1f == 0 {
+				return ErrInvalidData
+			}
+			pos += size
+		}
+	case 28:
+		if len(payload) < 3 {
+			return ErrInvalidData
+		}
+		fuHeader := payload[1]
+		if fuHeader&0x20 != 0 || fuHeader&0x1f == 0 || fuHeader&0xc0 == 0xc0 {
+			return ErrInvalidData
+		}
+	}
+	return nil
 }
 
 // AppendPayloadData appends a caller-owned copy of PayloadData to dst.
