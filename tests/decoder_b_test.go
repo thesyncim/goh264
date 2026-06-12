@@ -204,6 +204,15 @@ func TestDecodeConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 				if len(out) != 0 {
 					t.Fatalf("nalLengthSize=%d second flush frames = %d, want 0", nalLengthSize, len(out))
 				}
+
+				out, err = dec.DecodeConfiguredAVCFrames(samples[0])
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d decode after flush: %v", nalLengthSize, err)
+				}
+				if len(out) == 0 || len(out) > len(tt.want) {
+					t.Fatalf("nalLengthSize=%d decode after flush frames = %d, want 1..%d", nalLengthSize, len(out), len(tt.want))
+				}
+				assertFrameMD5Strings(t, out, tt.want[:len(out)])
 			}
 		})
 	}
