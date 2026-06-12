@@ -793,7 +793,6 @@ func TestParseHeadersPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 		t.Fatalf("samples = %d, want 3", len(samples))
 	}
 	headersAnnexB, _ := annexBParameterSetsAndPacket(t, data)
-	headersAVC := annexBToAVC(t, headersAnnexB, 4)
 
 	for _, tt := range []struct {
 		name    string
@@ -805,14 +804,6 @@ func TestParseHeadersPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 			headers: append([]byte(nil), headersAnnexB...),
 			parse: func(dec *Decoder, headers []byte) error {
 				_, err := dec.ParseHeadersAnnexB(headers)
-				return err
-			},
-		},
-		{
-			name:    "avc",
-			headers: append([]byte(nil), headersAVC...),
-			parse: func(dec *Decoder, headers []byte) error {
-				_, err := dec.ParseHeadersAVC(headers, 4)
 				return err
 			},
 		},
@@ -842,6 +833,42 @@ func TestParseHeadersPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 			out, err := dec.FlushDelayedFrames()
 			if err != nil {
 				t.Fatalf("FlushDelayedFrames after ParseHeaders %s: %v", tt.name, err)
+			}
+			frames = append(frames, out...)
+			assertFrameMD5Strings(t, frames, []string{
+				"4296e3dc95829cc27071a8685a428494",
+				"aa778b981f96d21489196f6a0faa0959",
+			})
+		})
+	}
+
+	for _, nalLengthSize := range []int{2, 3, 4} {
+		t.Run(fmt.Sprintf("avc-length%d", nalLengthSize), func(t *testing.T) {
+			dec := NewDecoder()
+			if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+				t.Fatal(err)
+			}
+
+			var frames []*Frame
+			for i := 0; i < 2; i++ {
+				out, err := dec.DecodeConfiguredAVCFrames(samples[i])
+				if err != nil {
+					t.Fatalf("sample[%d]: %v", i, err)
+				}
+				frames = append(frames, out...)
+			}
+
+			headers := annexBToAVC(t, headersAnnexB, nalLengthSize)
+			if _, err := dec.ParseHeadersAVC(headers, nalLengthSize); err != nil {
+				t.Fatalf("ParseHeadersAVC length %d: %v", nalLengthSize, err)
+			}
+			for i := range headers {
+				headers[i] = 0xff
+			}
+
+			out, err := dec.FlushDelayedFrames()
+			if err != nil {
+				t.Fatalf("FlushDelayedFrames after ParseHeadersAVC length %d: %v", nalLengthSize, err)
 			}
 			frames = append(frames, out...)
 			assertFrameMD5Strings(t, frames, []string{
