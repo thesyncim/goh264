@@ -7162,6 +7162,102 @@ func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingState(t *testin
 	}
 }
 
+func TestEncoderSetMaxEncodeTimeUSTogglesLateDropBudget(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(128, 128)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.OutputFormat = goh264.EncoderOutputRTP
+	cfg.FrameDrop = goh264.EncoderFrameDropLate
+	cfg.MaxEncodeTimeUS = 10_000_000
+	cfg.RTPMaxPayloadSize = 96
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+
+	frame := validI420EncoderFrame(128, 128)
+	frame.PTS = 3000
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR {
+		t.Fatalf("first frame dropped=%v idr=%v, want delivered IDR", first.Dropped, first.IDR)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	firstPacketCount := len(first.RTPPackets)
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("first callbacks = %d, want %d", callbackCalls, firstPacketCount)
+	}
+
+	if err := enc.SetMaxEncodeTimeUS(1); err != nil {
+		t.Fatalf("SetMaxEncodeTimeUS low budget: %v", err)
+	}
+	if got := enc.Config().MaxEncodeTimeUS; got != 1 {
+		t.Fatalf("MaxEncodeTimeUS = %d, want 1", got)
+	}
+	lateFrame := cloneI420EncoderFrame(frame)
+	lateFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	lateFrame.Y[0] ^= 0x7f
+	dropped, err := enc.Encode(lateFrame)
+	if err != nil {
+		t.Fatalf("Encode late frame: %v", err)
+	}
+	if !dropped.Dropped || len(dropped.Data) != 0 || len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 {
+		t.Fatalf("late frame = %+v, want dropped metadata without output", dropped)
+	}
+	if dropped.RTPTime != first.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("dropped RTP time = %d, want %d", dropped.RTPTime, first.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("late drop callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+	}
+
+	if err := enc.SetMaxEncodeTimeUS(0); err != nil {
+		t.Fatalf("SetMaxEncodeTimeUS disable: %v", err)
+	}
+	if got := enc.Config().MaxEncodeTimeUS; got != 0 {
+		t.Fatalf("disabled MaxEncodeTimeUS = %d, want 0", got)
+	}
+	recoveredFrame := cloneI420EncoderFrame(frame)
+	recoveredFrame.PTS = lateFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	recovered, err := enc.Encode(recoveredFrame)
+	if err != nil {
+		t.Fatalf("Encode after disabled late budget: %v", err)
+	}
+	if recovered.Dropped || recovered.IDR {
+		t.Fatalf("recovered frame dropped=%v idr=%v, want delivered P-skip", recovered.Dropped, recovered.IDR)
+	}
+	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
+	if recovered.RTPTime != dropped.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("recovered RTP time = %d, want %d", recovered.RTPTime, dropped.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+		t.Fatalf("recovered callbacks = %d, want %d", callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+	}
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, frame))
+	decodedRecovered, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, recovered.RTPPackets))
+	if err != nil {
+		t.Fatalf("Decode recovered P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedRecovered, appendI420FrameBytes(nil, recoveredFrame))
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, recovered.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+}
+
 func TestEncoderFrameDropToBitrateDropsOversizeFrameWithoutAdvancingReferenceOrPacketState(t *testing.T) {
 	for _, format := range []struct {
 		name string
