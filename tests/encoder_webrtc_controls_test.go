@@ -11251,6 +11251,8 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "negative offset", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: -1, Size: 1}}}, index: 0},
 		{name: "zero size", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 4}}}, index: 0},
 		{name: "past data", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 6, Size: 3}}}, index: 0},
+		{name: "forbidden zero bit", frame: goh264.EncodedFrame{Data: []byte{0, 0, 0, 1, 0xe7}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}, index: 0},
+		{name: "zero nal type", frame: goh264.EncodedFrame{Data: []byte{0, 0, 0, 1, 0x00}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}, index: 0},
 		{name: "type mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 8, Offset: 4, Size: 3}}}, index: 0},
 		{name: "parameter-set flag mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, KeyFrame: true}}}, index: 0},
 		{name: "keyframe flag mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, ParameterSet: true}}}, index: 0},
@@ -11271,6 +11273,8 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "bad prefix", frame: goh264.EncodedFrame{Data: []byte{9, 9, 9, 9, 0x67}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}},
 		{name: "zero size", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 4}}}},
 		{name: "past data", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 6, Size: 3}}}},
+		{name: "forbidden zero bit", frame: goh264.EncodedFrame{Data: []byte{0, 0, 0, 1, 0xe7}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}},
+		{name: "zero nal type", frame: goh264.EncodedFrame{Data: []byte{0, 0, 0, 1, 0x00}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}},
 		{name: "type mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 8, Offset: 4, Size: 3}}}},
 		{name: "parameter-set flag mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, KeyFrame: true}}}},
 		{name: "keyframe flag mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, ParameterSet: true}}}},
@@ -11827,6 +11831,20 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 			frame: goh264.EncodedFrame{
 				Data:     []byte{0, 0, 0, 1, 0x67},
 				NALUnits: []goh264.EncoderNALUnit{{Type: 8, Offset: 4, Size: 1}},
+			},
+		},
+		{
+			name: "nal forbidden zero bit",
+			frame: goh264.EncodedFrame{
+				Data:     []byte{0, 0, 0, 1, 0xe7},
+				NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}},
+			},
+		},
+		{
+			name: "nal zero type",
+			frame: goh264.EncodedFrame{
+				Data:     []byte{0, 0, 0, 1, 0x00},
+				NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}},
 			},
 		},
 		{
