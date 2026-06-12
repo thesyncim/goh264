@@ -4603,57 +4603,76 @@ func TestEncoderFrameDropToBitrateDropsChangedOversizeSliceWithoutAdvancingRefer
 }
 
 func TestEncoderFrameDropToBitrateDropsMaxBitrateBudgetWithoutAdvancingState(t *testing.T) {
-	cfg := goh264.DefaultEncoderConfig(16, 16)
-	cfg.DeblockMode = goh264.EncoderDeblockDisabled
-	cfg.TargetBitrate = 1_000
-	cfg.MaxBitrate = 1_000
-	cfg.VBVBufferSize = 64
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.OutputFormat = format.fmt
+			if format.fmt != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			cfg.TargetBitrate = 1_000
+			cfg.MaxBitrate = 1_000
+			cfg.VBVBufferSize = 64
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
 
-	var callbackCalls int
-	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
-		callbackCalls++
-	})
-	frame := patternedI420EncoderFrame(16, 16)
-	frame.PTS = 0
+			var callbackCalls int
+			enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+				callbackCalls++
+			})
+			frame := patternedI420EncoderFrame(16, 16)
+			frame.PTS = 0
 
-	dropped, err := enc.Encode(frame)
-	if err != nil {
-		t.Fatalf("Encode bitrate-budget frame: %v", err)
-	}
-	if !dropped.Dropped || len(dropped.Data) != 0 || len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 {
-		t.Fatalf("bitrate-budget dropped frame = %+v, want dropped metadata without output", dropped)
-	}
-	if dropped.RTPTime != 0 {
-		t.Fatalf("first bitrate-budget dropped RTP time = %d, want 0", dropped.RTPTime)
-	}
-	if callbackCalls != 0 {
-		t.Fatalf("bitrate-budget dropped frame invoked callback count %d, want 0", callbackCalls)
-	}
+			dropped, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode bitrate-budget frame: %v", err)
+			}
+			if !dropped.Dropped || len(dropped.Data) != 0 || len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 {
+				t.Fatalf("bitrate-budget dropped frame = %+v, want dropped metadata without output", dropped)
+			}
+			if dropped.RTPTime != 0 {
+				t.Fatalf("first bitrate-budget dropped RTP time = %d, want 0", dropped.RTPTime)
+			}
+			if callbackCalls != 0 {
+				t.Fatalf("bitrate-budget dropped frame invoked callback count %d, want 0", callbackCalls)
+			}
 
-	vbv := 1_000_000
-	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxBitrate: 1_000_000, VBVBufferSize: &vbv}); err != nil {
-		t.Fatalf("raise MaxBitrate/VBV: %v", err)
+			vbv := 1_000_000
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxBitrate: 1_000_000, VBVBufferSize: &vbv}); err != nil {
+				t.Fatalf("raise MaxBitrate/VBV: %v", err)
+			}
+			out, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode after bitrate-budget drop: %v", err)
+			}
+			if out.Dropped || !out.IDR {
+				t.Fatalf("post-bitrate-drop frame dropped=%v idr=%v, want first transmitted IDR", out.Dropped, out.IDR)
+			}
+			if out.RTPTime != cfg.RTPTimestampIncrement {
+				t.Fatalf("post-bitrate-drop RTP time = %d, want %d", out.RTPTime, cfg.RTPTimestampIncrement)
+			}
+			assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+			assertEncoderVCLFrameNums(t, annexBFromEncodedFrame(t, out, cfg.OutputFormat), []uint8{5}, []uint32{0})
+			if format.fmt == goh264.EncoderOutputRTP {
+				assertRTPPacketMetadata(t, out.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+				if callbackCalls != len(out.RTPPackets) {
+					t.Fatalf("post-bitrate-drop callback count = %d, want %d", callbackCalls, len(out.RTPPackets))
+				}
+			} else if len(out.RTPPackets) != 0 || callbackCalls != 0 {
+				t.Fatalf("non-RTP post-bitrate-drop packets/callbacks = %d/%d, want none", len(out.RTPPackets), callbackCalls)
+			}
+		})
 	}
-	out, err := enc.Encode(frame)
-	if err != nil {
-		t.Fatalf("Encode after bitrate-budget drop: %v", err)
-	}
-	if out.Dropped || !out.IDR {
-		t.Fatalf("post-bitrate-drop frame dropped=%v idr=%v, want first transmitted IDR", out.Dropped, out.IDR)
-	}
-	if out.RTPTime != cfg.RTPTimestampIncrement {
-		t.Fatalf("post-bitrate-drop RTP time = %d, want %d", out.RTPTime, cfg.RTPTimestampIncrement)
-	}
-	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
-	assertEncoderVCLFrameNums(t, out.Data, []uint8{5}, []uint32{0})
-	if callbackCalls != len(out.RTPPackets) {
-		t.Fatalf("post-bitrate-drop callback count = %d, want %d", callbackCalls, len(out.RTPPackets))
-	}
-	assertRTPPacketMetadata(t, out.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
 }
 
 func TestEncoderFrameDropToBitrateConsumesAndRefillsMaxBitrateCredit(t *testing.T) {
