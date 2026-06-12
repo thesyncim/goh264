@@ -28,6 +28,7 @@ var (
 
 	ParseAVCDecoderConfigurationRecord = goh264.ParseAVCDecoderConfigurationRecord
 	ParseAVCC                          = goh264.ParseAVCC
+	InspectAVCC                        = goh264.InspectAVCC
 )
 
 type (

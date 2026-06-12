@@ -73,6 +73,14 @@ func ParseAVCC(data []byte) (AVCConfig, error) {
 	return ParseAVCDecoderConfigurationRecord(data)
 }
 
+// InspectAVCC parses avcC metadata without changing decoder state.
+//
+// InspectAVCC is the preferred stateless name. ParseAVCC remains as a
+// compatibility alias.
+func InspectAVCC(data []byte) (AVCConfig, error) {
+	return ParseAVCC(data)
+}
+
 // PacketSideDataType identifies auxiliary packet metadata accepted by Packet.
 type PacketSideDataType uint8
 
@@ -806,6 +814,15 @@ func avcDecoderConfigurationFromH264(cfg h264.AVCDecoderConfigurationRecord) (AV
 // and returns stream metadata.
 func (d *Decoder) ParseAVCC(data []byte) (AVCConfig, error) {
 	return d.ParseAVCDecoderConfigurationRecord(data)
+}
+
+// ConfigureAVCC parses an avcC record, stores it for configured-AVC decode
+// calls, and returns stream metadata.
+//
+// ConfigureAVCC is the preferred mutating name. ParseAVCC remains as a
+// compatibility alias.
+func (d *Decoder) ConfigureAVCC(data []byte) (AVCConfig, error) {
+	return d.ParseAVCC(data)
 }
 
 // AVCConfig returns the currently stored avcC/configured-AVC metadata.

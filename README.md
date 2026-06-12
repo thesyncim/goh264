@@ -181,7 +181,7 @@ Choose the entry point by ownership and packet shape:
 | Same stream path plus packet side data such as `NEW_EXTRADATA` | `DecodePacketFrames` |
 | Complete Annex B bytestream with no streaming state needed | `DecodeAnnexBFrames` |
 | Complete length-prefixed AVC packet stream with known NAL length size | `DecodeAVCFrames` |
-| Stored avcC/configured-AVC stream packets | `ParseAVCC` then `DecodeConfiguredAVCFrames` |
+| Stored avcC/configured-AVC stream packets | `ConfigureAVCC` then `DecodeConfiguredAVCFrames` |
 | Exactly one expected output frame | `Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`, `DecodeConfiguredAVC`, or `DecodeAVCC` |
 
 Use the format-specific helpers when the packet format is already known:
@@ -189,7 +189,7 @@ Use the format-specific helpers when the packet format is already known:
 ```go
 frames, err := dec.DecodeAnnexBFrames(annexB)          // complete Annex B bytestream
 frames, err := dec.DecodeAVCFrames(packet, lengthSize) // complete length-prefixed AVC packet stream
-cfg, err := dec.ParseAVCC(avcc)                        // store avcC for configured AVC
+cfg, err := dec.ConfigureAVCC(avcc)                    // store avcC for configured AVC
 frames, err := dec.DecodeConfiguredAVCFrames(packet)   // stateful AVC after avcC
 frames, err := dec.DecodeAVCCFrames(avcc, packet)      // update avcC, decode, then drain
 cfg, err = dec.AVCConfig()                             // current configured-AVC metadata
@@ -217,16 +217,16 @@ Parse headers without decoding full frames:
 ```go
 info, err := dec.ParseHeadersAnnexB(data)
 info, err := dec.ParseHeadersAVC(packet, nalLengthSize)
-cfg, err := dec.ParseAVCC(avcc)
-cfg, err := goh264.ParseAVCC(avcc) // stateless avcC inspection
+cfg, err := goh264.InspectAVCC(avcc) // stateless avcC inspection
 ```
 
 Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are transactional:
 partially parsed SPS/PPS state is not committed over a previous valid
 configuration, and delayed configured-AVC B-frame output remains available for
 flush after the rejected parse.
-Decoder `ParseAVCC` stores the configuration for later configured-AVC decode;
-package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` parse the
+Decoder `ConfigureAVCC` stores the configuration for later configured-AVC
+decode; decoder `ParseAVCC` remains a compatibility alias. Package-level
+`InspectAVCC`, `ParseAVCC`, and `ParseAVCDecoderConfigurationRecord` parse the
 same metadata without mutating decoder state.
 
 Packet side-data support mirrors FFmpeg-facing surfaces used by the port:

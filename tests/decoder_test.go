@@ -301,6 +301,10 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 			_, err := dec.ParseAVCC([]byte{1})
 			return err
 		}},
+		{name: "ConfigureAVCC", call: func() error {
+			_, err := dec.ConfigureAVCC([]byte{1})
+			return err
+		}},
 		{name: "AVCConfig", call: func() error {
 			_, err := dec.AVCConfig()
 			return err
@@ -881,6 +885,13 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 	if stateless != stateful {
 		t.Fatalf("package ParseAVCC = %+v, want stateful result %+v", stateless, stateful)
 	}
+	inspected, err := InspectAVCC(config3)
+	if err != nil {
+		t.Fatalf("InspectAVCC: %v", err)
+	}
+	if inspected.NALLengthSize != 3 || inspected.StreamInfo.Width != 16 || inspected.StreamInfo.Height != 16 {
+		t.Fatalf("InspectAVCC = %+v, want length-size 3 black16 config", inspected)
+	}
 	statelessRecord, err := ParseAVCDecoderConfigurationRecord(config3)
 	if err != nil {
 		t.Fatalf("package ParseAVCDecoderConfigurationRecord: %v", err)
@@ -915,6 +926,35 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 	if _, err := dec.DecodeConfiguredAVCFrames(samples4[1]); err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames after damaged package ParseAVCC: %v", err)
 	}
+}
+
+func TestDecoderConfigureAVCCStoresConfiguration(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	cfg, err := dec.ConfigureAVCC(config)
+	if err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
+	}
+	if cfg.NALLengthSize != 4 || cfg.StreamInfo.Width != 16 || cfg.StreamInfo.Height != 16 {
+		t.Fatalf("ConfigureAVCC config = %+v", cfg)
+	}
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after ConfigureAVCC: %v", err)
+	}
+	if got != cfg {
+		t.Fatalf("AVCConfig after ConfigureAVCC = %+v, want %+v", got, cfg)
+	}
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after ConfigureAVCC: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
 func TestDecoderAVCConfigReportsStoredConfiguration(t *testing.T) {
