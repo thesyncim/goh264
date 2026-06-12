@@ -5906,9 +5906,17 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 	if err != nil {
 		t.Fatalf("NewEncoder STAP-A: %v", err)
 	}
+	var callbackPackets []goh264.EncoderRTPPacket
 	var callbackMetadata []goh264.EncoderRTPPacketMetadata
-	enc.SetRTPPacketCallback(func(_ goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackPackets = append(callbackPackets, pkt)
 		callbackMetadata = append(callbackMetadata, meta)
+		if len(pkt.Payload) != 0 {
+			pkt.Payload[0] ^= 0xff
+		}
+		if len(pkt.Data) != 0 {
+			pkt.Data[0] ^= 0xff
+		}
 	})
 
 	frame := patternedI420EncoderFrame(16, 16)
@@ -5920,9 +5928,9 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 	if !first.IDR || enc.PendingIDR() {
 		t.Fatalf("first STAP-A frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
 	}
-	if len(first.RTPPackets) < 2 || len(callbackMetadata) != len(first.RTPPackets) {
-		t.Fatalf("first STAP-A packets/callbacks = %d/%d, want multiple matching packets",
-			len(first.RTPPackets), len(callbackMetadata))
+	if len(first.RTPPackets) < 2 || len(callbackPackets) != len(first.RTPPackets) || len(callbackMetadata) != len(first.RTPPackets) {
+		t.Fatalf("first STAP-A packets/callbacks/meta = %d/%d/%d, want multiple matching packets",
+			len(first.RTPPackets), len(callbackPackets), len(callbackMetadata))
 	}
 	if first.RTPPackets[0].Payload[0]&0x1f != 24 {
 		t.Fatalf("first STAP-A payload type = %d, want STAP-A", first.RTPPackets[0].Payload[0]&0x1f)
@@ -5962,11 +5970,22 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 		}
 	}
 	assertRTPPacketMetadata(t, fallback.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
-	if len(callbackMetadata) != firstPacketCount+len(fallback.RTPPackets) {
-		t.Fatalf("STAP-A fallback callbacks = %d, want %d", len(callbackMetadata), firstPacketCount+len(fallback.RTPPackets))
+	if len(callbackPackets) != firstPacketCount+len(fallback.RTPPackets) ||
+		len(callbackMetadata) != firstPacketCount+len(fallback.RTPPackets) {
+		t.Fatalf("STAP-A fallback callbacks/meta = %d/%d, want %d",
+			len(callbackPackets), len(callbackMetadata), firstPacketCount+len(fallback.RTPPackets))
 	}
+	fallbackCallbackPackets := callbackPackets[firstPacketCount:]
 	fallbackMetadata := callbackMetadata[firstPacketCount:]
 	for i, meta := range fallbackMetadata {
+		pkt := fallbackCallbackPackets[i]
+		if pkt.PayloadType != fallback.RTPPackets[i].PayloadType ||
+			pkt.SequenceNumber != fallback.RTPPackets[i].SequenceNumber ||
+			pkt.Timestamp != fallback.RTPPackets[i].Timestamp ||
+			pkt.SSRC != fallback.RTPPackets[i].SSRC ||
+			pkt.Marker != fallback.RTPPackets[i].Marker {
+			t.Fatalf("STAP-A fallback callback packet[%d] metadata = %+v, want returned RTP packet fields", i, pkt)
+		}
 		if meta.PacketIndex != i || meta.PacketCount != len(fallback.RTPPackets) ||
 			meta.FramePTS != nextFrame.PTS || meta.FrameDTS != nextFrame.PTS ||
 			meta.RTPTime != fallback.RTPTime || !meta.KeyFrame || !meta.IDR {
@@ -6016,12 +6035,22 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 	}
 	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
 	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount+len(fallback.RTPPackets)))
-	if len(callbackMetadata) != firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets) {
-		t.Fatalf("post-STAP-A-fallback callbacks = %d, want %d",
-			len(callbackMetadata), firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets))
+	if len(callbackPackets) != firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets) ||
+		len(callbackMetadata) != firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets) {
+		t.Fatalf("post-STAP-A-fallback callbacks/meta = %d/%d, want %d",
+			len(callbackPackets), len(callbackMetadata), firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets))
 	}
+	recoveredCallbackPackets := callbackPackets[firstPacketCount+len(fallback.RTPPackets):]
 	recoveredMetadata := callbackMetadata[firstPacketCount+len(fallback.RTPPackets):]
 	for i, meta := range recoveredMetadata {
+		pkt := recoveredCallbackPackets[i]
+		if pkt.PayloadType != recovered.RTPPackets[i].PayloadType ||
+			pkt.SequenceNumber != recovered.RTPPackets[i].SequenceNumber ||
+			pkt.Timestamp != recovered.RTPPackets[i].Timestamp ||
+			pkt.SSRC != recovered.RTPPackets[i].SSRC ||
+			pkt.Marker != recovered.RTPPackets[i].Marker {
+			t.Fatalf("post-STAP-A-fallback callback packet[%d] metadata = %+v, want returned RTP packet fields", i, pkt)
+		}
 		if meta.PacketIndex != i || meta.PacketCount != len(recovered.RTPPackets) ||
 			meta.FramePTS != pFrame.PTS || meta.FrameDTS != pFrame.PTS ||
 			meta.RTPTime != recovered.RTPTime || meta.KeyFrame || meta.IDR {

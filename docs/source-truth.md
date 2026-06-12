@@ -206,7 +206,7 @@ access-unit and RTP packet storage-size overflow rejection, RTP packetization-mo
 reassembly and oversize rejection, RTP packetization-mode 1 FU-A reassembly,
 STAP-A parameter-set aggregation plus small-payload fallback to non-aggregated
 mode-1 packets with fallback-IDR and post-fallback P-skip callback payload
-metadata, RTP payload-type/SSRC/sequence metadata, full
+metadata and callback packet isolation, RTP payload-type/SSRC/sequence metadata, full
 RTP header bytes with clipped packet payload views over packet data and packet
 storage isolated from `EncodedFrame.Data` including caller-backed `EncodeInto`
 output buffers, shared packet metadata guards for
