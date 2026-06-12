@@ -295,6 +295,45 @@ func decodeCAVLCCBP(gb *bitReader, mbType uint32, decodeChroma bool, cbp int) (i
 	return cbp, nil
 }
 
+func writeCAVLCCBP(bw *BitWriter, mbType uint32, decodeChroma bool, cbp int) error {
+	if bw == nil || cbp < 0 {
+		return ErrInvalidData
+	}
+	if isIntra16x16(mbType) {
+		if !decodeChroma && cbp > 15 {
+			return ErrInvalidData
+		}
+		return nil
+	}
+
+	var table []uint8
+	if decodeChroma {
+		if cbp > 47 {
+			return ErrInvalidData
+		}
+		if isIntra4x4(mbType) {
+			table = h264GolombToIntra4x4CBP[:]
+		} else {
+			table = h264GolombToInterCBP[:]
+		}
+	} else {
+		if cbp > 15 {
+			return ErrInvalidData
+		}
+		if isIntra4x4(mbType) {
+			table = cavlcGolombToIntra4x4CBPGray[:]
+		} else {
+			table = cavlcGolombToInterCBPGray[:]
+		}
+	}
+	for raw, value := range table {
+		if int(value) == cbp {
+			return bw.WriteUEGolomb(uint32(raw))
+		}
+	}
+	return ErrInvalidData
+}
+
 func (c *cavlcResidualContext) decodeCAVLCResidualPayload(gb *bitReader, pps *PPS, sps *SPS, mbType uint32, cbp int, qscale int) (int, [2]uint8, int, error) {
 	var chromaQP [2]uint8
 	cbpTable := cbp

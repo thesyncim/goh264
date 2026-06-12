@@ -65,6 +65,94 @@ func TestDecodeCAVLCCBP(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCCBPRoundTripsThroughDecoder(t *testing.T) {
+	cases := []struct {
+		name         string
+		mbType       uint32
+		decodeChroma bool
+		maxCBP       int
+	}{
+		{name: "intra chroma", mbType: MBTypeIntra4x4, decodeChroma: true, maxCBP: 47},
+		{name: "inter chroma", mbType: MBType16x16 | MBTypeP0L0, decodeChroma: true, maxCBP: 47},
+		{name: "intra gray", mbType: MBTypeIntra4x4, decodeChroma: false, maxCBP: 15},
+		{name: "inter gray", mbType: MBType16x16 | MBTypeP0L0, decodeChroma: false, maxCBP: 15},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for cbp := 0; cbp <= tc.maxCBP; cbp++ {
+				var bw BitWriter
+				if err := writeCAVLCCBP(&bw, tc.mbType, tc.decodeChroma, cbp); err != nil {
+					t.Fatalf("write cbp %d failed: %v", cbp, err)
+				}
+				gb := newBitReader(bw.Bytes())
+				got, err := decodeCAVLCCBP(&gb, tc.mbType, tc.decodeChroma, -1)
+				if err != nil {
+					t.Fatalf("decode written cbp %d failed: %v", cbp, err)
+				}
+				if got != cbp {
+					t.Fatalf("decoded cbp = %d, want %d", got, cbp)
+				}
+				if gb.bitPos != bw.BitLen() {
+					t.Fatalf("decoded cbp %d consumed %d bits, want %d", cbp, gb.bitPos, bw.BitLen())
+				}
+			}
+		})
+	}
+}
+
+func TestWriteCAVLCCBPIntra16x16WritesNoBits(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		decodeChroma bool
+		cbp          int
+	}{
+		{name: "chroma table value", decodeChroma: true, cbp: 47},
+		{name: "gray luma value", decodeChroma: false, cbp: 15},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			if err := writeCAVLCCBP(&bw, MBTypeIntra16x16, tt.decodeChroma, tt.cbp); err != nil {
+				t.Fatalf("write intra16 cbp: %v", err)
+			}
+			if bw.BitLen() != 0 {
+				t.Fatalf("intra16 cbp wrote %d bits, want 0", bw.BitLen())
+			}
+			gb := newBitReader(bw.Bytes())
+			got, err := decodeCAVLCCBP(&gb, MBTypeIntra16x16, tt.decodeChroma, tt.cbp)
+			if err != nil {
+				t.Fatalf("decode intra16 cbp: %v", err)
+			}
+			if got != tt.cbp {
+				t.Fatalf("decoded cbp = %d, want %d", got, tt.cbp)
+			}
+		})
+	}
+}
+
+func TestWriteCAVLCCBPRejectsInvalid(t *testing.T) {
+	var bw BitWriter
+	for _, tt := range []struct {
+		name         string
+		mbType       uint32
+		decodeChroma bool
+		cbp          int
+		err          error
+	}{
+		{name: "nil writer", mbType: MBTypeIntra4x4, decodeChroma: true, cbp: 0, err: writeCAVLCCBP(nil, MBTypeIntra4x4, true, 0)},
+		{name: "negative cbp", mbType: MBTypeIntra4x4, decodeChroma: true, cbp: -1, err: writeCAVLCCBP(&bw, MBTypeIntra4x4, true, -1)},
+		{name: "chroma cbp too large", mbType: MBType16x16 | MBTypeP0L0, decodeChroma: true, cbp: 48, err: writeCAVLCCBP(&bw, MBType16x16|MBTypeP0L0, true, 48)},
+		{name: "gray cbp too large", mbType: MBType16x16 | MBTypeP0L0, decodeChroma: false, cbp: 16, err: writeCAVLCCBP(&bw, MBType16x16|MBTypeP0L0, false, 16)},
+		{name: "intra16 gray cbp too large", mbType: MBTypeIntra16x16, decodeChroma: false, cbp: 16, err: writeCAVLCCBP(&bw, MBTypeIntra16x16, false, 16)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.err != ErrInvalidData {
+				t.Fatalf("write cbp error = %v, want ErrInvalidData", tt.err)
+			}
+		})
+	}
+}
+
 func TestUpdateCAVLCQScale(t *testing.T) {
 	cases := []struct {
 		name   string
