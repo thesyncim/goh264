@@ -8157,6 +8157,58 @@ func TestEncoderEncodeResultsSurviveLaterEncode(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeNALUnitsAppendDoesNotAliasLaterResult(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		outputFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", outputFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc", outputFormat: goh264.EncoderOutputAVC},
+		{name: "rtp", outputFormat: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.GOPSize = 10000
+			cfg.IDRInterval = 10000
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode first frame: %v", err)
+			}
+			if cap(first.NALUnits) != len(first.NALUnits) {
+				t.Fatalf("first NALUnits cap = %d, want clipped length %d", cap(first.NALUnits), len(first.NALUnits))
+			}
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode second frame: %v", err)
+			}
+			if cap(second.NALUnits) != len(second.NALUnits) {
+				t.Fatalf("second NALUnits cap = %d, want clipped length %d", cap(second.NALUnits), len(second.NALUnits))
+			}
+			secondNALUnits := append([]goh264.EncoderNALUnit(nil), second.NALUnits...)
+
+			grown := append(first.NALUnits, goh264.EncoderNALUnit{Type: 0xff, Offset: len(first.Data), Size: 1})
+			grown[len(first.NALUnits)].Offset = 0
+			if !reflect.DeepEqual(second.NALUnits, secondNALUnits) {
+				t.Fatalf("appending to first NALUnits mutated second NALUnits")
+			}
+			assertEncodedFrameNALUnitIndexes(t, first, cfg.OutputFormat)
+			assertEncodedFrameNALUnitIndexes(t, second, cfg.OutputFormat)
+		})
+	}
+}
+
 func TestEncoderEncodeRTPPacketsCarryFullRTPHeaders(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPayloadType = 102
