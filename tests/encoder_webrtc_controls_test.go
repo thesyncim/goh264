@@ -2633,6 +2633,95 @@ func TestEncoderReconfigureResolutionResetsReferenceAndQueuesIDR(t *testing.T) {
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 5, 1}, []uint32{0, 1, 2, 3})
 }
 
+func TestEncoderSetResolutionResetsReferenceAndQueuesIDR(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	cfg.GOPSize = 10000
+	cfg.IDRInterval = 10000
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	if err := enc.SetResolution(32, 16); err != nil {
+		t.Fatalf("SetResolution: %v", err)
+	}
+	if got := enc.Config(); got.Width != 32 || got.Height != 16 ||
+		got.StrideY != 32 || got.StrideCb != 16 || got.StrideCr != 16 {
+		t.Fatalf("resolution config = %+v, want 32x16 with matching I420 strides", got)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("SetResolution did not queue IDR refresh")
+	}
+
+	staleFrame := firstFrame
+	staleFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	if _, err := enc.Encode(staleFrame); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Encode stale-size frame error = %v, want ErrInvalidData", err)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("stale-size frame consumed queued SetResolution IDR")
+	}
+
+	resizedFrame := patternedI420EncoderFrame(32, 16)
+	resizedFrame.PTS = staleFrame.PTS
+	resized, err := enc.Encode(resizedFrame)
+	if err != nil {
+		t.Fatalf("Encode resized IDR: %v", err)
+	}
+	if resized.Dropped || !resized.IDR || enc.PendingIDR() {
+		t.Fatalf("resized frame dropped=%v idr=%v pending=%v, want delivered IDR",
+			resized.Dropped, resized.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, resized.NALUnits, []uint8{7, 8, 5})
+
+	resizedPSkipFrame := resizedFrame
+	resizedPSkipFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	resizedPSkip, err := enc.Encode(resizedPSkipFrame)
+	if err != nil {
+		t.Fatalf("Encode resized P-skip: %v", err)
+	}
+	if resizedPSkip.Dropped || resizedPSkip.IDR || resizedPSkip.KeyFrame || enc.PendingIDR() {
+		t.Fatalf("resized P-skip dropped=%v idr=%v key=%v pending=%v, want delivered P-skip",
+			resizedPSkip.Dropped, resizedPSkip.IDR, resizedPSkip.KeyFrame, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, resizedPSkip.NALUnits, []uint8{1})
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+	decodedResized, err := dec.DecodeFrames(resized.Data)
+	if err != nil {
+		t.Fatalf("Decode resized IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedResized, appendI420FrameBytes(nil, resizedFrame))
+	decodedResizedPSkip, err := dec.DecodeFrames(resizedPSkip.Data)
+	if err != nil {
+		t.Fatalf("Decode resized P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedResizedPSkip, appendI420FrameBytes(nil, resizedPSkipFrame))
+
+	stream := append([]byte(nil), first.Data...)
+	stream = append(stream, resized.Data...)
+	stream = append(stream, resizedPSkip.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1}, []uint32{0, 1, 2})
+}
+
 func TestEncoderRealtimeControlLoopStressPreservesPacketAndReferenceState(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(128, 128)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
