@@ -5652,7 +5652,8 @@ func TestEncoderEncodeForceIDRBypassesPSkipReference(t *testing.T) {
 				t.Fatalf("NewEncoder: %v", err)
 			}
 			frame := patternedI420EncoderFrame(16, 16)
-			if _, err := enc.Encode(frame); err != nil {
+			first, err := enc.Encode(frame)
+			if err != nil {
 				t.Fatalf("Encode first IDR: %v", err)
 			}
 			frame.PTS += int64(cfg.RTPTimestampIncrement)
@@ -5665,6 +5666,11 @@ func TestEncoderEncodeForceIDRBypassesPSkipReference(t *testing.T) {
 				t.Fatalf("forced frame key=%v idr=%v pending=%v, want completed IDR", out.KeyFrame, out.IDR, enc.PendingIDR())
 			}
 			assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+			assertEncoderVCLFrameNums(t,
+				append(append([]byte(nil), first.Data...), out.Data...),
+				[]uint8{5, 5},
+				[]uint32{0, 1},
+			)
 		})
 	}
 }
