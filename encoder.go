@@ -289,6 +289,9 @@ func (packet EncoderRTPPacket) PayloadData() ([]byte, error) {
 	if err != nil || dataEnd > len(packet.Data) {
 		return nil, ErrInvalidData
 	}
+	if packet.Payload[0]&0x80 != 0 || packet.Payload[0]&0x1f == 0 {
+		return nil, ErrInvalidData
+	}
 	return packet.Payload[:len(packet.Payload):len(packet.Payload)], nil
 }
 

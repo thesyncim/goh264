@@ -11383,6 +11383,10 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 			}
 		})
 	}
+	forbiddenPayloadPacketData := append([]byte(nil), packetData...)
+	forbiddenPayloadPacketData[12] = 0xe5
+	zeroTypePayloadPacketData := append([]byte(nil), packetData...)
+	zeroTypePayloadPacketData[12] = 0x00
 	for _, tt := range []struct {
 		name  string
 		frame goh264.EncodedFrame
@@ -11394,6 +11398,8 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "short packet", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData[:11], Payload: packetData[12:]}}}},
 		{name: "empty payload", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: nil}}}},
 		{name: "payload before header", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: packetData[8:12]}}}},
+		{name: "payload forbidden zero bit", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: forbiddenPayloadPacketData, Payload: forbiddenPayloadPacketData[12:]}}}},
+		{name: "payload zero nal type", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: zeroTypePayloadPacketData, Payload: zeroTypePayloadPacketData[12:]}}}},
 		{name: "foreign payload", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: []byte{0x65, 0x88, 0x99}}}}},
 	} {
 		t.Run("payload-"+tt.name, func(t *testing.T) {
@@ -11523,6 +11529,10 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 
 	badVersionPacketData := append([]byte(nil), packetData...)
 	badVersionPacketData[0] = 0x40
+	badPayloadPacketData := append([]byte(nil), packetData...)
+	badPayloadPacketData[12] = 0xe5
+	zeroPayloadPacketData := append([]byte(nil), packetData...)
+	zeroPayloadPacketData[12] = 0x00
 	for _, tt := range []struct {
 		name   string
 		packet goh264.EncoderRTPPacket
@@ -11531,6 +11541,8 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 		{name: "bad version", packet: goh264.EncoderRTPPacket{Data: badVersionPacketData, Payload: badVersionPacketData[12:]}},
 		{name: "empty payload", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: nil}},
 		{name: "payload before header", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: packetData[8:12]}},
+		{name: "payload forbidden zero bit", packet: goh264.EncoderRTPPacket{Data: badPayloadPacketData, Payload: badPayloadPacketData[12:]}},
+		{name: "payload zero nal type", packet: goh264.EncoderRTPPacket{Data: zeroPayloadPacketData, Payload: zeroPayloadPacketData[12:]}},
 		{name: "foreign payload", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: []byte{0x65, 0x88, 0x99}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
