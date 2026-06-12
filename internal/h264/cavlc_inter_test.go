@@ -21,6 +21,102 @@ func TestReadCAVLCRefIndex(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCRefIndexRoundTripsThroughReader(t *testing.T) {
+	tests := []struct {
+		refCount uint32
+		ref      int32
+		bits     uint32
+	}{
+		{refCount: 1, ref: 0, bits: 0},
+		{refCount: 2, ref: 0, bits: 1},
+		{refCount: 2, ref: 1, bits: 1},
+		{refCount: 3, ref: 0, bits: 1},
+		{refCount: 3, ref: 1, bits: 3},
+		{refCount: 5, ref: 4, bits: 5},
+	}
+	for _, tt := range tests {
+		var bw BitWriter
+		if err := writeCAVLCRefIndex(&bw, tt.refCount, tt.ref); err != nil {
+			t.Fatalf("write refCount=%d ref=%d failed: %v", tt.refCount, tt.ref, err)
+		}
+		if bw.BitLen() != tt.bits {
+			t.Fatalf("refCount=%d ref=%d wrote %d bits, want %d", tt.refCount, tt.ref, bw.BitLen(), tt.bits)
+		}
+
+		gb := newBitReader(bw.Bytes())
+		got, err := readCAVLCRefIndex(&gb, tt.refCount)
+		if err != nil {
+			t.Fatalf("read refCount=%d ref=%d failed: %v", tt.refCount, tt.ref, err)
+		}
+		if got != tt.ref {
+			t.Fatalf("refCount=%d round trip = %d, want %d", tt.refCount, got, tt.ref)
+		}
+		if gb.bitPos != bw.BitLen() {
+			t.Fatalf("refCount=%d consumed %d bits, want %d", tt.refCount, gb.bitPos, bw.BitLen())
+		}
+	}
+}
+
+func TestWriteCAVLCRefIndexRejectsInvalid(t *testing.T) {
+	var bw BitWriter
+	tests := []struct {
+		name     string
+		refCount uint32
+		ref      int32
+		err      error
+	}{
+		{name: "nil writer", refCount: 1, ref: 0, err: writeCAVLCRefIndex(nil, 1, 0)},
+		{name: "zero refs", refCount: 0, ref: 0, err: writeCAVLCRefIndex(&bw, 0, 0)},
+		{name: "negative ref", refCount: 2, ref: -1, err: writeCAVLCRefIndex(&bw, 2, -1)},
+		{name: "ref equals count", refCount: 2, ref: 2, err: writeCAVLCRefIndex(&bw, 2, 2)},
+	}
+	for _, tt := range tests {
+		if tt.err != ErrInvalidData {
+			t.Fatalf("%s err = %v, want ErrInvalidData", tt.name, tt.err)
+		}
+	}
+}
+
+func TestWriteCAVLCMVDRoundTripsThroughReader(t *testing.T) {
+	tests := [][2]int32{
+		{},
+		{1, -1},
+		{-3, 2},
+		{127, -128},
+	}
+	for _, want := range tests {
+		var bw BitWriter
+		if err := writeCAVLCMVD(&bw, want); err != nil {
+			t.Fatalf("write mvd %v failed: %v", want, err)
+		}
+
+		gb := newBitReader(bw.Bytes())
+		var got [2]int32
+		if err := readCAVLCMVD(&gb, &got); err != nil {
+			t.Fatalf("read mvd %v failed: %v", want, err)
+		}
+		if got != want {
+			t.Fatalf("mvd round trip = %v, want %v", got, want)
+		}
+		if gb.bitPos != bw.BitLen() {
+			t.Fatalf("mvd consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+		}
+	}
+}
+
+func TestWriteCAVLCMVDRejectsInvalid(t *testing.T) {
+	if err := writeCAVLCMVD(nil, [2]int32{}); err != ErrInvalidData {
+		t.Fatalf("nil mvd writer err = %v, want ErrInvalidData", err)
+	}
+	var bw BitWriter
+	if err := writeCAVLCMVD(&bw, [2]int32{-2147483648, 0}); err != ErrInvalidData {
+		t.Fatalf("invalid mvd x err = %v, want ErrInvalidData", err)
+	}
+	if err := writeCAVLCMVD(&bw, [2]int32{0, -2147483648}); err != ErrInvalidData {
+		t.Fatalf("invalid mvd y err = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestWriteCAVLCPSubMBTypeRoundTripsThroughReader(t *testing.T) {
 	for raw, info := range h264PSubMBTypeInfo {
 		var bw BitWriter

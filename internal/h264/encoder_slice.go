@@ -341,10 +341,7 @@ func EncodeI420P16x16NoResidualSliceRBSP(cfg EncoderI420P16x16NoResidualConfig) 
 		if err := bw.WriteUEGolomb(0); err != nil { // P_L0_16x16
 			return nil, err
 		}
-		if err := bw.WriteSEGolomb(mvdX); err != nil {
-			return nil, err
-		}
-		if err := bw.WriteSEGolomb(mvdY); err != nil {
+		if err := writeCAVLCMVD(&bw, [2]int32{mvdX, mvdY}); err != nil {
 			return nil, err
 		}
 		if err := bw.WriteUEGolomb(0); err != nil { // coded_block_pattern

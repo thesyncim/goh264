@@ -41,6 +41,30 @@ func writeCAVLCBSubMBType(bw *BitWriter, info PMBInfo) error {
 	return ErrInvalidData
 }
 
+func writeCAVLCRefIndex(bw *BitWriter, refCount uint32, ref int32) error {
+	if bw == nil || refCount == 0 || ref < 0 || uint32(ref) >= refCount {
+		return ErrInvalidData
+	}
+	if refCount == 1 {
+		return nil
+	}
+	if refCount == 2 {
+		bw.WriteBit(uint32(ref) ^ 1)
+		return nil
+	}
+	return bw.WriteUEGolomb(uint32(ref))
+}
+
+func writeCAVLCMVD(bw *BitWriter, mvd [2]int32) error {
+	if bw == nil {
+		return ErrInvalidData
+	}
+	if err := bw.WriteSEGolomb(mvd[0]); err != nil {
+		return err
+	}
+	return bw.WriteSEGolomb(mvd[1])
+}
+
 func (c *cavlcResidualContext) decodeCAVLCInterPMacroblock(gb *bitReader, pps *PPS, sps *SPS, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
 	var mb cavlcInterMacroblockSyntax
 	base, err := decodeCAVLCMBType(gb, PictureTypeP, PictureTypeP)
