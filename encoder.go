@@ -914,7 +914,7 @@ func (cfg EncoderConfig) RecoveryPointSEIMessage(recoveryFrameCount uint32) (Enc
 	return enc.RecoveryPointSEI(recoveryFrameCount)
 }
 
-// Reset clears encoder coding state while preserving configuration and callback.
+// Reset clears encoder coding state while preserving configuration and RTP callback.
 //
 // After Reset, the next successfully encoded frame starts a fresh sequence for
 // the current encoder configuration.

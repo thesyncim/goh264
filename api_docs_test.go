@@ -381,6 +381,36 @@ func TestREADMEStateLifecycleDocumentsDecoderEncoderBoundaries(t *testing.T) {
 	}
 }
 
+func TestPublicCommentsDocumentStateLifecycleBoundaries(t *testing.T) {
+	decoderData, err := os.ReadFile("decoder.go")
+	if err != nil {
+		t.Fatalf("read decoder.go: %v", err)
+	}
+	encoderData, err := os.ReadFile("encoder.go")
+	if err != nil {
+		t.Fatalf("read encoder.go: %v", err)
+	}
+	decoder := string(decoderData)
+	encoder := string(encoderData)
+	for _, phrase := range []string{
+		"Storing a configuration resets decoder picture state for a new",
+		"ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,\n// resets decoder picture state",
+		"ConfigureAVCC parses an avcC record, stores it for configured-AVC decode\n// calls, resets decoder picture state",
+	} {
+		if !strings.Contains(decoder, phrase) {
+			t.Fatalf("decoder public comments missing lifecycle phrase %q", phrase)
+		}
+	}
+	for _, phrase := range []string{
+		"Reset clears encoder coding state while preserving configuration and RTP callback",
+		"After Reset, the next successfully encoded frame starts a fresh sequence",
+	} {
+		if !strings.Contains(encoder, phrase) {
+			t.Fatalf("encoder public comments missing lifecycle phrase %q", phrase)
+		}
+	}
+}
+
 func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	data, err := os.ReadFile("examples_test.go")
 	if err != nil {

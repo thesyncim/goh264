@@ -805,7 +805,8 @@ func (d *Decoder) ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderCon
 
 // ConfigureAVCDecoderConfigurationRecord parses an AVC decoder configuration
 // record, stores it for configured-AVC decode calls, and returns stream
-// metadata.
+// metadata. Storing a configuration resets decoder picture state for a new
+// configured-AVC stream.
 //
 // ConfigureAVCDecoderConfigurationRecord is the preferred mutating name.
 // ParseAVCDecoderConfigurationRecord remains as a compatibility alias.
@@ -833,7 +834,7 @@ func avcDecoderConfigurationFromH264(cfg h264.AVCDecoderConfigurationRecord) (AV
 }
 
 // ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,
-// and returns stream metadata.
+// resets decoder picture state, and returns stream metadata.
 //
 // ParseAVCC remains as a compatibility alias for ConfigureAVCC.
 func (d *Decoder) ParseAVCC(data []byte) (AVCConfig, error) {
@@ -841,7 +842,7 @@ func (d *Decoder) ParseAVCC(data []byte) (AVCConfig, error) {
 }
 
 // ConfigureAVCC parses an avcC record, stores it for configured-AVC decode
-// calls, and returns stream metadata.
+// calls, resets decoder picture state, and returns stream metadata.
 //
 // ConfigureAVCC is the preferred mutating name. ParseAVCC remains as a
 // compatibility alias.
