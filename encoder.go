@@ -622,6 +622,19 @@ func (cfg EncoderConfig) Normalize() (EncoderConfig, error) {
 	return normalizeEncoderConfig(cfg)
 }
 
+// ValidateFrame reports whether frame can be encoded by cfg after normalization.
+//
+// cfg and frame are not modified. The validation matches Encoder.ValidateFrame
+// without constructing or mutating a live encoder.
+func (cfg EncoderConfig) ValidateFrame(frame EncoderFrame) error {
+	normalized, err := normalizeEncoderConfig(cfg)
+	if err != nil {
+		return err
+	}
+	enc := Encoder{cfg: normalized}
+	return enc.validateFrame(frame)
+}
+
 // Reset clears encoder coding state while preserving configuration and callback.
 //
 // After Reset, the next successfully encoded frame starts a fresh sequence for

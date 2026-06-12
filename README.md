@@ -229,6 +229,7 @@ cfg := goh264.DefaultEncoderConfig(640, 480)
 cfg.TargetBitrate = 800_000
 cfg.MaxBitrate = 1_000_000
 cfg.SliceCount = 2
+cfg, err := cfg.Normalize()
 
 enc, err := goh264.NewEncoder(cfg)
 if err != nil {
@@ -252,6 +253,7 @@ headersCopy := headers.Clone()
 sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
 seiCopy := sei.Clone()
 frame := enc.I420Frame(y, cb, cr, pts)
+err = cfg.ValidateFrame(frame)
 err = enc.ValidateFrame(frame)
 out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if out.Dropped {
@@ -265,10 +267,12 @@ owned, err := out.Clone()   // deep-owned snapshot for async retention
 err = enc.Reset()           // clear encoder coding state, keep config/callback
 ```
 
-`ValidateFrame`, `Encode`, and `EncodeInto` validate frame shape before bitstream work; invalid
-frames return empty output without advancing RTP sequence, callback,
-frame-number, timestamp, or reference state, then valid input resumes as the
-expected P-skip, or as the queued IDR when a prior IDR request was pending.
+`EncoderConfig.Normalize` exposes the exact validated configuration stored by
+`NewEncoder`. `EncoderConfig.ValidateFrame` and `Encoder.ValidateFrame` validate
+frame shape before bitstream work; invalid frames return empty output without
+advancing RTP sequence, callback, frame-number, timestamp, or reference state,
+then valid input resumes as the expected P-skip, or as the queued IDR when a
+prior IDR request was pending.
 Overflowed caller-owned `EncodeInto` destination growth is also rejected across
 Annex B, AVC, and RTP without consuming queued IDR state or advancing
 RTP/callback state, and the same hard-error path preserves P-frame reference

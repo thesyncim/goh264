@@ -193,6 +193,51 @@ func TestEncoderI420FrameHelpersPopulateConfigFields(t *testing.T) {
 	}
 }
 
+func TestEncoderConfigValidateFrameMatchesEncoderPreflight(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.StrideY = 20
+	cfg.StrideCb = 10
+	cfg.StrideCr = 10
+	cfg.RTPTimestampIncrement = 0
+	frame := cfg.I420Frame(make([]byte, 20*16), make([]byte, 10*8), make([]byte, 10*8), 123)
+	if frame.Duration != 0 {
+		t.Fatalf("config I420Frame duration = %d, want raw config value before normalization", frame.Duration)
+	}
+	originalCfg := cfg
+
+	if err := cfg.ValidateFrame(frame); err != nil {
+		t.Fatalf("config ValidateFrame with derived defaults: %v", err)
+	}
+	if cfg != originalCfg {
+		t.Fatalf("ValidateFrame mutated source config: %+v", cfg)
+	}
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	if err := enc.ValidateFrame(frame); err != nil {
+		t.Fatalf("encoder ValidateFrame with derived defaults: %v", err)
+	}
+
+	badFrame := frame
+	badFrame.Y = badFrame.Y[:len(badFrame.Y)-1]
+	configErr := cfg.ValidateFrame(badFrame)
+	encoderErr := enc.ValidateFrame(badFrame)
+	if !errors.Is(configErr, goh264.ErrInvalidData) {
+		t.Fatalf("config ValidateFrame undersized luma error = %v, want ErrInvalidData", configErr)
+	}
+	if !errors.Is(encoderErr, goh264.ErrInvalidData) {
+		t.Fatalf("encoder ValidateFrame undersized luma error = %v, want ErrInvalidData", encoderErr)
+	}
+
+	invalidCfg := cfg
+	invalidCfg.Width = 15
+	if err := invalidCfg.ValidateFrame(frame); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("invalid config ValidateFrame error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestEncoderResetClearsLiveStateAndPreservesConfigAndCallback(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputRTP
@@ -11860,6 +11905,9 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderConfig{}).MethodByName("Normalize"); !ok {
 		t.Fatal("EncoderConfig missing Normalize convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderConfig{}).MethodByName("ValidateFrame"); !ok {
+		t.Fatal("EncoderConfig missing ValidateFrame convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCC"); !ok {
 		t.Fatal("EncoderParameterSets missing AVCC convenience method")
