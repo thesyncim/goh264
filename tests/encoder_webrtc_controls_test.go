@@ -11386,17 +11386,30 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		0x65, 0x88, 0x99,
 	}
 	valid := goh264.EncodedFrame{
+		OutputFormat: goh264.EncoderOutputRTP,
 		RTPPackets: []goh264.EncoderRTPPacket{{
 			Data:    packetData,
 			Payload: packetData[12:],
 		}},
 	}
+	legacyValid := valid
+	legacyValid.OutputFormat = 0
 	if got, err := valid.RTPPacketData(0); err != nil || !bytes.Equal(got, packetData) || cap(got) != len(got) {
 		t.Fatalf("valid RTPPacketData = %x cap=%d err=%v, want clipped packet bytes", got, cap(got), err)
 	}
 	if got, err := valid.RTPPayloadData(0); err != nil || !bytes.Equal(got, []byte{0x65, 0x88, 0x99}) || cap(got) != len(got) {
 		t.Fatalf("valid RTPPayloadData = %x cap=%d err=%v, want clipped payload bytes", got, cap(got), err)
 	}
+	if got, err := legacyValid.RTPPacketData(0); err != nil || !bytes.Equal(got, packetData) {
+		t.Fatalf("legacy RTPPacketData = %x/%v, want packet bytes", got, err)
+	}
+	if got, err := legacyValid.RTPPayloadData(0); err != nil || !bytes.Equal(got, []byte{0x65, 0x88, 0x99}) {
+		t.Fatalf("legacy RTPPayloadData = %x/%v, want payload bytes", got, err)
+	}
+	annexBFrameWithRTPPackets := valid
+	annexBFrameWithRTPPackets.OutputFormat = goh264.EncoderOutputAnnexB
+	avcFrameWithRTPPackets := valid
+	avcFrameWithRTPPackets.OutputFormat = goh264.EncoderOutputAVC
 	for _, tt := range []struct {
 		name  string
 		frame goh264.EncodedFrame
@@ -11405,6 +11418,8 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "negative index", frame: valid, index: -1},
 		{name: "past end", frame: valid, index: 1},
 		{name: "dropped", frame: goh264.EncodedFrame{Dropped: true, RTPPackets: valid.RTPPackets}},
+		{name: "annexb output format", frame: annexBFrameWithRTPPackets},
+		{name: "avc output format", frame: avcFrameWithRTPPackets},
 		{name: "short packet", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData[:11], Payload: packetData[12:]}}}},
 	} {
 		t.Run("packet-"+tt.name, func(t *testing.T) {
@@ -11439,6 +11454,8 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "negative index", frame: valid, index: -1},
 		{name: "past end", frame: valid, index: 1},
 		{name: "dropped", frame: goh264.EncodedFrame{Dropped: true, RTPPackets: valid.RTPPackets}},
+		{name: "annexb output format", frame: annexBFrameWithRTPPackets},
+		{name: "avc output format", frame: avcFrameWithRTPPackets},
 		{name: "short packet", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData[:11], Payload: packetData[12:]}}}},
 		{name: "empty payload", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: nil}}}},
 		{name: "payload before header", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: packetData[8:12]}}}},
@@ -11509,6 +11526,14 @@ func TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes(t *testing.T) {
 	}
 	if got, err := (goh264.EncodedFrame{}).AppendRTPPayloadData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
 		t.Fatalf("AppendRTPPayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
+	}
+	nonRTP := valid
+	nonRTP.OutputFormat = goh264.EncoderOutputAVC
+	if got, err := nonRTP.AppendRTPPacketData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+		t.Fatalf("AppendRTPPacketData non-RTP = %x/%v, want nil ErrInvalidData", got, err)
+	}
+	if got, err := nonRTP.AppendRTPPayloadData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+		t.Fatalf("AppendRTPPayloadData non-RTP = %x/%v, want nil ErrInvalidData", got, err)
 	}
 }
 

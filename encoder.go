@@ -533,7 +533,8 @@ func (frame EncodedFrame) AppendAccessUnitData(dst []byte) ([]byte, error) {
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (frame EncodedFrame) RTPPacketData(index int) ([]byte, error) {
-	if frame.Dropped || index < 0 || index >= len(frame.RTPPackets) {
+	if frame.Dropped || (frame.OutputFormat != 0 && frame.OutputFormat != EncoderOutputRTP) ||
+		index < 0 || index >= len(frame.RTPPackets) {
 		return nil, ErrInvalidData
 	}
 	return frame.RTPPackets[index].PacketData()
@@ -553,7 +554,8 @@ func (frame EncodedFrame) AppendRTPPacketData(dst []byte, index int) ([]byte, er
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (frame EncodedFrame) RTPPayloadData(index int) ([]byte, error) {
-	if frame.Dropped || index < 0 || index >= len(frame.RTPPackets) {
+	if frame.Dropped || (frame.OutputFormat != 0 && frame.OutputFormat != EncoderOutputRTP) ||
+		index < 0 || index >= len(frame.RTPPackets) {
 		return nil, ErrInvalidData
 	}
 	return frame.RTPPackets[index].PayloadData()
