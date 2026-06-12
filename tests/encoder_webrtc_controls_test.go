@@ -282,6 +282,17 @@ func TestEncoderSetFrameRateRejectsTimestampOverflowWithoutMutation(t *testing.T
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before overflow SetFrameRate did not queue IDR")
+	}
 	before := enc.Config()
 	if err := enc.SetFrameRate(1, maxIntForTest); !errors.Is(err, goh264.ErrInvalidData) {
 		t.Fatalf("SetFrameRate overflow error = %v, want ErrInvalidData", err)
@@ -289,12 +300,41 @@ func TestEncoderSetFrameRateRejectsTimestampOverflowWithoutMutation(t *testing.T
 	if got := enc.Config(); got != before {
 		t.Fatalf("overflow SetFrameRate mutated config = %+v, want %+v", got, before)
 	}
+	if !enc.PendingIDR() {
+		t.Fatal("overflow SetFrameRate cleared pending IDR")
+	}
+
+	second, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode after overflow SetFrameRate: %v", err)
+	}
+	if !second.IDR || enc.PendingIDR() {
+		t.Fatalf("post-overflow-SetFrameRate frame idr=%v pending=%v, want delivered IDR",
+			second.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLFrameNums(t,
+		append(append([]byte(nil), first.Data...), second.Data...),
+		[]uint8{5, 5},
+		[]uint32{0, 1},
+	)
 }
 
 func TestEncoderSetFrameRateRejectsZeroTimestampIncrementWithoutMutation(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
+	}
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before zero-increment SetFrameRate did not queue IDR")
 	}
 	before := enc.Config()
 	if err := enc.SetFrameRate(before.TimeBaseDen+1, 1); !errors.Is(err, goh264.ErrInvalidData) {
@@ -303,6 +343,24 @@ func TestEncoderSetFrameRateRejectsZeroTimestampIncrementWithoutMutation(t *test
 	if got := enc.Config(); got != before {
 		t.Fatalf("zero-increment SetFrameRate mutated config = %+v, want %+v", got, before)
 	}
+	if !enc.PendingIDR() {
+		t.Fatal("zero-increment SetFrameRate cleared pending IDR")
+	}
+
+	second, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode after zero-increment SetFrameRate: %v", err)
+	}
+	if !second.IDR || enc.PendingIDR() {
+		t.Fatalf("post-zero-increment-SetFrameRate frame idr=%v pending=%v, want delivered IDR",
+			second.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLFrameNums(t,
+		append(append([]byte(nil), first.Data...), second.Data...),
+		[]uint8{5, 5},
+		[]uint32{0, 1},
+	)
 }
 
 func TestEncoderEncodeRejectsFramePlaneSizeOverflowWithoutPanic(t *testing.T) {
