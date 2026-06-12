@@ -277,6 +277,18 @@ Duplicate packet side data follows first-entry semantics: empty or malformed
 first active-format, S12M timecode, ICC profile, HDR10+, and LCEVC entries
 suppress later duplicates.
 
+## State Lifecycle
+
+| Surface | State behavior |
+| --- | --- |
+| `Decoder.DecodeFrames` / `DecodePacketFrames` | Retain decoder references and delayed output across stream packets; empty input flushes delayed frames. |
+| `Decoder.ConfigureAVCC` | Stores avcC metadata and resets decoder picture state for a new configured-AVC stream. |
+| `Decoder.DecodeAVCCFrames` / packet `NEW_EXTRADATA` | Compatible avcC updates retain references; incompatible active SPS changes reset picture state before decoding. |
+| `Decoder.Reset` | Clears stored SPS/PPS, avcC length-size, references, delayed output, and parsed slice state. |
+| `Encoder.Reset` | Clears coding/reference/rate state and queued IDR state while preserving configuration and RTP callback. |
+| `Encoder.SetResolution` / `SetOutputFormat` | Apply validated live changes and queue an IDR boundary for the next emitted access unit. |
+| Invalid encoder setters or `Reconfigure` updates | Leave configuration, queued IDR state, RTP sequence/callback state, frame number, timestamp, and references unchanged. |
+
 ## Encoder API (Experimental)
 
 The encoder surface is intentionally split into a small recommended realtime

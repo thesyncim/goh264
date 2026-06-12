@@ -351,6 +351,36 @@ func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
 	}
 }
 
+func TestREADMEStateLifecycleDocumentsDecoderEncoderBoundaries(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+	for _, phrase := range []string{
+		"## State Lifecycle",
+		"`Decoder.DecodeFrames` / `DecodePacketFrames`",
+		"Retain decoder references and delayed output across stream packets",
+		"`Decoder.ConfigureAVCC`",
+		"resets decoder picture state for a new configured-AVC stream",
+		"`Decoder.DecodeAVCCFrames` / packet `NEW_EXTRADATA`",
+		"Compatible avcC updates retain references",
+		"incompatible active SPS changes reset picture state before decoding",
+		"`Decoder.Reset`",
+		"Clears stored SPS/PPS, avcC length-size, references, delayed output, and parsed slice state",
+		"`Encoder.Reset`",
+		"preserving configuration and RTP callback",
+		"`Encoder.SetResolution` / `SetOutputFormat`",
+		"queue an IDR boundary",
+		"Invalid encoder setters or `Reconfigure` updates",
+		"Leave configuration, queued IDR state, RTP sequence/callback state, frame number, timestamp, and references unchanged",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md lifecycle table missing %q", phrase)
+		}
+	}
+}
+
 func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	data, err := os.ReadFile("examples_test.go")
 	if err != nil {
