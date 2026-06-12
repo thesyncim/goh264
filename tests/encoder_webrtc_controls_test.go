@@ -6384,6 +6384,93 @@ func TestEncoderSliceCountSplitsIDRPSkipAndPIntraPCMAccessUnits(t *testing.T) {
 	assertFFmpegRawVideoOracle(t, stream, want)
 }
 
+func TestEncoderSetSliceCountControlsLiveSliceRanges(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(48, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	cfg.SliceCount = 1
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(48, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first single-slice IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLFirstMBs(t, first.Data, []uint8{5}, []uint32{0})
+
+	if err := enc.SetSliceCount(3); err != nil {
+		t.Fatalf("SetSliceCount 3: %v", err)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetSliceCount queued unexpected IDR")
+	}
+	if got := enc.Config(); got.SliceCount != 3 {
+		t.Fatalf("SliceCount after setter = %d, want 3", got.SliceCount)
+	}
+
+	secondFrame := firstFrame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	enc.ForceIDR()
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode forced multi-slice IDR: %v", err)
+	}
+	if !second.IDR || enc.PendingIDR() {
+		t.Fatalf("forced output idr=%v pending=%v, want completed IDR", second.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5, 5, 5})
+	assertEncoderVCLFirstMBs(t, second.Data, []uint8{5, 5, 5}, []uint32{0, 1, 2})
+
+	thirdFrame := secondFrame
+	thirdFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode live multi-slice P-skip: %v", err)
+	}
+	if third.IDR || third.KeyFrame {
+		t.Fatalf("third frame idr/key=%v/%v, want P-skip", third.IDR, third.KeyFrame)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{1, 1, 1})
+
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets: %v", err)
+	}
+	assertEncoderVCLFirstMBs(t, append(append([]byte(nil), headers.AnnexB...), third.Data...), []uint8{1, 1, 1}, []uint32{0, 1, 2})
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first single-slice IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode forced multi-slice IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+	decodedThird, err := dec.DecodeFrames(third.Data)
+	if err != nil {
+		t.Fatalf("Decode live multi-slice P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedThird, appendI420FrameBytes(nil, thirdFrame))
+
+	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	stream = append(stream, third.Data...)
+	assertEncoderVCLFrameNums(t, stream,
+		[]uint8{5, 5, 5, 5, 1, 1, 1},
+		[]uint32{0, 1, 1, 1, 2, 2, 2})
+	want := appendI420FrameBytes(nil, firstFrame)
+	want = appendI420FrameBytes(want, secondFrame)
+	want = appendI420FrameBytes(want, thirdFrame)
+	assertFFmpegRawVideoOracle(t, stream, want)
+}
+
 func TestEncoderSliceCountFeedsRTPMode1SingleNALPackets(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(32, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
