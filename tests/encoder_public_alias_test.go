@@ -113,6 +113,8 @@ var _ = (EncodedFrame).RTPPayloadData
 var _ = (EncodedFrame).AppendRTPPayloadData
 var _ = (EncodedFrame).Clone
 
+var _ = EncoderReconfigure{Limits: &EncoderLimits{}}
+
 var _ = (*Encoder).Config
 var _ = (*Encoder).ParameterSets
 var _ = (*Encoder).RecoveryPointSEI

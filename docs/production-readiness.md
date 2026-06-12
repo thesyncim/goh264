@@ -20,7 +20,10 @@ The encoder bitstream-writer residual work is still deliberately bounded, but
 the CAVLC single-level and single-level-plus-trailing-ones residual writers now
 round-trip both short and decoder-supported prefix-14/prefix-15 first-level
 codes, and two-, three-, four-, five-, six-, seven-, eight-, nine-, ten-, eleven-, twelve-, thirteen-, fourteen-, fifteen-, and sixteen-non-trailing-level writers plus a bounded dispatcher including multi-level-plus-trailing-one shapes now round-trip subsequent
-suffix-length transitions plus the totalCoeff>10 first-level suffix transition, before broader residual macroblock admission.
+suffix-length transitions plus the totalCoeff>10 first-level suffix transition, before broader residual macroblock admission. Public encoder coverage now also
+pins the current residual boundary: residual-shaped P-frame deltas still emit
+the admitted recovery-SEI plus P IntraPCM fallback across Annex B, AVC, RTP
+mode 1, and RTP mode 0 until pixel-domain residual admission lands deliberately.
 
 Harness-first status:
 

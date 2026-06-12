@@ -272,7 +272,9 @@ packaging, AVC decoder configuration records, baseline SPS/PPS syntax with
 4:2:0 crop-unit emission, recovery-point SEI syntax, and Baseline IDR plus
 P-skip/P16x16 no-residual/P IntraPCM slice syntax via decoder-parser and
 encoded-frame round trips, including per-macroblock MVD syntax for the P16x16
-writer.
+writer. Public encoder coverage pins residual-shaped P-frame deltas as the
+current recovery-SEI plus P IntraPCM fallback across Annex B, AVC, RTP mode 1,
+and RTP mode 0; this is an intentional boundary, not public residual admission.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder
