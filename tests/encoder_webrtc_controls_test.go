@@ -1418,6 +1418,143 @@ func TestEncoderDroppedFrameDoesNotPersistPerFrameForceIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderDroppedIntervalIDRRetriesWithoutAdvancingCadence(t *testing.T) {
+	budgets := []struct {
+		name    string
+		lower   goh264.EncoderReconfigure
+		restore goh264.EncoderReconfigure
+	}{
+		{
+			name:    "max-frame-size",
+			lower:   goh264.EncoderReconfigure{MaxFrameSize: 16},
+			restore: goh264.EncoderReconfigure{MaxFrameSize: 4096},
+		},
+		{
+			name:    "slice-max-bytes",
+			lower:   goh264.EncoderReconfigure{SliceMaxBytes: 1},
+			restore: goh264.EncoderReconfigure{SliceMaxBytes: 4096},
+		},
+	}
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			for _, budget := range budgets {
+				t.Run(budget.name, func(t *testing.T) {
+					cfg := goh264.DefaultEncoderConfig(16, 16)
+					cfg.DeblockMode = goh264.EncoderDeblockDisabled
+					cfg.OutputFormat = format.fmt
+					cfg.GOPSize = 2
+					cfg.IDRInterval = 2
+					cfg.MaxFrameSize = 4096
+					cfg.SliceMaxBytes = 4096
+					if format.fmt == goh264.EncoderOutputRTP {
+						cfg.RTPMaxPayloadSize = 32
+					} else {
+						cfg.RTPMaxPayloadSize = 0
+					}
+					enc, err := goh264.NewEncoder(cfg)
+					if err != nil {
+						t.Fatalf("NewEncoder: %v", err)
+					}
+
+					var callbackCalls int
+					enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+						callbackCalls++
+					})
+					frame := patternedI420EncoderFrame(16, 16)
+					first, err := enc.Encode(frame)
+					if err != nil {
+						t.Fatalf("Encode first IDR: %v", err)
+					}
+					if first.Dropped || !first.IDR || enc.PendingIDR() {
+						t.Fatalf("first output dropped=%v idr=%v pending=%v, want completed IDR",
+							first.Dropped, first.IDR, enc.PendingIDR())
+					}
+					firstPacketCount := len(first.RTPPackets)
+
+					frame.PTS = int64(cfg.RTPTimestampIncrement)
+					second, err := enc.Encode(frame)
+					if err != nil {
+						t.Fatalf("Encode second P-skip: %v", err)
+					}
+					if second.Dropped || second.IDR || second.KeyFrame || enc.PendingIDR() {
+						t.Fatalf("second output dropped=%v idr=%v key=%v pending=%v, want completed P-skip",
+							second.Dropped, second.IDR, second.KeyFrame, enc.PendingIDR())
+					}
+					secondPacketCount := len(second.RTPPackets)
+					if format.fmt == goh264.EncoderOutputRTP {
+						if firstPacketCount == 0 || secondPacketCount == 0 || callbackCalls != firstPacketCount+secondPacketCount {
+							t.Fatalf("pre-drop RTP packets/callbacks = %d/%d/%d, want nonzero matching count",
+								firstPacketCount, secondPacketCount, callbackCalls)
+						}
+					} else if firstPacketCount != 0 || secondPacketCount != 0 || callbackCalls != 0 {
+						t.Fatalf("non-RTP pre-drop packets/callbacks = %d/%d/%d, want none",
+							firstPacketCount, secondPacketCount, callbackCalls)
+					}
+
+					if err := enc.Reconfigure(budget.lower); err != nil {
+						t.Fatalf("lower %s: %v", budget.name, err)
+					}
+					intervalIDR := patternedI420EncoderFrame(16, 16)
+					intervalIDR.PTS = int64(2 * cfg.RTPTimestampIncrement)
+					intervalIDR.Y[0] ^= 0x3d
+					dropped, err := enc.Encode(intervalIDR)
+					if err != nil {
+						t.Fatalf("Encode interval IDR under %s budget: %v", budget.name, err)
+					}
+					if !dropped.Dropped || dropped.IDR || dropped.KeyFrame || len(dropped.Data) != 0 ||
+						len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 || enc.PendingIDR() {
+						t.Fatalf("budgeted interval IDR output = %+v pending=%v, want empty dropped metadata without forced IDR",
+							dropped, enc.PendingIDR())
+					}
+					if dropped.PTS != intervalIDR.PTS || dropped.DTS != intervalIDR.PTS || dropped.RTPTime != uint32(intervalIDR.PTS) {
+						t.Fatalf("budgeted interval IDR metadata pts/dts/rtp = %d/%d/%d, want %d/%d/%d",
+							dropped.PTS, dropped.DTS, dropped.RTPTime, intervalIDR.PTS, intervalIDR.PTS, uint32(intervalIDR.PTS))
+					}
+					if callbackCalls != firstPacketCount+secondPacketCount {
+						t.Fatalf("budgeted interval IDR callbacks = %d, want still %d",
+							callbackCalls, firstPacketCount+secondPacketCount)
+					}
+
+					if err := enc.Reconfigure(budget.restore); err != nil {
+						t.Fatalf("restore %s: %v", budget.name, err)
+					}
+					recovered := intervalIDR
+					recovered.PTS = int64(3 * cfg.RTPTimestampIncrement)
+					third, err := enc.Encode(recovered)
+					if err != nil {
+						t.Fatalf("Encode after interval IDR drop: %v", err)
+					}
+					if third.Dropped || !third.IDR || !third.KeyFrame || enc.PendingIDR() {
+						t.Fatalf("post-drop output dropped=%v idr=%v key=%v pending=%v, want delivered interval IDR",
+							third.Dropped, third.IDR, third.KeyFrame, enc.PendingIDR())
+					}
+					assertEncoderNALTypes(t, third.NALUnits, []uint8{7, 8, 5})
+					if format.fmt == goh264.EncoderOutputRTP {
+						assertRTPPacketMetadata(t, third.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount+secondPacketCount))
+					} else if len(third.RTPPackets) != 0 {
+						t.Fatalf("non-RTP third packets = %d, want none", len(third.RTPPackets))
+					}
+					if callbackCalls != firstPacketCount+secondPacketCount+len(third.RTPPackets) {
+						t.Fatalf("post-drop callbacks = %d, want %d",
+							callbackCalls, firstPacketCount+secondPacketCount+len(third.RTPPackets))
+					}
+					stream := annexBFromEncodedFrame(t, first, format.fmt)
+					stream = append(stream, annexBFromEncodedFrame(t, second, format.fmt)...)
+					stream = append(stream, annexBFromEncodedFrame(t, third, format.fmt)...)
+					assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 5}, []uint32{0, 1, 2})
+				})
+			}
+		})
+	}
+}
+
 func TestEncoderValidSetterPreservesPendingIDR(t *testing.T) {
 	tests := []struct {
 		name string
