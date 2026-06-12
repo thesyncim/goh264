@@ -704,6 +704,43 @@ func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	}
 }
 
+func TestDecodePacketFramesIgnoresMalformedStructuredPacketSideData(t *testing.T) {
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0x01, 0x02, 0x03}},
+			{Type: PacketSideDataActiveFormat, Data: nil},
+			{Type: PacketSideDataS12MTimecode, Data: []byte{0x02, 0x00, 0x00, 0x00, 0x44}},
+			{Type: PacketSideDataDisplayMatrix, Data: []byte{0x01, 0x02, 0x03}},
+			{Type: PacketSideDataStereo3D, Data: []byte{0x01, 0x02, 0x03}},
+			{Type: PacketSideDataSpherical, Data: []byte{0x01, 0x02, 0x03}},
+			{Type: PacketSideDataAmbientViewingEnvironment, Data: []byte{0x01, 0x02, 0x03}},
+			{Type: PacketSideDataMasteringDisplayMetadata, Data: []byte{0x01, 0x02, 0x03}},
+			{Type: PacketSideDataContentLightLevel, Data: []byte{0x01, 0x02, 0x03}},
+			{Type: PacketSideData3DReferenceDisplays, Data: []byte{0x01, 0x02, 0x03}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	side := frame.SideData
+	if got, want := side.A53ClosedCaptions, []byte{0x01, 0x02, 0x03}; !bytes.Equal(got, want) {
+		t.Fatalf("packet a53 captions = %x, want %x", got, want)
+	}
+	if side.ActiveFormat != nil ||
+		len(side.S12MTimecodes) != 0 ||
+		side.DisplayOrientation != nil ||
+		side.Stereo3D != nil ||
+		side.Spherical != nil ||
+		side.AmbientViewing != nil ||
+		side.MasteringDisplay != nil ||
+		side.ContentLight != nil ||
+		side.ReferenceDisplays != nil {
+		t.Fatalf("malformed structured packet side data was accepted: %+v", side)
+	}
+}
+
 func TestDecodePacketFramesPacketDisplayAndStereoWinPublicFirstSideData(t *testing.T) {
 	matrix := [9]int32{0, 65536, 0, -65536, 0, 0, 0, 0, 1 << 30}
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
