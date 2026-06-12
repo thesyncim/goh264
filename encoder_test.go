@@ -117,6 +117,24 @@ func TestAppendEncoderAccessUnitRejectsOverflowedDestination(t *testing.T) {
 	}
 }
 
+func TestAppendEncoderAccessUnitRejectsEmptyNALWithoutMutation(t *testing.T) {
+	nals := []encoderRawNAL{
+		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
+		{},
+	}
+	for _, format := range []EncoderOutputFormat{EncoderOutputAnnexB, EncoderOutputAVC, EncoderOutputRTP} {
+		dst := []byte{0xaa, 0xbb}
+		before := append([]byte(nil), dst...)
+		got, units, err := appendEncoderAccessUnit(dst, format, nals)
+		if !errors.Is(err, ErrInvalidData) || len(got) != len(dst) || units != nil {
+			t.Fatalf("format %v empty NAL got len=%d units=%v err=%v, want original buffer, nil units, ErrInvalidData", format, len(got), units, err)
+		}
+		if !bytes.Equal(dst, before) {
+			t.Fatalf("format %v empty NAL mutated caller buffer: got %x want %x", format, dst, before)
+		}
+	}
+}
+
 func TestEncoderRTPMode1StoragePlanRejectsOverflow(t *testing.T) {
 	nals := []encoderRawNAL{
 		{raw: fakeEncoderBytesLen(maxInt - 1)},
