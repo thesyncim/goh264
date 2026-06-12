@@ -160,6 +160,16 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 	}
 }
 
+func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
+	data, err := os.ReadFile("examples_test.go")
+	if err != nil {
+		t.Fatalf("read examples_test.go: %v", err)
+	}
+	if strings.Contains(string(data), "dec.ParseAVCC(") {
+		t.Fatal("public examples should use ConfigureAVCC for mutating decoder avcC configuration")
+	}
+}
+
 func requireREADMECodeName(t *testing.T, readme string, name string) {
 	t.Helper()
 	if !strings.Contains(readme, "`"+name+"`") && !strings.Contains(readme, name) {

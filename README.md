@@ -106,9 +106,10 @@ mixed chroma/luma bit depths.
 
 ## Quick Start: Decode
 
-For normal stream processing, keep one decoder and feed it access units with
-`DecodeFrames` or `DecodePacketFrames`. Empty calls flush delayed B-frame output.
-The raw-output helpers append pixels in FFmpeg-compatible plane order:
+For whole Annex B files, use the complete-stream helper. For packetized stream
+processing, keep one decoder and feed access units with `DecodeFrames` or
+`DecodePacketFrames`; empty calls flush delayed B-frame output. The raw-output
+helpers append pixels in FFmpeg-compatible plane order:
 
 ```go
 package main
@@ -127,15 +128,10 @@ func main() {
 	}
 
 	dec := goh264.NewDecoder()
-	frames, err := dec.DecodeFrames(data)
+	frames, err := dec.DecodeAnnexBFrames(data)
 	if err != nil {
 		log.Fatal(err)
 	}
-	delayed, err := dec.FlushDelayedFrames()
-	if err != nil {
-		log.Fatal(err)
-	}
-	frames = append(frames, delayed...)
 
 	var raw []byte
 	for _, frame := range frames {

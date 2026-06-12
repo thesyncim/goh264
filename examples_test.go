@@ -65,7 +65,7 @@ func ExampleDecoder_DecodeConfiguredAVCFrames() {
 	}
 
 	dec := goh264.NewDecoder()
-	avcc, err := dec.ParseAVCC(headers.AVCC())
+	avcc, err := dec.ConfigureAVCC(headers.AVCC())
 	if err != nil {
 		log.Fatal(err)
 	}
