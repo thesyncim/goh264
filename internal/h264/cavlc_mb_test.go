@@ -181,6 +181,69 @@ func TestUpdateCAVLCQScale(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCDQuantForQScaleRoundTripsThroughDecoder(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		qscale     int
+		nextQScale int
+		maxQP      int32
+		wantDelta  int32
+	}{
+		{name: "same", qscale: 26, nextQScale: 26, maxQP: 51, wantDelta: 0},
+		{name: "positive", qscale: 20, nextQScale: 23, maxQP: 51, wantDelta: 3},
+		{name: "negative", qscale: 20, nextQScale: 17, maxQP: 51, wantDelta: -3},
+		{name: "positive wraps", qscale: 51, nextQScale: 0, maxQP: 51, wantDelta: 1},
+		{name: "negative wraps", qscale: 0, nextQScale: 51, maxQP: 51, wantDelta: -1},
+		{name: "high bit depth range", qscale: 60, nextQScale: 63, maxQP: 63, wantDelta: 3},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			if err := writeCAVLCDQuantForQScale(&bw, tt.qscale, tt.nextQScale, tt.maxQP); err != nil {
+				t.Fatalf("write dquant: %v", err)
+			}
+			gb := newBitReader(bw.Bytes())
+			delta, err := gb.readSEGolombLong()
+			if err != nil {
+				t.Fatalf("read written dquant: %v", err)
+			}
+			if delta != tt.wantDelta {
+				t.Fatalf("delta = %d, want %d", delta, tt.wantDelta)
+			}
+			got, err := updateCAVLCQScale(tt.qscale, delta, tt.maxQP)
+			if err != nil {
+				t.Fatalf("update qscale: %v", err)
+			}
+			if got != tt.nextQScale {
+				t.Fatalf("qscale = %d, want %d", got, tt.nextQScale)
+			}
+			if gb.bitPos != bw.BitLen() {
+				t.Fatalf("decoded consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+			}
+		})
+	}
+}
+
+func TestWriteCAVLCDQuantForQScaleRejectsInvalid(t *testing.T) {
+	var bw BitWriter
+	for _, tt := range []struct {
+		name string
+		err  error
+	}{
+		{name: "nil writer", err: writeCAVLCDQuantForQScale(nil, 0, 0, 51)},
+		{name: "negative qscale", err: writeCAVLCDQuantForQScale(&bw, -1, 0, 51)},
+		{name: "negative next qscale", err: writeCAVLCDQuantForQScale(&bw, 0, -1, 51)},
+		{name: "negative max qp", err: writeCAVLCDQuantForQScale(&bw, 0, 0, -1)},
+		{name: "qscale above max", err: writeCAVLCDQuantForQScale(&bw, 52, 0, 51)},
+		{name: "next qscale above max", err: writeCAVLCDQuantForQScale(&bw, 0, 52, 51)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.err != ErrInvalidData {
+				t.Fatalf("write dquant error = %v, want ErrInvalidData", tt.err)
+			}
+		})
+	}
+}
+
 func TestDecodeCAVLCIntra16x16MacroblockNoResidual(t *testing.T) {
 	pps := cavlcFlatQMulPPS()
 	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}

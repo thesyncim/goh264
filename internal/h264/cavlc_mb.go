@@ -396,6 +396,25 @@ func updateCAVLCQScale(qscale int, dquant int32, maxQP int32) (int, error) {
 	return int(q), nil
 }
 
+func writeCAVLCDQuantForQScale(bw *BitWriter, qscale int, nextQScale int, maxQP int32) error {
+	if bw == nil || qscale < 0 || nextQScale < 0 || maxQP < 0 ||
+		qscale > int(maxQP) || nextQScale > int(maxQP) {
+		return ErrInvalidData
+	}
+	qpRange := int(maxQP) + 1
+	delta := nextQScale - qscale
+	if delta > qpRange/2 {
+		delta -= qpRange
+	} else if delta < -qpRange/2 {
+		delta += qpRange
+	}
+	got, err := updateCAVLCQScale(qscale, int32(delta), maxQP)
+	if err != nil || got != nextQScale {
+		return ErrInvalidData
+	}
+	return bw.WriteSEGolomb(int32(delta))
+}
+
 func clearCAVLCResidualCaches(c *cavlcResidualContext) {
 	fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[0]), 4, 4, 8, 0)
 	fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[16]), 4, 4, 8, 0)
