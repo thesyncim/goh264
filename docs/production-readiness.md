@@ -159,6 +159,9 @@ configuration, including when no delayed frame is available and the single-frame
 helper reports `ErrUnsupported`.
 Successful and malformed Annex B/AVC header parses preserve delayed
 configured-AVC B-frame flush state.
+`Decoder.Reset` is covered as a full state reset: it clears configured-AVC
+metadata and pending delayed B-frame output, rejects a nil receiver, and allows
+the same decoder value to be reused on fresh Annex B or avcC input.
 
 Malformed-input safety evidence now includes deterministic public-surface
 corruption rows plus `FuzzDecodePublicSurfacesNoPanic`, a bounded fuzz target

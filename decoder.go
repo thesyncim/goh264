@@ -367,6 +367,17 @@ func NewDecoder() *Decoder {
 	return &Decoder{}
 }
 
+// Reset clears all decoder state.
+//
+// After Reset, the decoder behaves like a newly created Decoder.
+func (d *Decoder) Reset() error {
+	if d == nil {
+		return ErrInvalidData
+	}
+	*d = Decoder{}
+	return nil
+}
+
 // Decode decodes data through DecodeFrames and returns the single output frame.
 //
 // It returns ErrUnsupported when the packet produces zero or multiple frames

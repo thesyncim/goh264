@@ -268,6 +268,9 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 			_, err := dec.FlushDelayedFrames()
 			return err
 		}},
+		{name: "Reset", call: func() error {
+			return dec.Reset()
+		}},
 		{name: "DecodeAVCWithConfigurationRecord", call: func() error {
 			_, err := dec.DecodeAVCWithConfigurationRecord([]byte{1}, []byte{0, 0, 0, 1, 0x65})
 			return err
@@ -731,6 +734,49 @@ func TestDecoderAVCConfigReportsStoredConfiguration(t *testing.T) {
 	if cfg, err := dec.AVCConfig(); err != ErrInvalidData || cfg != (AVCConfig{}) {
 		t.Fatalf("AVCConfig after Annex B new extradata reset = %+v, %v; want zero config and ErrInvalidData", cfg, err)
 	}
+}
+
+func TestDecoderResetClearsConfiguredAVCAndReusesDecoder(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCC(config); err != nil {
+		t.Fatalf("ParseAVCC: %v", err)
+	}
+	if _, err := dec.DecodeConfiguredAVCFrames(samples[0]); err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames before reset: %v", err)
+	}
+	if err := dec.Reset(); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+	if cfg, err := dec.AVCConfig(); err != ErrInvalidData || cfg != (AVCConfig{}) {
+		t.Fatalf("AVCConfig after reset = %+v, %v; want zero config and ErrInvalidData", cfg, err)
+	}
+	if frames, err := dec.DecodeConfiguredAVCFrames(samples[1]); err != ErrInvalidData || frames != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after reset = %d/%v, want nil ErrInvalidData", len(frames), err)
+	}
+
+	frames, err := dec.DecodeAnnexBFrames(data)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames after reset: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{
+		"8aaefe0adcea094cfb5161a060bab4e2",
+		"8aaefe0adcea094cfb5161a060bab4e2",
+	})
+
+	if err := dec.Reset(); err != nil {
+		t.Fatalf("second Reset: %v", err)
+	}
+	frames, err = dec.DecodeAVCCFrames(config, samples[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames after second reset: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
 func TestDecodePacketFramesNewExtradataAVC(t *testing.T) {

@@ -283,6 +283,55 @@ func TestDecodeConfiguredAVCTestsrcBFrameReturnsDelayedFrameOnEmptyPacket(t *tes
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"aa778b981f96d21489196f6a0faa0959"})
 }
 
+func TestDecoderResetClearsDelayedFrames(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := dec.DecodeConfiguredAVCFrames(samples[i]); err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+	}
+	if err := dec.Reset(); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+	out, err := dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("FlushDelayedFrames after reset: %v", err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("FlushDelayedFrames after reset = %d frames, want 0", len(out))
+	}
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("reconfigure after reset: %v", err)
+	}
+	var frames []*Frame
+	for i, sample := range samples {
+		decoded, err := dec.DecodeConfiguredAVCFrames(sample)
+		if err != nil {
+			t.Fatalf("post-reset sample[%d]: %v", i, err)
+		}
+		frames = append(frames, decoded...)
+	}
+	flushed, err := dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("post-reset flush: %v", err)
+	}
+	frames = append(frames, flushed...)
+	assertFrameMD5Strings(t, frames, []string{
+		"4296e3dc95829cc27071a8685a428494",
+		"36f5a9b9064709ee891652e8f4e06992",
+		"aa778b981f96d21489196f6a0faa0959",
+	})
+}
+
 func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesOnEmptyPacket(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
