@@ -398,6 +398,7 @@ if out.Dropped {
 }
 accessUnit, err := out.AccessUnitData()
 nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
+err = enc.Reset()           // clear encoder coding state, keep config/callback
 ```
 
 `Encode` and `EncodeInto` validate frame shape before bitstream work; invalid

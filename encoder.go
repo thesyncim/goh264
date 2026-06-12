@@ -493,6 +493,23 @@ func (cfg EncoderConfig) Validate() error {
 	return err
 }
 
+// Reset clears encoder coding state while preserving configuration and callback.
+//
+// After Reset, the next successfully encoded frame starts a fresh sequence for
+// the current encoder configuration.
+func (e *Encoder) Reset() error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	cfg := e.cfg
+	callback := e.rtpPacketCallback
+	*e = Encoder{
+		cfg:               cfg,
+		rtpPacketCallback: callback,
+	}
+	return nil
+}
+
 // Config returns the current normalized encoder configuration.
 func (e *Encoder) Config() EncoderConfig {
 	if e == nil {

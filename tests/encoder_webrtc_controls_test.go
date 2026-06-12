@@ -112,6 +112,90 @@ func TestEncoderI420FrameHelpersPopulateConfigFields(t *testing.T) {
 	}
 }
 
+func TestEncoderResetClearsLiveStateAndPreservesConfigAndCallback(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputRTP
+	cfg.RTPMaxPayloadSize = 64
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	var callbackPackets []goh264.EncoderRTPPacket
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackPackets = append(callbackPackets, pkt)
+		callbackMetadata = append(callbackMetadata, meta)
+	})
+	beforeCfg := enc.Config()
+	frame := enc.I420Frame(make([]byte, 16*16), make([]byte, 8*8), make([]byte, 8*8), 0)
+	for i := range frame.Cb {
+		frame.Cb[i] = 0x80
+		frame.Cr[i] = 0x80
+	}
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first: %v", err)
+	}
+	if first.Dropped || !first.IDR || first.RTPTime != 0 || enc.PendingIDR() {
+		t.Fatalf("first encode dropped/id/time/pending = %v/%v/%d/%v, want IDR time 0",
+			first.Dropped, first.IDR, first.RTPTime, enc.PendingIDR())
+	}
+	frame.PTS = int64(beforeCfg.RTPTimestampIncrement)
+	second, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode second: %v", err)
+	}
+	if second.Dropped || second.IDR || second.RTPTime != beforeCfg.RTPTimestampIncrement {
+		t.Fatalf("second encode dropped/id/time = %v/%v/%d, want P-skip time %d",
+			second.Dropped, second.IDR, second.RTPTime, beforeCfg.RTPTimestampIncrement)
+	}
+	if len(first.RTPPackets) == 0 || len(second.RTPPackets) == 0 || len(callbackPackets) != len(first.RTPPackets)+len(second.RTPPackets) {
+		t.Fatalf("pre-reset packets/callbacks = %d/%d/%d, want populated and matching",
+			len(first.RTPPackets), len(second.RTPPackets), len(callbackPackets))
+	}
+
+	if err := enc.Reset(); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+	if got := enc.Config(); got != beforeCfg {
+		t.Fatalf("config after reset = %+v, want %+v", got, beforeCfg)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("reset left pending IDR queued")
+	}
+	callbackPackets = callbackPackets[:0]
+	callbackMetadata = callbackMetadata[:0]
+	frame.PTS = 0
+	resetOut, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode after reset: %v", err)
+	}
+	if resetOut.Dropped || !resetOut.IDR || resetOut.RTPTime != 0 || enc.PendingIDR() {
+		t.Fatalf("post-reset encode dropped/id/time/pending = %v/%v/%d/%v, want fresh IDR time 0",
+			resetOut.Dropped, resetOut.IDR, resetOut.RTPTime, enc.PendingIDR())
+	}
+	if len(resetOut.RTPPackets) == 0 || len(callbackPackets) != len(resetOut.RTPPackets) || len(callbackMetadata) != len(resetOut.RTPPackets) {
+		t.Fatalf("post-reset packets/callbacks/metadata = %d/%d/%d, want matching nonzero",
+			len(resetOut.RTPPackets), len(callbackPackets), len(callbackMetadata))
+	}
+	assertRTPPacketMetadata(t, resetOut.RTPPackets, beforeCfg.RTPPayloadType, beforeCfg.RTPSSRC, 0)
+	for i := range resetOut.RTPPackets {
+		if callbackMetadata[i].PacketIndex != i || callbackMetadata[i].PacketCount != len(resetOut.RTPPackets) ||
+			callbackMetadata[i].FramePTS != frame.PTS || callbackMetadata[i].RTPTime != resetOut.RTPTime ||
+			!callbackMetadata[i].KeyFrame || !callbackMetadata[i].IDR {
+			t.Fatalf("callback metadata[%d] = %+v, want reset IDR packet metadata", i, callbackMetadata[i])
+		}
+		if !bytes.Equal(callbackPackets[i].Data, resetOut.RTPPackets[i].Data) ||
+			!bytes.Equal(callbackPackets[i].Payload, resetOut.RTPPackets[i].Payload) {
+			t.Fatalf("callback packet[%d] does not match returned packet", i)
+		}
+		assertEncoderRTPCallbackPacketDoesNotAliasReturned(t, callbackPackets[i], resetOut.RTPPackets[i], i)
+	}
+	stream := annexBFromEncoderRTPPackets(t, resetOut.RTPPackets)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5}, []uint32{0})
+}
+
 func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 	var enc *goh264.Encoder
 	if got := enc.Config(); got != (goh264.EncoderConfig{}) {
@@ -171,6 +255,9 @@ func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 		}},
 		{name: "Reconfigure", call: func() error {
 			return enc.Reconfigure(goh264.EncoderReconfigure{})
+		}},
+		{name: "Reset", call: func() error {
+			return enc.Reset()
 		}},
 	}
 	for _, tt := range errorCalls {
@@ -11399,7 +11486,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	for _, method := range []string{
 		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
 		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize",
-		"SetRTPPacketCallback", "Reconfigure", "I420Frame",
+		"SetRTPPacketCallback", "Reconfigure", "I420Frame", "Reset",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
 			t.Fatalf("Encoder missing runtime control method %s", method)

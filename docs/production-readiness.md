@@ -162,6 +162,10 @@ configured-AVC B-frame flush state.
 `Decoder.Reset` is covered as a full state reset: it clears configured-AVC
 metadata and pending delayed B-frame output, rejects a nil receiver, and allows
 the same decoder value to be reused on fresh Annex B or avcC input.
+`Encoder.Reset` is covered as a live encoder state reset: it preserves the
+current configuration and RTP callback, clears coding/reference/frame-budget/RTP
+state, rejects a nil receiver, and makes the next successful frame a fresh IDR
+for the current configuration.
 
 Malformed-input safety evidence now includes deterministic public-surface
 corruption rows plus `FuzzDecodePublicSurfacesNoPanic`, a bounded fuzz target
@@ -246,6 +250,9 @@ surfaces accepted by public decode paths with the same mutation/append
 isolation, and proves valid and invalid header/SEI helper calls preserve queued
 IDR, config, callback, RTP packet metadata, and frame-number state across Annex
 B, AVC, and RTP,
+proves `Encoder.Reset` preserves config and callback while clearing reference,
+pending-IDR, frame-budget, RTP timestamp, and RTP sequence state before the next
+fresh-IDR encode,
 proves encoded input-frame planes are not retained after `Encode` returns by
 mutating caller-owned first-frame storage before a matching second frame across
 Annex B, AVC, and RTP output,

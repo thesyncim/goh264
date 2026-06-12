@@ -153,6 +153,9 @@ and callbacks intact,
 accepted bitrate, frame-rate, RTP payload-size, and deblock setter or
 reconfigure updates, including SPS/PPS cadence and recovery-point toggles,
 preserving a queued IDR until an IDR is emitted,
+public `Encoder.Reset` preserving configuration and RTP callback while clearing
+reference, pending-IDR, frame-budget, RTP timestamp, and RTP sequence state
+before fresh-IDR reuse,
 `SetRTPMaxPayloadSize` live RTP FU-A retargeting before the next P-frame with
 sequence/decode continuity and invalid-update rollback,
 runtime `RecoveryPointSEI` toggles that add, suppress, and restore changed-P
