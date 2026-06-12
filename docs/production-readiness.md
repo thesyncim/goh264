@@ -9,7 +9,8 @@ CAVLC P-skip, bounded exact macroblock-aligned P16x16 no-residual prediction
 for frame-wide and per-macroblock integer-pel shifts up to 8 pixels, including
 enabled and slice-boundary deblock on multi-macroblock frames, with odd-pixel
 luma motion admitted only with disabled deblock and constant 4:2:0 chroma
-planes, plus guarded odd-pixel deblock fallback, and changed-frame
+planes, plus guarded odd-pixel deblock fallback across Annex B, configured AVC,
+and RTP, and changed-frame
 P IntraPCM across disabled, enabled, and slice-boundary deblock controls.
 Encoder
 production gates live in `docs/encoder-webrtc-roadmap.md` until broader
