@@ -95,6 +95,9 @@ type encoderI420P16x16ResidualConfig struct {
 	ChromaDCCoeffCb            int32
 	ChromaDCCoeffCr            int32
 	ChromaDCCoeffs             [][2]int32
+	ChromaACCoeffCb            int32
+	ChromaACCoeffCr            int32
+	ChromaACCoeffs             [][2]int32
 }
 
 type EncoderIDRSlice struct {
@@ -414,9 +417,16 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		if len(cfg.ChromaDCCoeffs) > 0 {
 			chromaDCCb, chromaDCCr = cfg.ChromaDCCoeffs[i][0], cfg.ChromaDCCoeffs[i][1]
 		}
+		chromaACCb, chromaACCr := cfg.ChromaACCoeffCb, cfg.ChromaACCoeffCr
+		if len(cfg.ChromaACCoeffs) > 0 {
+			chromaACCb, chromaACCr = cfg.ChromaACCoeffs[i][0], cfg.ChromaACCoeffs[i][1]
+		}
 		cbp := 1
 		if chromaDCCb != 0 || chromaDCCr != 0 {
 			cbp |= 0x10
+		}
+		if chromaACCb != 0 || chromaACCr != 0 {
+			cbp |= 0x20
 		}
 		if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
 			return nil, err
@@ -431,9 +441,12 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		}
 		mb.MVD[0][0] = [2]int32{mvdX, mvdY}
 		var residual cavlcResidualContext
+		chromaACPos := int(h264ZigzagScanCAVLC[1])
 		residual.MB[0] = coeff
 		residual.MB[256] = chromaDCCb
 		residual.MB[512] = chromaDCCr
+		residual.MB[256+chromaACPos] = chromaACCb
+		residual.MB[512+chromaACPos] = chromaACCr
 		if _, err := writeCAVLCInterPBoundedMacroblock(&bw, &residual, pps, sps, mb, [2]uint32{1, 0}, qscale, cfg.NextQP); err != nil {
 			return nil, err
 		}
@@ -696,6 +709,9 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	if len(cfg.ChromaDCCoeffs) > 0 && len(cfg.ChromaDCCoeffs) != macroblockCount {
 		return ErrInvalidData
 	}
+	if len(cfg.ChromaACCoeffs) > 0 && len(cfg.ChromaACCoeffs) != macroblockCount {
+		return ErrInvalidData
+	}
 	if len(cfg.Coeffs) > 0 {
 		if len(cfg.Coeffs) != macroblockCount {
 			return ErrInvalidData
@@ -715,6 +731,15 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 			}
 		}
 	} else if (cfg.ChromaDCCoeffCb == 0) != (cfg.ChromaDCCoeffCr == 0) {
+		return ErrInvalidData
+	}
+	if len(cfg.ChromaACCoeffs) > 0 {
+		for _, coeff := range cfg.ChromaACCoeffs {
+			if coeff[0] == 0 || coeff[1] == 0 {
+				return ErrInvalidData
+			}
+		}
+	} else if (cfg.ChromaACCoeffCb == 0) != (cfg.ChromaACCoeffCr == 0) {
 		return ErrInvalidData
 	}
 	return nil
