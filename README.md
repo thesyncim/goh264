@@ -681,7 +681,8 @@ No tag should be treated as production until a release-evidence pass proves:
 
 - `scripts/h264-release-evidence.sh` is green as the combined decoder and
   admitted-encoder release gate.
-- `scripts/h264-decoder-release-evidence.sh` is green.
+- `scripts/h264-decoder-release-evidence.sh` is green, including
+  decoder API-surface and ref-modification gates.
 - `go vet ./...` is green.
 - `go test ./...` is green.
 - `go test -race ./...` is green.

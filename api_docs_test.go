@@ -225,6 +225,39 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 	}
 }
 
+func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
+	readmeData, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	scriptData, err := os.ReadFile("scripts/h264-decoder-release-evidence.sh")
+	if err != nil {
+		t.Fatalf("read decoder release evidence script: %v", err)
+	}
+	readme := string(readmeData)
+	script := string(scriptData)
+	for _, phrase := range []string{
+		"decoder API-surface",
+		"ref-modification gates",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md decoder release evidence text missing %q", phrase)
+		}
+	}
+	for _, phrase := range []string{
+		"decoder-api-surfaces",
+		"decoder-ref-modifications",
+		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
+		"TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
+		"TestSimpleFrameDPBRejectsMissingShortRefModificationTarget",
+		"TestSimpleFrameDPBRejectsMissingLongRefModificationTarget",
+	} {
+		if !strings.Contains(script, phrase) {
+			t.Fatalf("decoder release evidence script missing focused gate phrase %q", phrase)
+		}
+	}
+}
+
 func TestREADMEEncoderRTPDataSurfaceDocumentsPacketBytes(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {

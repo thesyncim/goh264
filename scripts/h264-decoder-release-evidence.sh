@@ -64,6 +64,8 @@ run_gate git-diff-check git diff --check
 run_gate git-diff-cached-check git diff --cached --check
 run_gate go-vet go vet ./...
 run_gate go-test-all go test ./...
+run_gate decoder-api-surfaces go test ./tests -run '^(TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset|TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration)$' -count=1 -v
+run_gate decoder-ref-modifications go test ./internal/h264 -run '^(TestSimpleFrameDPBRejectsMissingShortRefModificationTarget|TestSimpleFrameDPBRejectsMissingLongRefModificationTarget|TestSimpleFrameDPBReordersShortRefs|TestSimpleFrameDPBReordersLongRefs)$' -count=1 -v
 
 if [[ -s testdata/h264/realvectors/failures.jsonl && "${GOH264_RELEASE_ALLOW_KNOWN_RED:-0}" != "1" ]]; then
     printf '\nknown-red-failures: testdata/h264/realvectors/failures.jsonl is not empty; set GOH264_RELEASE_ALLOW_KNOWN_RED=1 only for non-release diagnostics\n' | tee -a "$summary" >&2
