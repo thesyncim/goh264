@@ -255,6 +255,7 @@ seiCopy := sei.Clone()
 frame := enc.I420Frame(y, cb, cr, pts)
 err = cfg.ValidateFrame(frame)
 err = enc.ValidateFrame(frame)
+frameCopy, err := frame.Clone()
 out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if out.Dropped {
 	// Realtime budget drop: no bytes or RTP packets were emitted.
@@ -272,7 +273,8 @@ err = enc.Reset()           // clear encoder coding state, keep config/callback
 frame shape before bitstream work; invalid frames return empty output without
 advancing RTP sequence, callback, frame-number, timestamp, or reference state,
 then valid input resumes as the expected P-skip, or as the queued IDR when a
-prior IDR request was pending.
+prior IDR request was pending. `EncoderFrame.Clone` returns a deep-owned input
+snapshot for retry queues or async handoff.
 Overflowed caller-owned `EncodeInto` destination growth is also rejected across
 Annex B, AVC, and RTP without consuming queued IDR state or advancing
 RTP/callback state, and the same hard-error path preserves P-frame reference

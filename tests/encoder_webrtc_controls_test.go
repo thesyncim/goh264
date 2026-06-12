@@ -238,6 +238,55 @@ func TestEncoderConfigValidateFrameMatchesEncoderPreflight(t *testing.T) {
 	}
 }
 
+func TestEncoderFrameCloneDeepCopiesInputPlanes(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	frame := cfg.I420Frame(
+		append([]byte(nil), bytes.Repeat([]byte{0x10}, 16*16)...),
+		append([]byte(nil), bytes.Repeat([]byte{0x80}, 8*8)...),
+		append([]byte(nil), bytes.Repeat([]byte{0x40}, 8*8)...),
+		9000,
+	)
+	frame.ForceIDR = true
+	frame.Color.FullRange = true
+
+	clone, err := frame.Clone()
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	if !reflect.DeepEqual(clone, frame) {
+		t.Fatalf("Clone = %+v, want %+v", clone, frame)
+	}
+	if len(clone.Y) != 0 && &clone.Y[0] == &frame.Y[0] {
+		t.Fatal("Clone Y aliases source")
+	}
+	if len(clone.Cb) != 0 && &clone.Cb[0] == &frame.Cb[0] {
+		t.Fatal("Clone Cb aliases source")
+	}
+	if len(clone.Cr) != 0 && &clone.Cr[0] == &frame.Cr[0] {
+		t.Fatal("Clone Cr aliases source")
+	}
+
+	for i := range frame.Y {
+		frame.Y[i] ^= 0xff
+	}
+	for i := range frame.Cb {
+		frame.Cb[i] ^= 0xff
+	}
+	for i := range frame.Cr {
+		frame.Cr[i] ^= 0xff
+	}
+	if err := cfg.ValidateFrame(clone); err != nil {
+		t.Fatalf("ValidateFrame cloned input: %v", err)
+	}
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	if _, err := enc.Encode(clone); err != nil {
+		t.Fatalf("Encode cloned input: %v", err)
+	}
+}
+
 func TestEncoderResetClearsLiveStateAndPreservesConfigAndCallback(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputRTP
@@ -11908,6 +11957,9 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderConfig{}).MethodByName("ValidateFrame"); !ok {
 		t.Fatal("EncoderConfig missing ValidateFrame convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderFrame{}).MethodByName("Clone"); !ok {
+		t.Fatal("EncoderFrame missing Clone convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCC"); !ok {
 		t.Fatal("EncoderParameterSets missing AVCC convenience method")

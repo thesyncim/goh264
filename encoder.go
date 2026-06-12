@@ -191,6 +191,21 @@ type EncoderFrame struct {
 	Color    EncoderColorConfig
 }
 
+// Clone returns a deep-owned copy of the input frame.
+//
+// The cloned planes are independent from frame and safe to retain after the
+// original caller-owned buffers are reused.
+func (frame EncoderFrame) Clone() (EncoderFrame, error) {
+	if len(frame.Y) > maxInt/2 || len(frame.Cb) > maxInt/2 || len(frame.Cr) > maxInt/2 {
+		return EncoderFrame{}, ErrInvalidData
+	}
+	clone := frame
+	clone.Y = cloneByteSlice(frame.Y)
+	clone.Cb = cloneByteSlice(frame.Cb)
+	clone.Cr = cloneByteSlice(frame.Cr)
+	return clone, nil
+}
+
 // I420Frame returns an EncoderFrame populated from cfg dimensions, strides,
 // timing defaults, and color metadata.
 func (cfg EncoderConfig) I420Frame(y, cb, cr []byte, pts int64) EncoderFrame {

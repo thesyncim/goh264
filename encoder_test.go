@@ -810,6 +810,24 @@ func TestCloneEncoderRTPPacketRejectsOverflowedByteClones(t *testing.T) {
 	}
 }
 
+func TestEncoderFrameCloneRejectsOverflowedPlanes(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		frame EncoderFrame
+	}{
+		{name: "luma", frame: EncoderFrame{Y: fakeEncoderBytesLen(maxInt/2 + 1)}},
+		{name: "cb", frame: EncoderFrame{Cb: fakeEncoderBytesLen(maxInt/2 + 1)}},
+		{name: "cr", frame: EncoderFrame{Cr: fakeEncoderBytesLen(maxInt/2 + 1)}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.frame.Clone()
+			if !errors.Is(err, ErrInvalidData) || len(got.Y) != 0 || len(got.Cb) != 0 || len(got.Cr) != 0 {
+				t.Fatalf("Clone overflow = %+v/%v, want zero ErrInvalidData", got, err)
+			}
+		})
+	}
+}
+
 func TestEncoderRTPPacketMetadataClassifiesMalformedPayloads(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
