@@ -461,7 +461,20 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 		prefix := frame.Data[prefixStart:unit.Offset]
 		annexBPrefix := prefix[0] == 0 && prefix[1] == 0 && prefix[2] == 0 && prefix[3] == 1
 		avcPrefix := binary.BigEndian.Uint32(prefix) == uint32(unit.Size)
-		if !annexBPrefix && !avcPrefix {
+		switch frame.OutputFormat {
+		case 0:
+			if !annexBPrefix && !avcPrefix {
+				return nil, ErrInvalidData
+			}
+		case EncoderOutputAnnexB, EncoderOutputRTP:
+			if !annexBPrefix {
+				return nil, ErrInvalidData
+			}
+		case EncoderOutputAVC:
+			if !avcPrefix {
+				return nil, ErrInvalidData
+			}
+		default:
 			return nil, ErrInvalidData
 		}
 		if start < 0 {

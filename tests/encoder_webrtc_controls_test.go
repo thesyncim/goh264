@@ -11240,6 +11240,32 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 	if got, err := valid.AccessUnitData(); err != nil || !bytes.Equal(got, []byte{0, 0, 0, 1, 0x67, 0x42, 0x00}) || cap(got) != len(got) {
 		t.Fatalf("valid AccessUnitData = %x cap=%d err=%v, want clipped access-unit bytes", got, cap(got), err)
 	}
+	annexB := goh264.EncodedFrame{
+		OutputFormat: goh264.EncoderOutputAnnexB,
+		Data:         []byte{0, 0, 0, 1, 0x67, 0x42},
+		NALUnits:     []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 2, KeyFrame: true, ParameterSet: true}},
+	}
+	avc := goh264.EncodedFrame{
+		OutputFormat: goh264.EncoderOutputAVC,
+		Data:         []byte{0, 0, 0, 2, 0x67, 0x42},
+		NALUnits:     []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 2, KeyFrame: true, ParameterSet: true}},
+	}
+	rtp := annexB
+	rtp.OutputFormat = goh264.EncoderOutputRTP
+	for _, tt := range []struct {
+		name  string
+		frame goh264.EncodedFrame
+	}{
+		{name: "annexb", frame: annexB},
+		{name: "avc", frame: avc},
+		{name: "rtp", frame: rtp},
+	} {
+		t.Run("format-"+tt.name, func(t *testing.T) {
+			if got, err := tt.frame.AccessUnitData(); err != nil || len(got) != len(tt.frame.Data) {
+				t.Fatalf("AccessUnitData %s = %x/%v, want full access unit", tt.name, got, err)
+			}
+		})
+	}
 	for _, tt := range []struct {
 		name  string
 		frame goh264.EncodedFrame
@@ -11278,6 +11304,10 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "type mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 8, Offset: 4, Size: 3}}}},
 		{name: "parameter-set flag mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, KeyFrame: true}}}},
 		{name: "keyframe flag mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, ParameterSet: true}}}},
+		{name: "annexb frame with avc prefix", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: avc.Data, NALUnits: avc.NALUnits}},
+		{name: "rtp frame with avc prefix", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, Data: avc.Data, NALUnits: avc.NALUnits}},
+		{name: "avc frame with annexb prefix", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAVC, Data: annexB.Data, NALUnits: annexB.NALUnits}},
+		{name: "unknown output format", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputFormat(99), Data: valid.Data, NALUnits: valid.NALUnits}},
 		{
 			name: "gap between nal units",
 			frame: goh264.EncodedFrame{
