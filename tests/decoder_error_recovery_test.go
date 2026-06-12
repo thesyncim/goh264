@@ -599,37 +599,41 @@ func TestDecodePacketFramesAVCRecoversAfterDamagedSlicePacket(t *testing.T) {
 
 func TestDecodePacketFramesAVCRecoversAfterDamagedNewExtradata(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
-	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
-	if len(samples) != 2 {
-		t.Fatalf("samples = %d, want 2", len(samples))
-	}
+	for _, nalLengthSize := range []int{2, 3, 4} {
+		t.Run(fmt.Sprintf("length%d", nalLengthSize), func(t *testing.T) {
+			config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
+			if len(samples) != 2 {
+				t.Fatalf("samples = %d, want 2", len(samples))
+			}
 
-	dec := NewDecoder()
-	frames, err := dec.DecodePacketFrames(Packet{
-		Data:     samples[0],
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+			dec := NewDecoder()
+			frames, err := dec.DecodePacketFrames(Packet{
+				Data:     samples[0],
+				SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
-	damagedConfig := append([]byte(nil), config...)
-	damagedConfig = damagedConfig[:len(damagedConfig)-1]
-	frames, err = dec.DecodePacketFrames(Packet{
-		Data:     samples[1],
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedConfig}},
-	})
-	if err != nil {
-		t.Fatalf("decode with damaged avcC side data: %v", err)
-	}
-	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+			damagedConfig := append([]byte(nil), config...)
+			damagedConfig = damagedConfig[:len(damagedConfig)-1]
+			frames, err = dec.DecodePacketFrames(Packet{
+				Data:     samples[1],
+				SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedConfig}},
+			})
+			if err != nil {
+				t.Fatalf("decode with damaged avcC side data: %v", err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
-	frames, err = dec.DecodePacketFrames(Packet{Data: samples[1]})
-	if err != nil {
-		t.Fatalf("decode after damaged avcC: %v", err)
+			frames, err = dec.DecodePacketFrames(Packet{Data: samples[1]})
+			if err != nil {
+				t.Fatalf("decode after damaged avcC: %v", err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+		})
 	}
-	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
 func TestDecodePacketFramesAnnexBRecoversAfterDamagedNewExtradata(t *testing.T) {
