@@ -1111,7 +1111,14 @@ func checkPrediction8x8LArgs(pix []uint8, offset int, stride int, left bool, top
 		return err
 	}
 	if top && topRightMaxX >= 0 {
-		maxTopIndex := offset - stride + topRightMaxX
+		topRow, err := checkedAddInt(offset, -stride)
+		if err != nil {
+			return ErrInvalidData
+		}
+		maxTopIndex, err := checkedAddInt(topRow, topRightMaxX)
+		if err != nil {
+			return ErrInvalidData
+		}
 		if maxTopIndex < 0 || maxTopIndex >= len(pix) {
 			return ErrInvalidData
 		}
@@ -1123,9 +1130,23 @@ func checkPredictionArgs(pix []uint8, offset int, stride int, width int, height 
 	if offset < 0 || stride <= 0 || width <= 0 || height <= 0 || leftMargin < 0 || topMargin < 0 {
 		return ErrInvalidData
 	}
-	minIndex := offset - leftMargin - topMargin*stride
-	maxIndex := offset + (height-1)*stride + width - 1
-	if minIndex < 0 || maxIndex >= len(pix) {
+	topRows, err := checkedMulInt(topMargin, stride)
+	if err != nil {
+		return ErrInvalidData
+	}
+	minIndex, err := checkedAddInt(offset, -leftMargin)
+	if err != nil {
+		return ErrInvalidData
+	}
+	minIndex, err = checkedAddInt(minIndex, -topRows)
+	if err != nil {
+		return ErrInvalidData
+	}
+	end, err := h264PlaneSpanEnd(offset, stride, height, width)
+	if err != nil {
+		return ErrInvalidData
+	}
+	if minIndex < 0 || end > len(pix) {
 		return ErrInvalidData
 	}
 	return nil

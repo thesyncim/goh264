@@ -377,6 +377,21 @@ func TestH264PredictionValidatesMargins(t *testing.T) {
 	}
 }
 
+func TestH264PredictionRejectsOverflowedGeometry(t *testing.T) {
+	if err := checkPredictionArgs(nil, maxInt-1, maxInt, 4, 2, 0, 0); err != ErrInvalidData {
+		t.Fatalf("overflowed low prediction geometry error = %v, want ErrInvalidData", err)
+	}
+	if err := checkPrediction8x8LArgs(nil, maxInt-1, maxInt, false, true, 7); err != ErrInvalidData {
+		t.Fatalf("overflowed low top-right geometry error = %v, want ErrInvalidData", err)
+	}
+	if err := checkPredictionArgsHigh(nil, maxInt-1, maxInt, 4, 2, 0, 0); err != ErrInvalidData {
+		t.Fatalf("overflowed high prediction geometry error = %v, want ErrInvalidData", err)
+	}
+	if err := checkPrediction8x8LArgsHigh(nil, maxInt-1, maxInt, false, true, 7); err != ErrInvalidData {
+		t.Fatalf("overflowed high top-right geometry error = %v, want ErrInvalidData", err)
+	}
+}
+
 func makePredictionFixture(stride int, rows int) []uint8 {
 	pix := make([]uint8, stride*rows)
 	for y := 0; y < rows; y++ {
