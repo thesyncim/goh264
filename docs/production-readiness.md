@@ -205,7 +205,10 @@ Stored `AVCConfig` metadata follows the avcC first SPS until a successful packet
 identifies a packet-active SPS, covering non-array-order multi-SPS records and
 packet-active SPS switches. Standalone multi-SPS avcC records accepted through
 auto-detected `DecodeFrames` reset conservatively when any SPS/PPS candidate
-could be incompatible with current references.
+could be incompatible with current references. Successful `ParseHeadersAnnexB`
+and `ParseHeadersAVC` updates use the same conservative reset policy, so
+header-only SPS/PPS reparses cannot leave stale references alive before the next
+packet.
 Direct avcC parse, configuration-record decode, valid packet AVC and Annex B
 `NEW_EXTRADATA`, and auto-detected avcC admission also prove the stored decoder
 configuration state does not retain caller-owned side-data, configuration, or

@@ -957,8 +957,17 @@ func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 	if !haveSPS {
 		return StreamInfo{}, ErrInvalidData
 	}
+	resetDPB := d.parameterSetUpdateNeedsDPBResetForAnySPS(spsList, ppsList)
 	d.sps = spsList
 	d.pps = ppsList
+	if resetDPB {
+		d.clearActiveSPS()
+		if err := d.simple.StoreParamSets(d.sps, d.pps); err != nil {
+			return StreamInfo{}, err
+		}
+		return info, nil
+	}
+	d.refreshActiveSPSFromStoredParamSets()
 	if err := d.simple.UpdateParamSets(d.sps, d.pps); err != nil {
 		return StreamInfo{}, err
 	}

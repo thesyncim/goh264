@@ -1004,6 +1004,90 @@ func TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUse
 	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
 }
 
+func TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference(t *testing.T) {
+	headers16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
+	headers32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	if len(packets16) != 2 || len(packets32) != 2 {
+		t.Fatalf("packet counts = %d/%d, want 2/2", len(packets16), len(packets32))
+	}
+
+	dec := NewDecoder()
+	info, err := dec.ParseHeadersAnnexB(headers16)
+	if err != nil {
+		t.Fatalf("ParseHeadersAnnexB 16x16: %v", err)
+	}
+	if info.Width != 16 || info.Height != 16 {
+		t.Fatalf("ParseHeadersAnnexB 16x16 info = %+v, want 16x16", info)
+	}
+	out, err := dec.DecodeFrames(packets16[0])
+	if err != nil {
+		t.Fatalf("DecodeFrames 16x16 IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	info, err = dec.ParseHeadersAnnexB(headers32)
+	if err != nil {
+		t.Fatalf("ParseHeadersAnnexB 32x16: %v", err)
+	}
+	if info.Width != 32 || info.Height != 16 {
+		t.Fatalf("ParseHeadersAnnexB 32x16 info = %+v, want 32x16", info)
+	}
+	out, err = dec.DecodeFrames(packets32[1])
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 P-skip after incompatible ParseHeadersAnnexB = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+	out, err = dec.DecodeFrames(packets32[0])
+	if err != nil {
+		t.Fatalf("DecodeFrames 32x16 IDR after ParseHeadersAnnexB stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
+func TestParseHeadersAVCIncompatibleHeadersDoNotUseStalePFrameReference(t *testing.T) {
+	_, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
+	_, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) != 2 || len(samples32) != 2 {
+		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
+	}
+	headers16 := decoderAVCParameterSetHeaders(t, 16, 16, 0, 0)
+	headers32 := decoderAVCParameterSetHeaders(t, 32, 16, 0, 0)
+
+	dec := NewDecoder()
+	info, err := dec.ParseHeadersAVC(headers16, 4)
+	if err != nil {
+		t.Fatalf("ParseHeadersAVC 16x16: %v", err)
+	}
+	if info.Width != 16 || info.Height != 16 {
+		t.Fatalf("ParseHeadersAVC 16x16 info = %+v, want 16x16", info)
+	}
+	out, err := dec.DecodeConfiguredAVCFrames(samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames 16x16 IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	info, err = dec.ParseHeadersAVC(headers32, 4)
+	if err != nil {
+		t.Fatalf("ParseHeadersAVC 32x16: %v", err)
+	}
+	if info.Width != 32 || info.Height != 16 {
+		t.Fatalf("ParseHeadersAVC 32x16 info = %+v, want 32x16", info)
+	}
+	out, err = dec.DecodeConfiguredAVCFrames(samples32[1])
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 P-skip after incompatible ParseHeadersAVC = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+	out, err = dec.DecodeConfiguredAVCFrames(samples32[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames 32x16 IDR after ParseHeadersAVC stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
 func TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset(t *testing.T) {
 	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
 	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
@@ -1374,6 +1458,13 @@ func decoderPSkipAnnexBSampleWithPPSID(t *testing.T, width int, height int, ppsI
 		t.Fatalf("AppendAnnexBNAL PPS%d P-skip: %v", ppsID, err)
 	}
 	return out
+}
+
+func decoderAVCParameterSetHeaders(t *testing.T, width int, height int, spsID uint32, ppsID uint32) []byte {
+	t.Helper()
+	sets := decoderParameterSetNALs(t, width, height, spsID, ppsID)
+	out := appendAVCNALUnit(t, nil, sets.SPS, 4)
+	return appendAVCNALUnit(t, out, sets.PPS, 4)
 }
 
 func decoderPSkipRBSPWithPPSID(t *testing.T, width int, height int, ppsID uint32, frameNum uint32) []byte {
