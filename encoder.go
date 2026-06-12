@@ -252,6 +252,74 @@ type EncoderRTPPacket struct {
 	Marker         bool
 }
 
+// PacketData returns the complete RTP packet bytes, including the 12-byte RTP
+// header.
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the packet backing store.
+func (packet EncoderRTPPacket) PacketData() ([]byte, error) {
+	if len(packet.Data) < 12 {
+		return nil, ErrInvalidData
+	}
+	return packet.Data[:len(packet.Data):len(packet.Data)], nil
+}
+
+// AppendPacketData appends a caller-owned copy of PacketData to dst.
+func (packet EncoderRTPPacket) AppendPacketData(dst []byte) ([]byte, error) {
+	data, err := packet.PacketData()
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, data...), nil
+}
+
+// PayloadData returns the RTP payload bytes.
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the packet backing store.
+func (packet EncoderRTPPacket) PayloadData() ([]byte, error) {
+	if len(packet.Data) < 12 || len(packet.Payload) == 0 {
+		return nil, ErrInvalidData
+	}
+	dataStart := unsafeSliceOffset(packet.Data, packet.Payload)
+	if dataStart < 12 {
+		return nil, ErrInvalidData
+	}
+	dataEnd, err := checkedAddInt(dataStart, len(packet.Payload))
+	if err != nil || dataEnd > len(packet.Data) {
+		return nil, ErrInvalidData
+	}
+	return packet.Payload[:len(packet.Payload):len(packet.Payload)], nil
+}
+
+// AppendPayloadData appends a caller-owned copy of PayloadData to dst.
+func (packet EncoderRTPPacket) AppendPayloadData(dst []byte) ([]byte, error) {
+	data, err := packet.PayloadData()
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, data...), nil
+}
+
+// Clone returns a deep-owned RTP packet snapshot.
+//
+// The cloned Payload view points into the cloned Data backing store and is safe
+// to retain after the original packet storage is reused or mutated.
+func (packet EncoderRTPPacket) Clone() (EncoderRTPPacket, error) {
+	if _, err := packet.PacketData(); err != nil {
+		return EncoderRTPPacket{}, err
+	}
+	if _, err := packet.PayloadData(); err != nil {
+		return EncoderRTPPacket{}, err
+	}
+	data := cloneByteSlice(packet.Data)
+	payloadOffset := unsafeSliceOffset(packet.Data, packet.Payload)
+	clone := packet
+	clone.Data = data
+	clone.Payload = data[payloadOffset : payloadOffset+len(packet.Payload) : payloadOffset+len(packet.Payload)]
+	return clone, nil
+}
+
 type EncoderRTPPayloadFormat uint8
 
 const (
@@ -388,11 +456,7 @@ func (frame EncodedFrame) RTPPacketData(index int) ([]byte, error) {
 	if frame.Dropped || index < 0 || index >= len(frame.RTPPackets) {
 		return nil, ErrInvalidData
 	}
-	packet := frame.RTPPackets[index]
-	if len(packet.Data) < 12 {
-		return nil, ErrInvalidData
-	}
-	return packet.Data[:len(packet.Data):len(packet.Data)], nil
+	return frame.RTPPackets[index].PacketData()
 }
 
 // AppendRTPPacketData appends a caller-owned copy of RTPPacketData(index) to dst.
@@ -412,19 +476,7 @@ func (frame EncodedFrame) RTPPayloadData(index int) ([]byte, error) {
 	if frame.Dropped || index < 0 || index >= len(frame.RTPPackets) {
 		return nil, ErrInvalidData
 	}
-	packet := frame.RTPPackets[index]
-	if len(packet.Data) < 12 || len(packet.Payload) == 0 {
-		return nil, ErrInvalidData
-	}
-	dataStart := unsafeSliceOffset(packet.Data, packet.Payload)
-	if dataStart < 12 {
-		return nil, ErrInvalidData
-	}
-	dataEnd, err := checkedAddInt(dataStart, len(packet.Payload))
-	if err != nil || dataEnd > len(packet.Data) {
-		return nil, ErrInvalidData
-	}
-	return packet.Payload[:len(packet.Payload):len(packet.Payload)], nil
+	return frame.RTPPackets[index].PayloadData()
 }
 
 // AppendRTPPayloadData appends a caller-owned copy of RTPPayloadData(index) to dst.
@@ -476,11 +528,11 @@ func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 		RTPTime:    frame.RTPTime,
 	}
 	for i, packet := range frame.RTPPackets {
-		data := cloneByteSlice(packet.Data)
-		payloadOffset := unsafeSliceOffset(packet.Data, packet.Payload)
-		clone.RTPPackets[i] = packet
-		clone.RTPPackets[i].Data = data
-		clone.RTPPackets[i].Payload = data[payloadOffset : payloadOffset+len(packet.Payload) : payloadOffset+len(packet.Payload)]
+		clonePacket, err := packet.Clone()
+		if err != nil {
+			return EncodedFrame{}, err
+		}
+		clone.RTPPackets[i] = clonePacket
 	}
 	return clone, nil
 }

@@ -9432,6 +9432,99 @@ func TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes(t *testing.T) {
 	}
 }
 
+func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) {
+	packetData := []byte{
+		0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd,
+		0x65, 0x88, 0x99,
+	}
+	valid := goh264.EncoderRTPPacket{
+		Data:           packetData,
+		Payload:        packetData[12:],
+		PayloadType:    96,
+		SequenceNumber: 0x1234,
+		Timestamp:      1,
+		SSRC:           0xaabbccdd,
+		Marker:         true,
+	}
+
+	if got, err := valid.PacketData(); err != nil || !bytes.Equal(got, packetData) || cap(got) != len(got) {
+		t.Fatalf("PacketData = %x cap=%d err=%v, want clipped packet bytes", got, cap(got), err)
+	}
+	if got, err := valid.PayloadData(); err != nil || !bytes.Equal(got, []byte{0x65, 0x88, 0x99}) || cap(got) != len(got) {
+		t.Fatalf("PayloadData = %x cap=%d err=%v, want clipped payload bytes", got, cap(got), err)
+	}
+
+	packetPrefix := []byte{0xde, 0xad}
+	packetCopy, err := valid.AppendPacketData(append([]byte(nil), packetPrefix...))
+	if err != nil {
+		t.Fatalf("AppendPacketData: %v", err)
+	}
+	if want := append(packetPrefix, packetData...); !bytes.Equal(packetCopy, want) {
+		t.Fatalf("AppendPacketData = %x, want %x", packetCopy, want)
+	}
+
+	payloadPrefix := []byte{0xca, 0xfe}
+	payloadCopy, err := valid.AppendPayloadData(append([]byte(nil), payloadPrefix...))
+	if err != nil {
+		t.Fatalf("AppendPayloadData: %v", err)
+	}
+	if want := []byte{0xca, 0xfe, 0x65, 0x88, 0x99}; !bytes.Equal(payloadCopy, want) {
+		t.Fatalf("AppendPayloadData = %x, want %x", payloadCopy, want)
+	}
+
+	clone, err := valid.Clone()
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	if !bytes.Equal(clone.Data, valid.Data) || !bytes.Equal(clone.Payload, valid.Payload) ||
+		clone.PayloadType != valid.PayloadType || clone.SequenceNumber != valid.SequenceNumber ||
+		clone.Timestamp != valid.Timestamp || clone.SSRC != valid.SSRC || clone.Marker != valid.Marker {
+		t.Fatalf("Clone = %+v, want packet metadata and bytes preserved", clone)
+	}
+	packetData[12] = 0xff
+	if !bytes.Equal(packetCopy, append(packetPrefix, []byte{
+		0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd, 0x65, 0x88, 0x99,
+	}...)) {
+		t.Fatalf("AppendPacketData output aliases source after mutation: %x", packetCopy)
+	}
+	if !bytes.Equal(payloadCopy, []byte{0xca, 0xfe, 0x65, 0x88, 0x99}) {
+		t.Fatalf("AppendPayloadData output aliases source after mutation: %x", payloadCopy)
+	}
+	if !bytes.Equal(clone.Data[12:], []byte{0x65, 0x88, 0x99}) || !bytes.Equal(clone.Payload, []byte{0x65, 0x88, 0x99}) {
+		t.Fatalf("Clone aliases source after mutation: data=%x payload=%x", clone.Data, clone.Payload)
+	}
+	if &clone.Data[12] != &clone.Payload[0] {
+		t.Fatalf("Clone payload does not point into cloned packet data")
+	}
+
+	for _, tt := range []struct {
+		name   string
+		packet goh264.EncoderRTPPacket
+	}{
+		{name: "short packet", packet: goh264.EncoderRTPPacket{Data: packetData[:11], Payload: packetData[12:]}},
+		{name: "empty payload", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: nil}},
+		{name: "payload before header", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: packetData[8:12]}},
+		{name: "foreign payload", packet: goh264.EncoderRTPPacket{Data: packetData, Payload: []byte{0x65, 0x88, 0x99}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := tt.packet.PacketData(); tt.name == "short packet" {
+				if !errors.Is(err, goh264.ErrInvalidData) {
+					t.Fatalf("PacketData error = %v, want ErrInvalidData", err)
+				}
+			}
+			if got, err := tt.packet.PayloadData(); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("PayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
+			}
+			if got, err := tt.packet.AppendPayloadData([]byte{1, 2}); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("AppendPayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
+			}
+			if got, err := tt.packet.Clone(); !errors.Is(err, goh264.ErrInvalidData) || got.Data != nil || got.Payload != nil {
+				t.Fatalf("Clone invalid = %+v/%v, want empty ErrInvalidData", got, err)
+			}
+		})
+	}
+}
+
 func TestEncoderDoesNotRetainInputFramePlanes(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
@@ -12756,6 +12849,13 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderSEI{}).MethodByName("Clone"); !ok {
 		t.Fatal("EncoderSEI missing Clone convenience method")
+	}
+	for _, method := range []string{
+		"PacketData", "AppendPacketData", "PayloadData", "AppendPayloadData", "Clone",
+	} {
+		if _, ok := reflect.TypeOf(goh264.EncoderRTPPacket{}).MethodByName(method); !ok {
+			t.Fatalf("EncoderRTPPacket missing %s convenience method", method)
+		}
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("NALData"); !ok {
 		t.Fatal("EncodedFrame missing NALData convenience method")

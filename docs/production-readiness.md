@@ -227,7 +227,8 @@ guards public input/result/callback surfaces for integration-facing encoder
 structs, including `EncoderConfig.Normalize`, `EncoderConfig.I420Frame`,
 `EncoderConfig.ValidateFrame`, `EncoderConfig.ParameterSets`,
 `EncoderConfig.RecoveryPointSEIMessage`, `EncoderFrame.Clone`, `Encoder.I420Frame`, `Encoder.ValidateFrame`,
-`EncodedFrame.NALData`, and `EncodedFrame.AccessUnitData`, rejects invalid or
+`EncodedFrame.NALData`, `EncodedFrame.AccessUnitData`, and packet-level
+`EncoderRTPPacket` byte helpers, rejects invalid or
 not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
 partial reconfiguration paths, proves invalid frame-rate helper/reconfigure,
@@ -322,9 +323,10 @@ proves mode-0 oversize queued-IDR and P-frame packetization failures leave
 pending-IDR, reference, RTP sequence, and callback state recoverable, plus
 Annex B/AVC/RTP bitrate-drop and late-drop non-output paths,
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
-public `EncodedFrame.RTPPacketData` and `EncodedFrame.RTPPayloadData` helpers,
-clipped packet payload views over packet data, packet storage isolated from
-`EncodedFrame.Data` including caller-backed `EncodeInto` output buffers, shared
+public `EncodedFrame.RTPPacketData`/`EncodedFrame.RTPPayloadData` and
+packet-level `EncoderRTPPacket` helpers, clipped packet payload views over
+packet data, packet storage isolated from `EncodedFrame.Data` including
+caller-backed `EncodeInto` output buffers, shared
 packet metadata guards for header fields and clipped packet slices, checked
 access-unit and RTP packet storage-size overflow rejection, and optional RTP callback metadata including mode 0/1
 IDR/P-frame single-NAL packets for multi-slice IDR, P-skip, exact P16x16,
