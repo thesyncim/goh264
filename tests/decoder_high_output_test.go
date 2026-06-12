@@ -841,6 +841,90 @@ func TestFrameAppendRawYUVMetadataErrorsPreserveCallerBuffer(t *testing.T) {
 	}
 }
 
+func TestFrameAppendRawYUVDimensionErrorsPreserveCallerBuffer(t *testing.T) {
+	tests := []struct {
+		name          string
+		frame         Frame
+		wantRaw       error
+		wantBytesLE   error
+		wantSamples16 error
+	}{
+		{
+			name: "zero-width-8-bit",
+			frame: Frame{
+				Width: 0, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: 8,
+			},
+			wantRaw:       ErrInvalidData,
+			wantBytesLE:   ErrInvalidData,
+			wantSamples16: ErrUnsupported,
+		},
+		{
+			name: "negative-height-8-bit",
+			frame: Frame{
+				Width: 2, Height: -1, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: 8,
+			},
+			wantRaw:       ErrInvalidData,
+			wantBytesLE:   ErrInvalidData,
+			wantSamples16: ErrUnsupported,
+		},
+		{
+			name: "zero-width-high-bit-depth",
+			frame: Frame{
+				Width: 0, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 10, BitDepthChroma: 10,
+			},
+			wantRaw:       ErrInvalidData,
+			wantBytesLE:   ErrInvalidData,
+			wantSamples16: ErrInvalidData,
+		},
+		{
+			name: "negative-height-high-bit-depth",
+			frame: Frame{
+				Width: 2, Height: -1, ChromaFormatIDC: 1,
+				BitDepthLuma: 10, BitDepthChroma: 10,
+			},
+			wantRaw:       ErrInvalidData,
+			wantBytesLE:   ErrInvalidData,
+			wantSamples16: ErrInvalidData,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rawDst, rawBefore := decoderPrefilledByteBuffer()
+			rawOut, err := tt.frame.AppendRawYUV(rawDst)
+			if !errors.Is(err, tt.wantRaw) {
+				t.Fatalf("AppendRawYUV error = %v, want %v", err, tt.wantRaw)
+			}
+			if len(rawOut) != len(rawDst) {
+				t.Fatalf("AppendRawYUV output len = %d, want original len %d", len(rawOut), len(rawDst))
+			}
+			assertDecoderByteBufferUnchanged(t, rawDst, rawBefore)
+
+			byteDst, byteBefore := decoderPrefilledByteBuffer()
+			byteOut, err := tt.frame.AppendRawYUVBytesLE(byteDst)
+			if !errors.Is(err, tt.wantBytesLE) {
+				t.Fatalf("AppendRawYUVBytesLE error = %v, want %v", err, tt.wantBytesLE)
+			}
+			if len(byteOut) != len(byteDst) {
+				t.Fatalf("AppendRawYUVBytesLE output len = %d, want original len %d", len(byteOut), len(byteDst))
+			}
+			assertDecoderByteBufferUnchanged(t, byteDst, byteBefore)
+
+			sampleDst, sampleBefore := decoderPrefilledUint16Buffer()
+			sampleOut, err := tt.frame.AppendRawYUV16(sampleDst)
+			if !errors.Is(err, tt.wantSamples16) {
+				t.Fatalf("AppendRawYUV16 error = %v, want %v", err, tt.wantSamples16)
+			}
+			if len(sampleOut) != len(sampleDst) {
+				t.Fatalf("AppendRawYUV16 output len = %d, want original len %d", len(sampleOut), len(sampleDst))
+			}
+			assertDecoderUint16BufferUnchanged(t, sampleDst, sampleBefore)
+		})
+	}
+}
+
 func decoderPrefilledByteBuffer() ([]byte, []byte) {
 	backing := bytes.Repeat([]byte{0xcc}, 128)
 	prefix := []byte{0xde, 0xad, 0xbe, 0xef}
