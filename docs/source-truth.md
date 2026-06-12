@@ -241,6 +241,9 @@ across Annex B/AVC/RTP plus RTP mode 0, per-macroblock exact P16x16 across
 Annex B/AVC/RTP plus RTP mode 0, 8-pixel exact-P16 edge search, AVC/RTP changed
 P IntraPCM, RTP STAP-A IDR/changed-P, RTP max-frame-size/late drop paths, and
 RTP packetization-mode 0 IDR/P-frame rows including exact-P16 edge search, with `-benchmem`.
+The combined release-evidence runner also requires repo-wide `go vet ./...` and
+`go test -race ./...`, with allocation canaries kept in the normal non-race
+release path because race instrumentation changes allocation counts.
 Internal writer proof covers raw
 bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
