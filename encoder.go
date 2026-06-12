@@ -845,6 +845,10 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if e == nil {
 		return encoderInvalid("nil encoder")
 	}
+	if update.Width < 0 || update.Height < 0 ||
+		((update.Width != 0 || update.Height != 0) && (update.Width == 0 || update.Height == 0)) {
+		return encoderInvalid("runtime resolution update requires positive width and height")
+	}
 	if update.GOPSize < 0 || update.IDRInterval < 0 {
 		return encoderInvalid("GOP size and IDR interval cannot be negative")
 	}
