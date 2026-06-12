@@ -774,6 +774,41 @@ func TestDecodePacketFramesAnnexBNewExtradataRejectPreservesAVCLengthState(t *te
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketAnnexBNewExtradataRejectPreservesAVCLengthState(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 2)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	frame, err := dec.DecodePacket(Packet{
+		Data:     samples[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	damagedExtradata := firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS)
+	damagedExtradata = appendAnnexBNAL(damagedExtradata, []byte{0x60 | byte(h264.NALPPS)})
+	frame, err = dec.DecodePacket(Packet{
+		Data:     samples[1],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedExtradata}},
+	})
+	if err != nil {
+		t.Fatalf("decode single length-2 AVC with damaged Annex B extradata side data: %v", err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	frames, err := dec.DecodePacketFrames(Packet{Data: samples[1]})
+	if err != nil {
+		t.Fatalf("decode length-2 AVC after damaged Annex B extradata: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeFramesAnnexBRecoversAfterMalformedInBandParameterSets(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)

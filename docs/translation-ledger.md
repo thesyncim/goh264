@@ -64,7 +64,8 @@ mutation, plus
 AVC 2/3/4-byte length-size state preservation into the next auto-detected and
 explicit configured-AVC VCL packet,
 including across a later Annex B header parse and failed Annex B/AVC header
-parses, plus malformed packet avcC and Annex B `NEW_EXTRADATA`.
+parses, plus malformed frame-list/single-frame packet avcC and Annex B
+`NEW_EXTRADATA`.
 Public raw-frame output now also has an external-package nil-frame contract
 covering `BytesPerSample`, `RawPixelFormat`, `RawYUVSize`, `AppendRawYUV`,
 `AppendRawYUVBytesLE`, and `AppendRawYUV16`: each rejects the nil receiver with
