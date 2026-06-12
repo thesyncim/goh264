@@ -3007,6 +3007,67 @@ func TestEncoderSetGOPControlsAutomaticIDRCadence(t *testing.T) {
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 5}, []uint32{0, 1, 2})
 }
 
+func TestEncoderSetPresetPreservesLiveReference(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	cfg.GOPSize = 10000
+	cfg.IDRInterval = 10000
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	if err := enc.SetPreset(goh264.EncoderPresetQuality); err != nil {
+		t.Fatalf("SetPreset quality: %v", err)
+	}
+	if got := enc.Config().Preset; got != goh264.EncoderPresetQuality {
+		t.Fatalf("preset = %v, want quality", got)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetPreset queued unexpected IDR")
+	}
+
+	secondFrame := firstFrame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode post-SetPreset P-skip: %v", err)
+	}
+	if second.Dropped || second.IDR || second.KeyFrame || enc.PendingIDR() {
+		t.Fatalf("post-SetPreset frame dropped=%v idr=%v key=%v pending=%v, want delivered P-skip",
+			second.Dropped, second.IDR, second.KeyFrame, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode post-SetPreset P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+
+	stream := append([]byte(nil), first.Data...)
+	stream = append(stream, second.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+}
+
 func TestEncoderReconfigureAcceptsExplicitZeroQP(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
