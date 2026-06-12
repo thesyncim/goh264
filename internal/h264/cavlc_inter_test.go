@@ -513,6 +513,129 @@ func TestWriteCAVLCInterBNoResidualMacroblockRejectsInvalid(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCInterBBoundedMacroblockRoundTripsResidualThroughDecoder(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, Direct8x8InferenceFlag: 1}
+	mb := cavlcInterMacroblockSyntax{
+		cavlcMacroblockSyntax: cavlcMacroblockSyntax{
+			MBType:         MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+			PartitionCount: 1,
+			CBP:            0x21,
+		},
+		Ref: [2][4]int32{{1}, {0}},
+	}
+	mb.MVD[0][0] = [2]int32{2, -1}
+	mb.MVD[1][0] = [2]int32{-2, 1}
+
+	chromaACPos := int(h264ZigzagScanCAVLC[1])
+	var writer cavlcResidualContext
+	writer.MB[0] = 1
+	writer.MB[16] = -1
+	writer.MB[256] = 1
+	writer.MB[512] = -1
+	writer.MB[256+chromaACPos] = 1
+	writer.MB[512+chromaACPos] = -1
+	fillCAVLCNonZero(&writer.NonZeroCountCache, int(h264Scan8[0]), 4, 4, 8, 9)
+	fillCAVLCNonZero(&writer.NonZeroCountCache, int(h264Scan8[16]), 4, 4, 8, 9)
+	fillCAVLCNonZero(&writer.NonZeroCountCache, int(h264Scan8[32]), 4, 4, 8, 9)
+
+	var bw BitWriter
+	cbpTable, err := writeCAVLCInterBBoundedMacroblock(&bw, &writer, pps, sps, mb, [2]uint32{2, 1}, 20, 23)
+	if err != nil {
+		t.Fatalf("write bounded B macroblock failed: %v", err)
+	}
+	if cbpTable != 0x1021 {
+		t.Fatalf("writer cbpTable = %#x, want 0x1021", cbpTable)
+	}
+
+	var decoded cavlcResidualContext
+	fillCAVLCNonZero(&decoded.NonZeroCountCache, int(h264Scan8[0]), 4, 4, 8, 9)
+	fillCAVLCNonZero(&decoded.NonZeroCountCache, int(h264Scan8[16]), 4, 4, 8, 9)
+	fillCAVLCNonZero(&decoded.NonZeroCountCache, int(h264Scan8[32]), 4, 4, 8, 9)
+	gb := newBitReader(bw.Bytes())
+	got, err := decoded.decodeCAVLCInterBMacroblock(&gb, pps, sps, 20, [2]uint32{2, 1}, false)
+	if err != nil {
+		t.Fatalf("decode written bounded B macroblock failed: %v", err)
+	}
+	if got.MBType != mb.MBType || got.PartitionCount != mb.PartitionCount || got.CBP != mb.CBP ||
+		got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != cbpTable {
+		t.Fatalf("decoded mb = type %#x part %d cbp/q/chroma/cbpTable %#x/%d/%v/%#x, want type %#x part %d cbp/q/chroma/cbpTable %#x/23/[23 23]/%#x",
+			got.MBType, got.PartitionCount, got.CBP, got.QScale, got.ChromaQP, got.CBPTable,
+			mb.MBType, mb.PartitionCount, mb.CBP, cbpTable)
+	}
+	if got.Ref != ([2][4]int32{{1, -1, -1, -1}, {0, -1, -1, -1}}) ||
+		got.MVD[0][0] != ([2]int32{2, -1}) || got.MVD[1][0] != ([2]int32{-2, 1}) {
+		t.Fatalf("decoded motion = refs %v mvd0 %v mvd1 %v, want bi-pred refs and MVDs",
+			got.Ref, got.MVD[0][0], got.MVD[1][0])
+	}
+	if decoded.MB[0] != 1 || decoded.MB[16] != -1 ||
+		decoded.MB[256] != 1 || decoded.MB[512] != -1 ||
+		decoded.MB[256+chromaACPos] != 1 || decoded.MB[512+chromaACPos] != -1 {
+		t.Fatalf("decoded residual coeffs mismatch")
+	}
+	if decoded.NonZeroCountCache != writer.NonZeroCountCache {
+		t.Fatalf("decoded nnz cache differs from writer cache")
+	}
+	if gb.bitPos != bw.BitLen() {
+		t.Fatalf("decoded consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+	}
+}
+
+func TestWriteCAVLCInterBBoundedMacroblockRejectsInvalid(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, Direct8x8InferenceFlag: 1}
+	valid := cavlcInterMacroblockSyntax{
+		cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, PartitionCount: 1, CBP: 1},
+		Ref:                   [2][4]int32{{0}, {0}},
+	}
+	var bw BitWriter
+	var residual cavlcResidualContext
+	for _, tt := range []struct {
+		name string
+		run  func() error
+		want error
+	}{
+		{name: "nil writer", run: func() error {
+			_, err := writeCAVLCInterBBoundedMacroblock(nil, &residual, pps, sps, valid, [2]uint32{1, 1}, 20, 20)
+			return err
+		}, want: ErrInvalidData},
+		{name: "nil residual", run: func() error {
+			_, err := writeCAVLCInterBBoundedMacroblock(&bw, nil, pps, sps, valid, [2]uint32{1, 1}, 20, 20)
+			return err
+		}, want: ErrInvalidData},
+		{name: "nil pps", run: func() error {
+			_, err := writeCAVLCInterBBoundedMacroblock(&bw, &residual, nil, sps, valid, [2]uint32{1, 1}, 20, 20)
+			return err
+		}, want: ErrInvalidData},
+		{name: "nil sps", run: func() error {
+			_, err := writeCAVLCInterBBoundedMacroblock(&bw, &residual, pps, nil, valid, [2]uint32{1, 1}, 20, 20)
+			return err
+		}, want: ErrInvalidData},
+		{name: "intra", run: func() error {
+			intra := valid
+			intra.MBType = MBTypeIntra4x4
+			_, err := writeCAVLCInterBBoundedMacroblock(&bw, &residual, pps, sps, intra, [2]uint32{1, 1}, 20, 20)
+			return err
+		}, want: ErrUnsupported},
+		{name: "bad ref", run: func() error {
+			bad := valid
+			bad.Ref[0][0] = 1
+			_, err := writeCAVLCInterBBoundedMacroblock(&bw, &residual, pps, sps, bad, [2]uint32{1, 1}, 20, 20)
+			return err
+		}, want: ErrInvalidData},
+		{name: "unsupported residual bounds", run: func() error {
+			_, err := writeCAVLCInterBBoundedMacroblock(&bw, &residual, pps, &SPS{BitDepthLuma: 8, ChromaFormatIDC: 2}, valid, [2]uint32{1, 1}, 20, 20)
+			return err
+		}, want: ErrUnsupported},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.run(); err != tt.want {
+				t.Fatalf("write bounded B macroblock error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
 func assertCAVLCInterPMacroblockSyntax(t *testing.T, got cavlcInterMacroblockSyntax, want cavlcInterMacroblockSyntax) {
 	t.Helper()
 	if got.MBType != want.MBType || got.PartitionCount != want.PartitionCount || got.CBP != 0 || got.QScale != 24 {

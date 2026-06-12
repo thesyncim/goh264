@@ -197,6 +197,40 @@ func writeCAVLCInterBNoResidualMacroblock(bw *BitWriter, mb cavlcInterMacroblock
 	if isIntra(mb.MBType) || mb.CBP != 0 {
 		return ErrUnsupported
 	}
+	if err := writeCAVLCInterBMacroblockMotion(bw, mb, refCount); err != nil {
+		return err
+	}
+
+	return writeCAVLCCBP(bw, mb.MBType, decodeChroma, 0)
+}
+
+func writeCAVLCInterBBoundedMacroblock(bw *BitWriter, residual *cavlcResidualContext, pps *PPS, sps *SPS, mb cavlcInterMacroblockSyntax, refCount [2]uint32, qscale int, nextQScale int) (int, error) {
+	if bw == nil || residual == nil || pps == nil || sps == nil {
+		return 0, ErrInvalidData
+	}
+	if isIntra(mb.MBType) {
+		return 0, ErrUnsupported
+	}
+	if mb.CBP == 0 {
+		if err := writeCAVLCInterBNoResidualMacroblock(bw, mb, refCount, sps.ChromaFormatIDC == 1 || sps.ChromaFormatIDC == 2); err != nil {
+			return 0, err
+		}
+		cbpTable, err := residual.writeCAVLCInterResidualPayload(bw, pps, sps, mb.MBType, 0, qscale, nextQScale)
+		return cbpTable, err
+	}
+	if err := writeCAVLCInterBMacroblockMotion(bw, mb, refCount); err != nil {
+		return 0, err
+	}
+	if err := writeCAVLCCBP(bw, mb.MBType, sps.ChromaFormatIDC == 1 || sps.ChromaFormatIDC == 2, mb.CBP); err != nil {
+		return 0, err
+	}
+	return residual.writeCAVLCInterResidualPayload(bw, pps, sps, mb.MBType, mb.CBP, qscale, nextQScale)
+}
+
+func writeCAVLCInterBMacroblockMotion(bw *BitWriter, mb cavlcInterMacroblockSyntax, refCount [2]uint32) error {
+	if bw == nil {
+		return ErrInvalidData
+	}
 	if err := writeCAVLCMBType(bw, PictureTypeB, PictureTypeB, mb.cavlcMacroblockSyntax); err != nil {
 		return err
 	}
@@ -278,8 +312,7 @@ func writeCAVLCInterBNoResidualMacroblock(bw *BitWriter, mb cavlcInterMacroblock
 	} else {
 		return ErrUnsupported
 	}
-
-	return writeCAVLCCBP(bw, mb.MBType, decodeChroma, 0)
+	return nil
 }
 
 func (c *cavlcResidualContext) decodeCAVLCInterPMacroblock(gb *bitReader, pps *PPS, sps *SPS, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
