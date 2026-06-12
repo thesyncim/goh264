@@ -98,6 +98,8 @@ type encoderI420P16x16ResidualConfig struct {
 	ChromaDCCoeffCb            int32
 	ChromaDCCoeffCr            int32
 	ChromaDCCoeffs             [][2]int32
+	ChromaDCCoeffPos           int
+	ChromaDCCoeffPositions     []int
 	ChromaACCoeffCb            int32
 	ChromaACCoeffCr            int32
 	ChromaACCoeffs             [][2]int32
@@ -430,6 +432,10 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		if len(cfg.ChromaDCCoeffs) > 0 {
 			chromaDCCb, chromaDCCr = cfg.ChromaDCCoeffs[i][0], cfg.ChromaDCCoeffs[i][1]
 		}
+		chromaDCPos := int(h264ChromaDCScan[cfg.ChromaDCCoeffPos])
+		if len(cfg.ChromaDCCoeffPositions) > 0 {
+			chromaDCPos = int(h264ChromaDCScan[cfg.ChromaDCCoeffPositions[i]])
+		}
 		chromaACCb, chromaACCr := cfg.ChromaACCoeffCb, cfg.ChromaACCoeffCr
 		if len(cfg.ChromaACCoeffs) > 0 {
 			chromaACCb, chromaACCr = cfg.ChromaACCoeffs[i][0], cfg.ChromaACCoeffs[i][1]
@@ -461,8 +467,8 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		mb.MVD[0][0] = [2]int32{mvdX, mvdY}
 		var residual cavlcResidualContext
 		residual.MB[coeffPos] = coeff
-		residual.MB[256] = chromaDCCb
-		residual.MB[512] = chromaDCCr
+		residual.MB[256+chromaDCPos] = chromaDCCb
+		residual.MB[512+chromaDCPos] = chromaDCCr
 		residual.MB[256+chromaACPos] = chromaACCb
 		residual.MB[512+chromaACPos] = chromaACCr
 		if _, err := writeCAVLCInterPBoundedMacroblock(&bw, &residual, pps, sps, mb, [2]uint32{1, 0}, qscale, nextQP); err != nil {
@@ -747,6 +753,9 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	if len(cfg.ChromaDCCoeffs) > 0 && len(cfg.ChromaDCCoeffs) != macroblockCount {
 		return ErrInvalidData
 	}
+	if len(cfg.ChromaDCCoeffPositions) > 0 && len(cfg.ChromaDCCoeffPositions) != macroblockCount {
+		return ErrInvalidData
+	}
 	if len(cfg.ChromaACCoeffs) > 0 && len(cfg.ChromaACCoeffs) != macroblockCount {
 		return ErrInvalidData
 	}
@@ -772,6 +781,15 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 			}
 		}
 	} else if (cfg.ChromaDCCoeffCb == 0) != (cfg.ChromaDCCoeffCr == 0) {
+		return ErrInvalidData
+	}
+	if len(cfg.ChromaDCCoeffPositions) > 0 {
+		for _, pos := range cfg.ChromaDCCoeffPositions {
+			if pos < 0 || pos >= len(h264ChromaDCScan) {
+				return ErrInvalidData
+			}
+		}
+	} else if cfg.ChromaDCCoeffPos < 0 || cfg.ChromaDCCoeffPos >= len(h264ChromaDCScan) {
 		return ErrInvalidData
 	}
 	if len(cfg.ChromaACCoeffs) > 0 {

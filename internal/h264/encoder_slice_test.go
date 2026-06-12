@@ -940,6 +940,115 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDC(t *testin
 	}
 }
 
+func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDCPositions(t *testing.T) {
+	pps, sps := encoderResidualSliceTestPPS(20)
+	wantMVDs := []EncoderMotionVectorDelta{
+		{X: 2, Y: -1},
+		{X: -3, Y: 4},
+	}
+	wantCoeffs := []int32{1, -2}
+	wantChromaDC := [][2]int32{
+		{1, -1},
+		{-1, 1},
+	}
+	wantChromaDCPositions := []int{1, 2}
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+		Width:                      32,
+		Height:                     16,
+		FrameNum:                   19,
+		InitialQP:                  20,
+		NextQP:                     23,
+		DisableDeblockingFilterIDC: 1,
+		MVDs:                       wantMVDs,
+		Coeffs:                     wantCoeffs,
+		ChromaDCCoeffs:             wantChromaDC,
+		ChromaDCCoeffPositions:     wantChromaDCPositions,
+	}, pps, sps)
+	if err != nil {
+		t.Fatalf("encode per-macroblock chroma DC-position residual slice rbsp: %v", err)
+	}
+
+	var ppsList [maxPPSCount]*PPS
+	ppsList[0] = pps
+	sh, payload, err := parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("parse per-macroblock chroma DC-position residual P slice header: %v", err)
+	}
+	qscale := int(sh.QScale)
+	for i := range wantMVDs {
+		skipRun, err := payload.readUEGolombLong()
+		if err != nil {
+			t.Fatalf("read per-macroblock chroma DC-position residual skip run[%d]: %v", i, err)
+		}
+		if skipRun != 0 {
+			t.Fatalf("skip run[%d] = %d, want 0", i, skipRun)
+		}
+		var decoded cavlcResidualContext
+		got, err := decoded.decodeCAVLCInterPMacroblock(&payload, pps, sps, qscale, [2]uint32{1, 0}, false)
+		if err != nil {
+			t.Fatalf("decode per-macroblock chroma DC-position residual macroblock[%d]: %v", i, err)
+		}
+		if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 0x11 ||
+			got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != 0x1011 {
+			t.Fatalf("decoded chroma DC-position mb[%d] type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x",
+				i, got.MBType, got.CBP, got.QScale, got.ChromaQP, got.CBPTable)
+		}
+		chromaDCPos := int(h264ChromaDCScan[wantChromaDCPositions[i]])
+		if got.MVD[0][0] != ([2]int32{wantMVDs[i].X, wantMVDs[i].Y}) ||
+			decoded.MB[0] != wantCoeffs[i] ||
+			decoded.MB[256+chromaDCPos] != wantChromaDC[i][0] ||
+			decoded.MB[512+chromaDCPos] != wantChromaDC[i][1] {
+			t.Fatalf("decoded chroma DC-position mb[%d] motion/residual = %v/%d/%d/%d at %d",
+				i, got.MVD[0][0], decoded.MB[0],
+				decoded.MB[256+chromaDCPos], decoded.MB[512+chromaDCPos], chromaDCPos)
+		}
+		if chromaDCPos != 0 && (decoded.MB[256] != 0 || decoded.MB[512] != 0) {
+			t.Fatalf("decoded chroma DC-position mb[%d] default pos coeffs = %d/%d, want untouched",
+				i, decoded.MB[256], decoded.MB[512])
+		}
+		if decoded.NonZeroCountCache[h264Scan8[chromaDCBlockIndex]] != 1 ||
+			decoded.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+1]] != 1 {
+			t.Fatalf("decoded chroma DC-position mb[%d] dc nnz = %d/%d, want 1/1",
+				i,
+				decoded.NonZeroCountCache[h264Scan8[chromaDCBlockIndex]],
+				decoded.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+1]])
+		}
+		qscale = got.QScale
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("per-macroblock chroma DC-position residual payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+
+	sh, payload, err = parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("reparse per-macroblock chroma DC-position residual P slice header: %v", err)
+	}
+	m, err := newMacroblockTables(2, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	for mbXY := 0; mbXY < 2; mbXY++ {
+		got, err := m.decodeCAVLCFrameSliceMacroblock(&payload, sh, &state, mbXY, 22)
+		if err != nil {
+			t.Fatalf("decode per-macroblock chroma DC-position residual frame macroblock[%d]: %v", mbXY, err)
+		}
+		if got.CBP != 0x11 || got.CBPTable != 0x1011 || got.QScale != 23 ||
+			m.CBPTable[mbXY] != 0x1011 || m.QScaleTable[mbXY] != 23 || m.SliceTable[mbXY] != 22 {
+			t.Fatalf("frame chroma DC-position mb[%d] result/table cbp/cbpTable/q = %#x/%#x/%d table %#x/%d/%d",
+				mbXY, got.CBP, got.CBPTable, got.QScale,
+				m.CBPTable[mbXY], m.QScaleTable[mbXY], m.SliceTable[mbXY])
+		}
+		if m.NonZeroCount[mbXY][0] != 1 {
+			t.Fatalf("frame chroma DC-position mb[%d] luma nnz = %d, want 1",
+				mbXY, m.NonZeroCount[mbXY][0])
+		}
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("per-macroblock chroma DC-position frame residual payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+}
+
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesChromaACThroughFramePath(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 	chromaACPos := int(h264ZigzagScanCAVLC[1])
@@ -1524,6 +1633,26 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			next := valid
 			next.Width = 32
 			next.ChromaDCCoeffs = [][2]int32{{1, -1}, {1, 0}}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad chroma dc position scalar", run: func() error {
+			next := valid
+			next.ChromaDCCoeffPos = 4
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad chroma dc position count", run: func() error {
+			next := valid
+			next.Width = 32
+			next.ChromaDCCoeffPositions = []int{1}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad per-macroblock chroma dc position", run: func() error {
+			next := valid
+			next.Width = 32
+			next.ChromaDCCoeffPositions = []int{1, -1}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
