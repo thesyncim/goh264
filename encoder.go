@@ -845,6 +845,9 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if e == nil {
 		return encoderInvalid("nil encoder")
 	}
+	if update.GOPSize < 0 || update.IDRInterval < 0 {
+		return encoderInvalid("GOP size and IDR interval cannot be negative")
+	}
 	cfg := e.cfg
 	oldWidth := cfg.Width
 	oldHeight := cfg.Height

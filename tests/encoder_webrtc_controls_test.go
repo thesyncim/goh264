@@ -1406,6 +1406,8 @@ func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *t
 		{name: "bad qp range", update: goh264.EncoderReconfigure{InitialQP: &badInitialQP, MinQP: &minQP, MaxQP: &maxQP}},
 		{name: "bad frame-drop mode", update: goh264.EncoderReconfigure{FrameDrop: goh264.EncoderFrameDropMode(99)}},
 		{name: "bad gop interval", update: goh264.EncoderReconfigure{GOPSize: 2, IDRInterval: 3}},
+		{name: "negative gop size", update: goh264.EncoderReconfigure{GOPSize: -1, ForceIDR: true}},
+		{name: "negative idr interval", update: goh264.EncoderReconfigure{IDRInterval: -1, ForceIDR: true}},
 		{name: "bad deblock mode", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockMode(99)}},
 	}
 	for _, tt := range tests {
