@@ -2084,6 +2084,9 @@ func encoderRawNALPayloadStorageSize(nals []encoderRawNAL) (int, error) {
 }
 
 func encoderRTPMode1StoragePlan(nals []encoderRawNAL, maxPayloadSize int, stapa bool) (int, int, error) {
+	if maxPayloadSize < 3 {
+		return 0, 0, encoderInvalid("RTP max payload size must leave room for FU-A headers")
+	}
 	if len(nals) > maxEncoderRawNALListLen {
 		return 0, 0, encoderInvalid("encoder NAL count overflows")
 	}

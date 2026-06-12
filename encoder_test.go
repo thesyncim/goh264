@@ -157,6 +157,13 @@ func TestEncoderRTPMode1StoragePlanRejectsOverflow(t *testing.T) {
 	}
 }
 
+func TestEncoderRTPMode1StoragePlanRejectsInvalidPayloadSize(t *testing.T) {
+	nals := []encoderRawNAL{{raw: []byte{byte(h264.NALSlice), 0xaa, 0xbb, 0xcc}}}
+	if packets, payload, err := encoderRTPMode1StoragePlan(nals, 2, false); !errors.Is(err, ErrInvalidData) || packets != 0 || payload != 0 {
+		t.Fatalf("encoderRTPMode1StoragePlan invalid payload packets=%d payload=%d err=%v, want zero plan and ErrInvalidData", packets, payload, err)
+	}
+}
+
 func TestEncoderRTPStorageHelpersRejectOverflowedNALCount(t *testing.T) {
 	nals := fakeEncoderRawNALLen(maxEncoderRawNALListLen + 1)
 	if _, err := encoderRawNALPayloadStorageSize(nals); !errors.Is(err, ErrInvalidData) {
