@@ -3177,6 +3177,53 @@ func TestEncoderRecoveryPointSEIExposesWebRTCRecoverySignal(t *testing.T) {
 	}
 }
 
+func TestEncoderRecoveryPointSEISurvivesLaterSEICall(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	first, err := enc.RecoveryPointSEI(0)
+	if err != nil {
+		t.Fatalf("RecoveryPointSEI first: %v", err)
+	}
+	firstNAL := append([]byte(nil), first.NAL...)
+	firstAnnexB := append([]byte(nil), first.AnnexB...)
+	firstAVC := append([]byte(nil), first.AVC...)
+
+	second, err := enc.RecoveryPointSEI(4)
+	if err != nil {
+		t.Fatalf("RecoveryPointSEI second: %v", err)
+	}
+	second.NAL[0] ^= 0xff
+	second.AnnexB[0] ^= 0xff
+	second.AVC[0] ^= 0xff
+
+	if !bytes.Equal(first.NAL, firstNAL) ||
+		!bytes.Equal(first.AnnexB, firstAnnexB) ||
+		!bytes.Equal(first.AVC, firstAVC) {
+		t.Fatalf("first RecoveryPointSEI mutated after later call mutation:\nNAL %x want %x\nAnnexB %x want %x\nAVC %x want %x",
+			first.NAL, firstNAL,
+			first.AnnexB, firstAnnexB,
+			first.AVC, firstAVC)
+	}
+
+	annexB := insertAnnexBNALBeforeVCL(t, decodeHexFixture(t, black16IPAnnexBHex), first.NAL, 1)
+	frames, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames first SEI after later mutation: %v", err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("first SEI after later mutation frames = %d, want 2", len(frames))
+	}
+	if !frames[1].KeyFrame ||
+		frames[1].SideData.RecoveryPoint == nil ||
+		frames[1].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("first SEI after later mutation frames/key/side = len %d %v %+v",
+			len(frames), frameKeyFlags(frames), frames[len(frames)-1].SideData.RecoveryPoint)
+	}
+}
+
 func TestEncoderRecoveryPointSEIRejectsInvalidFrameCount(t *testing.T) {
 	for _, format := range []struct {
 		name string
