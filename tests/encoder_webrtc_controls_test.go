@@ -58,6 +58,81 @@ func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
 	}
 }
 
+func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
+	var enc *goh264.Encoder
+	if got := enc.Config(); got != (goh264.EncoderConfig{}) {
+		t.Fatalf("Config nil encoder = %+v, want zero config", got)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("PendingIDR nil encoder = true, want false")
+	}
+	noPanic := []struct {
+		name string
+		call func()
+	}{
+		{name: "ForceIDR", call: func() { enc.ForceIDR() }},
+		{name: "HandlePLI", call: func() { enc.HandlePLI() }},
+		{name: "HandleFIR", call: func() { enc.HandleFIR() }},
+		{name: "SetRTPPacketCallback", call: func() { enc.SetRTPPacketCallback(nil) }},
+	}
+	for _, tt := range noPanic {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("%s panicked on nil encoder: %v", tt.name, r)
+				}
+			}()
+			tt.call()
+		})
+	}
+
+	errorCalls := []struct {
+		name string
+		call func() error
+	}{
+		{name: "ParameterSets", call: func() error {
+			_, err := enc.ParameterSets()
+			return err
+		}},
+		{name: "RecoveryPointSEI", call: func() error {
+			_, err := enc.RecoveryPointSEI(0)
+			return err
+		}},
+		{name: "Encode", call: func() error {
+			_, err := enc.Encode(goh264.EncoderFrame{})
+			return err
+		}},
+		{name: "EncodeInto", call: func() error {
+			_, err := enc.EncodeInto(nil, goh264.EncoderFrame{})
+			return err
+		}},
+		{name: "SetBitrate", call: func() error {
+			return enc.SetBitrate(1, 1)
+		}},
+		{name: "SetFrameRate", call: func() error {
+			return enc.SetFrameRate(1, 1)
+		}},
+		{name: "SetRTPMaxPayloadSize", call: func() error {
+			return enc.SetRTPMaxPayloadSize(1200)
+		}},
+		{name: "Reconfigure", call: func() error {
+			return enc.Reconfigure(goh264.EncoderReconfigure{})
+		}},
+	}
+	for _, tt := range errorCalls {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("%s panicked on nil encoder: %v", tt.name, r)
+				}
+			}()
+			if err := tt.call(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("%s nil encoder error = %v, want ErrInvalidData", tt.name, err)
+			}
+		})
+	}
+}
+
 func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 	tests := []struct {
 		name   string
