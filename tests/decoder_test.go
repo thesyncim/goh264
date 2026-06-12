@@ -887,6 +887,28 @@ func TestDecodePacketFramesBytePacketSideDataFirstEntryWins(t *testing.T) {
 	}
 }
 
+func TestDecodePacketFramesScalarPacketSideDataFirstEntryWins(t *testing.T) {
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{
+			{Type: PacketSideDataActiveFormat, Data: nil},
+			{Type: PacketSideDataActiveFormat, Data: []byte{0x0a}},
+			{Type: PacketSideDataS12MTimecode, Data: []byte{0x02, 0x00, 0x00, 0x00, 0x44}},
+			{Type: PacketSideDataS12MTimecode, Data: []byte{
+				0x01, 0x00, 0x00, 0x00,
+				0x88, 0x77, 0x66, 0x55,
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if frame.SideData.ActiveFormat != nil || len(frame.SideData.S12MTimecodes) != 0 {
+		t.Fatalf("later duplicate scalar packet side data overrode empty/malformed first entry: %+v", frame.SideData)
+	}
+}
+
 func TestDecodePacketFramesPacketDisplayAndStereoWinPublicFirstSideData(t *testing.T) {
 	matrix := [9]int32{0, 65536, 0, -65536, 0, 0, 0, 0, 1 << 30}
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(

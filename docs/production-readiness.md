@@ -175,9 +175,10 @@ AVC or mixed configured-AVC/Annex B public decode paths.
 Packet side-data byte payloads are copied before delayed B-frame storage:
 mutating caller-owned packet side-data immediately after each decode call does
 not affect immediate or flushed `FrameSideData`.
-Packet side-data duplicate handling follows first-entry semantics for both
-structured layouts and byte payloads: empty first ICC, HDR10+, and LCEVC entries
-suppress later duplicate payloads.
+Packet side-data duplicate handling follows first-entry semantics for scalar
+values, structured layouts, and byte payloads: empty or malformed first
+active-format and S12M entries plus empty first ICC, HDR10+, and LCEVC entries
+suppress later duplicates.
 Configured AVC and Annex B delayed-output guards also overwrite caller-owned
 compressed packet buffers after each decode call before flushing delayed frames,
 proving delayed output does not retain input packet storage.

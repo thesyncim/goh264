@@ -343,8 +343,9 @@ timing fields, keyframe/interlace flags, raw planes, and parsed SEI/packet side
 data such as A53 captions, S12M timecode, stereo 3D, spherical video, mastering
 display metadata, content light metadata, display orientation, film grain, ICC
 profile, HDR10+, and LCEVC side data.
-Duplicate packet side data follows first-entry semantics, including empty first
-ICC profile, HDR10+, and LCEVC byte payloads suppressing later duplicates.
+Duplicate packet side data follows first-entry semantics: empty or malformed
+first active-format, S12M timecode, ICC profile, HDR10+, and LCEVC entries
+suppress later duplicates.
 
 The encoder API is a WebRTC/realtime control contract while implementation is
 still landing:
