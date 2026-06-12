@@ -726,6 +726,9 @@ func TestEncoderRTPPacketMetadataClassifiesMalformedPayloads(t *testing.T) {
 		wantParamSet bool
 	}{
 		{
+			name: "empty-payload",
+		},
+		{
 			name:        "truncated-stapa-length",
 			payload:     []byte{24, 0},
 			wantFormat:  EncoderRTPPayloadSTAPA,
