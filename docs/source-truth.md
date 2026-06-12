@@ -204,7 +204,7 @@ mode-0 oversize queued-IDR/P-frame packetization rollback, Annex B/AVC/RTP
 bitrate-drop and late-drop non-output paths, checked
 access-unit and RTP packet storage-size overflow rejection, RTP packetization-mode 0 single-NAL IDR/P-frame
 reassembly and oversize rejection, RTP packetization-mode 1 FU-A reassembly,
-STAP-A parameter-set aggregation plus small-payload fallback to non-aggregated
+STAP-A parameter-set aggregation with callback metadata and packet isolation plus small-payload fallback to non-aggregated
 mode-1 packets with fallback-IDR and post-fallback P-skip callback payload
 metadata and callback packet isolation, RTP payload-type/SSRC/sequence metadata, full
 RTP header bytes with clipped packet payload views over packet data and packet

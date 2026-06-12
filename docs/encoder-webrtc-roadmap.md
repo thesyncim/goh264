@@ -144,7 +144,8 @@ oversize rejection, public NAL-unit metadata indexing back into encoded
 access-unit bytes for Annex B/AVC/RTP output including non-empty caller-buffer
 prefixes, caller-buffer preservation on RTP mode-0 rejection, live-state
 rollback for mode-0 oversize queued-IDR and P-frame packetization failures, and
-Annex B/AVC/RTP bitrate-drop and late-drop non-output paths, RTP FU-A reassembly, STAP-A parameter-set aggregation,
+Annex B/AVC/RTP bitrate-drop and late-drop non-output paths, RTP FU-A
+reassembly, STAP-A parameter-set aggregation with callback metadata and packet isolation,
 small-payload STAP-A fallback to non-aggregated mode-1 packets with decode and
 sequence continuity plus non-STAP-A callback payload metadata and callback
 packet isolation for the fallback IDR and next P-skip,

@@ -99,7 +99,8 @@ reconfigure updates, including SPS/PPS cadence and recovery-point toggles.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
 Annex B, AVC, configured `SliceCount` multi-slice VCL output, RTP
 packetization-mode 0 single-NAL packets, and RTP packetization-mode 1,
-including FU-A fragmentation and STAP-A parameter-set aggregation,
+including FU-A fragmentation and STAP-A parameter-set aggregation with callback
+metadata and packet isolation,
 payload-type/SSRC/sequence metadata, full RTP packet headers, marker-bit
 boundaries, clipped per-packet RTP payload views over packet data, RTP packet
 storage isolated from `EncodedFrame.Data`, oversize

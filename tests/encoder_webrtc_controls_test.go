@@ -5454,6 +5454,12 @@ func TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
+	var callbackPackets []goh264.EncoderRTPPacket
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackPackets = append(callbackPackets, pkt)
+		callbackMetadata = append(callbackMetadata, meta)
+	})
 	frame := patternedI420EncoderFrame(16, 16)
 	frame.PTS = 67890
 
@@ -5475,6 +5481,10 @@ func TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets(t *testing.T) {
 		t.Fatal("STAP-A parameter-set packet unexpectedly has marker bit")
 	}
 	assertSTAPANALTypes(t, stap.Payload, []uint8{7, 8})
+	if len(callbackPackets) != len(out.RTPPackets) || len(callbackMetadata) != len(out.RTPPackets) {
+		t.Fatalf("STAP-A callbacks packets/meta = %d/%d, want RTP packet count %d",
+			len(callbackPackets), len(callbackMetadata), len(out.RTPPackets))
+	}
 	for i, pkt := range out.RTPPackets {
 		if pkt.Timestamp != out.RTPTime {
 			t.Fatalf("packet[%d] timestamp = %d, want %d", i, pkt.Timestamp, out.RTPTime)
@@ -5484,6 +5494,40 @@ func TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets(t *testing.T) {
 		}
 		if pkt.Marker != (i == len(out.RTPPackets)-1) {
 			t.Fatalf("packet[%d] marker = %v, want only final marker", i, pkt.Marker)
+		}
+		callbackPkt := callbackPackets[i]
+		meta := callbackMetadata[i]
+		if callbackPkt.PayloadType != pkt.PayloadType ||
+			callbackPkt.SequenceNumber != pkt.SequenceNumber ||
+			callbackPkt.Timestamp != pkt.Timestamp ||
+			callbackPkt.SSRC != pkt.SSRC ||
+			callbackPkt.Marker != pkt.Marker ||
+			!bytes.Equal(callbackPkt.Payload, pkt.Payload) ||
+			!bytes.Equal(callbackPkt.Data, pkt.Data) {
+			t.Fatalf("STAP-A callback packet[%d] = %+v, want returned RTP packet fields", i, callbackPkt)
+		}
+		assertEncoderRTPCallbackPacketDoesNotAliasReturned(t, callbackPkt, pkt, i)
+		if meta.PacketIndex != i || meta.PacketCount != len(out.RTPPackets) ||
+			meta.FramePTS != frame.PTS || meta.FrameDTS != frame.PTS ||
+			meta.RTPTime != out.RTPTime || !meta.KeyFrame || !meta.IDR {
+			t.Fatalf("STAP-A callback meta[%d] frame fields = %+v, want IDR timing metadata", i, meta)
+		}
+		if i == 0 {
+			if meta.PayloadFormat != goh264.EncoderRTPPayloadSTAPA ||
+				meta.NALUnitType != 24 ||
+				meta.NALUnitCount != 2 ||
+				!meta.ParameterSet ||
+				meta.StartOfNAL || meta.EndOfNAL {
+				t.Fatalf("STAP-A callback meta[0] = %+v, want SPS/PPS aggregate metadata", meta)
+			}
+			continue
+		}
+		if meta.PayloadFormat != goh264.EncoderRTPPayloadFUA &&
+			meta.PayloadFormat != goh264.EncoderRTPPayloadSingleNAL {
+			t.Fatalf("STAP-A VCL callback meta[%d] payload format = %v, want FU-A or single-NAL", i, meta.PayloadFormat)
+		}
+		if meta.NALUnitType != 5 || meta.NALUnitCount != 1 || meta.ParameterSet {
+			t.Fatalf("STAP-A VCL callback meta[%d] = %+v, want IDR VCL metadata", i, meta)
 		}
 	}
 
