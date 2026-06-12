@@ -58,6 +58,8 @@
 Current decoder evidence addendum: public header parsing still validates VCL
 slice headers but no longer retains them in decoder state across repeated
 metadata parses, keeping `ParseHeaders*` bounded to stored SPS/PPS metadata.
+Successful Annex B/AVC header parses now also have delayed configured-AVC
+flush-state preservation coverage across caller header-buffer mutation.
 Public raw-frame output now also has an external-package nil-frame contract
 covering `BytesPerSample`, `RawPixelFormat`, `RawYUVSize`, `AppendRawYUV`,
 `AppendRawYUVBytesLE`, and `AppendRawYUV16`: each rejects the nil receiver with

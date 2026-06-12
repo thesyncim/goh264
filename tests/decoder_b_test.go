@@ -786,6 +786,72 @@ func TestDecodeConfiguredAVCTestsrcBFramesFlushRetainedReferenceSample(t *testin
 	}
 }
 
+func TestParseHeadersPreservesDelayedConfiguredAVCFlush(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+	headersAnnexB, _ := annexBParameterSetsAndPacket(t, data)
+	headersAVC := annexBToAVC(t, headersAnnexB, 4)
+
+	for _, tt := range []struct {
+		name    string
+		headers []byte
+		parse   func(*Decoder, []byte) error
+	}{
+		{
+			name:    "annexb",
+			headers: append([]byte(nil), headersAnnexB...),
+			parse: func(dec *Decoder, headers []byte) error {
+				_, err := dec.ParseHeadersAnnexB(headers)
+				return err
+			},
+		},
+		{
+			name:    "avc",
+			headers: append([]byte(nil), headersAVC...),
+			parse: func(dec *Decoder, headers []byte) error {
+				_, err := dec.ParseHeadersAVC(headers, 4)
+				return err
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+				t.Fatal(err)
+			}
+
+			var frames []*Frame
+			for i := 0; i < 2; i++ {
+				out, err := dec.DecodeConfiguredAVCFrames(samples[i])
+				if err != nil {
+					t.Fatalf("sample[%d]: %v", i, err)
+				}
+				frames = append(frames, out...)
+			}
+
+			if err := tt.parse(dec, tt.headers); err != nil {
+				t.Fatalf("ParseHeaders %s: %v", tt.name, err)
+			}
+			for i := range tt.headers {
+				tt.headers[i] = 0xff
+			}
+
+			out, err := dec.FlushDelayedFrames()
+			if err != nil {
+				t.Fatalf("FlushDelayedFrames after ParseHeaders %s: %v", tt.name, err)
+			}
+			frames = append(frames, out...)
+			assertFrameMD5Strings(t, frames, []string{
+				"4296e3dc95829cc27071a8685a428494",
+				"aa778b981f96d21489196f6a0faa0959",
+			})
+		})
+	}
+}
+
 func TestFFmpegFrameMD5OracleTestsrcBFrames(t *testing.T) {
 	if os.Getenv("GOH264_ORACLE") != "1" {
 		t.Skip("set GOH264_ORACLE=1 to run native ffmpeg oracle")
