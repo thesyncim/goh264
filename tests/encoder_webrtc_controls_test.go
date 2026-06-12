@@ -1088,6 +1088,11 @@ func TestEncoderSetRTPMaxPayloadSizeRetargetsLivePacketization(t *testing.T) {
 		t.Fatalf("DecodeFrames after invalid payload-size update: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decodedThird, appendI420FrameBytes(nil, thirdFrame))
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, third.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 1}, []uint32{0, 1, 2})
 }
 
 func TestEncoderReconfigureSwitchesOutputFormatForForcedIDR(t *testing.T) {
