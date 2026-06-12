@@ -305,6 +305,7 @@ proves mode-0 oversize queued-IDR and P-frame packetization failures leave
 pending-IDR, reference, RTP sequence, and callback state recoverable, plus
 Annex B/AVC/RTP bitrate-drop and late-drop non-output paths,
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
+public `EncodedFrame.RTPPacketData` and `EncodedFrame.RTPPayloadData` helpers,
 clipped packet payload views over packet data, packet storage isolated from
 `EncodedFrame.Data` including caller-backed `EncodeInto` output buffers, shared
 packet metadata guards for header fields and clipped packet slices, checked

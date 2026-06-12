@@ -398,6 +398,8 @@ if out.Dropped {
 }
 accessUnit, err := out.AccessUnitData()
 nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
+packet0, err := out.RTPPacketData(0)
+payload0, err := out.RTPPayloadData(0)
 err = enc.Reset()           // clear encoder coding state, keep config/callback
 ```
 
@@ -421,6 +423,7 @@ packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1
 FU-A/STAP-A output with small-payload STAP-A fallback to non-aggregated mode-1
 packets plus accurate fallback-IDR and post-fallback P-skip callback payload
 metadata and callback packet isolation, RTP packet storage isolated from `EncodedFrame.Data`,
+public `EncodedFrame.RTPPacketData` and `EncodedFrame.RTPPayloadData` helpers,
 optional per-packet callback metadata including mode 0/1
 IDR/P-frame single-NAL packets for multi-slice IDR, P-skip, exact P16x16,
 odd-pixel constant chroma, and P IntraPCM fallback rows with callback packet storage isolated from

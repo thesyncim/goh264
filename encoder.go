@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"time"
+	"unsafe"
 
 	"github.com/thesyncim/goh264/internal/h264"
 )
@@ -344,6 +345,58 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 		return nil, ErrInvalidData
 	}
 	return frame.Data[start:end:end], nil
+}
+
+// RTPPacketData returns the complete RTP packet bytes for RTPPackets[index].
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the packet backing store.
+func (frame EncodedFrame) RTPPacketData(index int) ([]byte, error) {
+	if frame.Dropped || index < 0 || index >= len(frame.RTPPackets) {
+		return nil, ErrInvalidData
+	}
+	packet := frame.RTPPackets[index]
+	if len(packet.Data) < 12 {
+		return nil, ErrInvalidData
+	}
+	return packet.Data[:len(packet.Data):len(packet.Data)], nil
+}
+
+// RTPPayloadData returns the RTP payload bytes for RTPPackets[index].
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the packet backing store.
+func (frame EncodedFrame) RTPPayloadData(index int) ([]byte, error) {
+	if frame.Dropped || index < 0 || index >= len(frame.RTPPackets) {
+		return nil, ErrInvalidData
+	}
+	packet := frame.RTPPackets[index]
+	if len(packet.Data) < 12 || len(packet.Payload) == 0 {
+		return nil, ErrInvalidData
+	}
+	dataStart := unsafeSliceOffset(packet.Data, packet.Payload)
+	if dataStart < 12 {
+		return nil, ErrInvalidData
+	}
+	dataEnd, err := checkedAddInt(dataStart, len(packet.Payload))
+	if err != nil || dataEnd > len(packet.Data) {
+		return nil, ErrInvalidData
+	}
+	return packet.Payload[:len(packet.Payload):len(packet.Payload)], nil
+}
+
+func unsafeSliceOffset(base []byte, sub []byte) int {
+	if len(base) == 0 || len(sub) == 0 {
+		return -1
+	}
+	baseStart := uintptr(unsafe.Pointer(unsafe.SliceData(base)))
+	baseEnd := baseStart + uintptr(len(base))
+	subStart := uintptr(unsafe.Pointer(unsafe.SliceData(sub)))
+	subEnd := subStart + uintptr(len(sub))
+	if subStart < baseStart || subEnd > baseEnd || subEnd < subStart {
+		return -1
+	}
+	return int(subStart - baseStart)
 }
 
 // EncoderParameterSets contains caller-owned SPS/PPS helper surfaces.

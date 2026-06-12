@@ -8373,6 +8373,60 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 	}
 }
 
+func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
+	packetData := []byte{
+		0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd,
+		0x65, 0x88, 0x99,
+	}
+	valid := goh264.EncodedFrame{
+		RTPPackets: []goh264.EncoderRTPPacket{{
+			Data:    packetData,
+			Payload: packetData[12:],
+		}},
+	}
+	if got, err := valid.RTPPacketData(0); err != nil || !bytes.Equal(got, packetData) || cap(got) != len(got) {
+		t.Fatalf("valid RTPPacketData = %x cap=%d err=%v, want clipped packet bytes", got, cap(got), err)
+	}
+	if got, err := valid.RTPPayloadData(0); err != nil || !bytes.Equal(got, []byte{0x65, 0x88, 0x99}) || cap(got) != len(got) {
+		t.Fatalf("valid RTPPayloadData = %x cap=%d err=%v, want clipped payload bytes", got, cap(got), err)
+	}
+	for _, tt := range []struct {
+		name  string
+		frame goh264.EncodedFrame
+		index int
+	}{
+		{name: "negative index", frame: valid, index: -1},
+		{name: "past end", frame: valid, index: 1},
+		{name: "dropped", frame: goh264.EncodedFrame{Dropped: true, RTPPackets: valid.RTPPackets}},
+		{name: "short packet", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData[:11], Payload: packetData[12:]}}}},
+	} {
+		t.Run("packet-"+tt.name, func(t *testing.T) {
+			if got, err := tt.frame.RTPPacketData(tt.index); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("RTPPacketData invalid = %x/%v, want nil ErrInvalidData", got, err)
+			}
+		})
+	}
+	for _, tt := range []struct {
+		name  string
+		frame goh264.EncodedFrame
+		index int
+	}{
+		{name: "negative index", frame: valid, index: -1},
+		{name: "past end", frame: valid, index: 1},
+		{name: "dropped", frame: goh264.EncodedFrame{Dropped: true, RTPPackets: valid.RTPPackets}},
+		{name: "short packet", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData[:11], Payload: packetData[12:]}}}},
+		{name: "empty payload", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: nil}}}},
+		{name: "payload before header", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: packetData[8:12]}}}},
+		{name: "foreign payload", frame: goh264.EncodedFrame{RTPPackets: []goh264.EncoderRTPPacket{{Data: packetData, Payload: []byte{0x65, 0x88, 0x99}}}}},
+	} {
+		t.Run("payload-"+tt.name, func(t *testing.T) {
+			if got, err := tt.frame.RTPPayloadData(tt.index); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("RTPPayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
+			}
+		})
+	}
+}
+
 func TestEncoderDoesNotRetainInputFramePlanes(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
@@ -11503,6 +11557,12 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AccessUnitData"); !ok {
 		t.Fatal("EncodedFrame missing AccessUnitData convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("RTPPacketData"); !ok {
+		t.Fatal("EncodedFrame missing RTPPacketData convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("RTPPayloadData"); !ok {
+		t.Fatal("EncodedFrame missing RTPPayloadData convenience method")
 	}
 
 	reconfigType := reflect.TypeOf(goh264.EncoderReconfigure{})
