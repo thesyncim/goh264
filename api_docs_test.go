@@ -70,7 +70,10 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"ValidateFrame",
 		"Encode",
 		"EncodeInto",
+		"ForceIDR",
 		"HandlePLI",
+		"HandleFIR",
+		"PendingIDR",
 		"Reset",
 		"ParameterSets",
 		"RecoveryPointSEI",
@@ -154,10 +157,22 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 		"Examples",
 		"API smoke tests only",
 		"oracle-backed bitstream parity",
-		"release readiness",
+		"production readiness",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md missing quality/parity status phrase %q", phrase)
+		}
+	}
+	for _, forbidden := range []string{
+		"pre" + "-release",
+		"release " + "tag",
+		"release " + "readiness",
+		"de" + "precate",
+		"de" + "precated",
+		"de" + "precation",
+	} {
+		if strings.Contains(readme, forbidden) {
+			t.Fatalf("README.md should not use shipping-lifecycle status phrase %q", forbidden)
 		}
 	}
 }
@@ -187,6 +202,7 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 		"must(enc.ValidateFrame",
 		"must(enc.Reset",
 		"admitted control, budget",
+		"`SetDeblockMode`, `SetRTPMaxPayloadSize`, `SetPreset`",
 		"Zero scalar fields in `EncoderReconfigure` mean unchanged",
 		"pointer fields, grouped `Limits`, or dedicated setters",
 		"`FrameRateNum`/`FrameRateDen` and `Width`/`Height` must be supplied",
@@ -221,8 +237,13 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"encoder-api-surfaces",
 		"TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData",
 		"TestEncoderReconfigureZeroScalarFieldsAreNoOps",
+		"TestEncoderZeroValueExplicitSettersRejectWithoutMutation",
 		"TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata",
 		"TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata",
+		"encoder-writers",
+		"TestCAVLCWriteResidual",
+		"TestWriteCAVLCInterPBoundedMacroblock",
+		"TestEncodeI420P16x16ResidualSliceRBSP",
 	} {
 		if !strings.Contains(script, phrase) {
 			t.Fatalf("encoder release evidence script missing API-surface gate phrase %q", phrase)
@@ -255,6 +276,12 @@ func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
+		"TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset",
+		"TestDecodeFramesStandaloneMultiSPSConfigurationResetsForNonFirstActiveSPS",
+		"TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset",
+		"TestDecodePacketFramesAnnexBMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset",
+		"TestDecoderAVCConfigUsesAVCCFirstSPSForMultiSPSConfiguration",
+		"TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration",
 		"TestSimpleFrameDPBRejectsMissingShortRefModificationTarget",
 		"TestSimpleFrameDPBRejectsMissingLongRefModificationTarget",
 	} {
@@ -399,7 +426,7 @@ func TestREADMEStateLifecycleDocumentsDecoderEncoderBoundaries(t *testing.T) {
 		"Clears stored SPS/PPS, avcC length-size, references, delayed output, and parsed slice state",
 		"`Encoder.Reset`",
 		"preserving configuration and RTP callback",
-		"`Encoder.SetResolution` / `SetOutputFormat`",
+		"`Encoder.SetQP` / `SetResolution` / `SetOutputFormat`",
 		"queue an IDR boundary",
 		"Invalid encoder setters or `Reconfigure` updates",
 		"Leave configuration, queued IDR state, RTP sequence/callback state, frame number, timestamp, and references unchanged",

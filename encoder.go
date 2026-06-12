@@ -1373,6 +1373,12 @@ func (e *Encoder) SetBitrate(targetBitrate, maxBitrate int) error {
 //
 // Invalid updates leave the encoder configuration and coding state unchanged.
 func (e *Encoder) SetRateControl(mode EncoderRateControlMode) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if mode == 0 {
+		return encoderInvalid("rate-control mode cannot be zero")
+	}
 	return e.Reconfigure(EncoderReconfigure{RateControl: mode})
 }
 
@@ -1388,6 +1394,12 @@ func (e *Encoder) SetVBVBufferSize(size int) error {
 //
 // Invalid updates leave the encoder configuration and coding state unchanged.
 func (e *Encoder) SetFrameDropMode(mode EncoderFrameDropMode) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if mode == 0 {
+		return encoderInvalid("frame drop mode cannot be zero")
+	}
 	return e.Reconfigure(EncoderReconfigure{FrameDrop: mode})
 }
 
@@ -1432,6 +1444,12 @@ func (e *Encoder) SetFrameRate(num, den int) error {
 // IDR. Invalid updates leave the encoder configuration and coding state
 // unchanged.
 func (e *Encoder) SetResolution(width, height int) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if width <= 0 || height <= 0 {
+		return encoderInvalid("runtime resolution update requires positive width and height")
+	}
 	return e.Reconfigure(EncoderReconfigure{Width: width, Height: height})
 }
 
@@ -1439,6 +1457,12 @@ func (e *Encoder) SetResolution(width, height int) error {
 //
 // Invalid updates leave the encoder configuration and coding state unchanged.
 func (e *Encoder) SetGOP(gopSize, idrInterval int) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if gopSize <= 0 || idrInterval <= 0 {
+		return encoderInvalid("GOP size and IDR interval must be positive")
+	}
 	return e.Reconfigure(EncoderReconfigure{GOPSize: gopSize, IDRInterval: idrInterval})
 }
 
@@ -1548,6 +1572,12 @@ func (e *Encoder) SetMaxEncodeTimeUS(us int) error {
 //
 // Invalid updates leave the encoder configuration and coding state unchanged.
 func (e *Encoder) SetPreset(preset EncoderPreset) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if preset == 0 {
+		return encoderInvalid("encoder preset cannot be zero")
+	}
 	return e.Reconfigure(EncoderReconfigure{Preset: preset})
 }
 
@@ -1555,6 +1585,12 @@ func (e *Encoder) SetPreset(preset EncoderPreset) error {
 //
 // Invalid updates leave the encoder configuration and coding state unchanged.
 func (e *Encoder) SetSliceCount(count int) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if count <= 0 {
+		return encoderInvalid("slice count must be positive")
+	}
 	return e.Reconfigure(EncoderReconfigure{SliceCount: count})
 }
 
@@ -1562,6 +1598,12 @@ func (e *Encoder) SetSliceCount(count int) error {
 //
 // Invalid updates leave the encoder configuration and coding state unchanged.
 func (e *Encoder) SetDeblockMode(mode EncoderDeblockMode) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if mode == 0 {
+		return encoderInvalid("deblock mode cannot be zero")
+	}
 	return e.Reconfigure(EncoderReconfigure{DeblockMode: mode})
 }
 
@@ -1569,6 +1611,12 @@ func (e *Encoder) SetDeblockMode(mode EncoderDeblockMode) error {
 //
 // Invalid updates leave the encoder configuration and coding state unchanged.
 func (e *Encoder) SetSPSPPSMode(mode EncoderSPSPPSMode) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if mode == 0 {
+		return encoderInvalid("SPS/PPS emission mode cannot be zero")
+	}
 	return e.Reconfigure(EncoderReconfigure{SPSPPSMode: mode})
 }
 
@@ -1615,6 +1663,12 @@ func (e *Encoder) SetRecoveryPointSEI(enabled bool) error {
 // A successful output-format update queues an IDR so the next emitted access
 // unit can carry a clean boundary for the new container.
 func (e *Encoder) SetOutputFormat(format EncoderOutputFormat) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if format == 0 {
+		return encoderInvalid("encoder output format cannot be zero")
+	}
 	return e.Reconfigure(EncoderReconfigure{
 		OutputFormat: format,
 		ForceIDR:     true,

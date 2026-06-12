@@ -1031,6 +1031,52 @@ func TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset(t *
 	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
 }
 
+func TestDecodeFramesStandaloneMultiSPSConfigurationResetsForNonFirstActiveSPS(t *testing.T) {
+	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	multiConfig, _ := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
+	pps1PSkip := decoderPSkipAVCSampleWithPPSID(t, 32, 16, 1, 1)
+
+	dec := NewDecoder()
+	out, err := dec.DecodeFrames(config16)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("DecodeFrames 16x16 avcC config frames=%d err=%v, want no output/error", len(out), err)
+	}
+	out, err = dec.DecodeFrames(samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeFrames 16x16 IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	out, err = dec.DecodeFrames(multiConfig)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("DecodeFrames standalone multi-SPS avcC config frames=%d err=%v, want no output/error", len(out), err)
+	}
+	out, err = dec.DecodeFrames(pps1PSkip)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 PPS1 P-skip after standalone multi-SPS avcC = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after standalone multi-SPS PPS1 P-skip: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.SPSID != 1 || got.StreamInfo.Width != 32 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after standalone multi-SPS PPS1 P-skip = %+v, want active SPS1 32x16", got)
+	}
+
+	out, err = dec.DecodeFrames(config32)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("DecodeFrames 32x16 avcC after standalone multi-SPS stale P-skip frames=%d err=%v, want no output/error", len(out), err)
+	}
+	out, err = dec.DecodeFrames(samples32[0])
+	if err != nil {
+		t.Fatalf("DecodeFrames 32x16 IDR after standalone multi-SPS stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
 func TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset(t *testing.T) {
 	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
 	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)

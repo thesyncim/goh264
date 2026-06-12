@@ -1112,6 +1112,83 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderZeroValueExplicitSettersRejectWithoutMutation(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(*goh264.Encoder) error
+	}{
+		{name: "SetRateControl", call: func(enc *goh264.Encoder) error {
+			return enc.SetRateControl(0)
+		}},
+		{name: "SetFrameDropMode", call: func(enc *goh264.Encoder) error {
+			return enc.SetFrameDropMode(0)
+		}},
+		{name: "SetGOP", call: func(enc *goh264.Encoder) error {
+			return enc.SetGOP(0, 0)
+		}},
+		{name: "SetResolution", call: func(enc *goh264.Encoder) error {
+			return enc.SetResolution(0, 0)
+		}},
+		{name: "SetPreset", call: func(enc *goh264.Encoder) error {
+			return enc.SetPreset(0)
+		}},
+		{name: "SetSliceCount", call: func(enc *goh264.Encoder) error {
+			return enc.SetSliceCount(0)
+		}},
+		{name: "SetDeblockMode", call: func(enc *goh264.Encoder) error {
+			return enc.SetDeblockMode(0)
+		}},
+		{name: "SetSPSPPSMode", call: func(enc *goh264.Encoder) error {
+			return enc.SetSPSPPSMode(0)
+		}},
+		{name: "SetOutputFormat", call: func(enc *goh264.Encoder) error {
+			return enc.SetOutputFormat(0)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+			}
+			before := enc.Config()
+
+			if err := tt.call(enc); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("%s zero-value setter error = %v, want ErrInvalidData", tt.name, err)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("%s zero-value setter mutated config = %+v, want %+v", tt.name, got, before)
+			}
+			if enc.PendingIDR() {
+				t.Fatalf("%s zero-value setter queued unexpected IDR", tt.name)
+			}
+
+			secondFrame := firstFrame
+			secondFrame.PTS = int64(before.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("%s Encode after zero-value setter: %v", tt.name, err)
+			}
+			if second.Dropped || second.IDR || second.KeyFrame || enc.PendingIDR() {
+				t.Fatalf("%s post-zero-setter frame dropped=%v idr=%v key=%v pending=%v, want P-skip",
+					tt.name, second.Dropped, second.IDR, second.KeyFrame, enc.PendingIDR())
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+		})
+	}
+}
+
 func TestEncoderSetIntraRefreshEnableIsUnsupportedAndPreservesState(t *testing.T) {
 	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
 	if err != nil {

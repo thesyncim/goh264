@@ -55,10 +55,10 @@ run_gate git-diff-cached-check git diff --cached --check
 run_gate go-vet go vet ./...
 run_gate go-test-all go test ./...
 run_gate encoder-contract go test ./tests -run '^TestEncoder' -count=1 -v
-run_gate encoder-api-surfaces go test ./tests -run '^(TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData|TestEncoderReconfigureZeroScalarFieldsAreNoOps|TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata|TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata)$' -count=1 -v
+run_gate encoder-api-surfaces go test ./tests -run '^(TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData|TestEncoderReconfigureZeroScalarFieldsAreNoOps|TestEncoderZeroValueExplicitSettersRejectWithoutMutation|TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata|TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata)$' -count=1 -v
 run_gate encoder-residual-boundary go test ./tests -run '^TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs$' -count=1 -v
 run_gate encoder-allocation-canary go test ./tests -run '^TestEncoderEncodeIntoAllocationCanary$' -count=1 -v
-run_gate encoder-writers go test ./internal/h264 -run '^(TestBitWriter|TestAppendNAL|TestAppendAVC|TestBuildEncoder|TestAppendSEI)' -count=1 -v
+run_gate encoder-writers go test ./internal/h264 -run '^(TestBitWriter|TestAppendNAL|TestAppendAVC|TestBuildEncoder|TestAppendSEI|TestCAVLCWriteResidual|TestWriteCAVLCInterPBoundedMacroblock|TestEncodeI420P16x16ResidualSliceRBSP)' -count=1 -v
 run_gate encoder-benchmem go test . -run '^$' -bench "$bench_pattern" -benchmem -benchtime "$bench_time"
 
 printf '\nall encoder release-evidence gates passed\n' | tee -a "$summary"

@@ -26,9 +26,9 @@ but it is not quality-parity with a production H.264 encoder.
 
 | Area | Quality state | Strong evidence today | Missing before production parity |
 | --- | --- | --- | --- |
-| Decoder | Best-covered, still pre-release | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Final release evidence, every selected release gate green together, exact parity on remaining unselected field/MBAFF/damaged-edge behavior |
+| Decoder | Best-covered, still hardening | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Final production evidence, every selected gate green together, exact parity on remaining unselected field/MBAFF/damaged-edge behavior |
 | Encoder | Experimental admitted subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, public residual macroblock admission, mature rate control, wider packetizer/control breadth, oracle-backed bitstream parity, reviewed allocation/performance evidence |
-| Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, release readiness, or performance evidence |
+| Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, production readiness, or performance evidence |
 
 ## What Works Today
 
@@ -48,9 +48,9 @@ but it is not quality-parity with a production H.264 encoder.
 
 ## Not Yet Production
 
-No release tag should be treated as production. The remaining work is mainly
-quality hardening, API cleanup, allocation/performance evidence, and broader
-encoder coverage. The detailed status lives in:
+Do not treat the current module as production-ready. The remaining work is
+mainly quality hardening, API cleanup, allocation/performance evidence, and
+broader encoder coverage. The detailed status lives in:
 
 - [docs/production-readiness.md](docs/production-readiness.md)
 - [docs/source-truth.md](docs/source-truth.md)
@@ -223,7 +223,9 @@ picture state before decoding. When an update carries multiple SPS/PPS entries,
 the reset decision follows the packet's slice-selected PPS/SPS when that packet
 can be parsed. `AVCConfig` reports the packet-active SPS after a successful
 configured-AVC packet identifies one; before that it reports the first SPS from
-the stored avcC record.
+the stored avcC record. Standalone multi-SPS avcC records accepted through
+`DecodeFrames` reset picture state conservatively when any SPS/PPS candidate
+could be incompatible with current references.
 
 Configure or inspect headers without decoding full frames. The decoder methods
 are stateful: `ParseHeadersAnnexB` stores SPS/PPS state, and `ParseHeadersAVC`
@@ -298,7 +300,7 @@ suppress later duplicates.
 | `Decoder.DecodeAVCCFrames` / packet `NEW_EXTRADATA` | Compatible avcC or Annex B parameter-set updates retain references; incompatible active SPS changes reset picture state before decoding. |
 | `Decoder.Reset` | Clears stored SPS/PPS, avcC length-size, references, delayed output, and parsed slice state. |
 | `Encoder.Reset` | Clears coding/reference/rate state and queued IDR state while preserving configuration and RTP callback. |
-| `Encoder.SetResolution` / `SetOutputFormat` | Apply validated live changes and queue an IDR boundary for the next emitted access unit. |
+| `Encoder.SetQP` / `SetResolution` / `SetOutputFormat` | Apply validated live changes and queue an IDR boundary for the next emitted access unit. |
 | Invalid encoder setters or `Reconfigure` updates | Leave configuration, queued IDR state, RTP sequence/callback state, frame number, timestamp, and references unchanged. |
 
 ## Encoder API (Experimental)
@@ -319,7 +321,8 @@ Choose the encoder surface by what the caller owns:
 | Generate SPS/PPS or recovery SEI without a live encoder | `EncoderConfig.ParameterSets` or `RecoveryPointSEIMessage` |
 | Encode with encoder-owned access-unit storage | `Encode` |
 | Encode into caller-owned access-unit storage | `EncodeInto` |
-| Change one live control | Explicit setters such as `SetBitrate`, `SetQP`, `SetOutputFormat`, and `SetRTPMetadata` |
+| Request or inspect an IDR boundary | `ForceIDR`, `HandlePLI`, `HandleFIR`, and `PendingIDR` |
+| Change one live control | Explicit setters such as `SetBitrate`, `SetQP`, `SetRTPMaxPayloadSize`, `SetOutputFormat`, and `SetRTPMetadata` |
 | Apply a bundled low-level update | `Reconfigure` |
 | Retain input/output beyond the call | `Clone` or `Append...` helpers |
 
@@ -471,14 +474,14 @@ that are currently intended to be stable enough for integration work:
   compatibility fields for zero-capable single-budget updates.
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
   `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
-  `SetDeblockMode`, `SetPreset`, `SetSliceCount`, `SetSPSPPSMode`,
-  `SetSPSPPSBeforeIDR`, `SetIntraRefresh`, `SetRecoveryPointSEI`,
-  `SetOutputFormat`, `SetRTPPacketizationMode`, and `SetRTPMetadata` cover
-  admitted control, budget, geometry, output, cadence, packetization, and RTP
-  header changes without constructing an `EncoderReconfigure` value. `SetQP`,
-  `SetResolution`, and `SetOutputFormat` queue an IDR boundary after a valid
-  update. `SetIntraRefresh(true)` returns `ErrUnsupported` until intra refresh
-  is admitted.
+  `SetDeblockMode`, `SetRTPMaxPayloadSize`, `SetPreset`, `SetSliceCount`,
+  `SetSPSPPSMode`, `SetSPSPPSBeforeIDR`, `SetIntraRefresh`,
+  `SetRecoveryPointSEI`, `SetOutputFormat`, `SetRTPPacketizationMode`, and
+  `SetRTPMetadata` cover admitted control, budget, geometry, output, cadence,
+  packetization, and RTP header changes without constructing an
+  `EncoderReconfigure` value. `SetQP`, `SetResolution`, and `SetOutputFormat`
+  queue an IDR boundary after a valid update. `SetIntraRefresh(true)` returns
+  `ErrUnsupported` until intra refresh is admitted.
 - `EncoderReconfigure` remains the grouped low-level update surface for
   bundled multi-field changes, grouped `Limits`, and explicit force-IDR
   requests. Zero scalar fields in `EncoderReconfigure` mean unchanged; use

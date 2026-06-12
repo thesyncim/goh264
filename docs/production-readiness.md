@@ -1,7 +1,8 @@
 # Production Readiness
 
-The decoder is the current implemented path. Realtime/WebRTC encoder support is
-now in scope, with a tested public control contract in `encoder.go`. Encoder
+The decoder remains the broadest and best-covered implemented path.
+Realtime/WebRTC encoder support is in scope, with a tested public control
+contract in `encoder.go`. Encoder
 bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
 IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
 output, and RTP packetization-mode 1 output, plus guarded identical-reference
@@ -202,7 +203,9 @@ DPB reset decision follows the packet's slice-selected PPS/SPS when available,
 so a non-first active SPS cannot reuse references from the previous stream.
 Stored `AVCConfig` metadata follows the avcC first SPS until a successful packet
 identifies a packet-active SPS, covering non-array-order multi-SPS records and
-packet-active SPS switches.
+packet-active SPS switches. Standalone multi-SPS avcC records accepted through
+auto-detected `DecodeFrames` reset conservatively when any SPS/PPS candidate
+could be incompatible with current references.
 Direct avcC parse, configuration-record decode, valid packet AVC and Annex B
 `NEW_EXTRADATA`, and auto-detected avcC admission also prove the stored decoder
 configuration state does not retain caller-owned side-data, configuration, or

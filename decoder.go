@@ -976,7 +976,19 @@ func (d *Decoder) storeAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationR
 }
 
 func (d *Decoder) updateAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationRecord) {
-	d.updateAVCDecoderConfigurationForActiveSPS(cfg, decoderActiveSPS{})
+	resetDPB := d.parameterSetUpdateNeedsDPBResetForAnySPS(cfg.SPS, cfg.PPS)
+	d.sps = cfg.SPS
+	d.pps = cfg.PPS
+	d.avcFirstSPSID = cfg.FirstSPSID
+	d.avcFirstSPSValid = true
+	d.avcNALLengthSize = cfg.NALLengthSize
+	if resetDPB {
+		d.clearActiveSPS()
+		_ = d.simple.StoreAVCDecoderConfiguration(cfg)
+		return
+	}
+	d.refreshActiveSPSFromStoredParamSets()
+	_ = d.simple.UpdateParamSets(d.sps, d.pps)
 }
 
 func (d *Decoder) updateAVCDecoderConfigurationForPacket(cfg h264.AVCDecoderConfigurationRecord, packetData []byte) {
@@ -1002,6 +1014,38 @@ func (d *Decoder) updateAVCDecoderConfigurationForActiveSPS(cfg h264.AVCDecoderC
 
 func (d *Decoder) parameterSetUpdateNeedsDPBReset(nextSPS [32]*h264.SPS, nextPPS [256]*h264.PPS) bool {
 	return d.parameterSetUpdateNeedsDPBResetForActiveSPS(nextSPS, nextPPS, decoderActiveSPS{})
+}
+
+func (d *Decoder) parameterSetUpdateNeedsDPBResetForAnySPS(nextSPS [32]*h264.SPS, nextPPS [256]*h264.PPS) bool {
+	if d == nil {
+		return false
+	}
+	prevID, prevSPS, prevOK := d.currentActiveSPS()
+	if !prevOK {
+		return false
+	}
+	haveCandidate := false
+	for _, pps := range nextPPS {
+		if pps == nil || pps.SPSID >= uint32(len(nextSPS)) || nextSPS[pps.SPSID] == nil {
+			continue
+		}
+		haveCandidate = true
+		if prevID != pps.SPSID || spsRequiresDPBReset(prevSPS, nextSPS[pps.SPSID]) {
+			return true
+		}
+	}
+	if haveCandidate {
+		return false
+	}
+	for id, sps := range nextSPS {
+		if sps == nil {
+			continue
+		}
+		if prevID != uint32(id) || spsRequiresDPBReset(prevSPS, sps) {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *Decoder) parameterSetUpdateNeedsDPBResetForActiveSPS(nextSPS [32]*h264.SPS, nextPPS [256]*h264.PPS, nextActive decoderActiveSPS) bool {
