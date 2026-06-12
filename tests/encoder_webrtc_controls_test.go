@@ -12076,6 +12076,13 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 				RTPPackets: []goh264.EncoderRTPPacket{{Data: validPacket, Payload: []byte{0x65}}},
 			},
 		},
+		{
+			name: "dropped unknown output format",
+			frame: goh264.EncodedFrame{
+				OutputFormat: goh264.EncoderOutputFormat(99),
+				Dropped:      true,
+			},
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if got, err := tt.frame.Clone(); !errors.Is(err, goh264.ErrInvalidData) ||
@@ -12085,12 +12092,20 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 			}
 		})
 	}
-	dropped := goh264.EncodedFrame{Dropped: true, KeyFrame: true, IDR: true, Data: []byte{1}, NALUnits: []goh264.EncoderNALUnit{{Offset: 0, Size: 1}}}
+	dropped := goh264.EncodedFrame{
+		OutputFormat: goh264.EncoderOutputRTP,
+		Dropped:      true,
+		KeyFrame:     true,
+		IDR:          true,
+		Data:         []byte{1},
+		NALUnits:     []goh264.EncoderNALUnit{{Offset: 0, Size: 1}},
+	}
 	clone, err := dropped.Clone()
 	if err != nil {
 		t.Fatalf("Clone dropped: %v", err)
 	}
-	if !clone.Dropped || !clone.KeyFrame || !clone.IDR || len(clone.Data) != 0 || len(clone.NALUnits) != 0 || len(clone.RTPPackets) != 0 {
+	if !clone.Dropped || !clone.KeyFrame || !clone.IDR || clone.OutputFormat != goh264.EncoderOutputRTP ||
+		len(clone.Data) != 0 || len(clone.NALUnits) != 0 || len(clone.RTPPackets) != 0 {
 		t.Fatalf("dropped clone = %+v, want metadata-only dropped result", clone)
 	}
 }

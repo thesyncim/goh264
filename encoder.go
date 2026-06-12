@@ -84,6 +84,15 @@ const (
 	EncoderOutputRTP
 )
 
+func validEncoderOutputFormat(format EncoderOutputFormat) bool {
+	switch format {
+	case 0, EncoderOutputAnnexB, EncoderOutputAVC, EncoderOutputRTP:
+		return true
+	default:
+		return false
+	}
+}
+
 type EncoderRTPPacketizationMode uint8
 
 const (
@@ -577,6 +586,9 @@ func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, e
 // buffers are reused.
 func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 	if frame.Dropped {
+		if !validEncoderOutputFormat(frame.OutputFormat) {
+			return EncodedFrame{}, ErrInvalidData
+		}
 		return EncodedFrame{
 			OutputFormat: frame.OutputFormat,
 			KeyFrame:     frame.KeyFrame,
