@@ -131,6 +131,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	delayed, err := dec.FlushDelayedFrames()
+	if err != nil {
+		log.Fatal(err)
+	}
+	frames = append(frames, delayed...)
 
 	var raw []byte
 	for _, frame := range frames {
