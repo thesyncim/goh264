@@ -7242,6 +7242,7 @@ func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 		name    string
 		prepare func(*goh264.Encoder) error
 		disable func() goh264.EncoderReconfigure
+		mixed   func() goh264.EncoderReconfigure
 		check   func(goh264.EncoderConfig) bool
 	}{
 		{
@@ -7252,6 +7253,10 @@ func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 			disable: func() goh264.EncoderReconfigure {
 				zero := 0
 				return goh264.EncoderReconfigure{MaxFrameSizeLimit: &zero}
+			},
+			mixed: func() goh264.EncoderReconfigure {
+				zero := 0
+				return goh264.EncoderReconfigure{MaxFrameSize: 4096, MaxFrameSizeLimit: &zero}
 			},
 			check: func(cfg goh264.EncoderConfig) bool {
 				return cfg.MaxFrameSize == 0
@@ -7266,6 +7271,10 @@ func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 				zero := 0
 				return goh264.EncoderReconfigure{SliceMaxBytesLimit: &zero}
 			},
+			mixed: func() goh264.EncoderReconfigure {
+				zero := 0
+				return goh264.EncoderReconfigure{SliceMaxBytes: 4096, SliceMaxBytesLimit: &zero}
+			},
 			check: func(cfg goh264.EncoderConfig) bool {
 				return cfg.SliceMaxBytes == 0
 			},
@@ -7278,6 +7287,10 @@ func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 			disable: func() goh264.EncoderReconfigure {
 				zero := 0
 				return goh264.EncoderReconfigure{MaxEncodeTimeUSLimit: &zero}
+			},
+			mixed: func() goh264.EncoderReconfigure {
+				zero := 0
+				return goh264.EncoderReconfigure{MaxEncodeTimeUS: 4096, MaxEncodeTimeUSLimit: &zero}
 			},
 			check: func(cfg goh264.EncoderConfig) bool {
 				return cfg.MaxEncodeTimeUS == 0
@@ -7302,6 +7315,15 @@ func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 			}
 			if got := enc.Config(); !tt.check(got) {
 				t.Fatalf("disabled limit config = %+v", got)
+			}
+			if err := tt.prepare(enc); err != nil {
+				t.Fatalf("restore limited encoder: %v", err)
+			}
+			if err := enc.Reconfigure(tt.mixed()); err != nil {
+				t.Fatalf("disable limit with mixed scalar and pointer: %v", err)
+			}
+			if got := enc.Config(); !tt.check(got) {
+				t.Fatalf("mixed scalar and pointer config = %+v, want explicit pointer value", got)
 			}
 
 			frame := patternedI420EncoderFrame(16, 16)
