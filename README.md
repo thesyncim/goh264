@@ -222,7 +222,8 @@ Parse headers without decoding full frames:
 ```go
 info, err := dec.ParseHeadersAnnexB(data)
 info, err := dec.ParseHeadersAVC(packet, nalLengthSize)
-cfg, err := goh264.InspectAVCC(avcc) // stateless avcC inspection
+cfg, err := goh264.InspectAVCDecoderConfigurationRecord(avcc)
+cfg, err = goh264.InspectAVCC(avcc) // short stateless avcC inspection
 ```
 
 Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are transactional:
@@ -232,8 +233,9 @@ flush after the rejected parse.
 Decoder `ConfigureAVCDecoderConfigurationRecord` and `ConfigureAVCC` store the
 configuration for later configured-AVC decode; decoder `ParseAVCDecoderConfigurationRecord`
 and `ParseAVCC` remain compatibility aliases. Package-level `InspectAVCC`,
-`ParseAVCC`, and `ParseAVCDecoderConfigurationRecord` parse the same metadata
-without mutating decoder state.
+`InspectAVCDecoderConfigurationRecord`, `ParseAVCC`, and
+`ParseAVCDecoderConfigurationRecord` parse the same metadata without mutating
+decoder state.
 
 Packet side-data support mirrors FFmpeg-facing surfaces used by the port:
 

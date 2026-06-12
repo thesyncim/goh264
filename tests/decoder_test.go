@@ -896,6 +896,13 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 	if inspected.NALLengthSize != 3 || inspected.StreamInfo.Width != 16 || inspected.StreamInfo.Height != 16 {
 		t.Fatalf("InspectAVCC = %+v, want length-size 3 black16 config", inspected)
 	}
+	inspectedRecord, err := InspectAVCDecoderConfigurationRecord(config3)
+	if err != nil {
+		t.Fatalf("InspectAVCDecoderConfigurationRecord: %v", err)
+	}
+	if inspectedRecord != inspected {
+		t.Fatalf("InspectAVCDecoderConfigurationRecord = %+v, want InspectAVCC result %+v", inspectedRecord, inspected)
+	}
 	statelessRecord, err := ParseAVCDecoderConfigurationRecord(config3)
 	if err != nil {
 		t.Fatalf("package ParseAVCDecoderConfigurationRecord: %v", err)

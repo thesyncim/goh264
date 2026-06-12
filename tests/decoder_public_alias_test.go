@@ -26,9 +26,10 @@ var (
 	ErrUnsupported = goh264.ErrUnsupported
 	NewDecoder     = goh264.NewDecoder
 
-	ParseAVCDecoderConfigurationRecord = goh264.ParseAVCDecoderConfigurationRecord
-	ParseAVCC                          = goh264.ParseAVCC
-	InspectAVCC                        = goh264.InspectAVCC
+	ParseAVCDecoderConfigurationRecord   = goh264.ParseAVCDecoderConfigurationRecord
+	InspectAVCDecoderConfigurationRecord = goh264.InspectAVCDecoderConfigurationRecord
+	ParseAVCC                            = goh264.ParseAVCC
+	InspectAVCC                          = goh264.InspectAVCC
 )
 
 var _ = (*Decoder).ConfigureAVCDecoderConfigurationRecord
