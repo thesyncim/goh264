@@ -2128,9 +2128,40 @@ func TestEncoderRecoveryPointSEIRejectsInvalidFrameCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before invalid RecoveryPointSEI did not queue IDR")
+	}
+	before := enc.Config()
 	if _, err := enc.RecoveryPointSEI(1 << 16); !errors.Is(err, goh264.ErrInvalidData) {
 		t.Fatalf("RecoveryPointSEI invalid error = %v, want ErrInvalidData", err)
 	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("invalid RecoveryPointSEI mutated config = %+v, want %+v", got, before)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("invalid RecoveryPointSEI cleared pending IDR")
+	}
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y[0] ^= 0x33
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode after invalid RecoveryPointSEI: %v", err)
+	}
+	if !second.IDR || enc.PendingIDR() {
+		t.Fatalf("post-invalid-RecoveryPointSEI frame idr=%v pending=%v, want delivered IDR",
+			second.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
 }
 
 func TestEncoderEncodeAnnexBIDRIntraPCMDecodesThroughLocalAndFFmpeg(t *testing.T) {
