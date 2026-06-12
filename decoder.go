@@ -773,7 +773,7 @@ func packetSideDataGet(sideData []PacketSideData, typ PacketSideDataType) (Packe
 func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameSideData {
 	var out h264.DecodedFrameSideData
 	if side, ok := packetSideDataGet(sideData, PacketSideDataA53ClosedCaptions); ok {
-		out.A53ClosedCaptions = append([]uint8(nil), side.Data...)
+		out.A53ClosedCaptions = cloneByteSlice(side.Data)
 	}
 	if side, ok := packetSideDataGet(sideData, PacketSideDataActiveFormat); ok && len(side.Data) > 0 {
 		out.AFD = h264.H2645SEIAFD{
@@ -815,13 +815,13 @@ func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameS
 		}
 	}
 	if side, ok := packetSideDataGet(sideData, PacketSideDataICCProfile); ok && len(side.Data) != 0 {
-		out.ICCProfile = append([]uint8(nil), side.Data...)
+		out.ICCProfile = cloneByteSlice(side.Data)
 	}
 	if side, ok := packetSideDataGet(sideData, PacketSideDataDynamicHDR10Plus); ok && len(side.Data) != 0 {
-		out.DynamicHDR10Plus = append([]uint8(nil), side.Data...)
+		out.DynamicHDR10Plus = cloneByteSlice(side.Data)
 	}
 	if side, ok := packetSideDataGet(sideData, PacketSideDataLCEVC); ok && len(side.Data) != 0 {
-		out.LCEVC = append([]uint8(nil), side.Data...)
+		out.LCEVC = cloneByteSlice(side.Data)
 	}
 	if side, ok := packetSideDataGet(sideData, PacketSideData3DReferenceDisplays); ok {
 		if displays, ok := referenceDisplaysFromPacketSideData(side.Data); ok {
@@ -1573,7 +1573,7 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numUnitsInTick uint32) FrameSideData {
 	out := FrameSideData{
 		UserDataUnregistered: cloneByteSlices(src.UserDataUnregistered),
-		A53ClosedCaptions:    append([]byte(nil), src.A53ClosedCaptions...),
+		A53ClosedCaptions:    cloneByteSlice(src.A53ClosedCaptions),
 		X264Build:            int(src.X264Build),
 		S12MTimecodes:        cloneUint32Slice(src.S12MTimecodes),
 	}
@@ -1677,13 +1677,13 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 		}
 	}
 	if len(src.ICCProfile) != 0 {
-		out.ICCProfile = append([]byte(nil), src.ICCProfile...)
+		out.ICCProfile = cloneByteSlice(src.ICCProfile)
 	}
 	if len(src.DynamicHDR10Plus) != 0 {
-		out.DynamicHDR10Plus = append([]byte(nil), src.DynamicHDR10Plus...)
+		out.DynamicHDR10Plus = cloneByteSlice(src.DynamicHDR10Plus)
 	}
 	if len(src.LCEVC) != 0 {
-		out.LCEVC = append([]byte(nil), src.LCEVC...)
+		out.LCEVC = cloneByteSlice(src.LCEVC)
 	}
 	if src.ReferenceDisplays.Present != 0 {
 		out.ReferenceDisplays = referenceDisplaysFromPacketSideDataValue(src.ReferenceDisplays)

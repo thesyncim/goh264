@@ -249,6 +249,55 @@ func TestFrameFromH264RejectsOverflowedPublicPlaneClones(t *testing.T) {
 	}
 }
 
+func TestPacketFrameSideDataFromPacketClonesBytePayloads(t *testing.T) {
+	captions := []byte{0x01, 0x02}
+	icc := []byte{0x03}
+	hdr10Plus := []byte{0x04}
+	lcevc := []byte{0x05}
+	got := packetFrameSideDataFromPacket([]PacketSideData{
+		{Type: PacketSideDataA53ClosedCaptions, Data: captions},
+		{Type: PacketSideDataICCProfile, Data: icc},
+		{Type: PacketSideDataDynamicHDR10Plus, Data: hdr10Plus},
+		{Type: PacketSideDataLCEVC, Data: lcevc},
+	})
+	if got.A53ClosedCaptions[0] != 0x01 || got.ICCProfile[0] != 0x03 ||
+		got.DynamicHDR10Plus[0] != 0x04 || got.LCEVC[0] != 0x05 {
+		t.Fatalf("packet byte side data = captions %x icc %x hdr %x lcevc %x", got.A53ClosedCaptions, got.ICCProfile, got.DynamicHDR10Plus, got.LCEVC)
+	}
+	captions[0], icc[0], hdr10Plus[0], lcevc[0] = 0xff, 0xff, 0xff, 0xff
+	if got.A53ClosedCaptions[0] != 0x01 || got.ICCProfile[0] != 0x03 ||
+		got.DynamicHDR10Plus[0] != 0x04 || got.LCEVC[0] != 0x05 {
+		t.Fatalf("packet byte side data aliases source = captions %x icc %x hdr %x lcevc %x", got.A53ClosedCaptions, got.ICCProfile, got.DynamicHDR10Plus, got.LCEVC)
+	}
+}
+
+func TestPacketFrameSideDataFromPacketRejectsOverflowedBytePayloads(t *testing.T) {
+	got := packetFrameSideDataFromPacket([]PacketSideData{
+		{Type: PacketSideDataA53ClosedCaptions, Data: fakeEncoderBytesLen(maxInt/2 + 1)},
+		{Type: PacketSideDataICCProfile, Data: fakeEncoderBytesLen(maxInt/2 + 1)},
+		{Type: PacketSideDataDynamicHDR10Plus, Data: fakeEncoderBytesLen(maxInt/2 + 1)},
+		{Type: PacketSideDataLCEVC, Data: fakeEncoderBytesLen(maxInt/2 + 1)},
+	})
+	if got.A53ClosedCaptions != nil || got.ICCProfile != nil || got.DynamicHDR10Plus != nil || got.LCEVC != nil {
+		t.Fatalf("overflowed packet byte side data = captions %d icc %d hdr %d lcevc %d",
+			len(got.A53ClosedCaptions), len(got.ICCProfile), len(got.DynamicHDR10Plus), len(got.LCEVC))
+	}
+}
+
+func TestFrameSideDataFromH264RejectsOverflowedBytePayloads(t *testing.T) {
+	src := h264.DecodedFrameSideData{
+		A53ClosedCaptions: fakeEncoderBytesLen(maxInt/2 + 1),
+		ICCProfile:        fakeEncoderBytesLen(maxInt/2 + 1),
+		DynamicHDR10Plus:  fakeEncoderBytesLen(maxInt/2 + 1),
+		LCEVC:             fakeEncoderBytesLen(maxInt/2 + 1),
+	}
+	got := frameSideDataFromH264(src, 0, 0)
+	if got.A53ClosedCaptions != nil || got.ICCProfile != nil || got.DynamicHDR10Plus != nil || got.LCEVC != nil {
+		t.Fatalf("overflowed frame byte side data = captions %d icc %d hdr %d lcevc %d",
+			len(got.A53ClosedCaptions), len(got.ICCProfile), len(got.DynamicHDR10Plus), len(got.LCEVC))
+	}
+}
+
 func fakeEncoderBytesLen(n int) []byte {
 	if n <= 0 {
 		return nil
