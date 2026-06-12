@@ -42,11 +42,36 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"ValidateFrame",
 		"Encode",
 		"EncodeInto",
+		"HandlePLI",
+		"Reset",
+		"ParameterSets",
+		"RecoveryPointSEI",
 		"SetBitrate",
+		"SetRateControl",
+		"SetVBVBufferSize",
+		"SetFrameDropMode",
 		"SetQP",
-		"SetOutputFormat",
+		"SetFrameRate",
+		"SetRTPTimestampIncrement",
+		"SetGOP",
+		"SetResolution",
+		"SetDeblockMode",
+		"SetRTPMaxPayloadSize",
+		"SetMaxFrameSize",
+		"SetPreset",
+		"SetSliceCount",
+		"SetSliceMaxBytes",
+		"SetMaxEncodeTimeUS",
+		"SetSPSPPSMode",
+		"SetSPSPPSBeforeIDR",
+		"SetIntraRefresh",
+		"SetRecoveryPointSEI",
+		"SetRTPPacketizationMode",
 		"SetRTPMetadata",
+		"SetOutputFormat",
+		"SetRTPPacketCallback",
 		"Reconfigure",
+		"I420Frame",
 	} {
 		if _, ok := encoderType.MethodByName(name); !ok {
 			t.Fatalf("README encoder chooser names missing Encoder.%s", name)
@@ -61,6 +86,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"ValidateFrame",
 		"ParameterSets",
 		"RecoveryPointSEIMessage",
+		"I420Frame",
 	} {
 		if _, ok := encoderConfigType.MethodByName(name); !ok {
 			t.Fatalf("README encoder chooser names missing EncoderConfig.%s", name)
@@ -72,6 +98,11 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"DefaultEncoderConfig",
 		"Clone",
 		"Append",
+		"AccessUnitData",
+		"NALData",
+		"RTPPacketData",
+		"RTPPayloadData",
+		"AVCC",
 	} {
 		requireREADMECodeName(t, readme, name)
 	}
