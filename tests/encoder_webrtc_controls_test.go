@@ -2238,46 +2238,99 @@ func TestEncoderReconfigureRejectsInvalidOutputControlsWithoutMutation(t *testin
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := goh264.DefaultEncoderConfig(16, 16)
-			cfg.OutputFormat = goh264.EncoderOutputAVC
-			cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
-			cfg.RTPMaxPayloadSize = 0
-			cfg.DeblockMode = goh264.EncoderDeblockDisabled
-			enc, err := goh264.NewEncoder(cfg)
-			if err != nil {
-				t.Fatalf("NewEncoder: %v", err)
+			for _, format := range []struct {
+				name string
+				fmt  goh264.EncoderOutputFormat
+			}{
+				{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+				{name: "avc", fmt: goh264.EncoderOutputAVC},
+				{name: "rtp", fmt: goh264.EncoderOutputRTP},
+			} {
+				t.Run(format.name, func(t *testing.T) {
+					cfg := goh264.DefaultEncoderConfig(16, 16)
+					cfg.OutputFormat = format.fmt
+					cfg.DeblockMode = goh264.EncoderDeblockDisabled
+					if format.fmt == goh264.EncoderOutputAVC {
+						cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
+					}
+					if format.fmt == goh264.EncoderOutputRTP {
+						cfg.RTPMaxPayloadSize = 32
+					} else {
+						cfg.RTPMaxPayloadSize = 0
+					}
+					enc, err := goh264.NewEncoder(cfg)
+					if err != nil {
+						t.Fatalf("NewEncoder: %v", err)
+					}
+					var headers goh264.EncoderParameterSets
+					if format.fmt == goh264.EncoderOutputAVC {
+						headers, err = enc.ParameterSets()
+						if err != nil {
+							t.Fatalf("ParameterSets: %v", err)
+						}
+					}
+					var callbackCalls int
+					enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+						callbackCalls++
+					})
+					firstFrame := patternedI420EncoderFrame(16, 16)
+					firstFrame.PTS = 0
+					first, err := enc.Encode(firstFrame)
+					if err != nil {
+						t.Fatalf("Encode first frame: %v", err)
+					}
+					if first.Dropped || !first.IDR || first.RTPTime != 0 || enc.PendingIDR() {
+						t.Fatalf("first frame dropped/id/time/pending = %v/%v/%d/%v, want delivered IDR time 0",
+							first.Dropped, first.IDR, first.RTPTime, enc.PendingIDR())
+					}
+					firstPacketCount := len(first.RTPPackets)
+					if format.fmt == goh264.EncoderOutputRTP {
+						if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+							t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+								firstPacketCount, callbackCalls)
+						}
+					} else if firstPacketCount != 0 || callbackCalls != 0 {
+						t.Fatalf("non-RTP first packets/callbacks = %d/%d, want none", firstPacketCount, callbackCalls)
+					}
+					before := enc.Config()
+					if err := enc.Reconfigure(tt.update); !errors.Is(err, goh264.ErrInvalidData) {
+						t.Fatalf("Reconfigure invalid output controls error = %v, want ErrInvalidData", err)
+					}
+					if got := enc.Config(); got != before {
+						t.Fatalf("invalid output controls mutated config = %+v, want %+v", got, before)
+					}
+					if enc.PendingIDR() {
+						t.Fatal("invalid output controls queued an IDR")
+					}
+					if callbackCalls != firstPacketCount {
+						t.Fatalf("invalid output controls invoked callbacks = %d, want still %d",
+							callbackCalls, firstPacketCount)
+					}
+					secondFrame := patternedI420EncoderFrame(16, 16)
+					secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
+					second, err := enc.Encode(secondFrame)
+					if err != nil {
+						t.Fatalf("Encode post-invalid P-skip: %v", err)
+					}
+					if second.Dropped || second.IDR || second.RTPTime != before.RTPTimestampIncrement {
+						t.Fatalf("post-invalid output dropped/id/time = %v/%v/%d, want P-skip time %d",
+							second.Dropped, second.IDR, second.RTPTime, before.RTPTimestampIncrement)
+					}
+					stream := append([]byte(nil), headers.AnnexB...)
+					stream = append(stream, annexBFromEncodedFrame(t, first, before.OutputFormat)...)
+					stream = append(stream, annexBFromEncodedFrame(t, second, before.OutputFormat)...)
+					assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+					if format.fmt == goh264.EncoderOutputRTP {
+						assertRTPPacketMetadata(t, second.RTPPackets, before.RTPPayloadType, before.RTPSSRC, uint16(firstPacketCount))
+					} else if len(second.RTPPackets) != 0 {
+						t.Fatalf("non-RTP second packets = %d, want none", len(second.RTPPackets))
+					}
+					if callbackCalls != firstPacketCount+len(second.RTPPackets) {
+						t.Fatalf("post-invalid callbacks = %d, want %d",
+							callbackCalls, firstPacketCount+len(second.RTPPackets))
+					}
+				})
 			}
-			headers, err := enc.ParameterSets()
-			if err != nil {
-				t.Fatalf("ParameterSets: %v", err)
-			}
-			first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
-			if err != nil {
-				t.Fatalf("Encode first AVC frame: %v", err)
-			}
-			if enc.PendingIDR() {
-				t.Fatal("freshly encoded AVC frame left unexpected pending IDR")
-			}
-			before := enc.Config()
-			if err := enc.Reconfigure(tt.update); !errors.Is(err, goh264.ErrInvalidData) {
-				t.Fatalf("Reconfigure invalid output controls error = %v, want ErrInvalidData", err)
-			}
-			if got := enc.Config(); got != before {
-				t.Fatalf("invalid output controls mutated config = %+v, want %+v", got, before)
-			}
-			if enc.PendingIDR() {
-				t.Fatal("invalid output controls queued an IDR")
-			}
-			secondFrame := patternedI420EncoderFrame(16, 16)
-			secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
-			second, err := enc.Encode(secondFrame)
-			if err != nil {
-				t.Fatalf("Encode post-invalid AVC P-skip: %v", err)
-			}
-			stream := append([]byte(nil), headers.AnnexB...)
-			stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
-			stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
-			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 		})
 	}
 }
