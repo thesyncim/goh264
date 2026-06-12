@@ -162,6 +162,10 @@ func TestFrameRawOutputRejectsNilFrame(t *testing.T) {
 		t.Fatalf("AppendRawYUV16 nil frame got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
 	}
 	assertDecoderUint16BufferUnchanged(t, uint16Dst, uint16Before)
+
+	if got, err := frame.RawYUV16(); got != nil || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("RawYUV16 nil frame got %v err=%v, want nil ErrInvalidData", got, err)
+	}
 }
 
 func TestFrameRawOutputClassifiesInvalidMetadata(t *testing.T) {
@@ -310,6 +314,17 @@ func TestFrameAppendRawYUV16AndBytesLEPreserveSamplesAndCrop(t *testing.T) {
 	}
 	if !equalUint16Slices(got16, want) {
 		t.Fatalf("AppendRawYUV16 = %v, want %v", got16, want)
+	}
+	gotRaw16, err := frame.RawYUV16()
+	if err != nil {
+		t.Fatalf("RawYUV16 error = %v", err)
+	}
+	if !equalUint16Slices(gotRaw16, want) {
+		t.Fatalf("RawYUV16 = %v, want %v", gotRaw16, want)
+	}
+	gotRaw16[0] ^= 0x1ff
+	if frame.Y16[frame.CropTop*frame.YStride+frame.CropLeft] == gotRaw16[0] {
+		t.Fatal("mutating RawYUV16 output changed source frame storage")
 	}
 
 	gotLE, err := frame.AppendRawYUVBytesLE(nil)
@@ -580,6 +595,9 @@ func TestFrameHighOutputRejectsWrongSurface(t *testing.T) {
 	if _, err := eight.AppendRawYUV16(nil); err != ErrUnsupported {
 		t.Fatalf("AppendRawYUV16 8-bit error = %v, want ErrUnsupported", err)
 	}
+	if got, err := eight.RawYUV16(); got != nil || err != ErrUnsupported {
+		t.Fatalf("RawYUV16 8-bit got %v err=%v, want nil ErrUnsupported", got, err)
+	}
 	uint16Dst, uint16Before := decoderPrefilledUint16Buffer()
 	if got, err := eight.AppendRawYUV16(uint16Dst); err != ErrUnsupported || len(got) != len(uint16Dst) {
 		t.Fatalf("AppendRawYUV16 8-bit got len=%d err=%v, want original buffer and ErrUnsupported", len(got), err)
@@ -613,6 +631,9 @@ func TestFrameHighOutputRejectsInvalidGeometryAndDepth(t *testing.T) {
 	}
 	if _, err := badSample.AppendRawYUV16(nil); err != ErrInvalidData {
 		t.Fatalf("bad sample AppendRawYUV16 error = %v, want ErrInvalidData", err)
+	}
+	if got, err := badSample.RawYUV16(); got != nil || err != ErrInvalidData {
+		t.Fatalf("bad sample RawYUV16 got %v err=%v, want nil ErrInvalidData", got, err)
 	}
 	if _, err := badSample.AppendRawYUVBytesLE(nil); err != ErrInvalidData {
 		t.Fatalf("bad sample AppendRawYUVBytesLE error = %v, want ErrInvalidData", err)

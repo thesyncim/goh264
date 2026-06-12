@@ -287,11 +287,13 @@ func main() {
 }
 ```
 
-`RawYUVBytesLE` returns a caller-owned rawvideo buffer for one frame.
+`RawYUVBytesLE` returns a caller-owned rawvideo byte buffer for one frame.
+`RawYUV16` returns a caller-owned uint16 sample buffer for high-bit-depth frames.
 `AppendRawYUV` is available for 8-bit output. `AppendRawYUVBytesLE` handles both
 8-bit and high-bit-depth output, using little-endian samples for 9-bit and
-higher formats. `RawPixelFormat` returns names such as `yuv420p`, `yuv422p10le`,
-or `yuv444p`.
+higher formats. `AppendRawYUV16` is the caller-buffer form for high-bit-depth
+uint16 output. `RawPixelFormat` returns names such as `yuv420p`,
+`yuv422p10le`, or `yuv444p`.
 
 ## API Surface
 

@@ -1266,6 +1266,21 @@ func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 	return dst, nil
 }
 
+// RawYUV16 returns the visible high-bit-depth frame as a new planar uint16 slice.
+//
+// The output order and sample representation match AppendRawYUV16.
+func (f *Frame) RawYUV16() ([]uint16, error) {
+	samples, err := f.rawYUVSampleCount()
+	if err != nil {
+		return nil, err
+	}
+	out, err := f.AppendRawYUV16(make([]uint16, 0, samples))
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AppendRawYUVBytesLE appends the visible frame as planar YUV bytes.
 //
 // The output order is Y, Cb, then Cr. 8-bit frames use one byte per sample;
