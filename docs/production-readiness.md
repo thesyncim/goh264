@@ -87,6 +87,9 @@ reconstruction plane-span checks reject overflowed geometry before indexing.
 Public SEI `FrameSideData` byte slices are guarded as caller-owned by mutating
 decoded unregistered-user-data, A53, and LCEVC slices and re-decoding the same
 input bytes.
+Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are guarded as
+transactional: a partially valid foreign SPS followed by malformed PPS returns
+an error without replacing the previous configured-AVC state.
 `cmd/goh264bench`
 records Go benchmark allocation totals and reports `alloc_bytes_per_iter`,
 `allocs_per_iter`, `alloc_bytes_per_frame`, and `allocs_per_frame` for each

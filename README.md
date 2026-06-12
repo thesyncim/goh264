@@ -322,6 +322,10 @@ info, err := dec.ParseHeadersAVC(packet, nalLengthSize)
 cfg, err := dec.ParseAVCDecoderConfigurationRecord(avcc)
 ```
 
+Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are transactional:
+partially parsed SPS/PPS state is not committed over a previous valid
+configuration.
+
 Packet side-data support mirrors FFmpeg-facing surfaces used by the port:
 
 ```go

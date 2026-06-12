@@ -110,6 +110,8 @@ malformed standalone AVC decoder configuration records preserving the last
 stored configured-AVC state,
 malformed AVC/Annex B `NEW_EXTRADATA` non-fatal packet-side-data guards,
 including partially valid Annex B side data rollback before commit,
+transactional public `ParseHeadersAnnexB`/`ParseHeadersAVC` rollback when a
+foreign SPS is followed by malformed PPS,
 malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,
 packet side-data byte-slice ownership across delayed B-frame output,

@@ -360,6 +360,56 @@ func TestDecodeFramesAnnexBRecoversAfterMalformedInBandParameterSets(t *testing.
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestParseHeadersAnnexBRejectPreservesStoredConfiguration(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+
+	damagedHeaders := firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS)
+	damagedHeaders = appendAnnexBNAL(damagedHeaders, []byte{0x60 | byte(h264.NALPPS)})
+	if _, err := dec.ParseHeadersAnnexB(damagedHeaders); err == nil {
+		t.Fatal("ParseHeadersAnnexB partially valid damaged headers returned nil error")
+	}
+
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after damaged Annex B header parse: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestParseHeadersAVCRejectPreservesStoredConfiguration(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+
+	damagedHeaders := annexBToAVC(t, firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS), 4)
+	damagedHeaders = appendAVCNALUnit(t, damagedHeaders, []byte{0x60 | byte(h264.NALPPS)}, 4)
+	if _, err := dec.ParseHeadersAVC(damagedHeaders, 4); err == nil {
+		t.Fatal("ParseHeadersAVC partially valid damaged headers returned nil error")
+	}
+
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after damaged AVC header parse: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeConfiguredAVCFramesRecoversAfterMalformedInBandParameterSets(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
