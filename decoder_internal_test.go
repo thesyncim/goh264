@@ -55,3 +55,33 @@ func TestParseHeadersDoesNotCommitPartialStateOnError(t *testing.T) {
 		t.Fatalf("parseHeaders committed %d slices after malformed PPS, want 0", len(dec.slices))
 	}
 }
+
+func TestParseHeadersDoesNotRetainSliceHeaders(t *testing.T) {
+	enc, err := NewEncoder(DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := EncoderFrame{
+		Width:    16,
+		Height:   16,
+		StrideY:  16,
+		StrideCb: 8,
+		StrideCr: 8,
+		Y:        make([]byte, 16*16),
+		Cb:       make([]byte, 8*8),
+		Cr:       make([]byte, 8*8),
+	}
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode IDR: %v", err)
+	}
+	dec := NewDecoder()
+	for i := 0; i < 3; i++ {
+		if _, err := dec.ParseHeadersAnnexB(out.Data); err != nil {
+			t.Fatalf("ParseHeadersAnnexB iteration %d: %v", i, err)
+		}
+		if len(dec.slices) != 0 {
+			t.Fatalf("ParseHeadersAnnexB iteration %d retained %d slice headers, want 0", i, len(dec.slices))
+		}
+	}
+}

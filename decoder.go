@@ -648,7 +648,6 @@ func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 	}
 	spsList := d.sps
 	ppsList := d.pps
-	slices := append([]h264.SliceHeader(nil), d.slices...)
 	var info StreamInfo
 	haveSPS := false
 	for _, nal := range nals {
@@ -674,11 +673,9 @@ func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 				ppsList[pps.PPSID] = pps
 			}
 		case h264.NALSlice, h264.NALIDRSlice:
-			slice, err := h264.ParseSliceHeader(nal, &ppsList)
-			if err != nil {
+			if _, err := h264.ParseSliceHeader(nal, &ppsList); err != nil {
 				return StreamInfo{}, err
 			}
-			slices = append(slices, *slice)
 		default:
 			continue
 		}
@@ -689,7 +686,6 @@ func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 	}
 	d.sps = spsList
 	d.pps = ppsList
-	d.slices = slices
 	return info, nil
 }
 
