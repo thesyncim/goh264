@@ -2044,6 +2044,62 @@ func TestEncoderParameterSetsReturnCallerOwnedSurfaces(t *testing.T) {
 	}
 }
 
+func TestEncoderHeaderHelpersPreservePendingIDR(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before header helpers did not queue IDR")
+	}
+	before := enc.Config()
+	for i := 0; i < 3; i++ {
+		headers, err := enc.ParameterSets()
+		if err != nil {
+			t.Fatalf("ParameterSets[%d]: %v", i, err)
+		}
+		if len(headers.SPS) == 0 || len(headers.PPS) == 0 ||
+			len(headers.AnnexB) == 0 || len(headers.AVCDecoderConfigurationRecord) == 0 {
+			t.Fatalf("ParameterSets[%d] returned empty surfaces: %+v", i, headers)
+		}
+		sei, err := enc.RecoveryPointSEI(uint32(i))
+		if err != nil {
+			t.Fatalf("RecoveryPointSEI[%d]: %v", i, err)
+		}
+		if len(sei.NAL) == 0 || len(sei.AnnexB) == 0 || len(sei.AVC) == 0 {
+			t.Fatalf("RecoveryPointSEI[%d] returned empty surfaces: %+v", i, sei)
+		}
+		if got := enc.Config(); got != before {
+			t.Fatalf("header helper[%d] mutated config = %+v, want %+v", i, got, before)
+		}
+		if !enc.PendingIDR() {
+			t.Fatalf("header helper[%d] cleared pending IDR", i)
+		}
+	}
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y = append([]byte(nil), secondFrame.Y...)
+	secondFrame.Y[0] ^= 0x44
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode after header helpers: %v", err)
+	}
+	if !second.IDR || enc.PendingIDR() {
+		t.Fatalf("post-helper frame idr=%v pending=%v, want delivered IDR",
+			second.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+}
+
 func TestEncoderParameterSetsExposeWebRTCCrop(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(640, 480)
 	cfg.Crop = goh264.EncoderCrop{Left: 2, Right: 4, Top: 6, Bottom: 8}
