@@ -233,7 +233,9 @@ run-before VLC write primitives, with every emitted table code round-tripped
 through the existing CAVLC decoder tables, plus bounded trailing-ones,
 single-level, and single-level-plus-trailing-ones residual block writers
 round-tripped through `decodeCAVLCResidual` across luma and chroma-DC table
-contexts.
+contexts. The first non-trailing residual level writer covers the short code
+path plus the decoder-supported prefix-14 and prefix-15 forms, while larger
+levels remain rejected until the next source-shaped residual slice.
 `internal/h264/encoder_headers.go` adds baseline SPS/PPS syntax writers,
 including 4:2:0 crop-unit emission, in the same source-shaped style and
 round-trips through `DecodeSPS`, `DecodePPS`, `SplitAnnexB`, and the avcC

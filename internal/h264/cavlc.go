@@ -628,13 +628,38 @@ func writeCAVLCFirstLevel(bw *BitWriter, level int32) error {
 	if adjusted < 0 {
 		code = int64(-adjusted)*2 - 1
 	}
-	if code < 0 || code > 13 {
+	if code < 0 {
 		return ErrInvalidData
 	}
-	for i := int64(0); i < code; i++ {
+	return writeCAVLCLevelCode(bw, code)
+}
+
+func writeCAVLCLevelCode(bw *BitWriter, code int64) error {
+	if bw == nil || code < 0 {
+		return ErrInvalidData
+	}
+	prefix := code
+	suffix := int64(0)
+	suffixBits := 0
+	if code >= 30 {
+		prefix = 15
+		suffix = code - 30
+		suffixBits = 12
+		if suffix > 0xfff {
+			return ErrInvalidData
+		}
+	} else if code >= 14 {
+		prefix = 14
+		suffix = code - 14
+		suffixBits = 4
+	}
+	for i := int64(0); i < prefix; i++ {
 		bw.WriteBit(0)
 	}
 	bw.WriteBit(1)
+	for i := suffixBits - 1; i >= 0; i-- {
+		bw.WriteBit(uint32((suffix >> uint(i)) & 1))
+	}
 	return nil
 }
 

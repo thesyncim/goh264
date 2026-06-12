@@ -16,6 +16,10 @@ Encoder
 production gates live in `docs/encoder-webrtc-roadmap.md` until broader
 P prediction, residual coding, rate control, remaining packetizer breadth,
 allocation budgets, and oracle evidence land.
+The encoder bitstream-writer residual work is still deliberately bounded, but
+the CAVLC single-level and single-level-plus-trailing-ones residual writers now
+round-trip both short and decoder-supported prefix-14/prefix-15 first-level
+codes before broader residual macroblock admission.
 
 Harness-first status:
 

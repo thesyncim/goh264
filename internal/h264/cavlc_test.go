@@ -335,6 +335,10 @@ func TestCAVLCWriteResidualSingleLevelRoundTripsThroughDecoder(t *testing.T) {
 		{name: "negative level two", block: [16]int32{0: -2}},
 		{name: "sparse positive level", block: [16]int32{4: 4}, predictedNnz: 2},
 		{name: "sparse negative level", block: [16]int32{7: -4}, predictedNnz: 4},
+		{name: "prefix fourteen positive level", block: [16]int32{0: 9}},
+		{name: "prefix fourteen negative level", block: [16]int32{0: -9}},
+		{name: "prefix fifteen positive level", block: [16]int32{0: 17}, predictedNnz: 3},
+		{name: "prefix fifteen negative level", block: [16]int32{0: -17}, predictedNnz: 7},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var bw BitWriter
@@ -376,8 +380,8 @@ func TestCAVLCWriteResidualSingleLevelRejectsUnsupportedBlocks(t *testing.T) {
 		{name: "trailing-one negative belongs to trailing-ones writer", block: [16]int32{0: -1}},
 		{name: "multiple nonzero coefficients", block: [16]int32{0: 2, 1: -2}},
 		{name: "mixed trailing one and level", block: [16]int32{0: 2, 2: 1}},
-		{name: "level beyond bounded short prefix", block: [16]int32{0: 9}},
-		{name: "negative level beyond bounded short prefix", block: [16]int32{0: -9}},
+		{name: "positive level beyond bounded prefix fifteen", block: [16]int32{0: 3000}},
+		{name: "negative level beyond bounded prefix fifteen", block: [16]int32{0: -3000}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var bw BitWriter
@@ -434,6 +438,17 @@ func TestCAVLCWriteResidualSingleLevelTrailingOnesRoundTripsThroughDecoder(t *te
 			predictedNnz: 8,
 			wantCoeff:    3,
 		},
+		{
+			name:      "prefix fourteen first level",
+			block:     [16]int32{0: 9, 1: 1},
+			wantCoeff: 2,
+		},
+		{
+			name:         "prefix fifteen first level",
+			block:        [16]int32{0: -17, 3: -1},
+			predictedNnz: 2,
+			wantCoeff:    2,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var bw BitWriter
@@ -473,7 +488,7 @@ func TestCAVLCWriteResidualSingleLevelTrailingOnesRejectsUnsupportedBlocks(t *te
 		{name: "trailing one before first level", block: [16]int32{0: 1, 2: 2}},
 		{name: "two non-trailing levels", block: [16]int32{0: 2, 1: 3, 2: 1}},
 		{name: "too many coefficients", block: [16]int32{0: 2, 1: 1, 2: -1, 3: 1}},
-		{name: "extended first level", block: [16]int32{0: 9, 1: 1}},
+		{name: "first level beyond bounded prefix fifteen", block: [16]int32{0: 3000, 1: 1}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var bw BitWriter
