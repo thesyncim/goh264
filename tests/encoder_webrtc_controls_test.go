@@ -638,6 +638,9 @@ func TestEncoderValidOutputReconfigurePreservesPendingIDR(t *testing.T) {
 			t.Fatalf("AVC output RTP packets = %d, want 0", len(second.RTPPackets))
 		}
 		assertEncoderNALTypes(t, second.NALUnits, []uint8{5})
+		stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+		stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
+		assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 	})
 
 	t.Run("rtp metadata", func(t *testing.T) {
@@ -683,6 +686,9 @@ func TestEncoderValidOutputReconfigurePreservesPendingIDR(t *testing.T) {
 		}
 		assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
 		assertRTPPacketMetadata(t, second.RTPPackets, payloadType, ssrc, uint16(len(first.RTPPackets)))
+		stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+		stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+		assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 	})
 }
 
@@ -1116,7 +1122,8 @@ func TestEncoderReconfigureSwitchesOutputFormatForForcedIDR(t *testing.T) {
 	}
 
 	firstFrame := patternedI420EncoderFrame(16, 16)
-	if _, err := enc.Encode(firstFrame); err != nil {
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
 		t.Fatalf("Encode first RTP frame: %v", err)
 	}
 
@@ -1142,6 +1149,9 @@ func TestEncoderReconfigureSwitchesOutputFormatForForcedIDR(t *testing.T) {
 		t.Fatalf("DecodeAnnexBFrames reconfigured IDR: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, secondFrame))
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, second.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 }
 
 func TestEncoderReconfigureSwitchesOutputFormatToAVCForForcedIDR(t *testing.T) {
@@ -1232,6 +1242,11 @@ func TestEncoderReconfigureSwitchesOutputFormatToAVCForForcedIDR(t *testing.T) {
 		t.Fatalf("DecodeConfiguredAVCFrames P-skip: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decodedThird, appendI420FrameBytes(nil, thirdFrame))
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, headers.AnnexB...)
+	stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
+	stream = append(stream, annexBFromEncoderAVCSample(t, third.Data)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1}, []uint32{0, 1, 2})
 }
 
 func TestEncoderReconfigureSwitchesOutputFormatFromAVCToRTPForForcedIDR(t *testing.T) {
@@ -1357,6 +1372,11 @@ func TestEncoderReconfigureSwitchesOutputFormatFromAVCToRTPForForcedIDR(t *testi
 		t.Fatalf("Decode RTP P-skip after AVC re-entry: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decodedThird, appendI420FrameBytes(nil, thirdFrame))
+	stream := append([]byte(nil), headers.AnnexB...)
+	stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, third.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1}, []uint32{0, 1, 2})
 }
 
 func TestEncoderReconfigureResolutionResetsReferenceAndQueuesIDR(t *testing.T) {
