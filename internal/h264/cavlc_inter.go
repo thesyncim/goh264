@@ -17,6 +17,30 @@ type cavlcInterMacroblockSyntax struct {
 
 type cavlcInterBDirectHook func(*cavlcInterMacroblockSyntax) error
 
+func writeCAVLCPSubMBType(bw *BitWriter, info PMBInfo) error {
+	if bw == nil {
+		return ErrInvalidData
+	}
+	for raw, tableInfo := range h264PSubMBTypeInfo {
+		if tableInfo == info {
+			return bw.WriteUEGolomb(uint32(raw))
+		}
+	}
+	return ErrInvalidData
+}
+
+func writeCAVLCBSubMBType(bw *BitWriter, info PMBInfo) error {
+	if bw == nil {
+		return ErrInvalidData
+	}
+	for raw, tableInfo := range h264BSubMBTypeInfo {
+		if tableInfo == info {
+			return bw.WriteUEGolomb(uint32(raw))
+		}
+	}
+	return ErrInvalidData
+}
+
 func (c *cavlcResidualContext) decodeCAVLCInterPMacroblock(gb *bitReader, pps *PPS, sps *SPS, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
 	var mb cavlcInterMacroblockSyntax
 	base, err := decodeCAVLCMBType(gb, PictureTypeP, PictureTypeP)

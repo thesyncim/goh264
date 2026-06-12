@@ -21,6 +21,75 @@ func TestReadCAVLCRefIndex(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCPSubMBTypeRoundTripsThroughReader(t *testing.T) {
+	for raw, info := range h264PSubMBTypeInfo {
+		var bw BitWriter
+		if err := writeCAVLCPSubMBType(&bw, info); err != nil {
+			t.Fatalf("write P sub mb type %d failed: %v", raw, err)
+		}
+
+		gb := newBitReader(bw.Bytes())
+		gotRaw, err := gb.readUEGolomb31()
+		if err != nil {
+			t.Fatalf("read P sub mb type %d failed: %v", raw, err)
+		}
+		if gotRaw != uint32(raw) {
+			t.Fatalf("P sub mb type raw = %d, want %d", gotRaw, raw)
+		}
+		if gotInfo := h264PSubMBTypeInfo[gotRaw]; gotInfo != info {
+			t.Fatalf("P sub mb type info = %#v, want %#v", gotInfo, info)
+		}
+		if gb.bitPos != bw.BitLen() {
+			t.Fatalf("P sub mb type consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+		}
+	}
+}
+
+func TestWriteCAVLCBSubMBTypeRoundTripsThroughReader(t *testing.T) {
+	for raw, info := range h264BSubMBTypeInfo {
+		var bw BitWriter
+		if err := writeCAVLCBSubMBType(&bw, info); err != nil {
+			t.Fatalf("write B sub mb type %d failed: %v", raw, err)
+		}
+
+		gb := newBitReader(bw.Bytes())
+		gotRaw, err := gb.readUEGolomb31()
+		if err != nil {
+			t.Fatalf("read B sub mb type %d failed: %v", raw, err)
+		}
+		if gotRaw != uint32(raw) {
+			t.Fatalf("B sub mb type raw = %d, want %d", gotRaw, raw)
+		}
+		if gotRaw >= uint32(len(h264BSubMBTypeInfo)) {
+			t.Fatalf("B sub mb type raw = %d outside table", gotRaw)
+		}
+		if gotInfo := h264BSubMBTypeInfo[gotRaw]; gotInfo != info {
+			t.Fatalf("B sub mb type info = %#v, want %#v", gotInfo, info)
+		}
+		if gb.bitPos != bw.BitLen() {
+			t.Fatalf("B sub mb type consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+		}
+	}
+}
+
+func TestWriteCAVLCSubMBTypeRejectsInvalid(t *testing.T) {
+	var bw BitWriter
+	if err := writeCAVLCPSubMBType(nil, h264PSubMBTypeInfo[0]); err != ErrInvalidData {
+		t.Fatalf("nil P sub mb writer err = %v, want ErrInvalidData", err)
+	}
+	if err := writeCAVLCBSubMBType(nil, h264BSubMBTypeInfo[0]); err != ErrInvalidData {
+		t.Fatalf("nil B sub mb writer err = %v, want ErrInvalidData", err)
+	}
+
+	invalid := PMBInfo{Type: MBTypeIntra4x4, PartitionCount: 9}
+	if err := writeCAVLCPSubMBType(&bw, invalid); err != ErrInvalidData {
+		t.Fatalf("invalid P sub mb type err = %v, want ErrInvalidData", err)
+	}
+	if err := writeCAVLCBSubMBType(&bw, invalid); err != ErrInvalidData {
+		t.Fatalf("invalid B sub mb type err = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestDecodeCAVLCInterP16x16MacroblockNoResidual(t *testing.T) {
 	pps := cavlcFlatQMulPPS()
 	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
