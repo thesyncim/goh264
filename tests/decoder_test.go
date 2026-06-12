@@ -924,18 +924,28 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 
 	damaged := append([]byte(nil), config3...)
 	damaged = damaged[:len(damaged)-1]
-	if _, err := ParseAVCC(damaged); err == nil {
-		t.Fatal("package ParseAVCC damaged config returned nil error")
+	for _, tt := range []struct {
+		name string
+		call func([]byte) (AVCConfig, error)
+	}{
+		{name: "ParseAVCC", call: ParseAVCC},
+		{name: "InspectAVCC", call: InspectAVCC},
+		{name: "InspectAVCDecoderConfigurationRecord", call: InspectAVCDecoderConfigurationRecord},
+		{name: "ParseAVCDecoderConfigurationRecord", call: ParseAVCDecoderConfigurationRecord},
+	} {
+		if _, err := tt.call(damaged); err == nil {
+			t.Fatalf("package %s damaged config returned nil error", tt.name)
+		}
 	}
 	got, err = dec.AVCConfig()
 	if err != nil {
-		t.Fatalf("AVCConfig after damaged package ParseAVCC: %v", err)
+		t.Fatalf("AVCConfig after damaged package avcC parser: %v", err)
 	}
 	if got != stateful {
-		t.Fatalf("AVCConfig after damaged package ParseAVCC = %+v, want original stateful config %+v", got, stateful)
+		t.Fatalf("AVCConfig after damaged package avcC parser = %+v, want original stateful config %+v", got, stateful)
 	}
 	if _, err := dec.DecodeConfiguredAVCFrames(samples4[1]); err != nil {
-		t.Fatalf("DecodeConfiguredAVCFrames after damaged package ParseAVCC: %v", err)
+		t.Fatalf("DecodeConfiguredAVCFrames after damaged package avcC parser: %v", err)
 	}
 }
 
