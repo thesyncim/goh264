@@ -3169,6 +3169,108 @@ func TestEncoderReconfigureDeblockModeControlsPFrameAdmission(t *testing.T) {
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 1, 1}, []uint32{0, 1, 2, 3})
 }
 
+func TestEncoderSetDeblockModeControlsLivePFrames(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	cfg.GOPSize = 10000
+	cfg.IDRInterval = 10000
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	frame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame dropped=%v idr=%v pending=%v, want completed IDR",
+			first.Dropped, first.IDR, enc.PendingIDR())
+	}
+
+	disabledFrame := frame
+	disabledFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	disabled, err := enc.Encode(disabledFrame)
+	if err != nil {
+		t.Fatalf("Encode disabled-deblock P-skip: %v", err)
+	}
+	if disabled.Dropped || disabled.IDR || disabled.KeyFrame || enc.PendingIDR() {
+		t.Fatalf("disabled-deblock frame dropped=%v idr=%v key=%v pending=%v, want P-skip",
+			disabled.Dropped, disabled.IDR, disabled.KeyFrame, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, disabled.NALUnits, []uint8{1})
+
+	if err := enc.SetDeblockMode(goh264.EncoderDeblockEnabled); err != nil {
+		t.Fatalf("SetDeblockMode enabled: %v", err)
+	}
+	if got := enc.Config().DeblockMode; got != goh264.EncoderDeblockEnabled {
+		t.Fatalf("deblock mode = %v, want enabled", got)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetDeblockMode enabled queued unexpected IDR")
+	}
+	enabledFrame := frame
+	enabledFrame.PTS = disabledFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	enabled, err := enc.Encode(enabledFrame)
+	if err != nil {
+		t.Fatalf("Encode enabled-deblock P-skip: %v", err)
+	}
+	if enabled.Dropped || enabled.IDR || enabled.KeyFrame || enc.PendingIDR() {
+		t.Fatalf("enabled-deblock frame dropped=%v idr=%v key=%v pending=%v, want P-skip",
+			enabled.Dropped, enabled.IDR, enabled.KeyFrame, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, enabled.NALUnits, []uint8{1})
+
+	if err := enc.SetDeblockMode(goh264.EncoderDeblockSliceBoundary); err != nil {
+		t.Fatalf("SetDeblockMode slice-boundary: %v", err)
+	}
+	if got := enc.Config().DeblockMode; got != goh264.EncoderDeblockSliceBoundary {
+		t.Fatalf("deblock mode = %v, want slice-boundary", got)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetDeblockMode slice-boundary queued unexpected IDR")
+	}
+	sliceBoundaryFrame := frame
+	sliceBoundaryFrame.PTS = enabledFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	sliceBoundary, err := enc.Encode(sliceBoundaryFrame)
+	if err != nil {
+		t.Fatalf("Encode slice-boundary-deblock P-skip: %v", err)
+	}
+	if sliceBoundary.Dropped || sliceBoundary.IDR || sliceBoundary.KeyFrame || enc.PendingIDR() {
+		t.Fatalf("slice-boundary-deblock frame dropped=%v idr=%v key=%v pending=%v, want P-skip",
+			sliceBoundary.Dropped, sliceBoundary.IDR, sliceBoundary.KeyFrame, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, sliceBoundary.NALUnits, []uint8{1})
+
+	stream := append([]byte(nil), first.Data...)
+	stream = append(stream, disabled.Data...)
+	stream = append(stream, enabled.Data...)
+	stream = append(stream, sliceBoundary.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 1, 1}, []uint32{0, 1, 2, 3})
+	assertEncoderVCLDeblocks(t, stream, []uint8{5, 1, 1, 1}, []int32{0, 0, 1, 2})
+
+	dec := goh264.NewDecoder()
+	for _, tt := range []struct {
+		name  string
+		data  []byte
+		frame goh264.EncoderFrame
+	}{
+		{name: "first", data: first.Data, frame: frame},
+		{name: "disabled", data: disabled.Data, frame: disabledFrame},
+		{name: "enabled", data: enabled.Data, frame: enabledFrame},
+		{name: "slice-boundary", data: sliceBoundary.Data, frame: sliceBoundaryFrame},
+	} {
+		decoded, err := dec.DecodeFrames(tt.data)
+		if err != nil {
+			t.Fatalf("Decode %s frame: %v", tt.name, err)
+		}
+		assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, tt.frame))
+	}
+}
+
 func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *testing.T) {
 	badVBV := -1
 	badInitialQP := 41
