@@ -2337,11 +2337,32 @@ func TestEncoderReconfigureRejectsInvalidOutputControlsWithoutMutation(t *testin
 
 func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutation(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPMaxPayloadSize = 32
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
 	enc, err := goh264.NewEncoder(cfg)
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
 
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 0
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first RTP IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR || first.RTPTime != 0 {
+		t.Fatalf("first RTP frame dropped/id/time = %v/%v/%d, want IDR time 0",
+			first.Dropped, first.IDR, first.RTPTime)
+	}
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+			firstPacketCount, callbackCalls)
+	}
 	before := enc.Config()
 	mode0 := goh264.EncoderRTPPacketizationSingleNAL
 	stapa := true
@@ -2358,6 +2379,10 @@ func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutatio
 	if enc.PendingIDR() {
 		t.Fatal("invalid packetization reconfigure queued an IDR")
 	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("invalid packetization reconfigure callbacks = %d, want still %d",
+			callbackCalls, firstPacketCount)
+	}
 
 	badPayloadType := uint8(128)
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
@@ -2372,19 +2397,29 @@ func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutatio
 	if enc.PendingIDR() {
 		t.Fatal("invalid payload type reconfigure queued an IDR")
 	}
-	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
-	if err != nil {
-		t.Fatalf("Encode post-invalid RTP IDR: %v", err)
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("invalid payload type reconfigure callbacks = %d, want still %d",
+			callbackCalls, firstPacketCount)
 	}
+
 	secondFrame := patternedI420EncoderFrame(16, 16)
 	secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
 	second, err := enc.Encode(secondFrame)
 	if err != nil {
 		t.Fatalf("Encode post-invalid RTP P-skip: %v", err)
 	}
+	if second.Dropped || second.IDR || second.RTPTime != before.RTPTimestampIncrement {
+		t.Fatalf("post-invalid RTP frame dropped/id/time = %v/%v/%d, want P-skip time %d",
+			second.Dropped, second.IDR, second.RTPTime, before.RTPTimestampIncrement)
+	}
+	assertRTPPacketMetadata(t, second.RTPPackets, before.RTPPayloadType, before.RTPSSRC, uint16(firstPacketCount))
 	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
 	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+	if callbackCalls != firstPacketCount+len(second.RTPPackets) {
+		t.Fatalf("post-invalid callbacks = %d, want %d",
+			callbackCalls, firstPacketCount+len(second.RTPPackets))
+	}
 }
 
 func TestEncoderKeyframeRequestsQueueIDR(t *testing.T) {
