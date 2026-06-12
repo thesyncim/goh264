@@ -1071,6 +1071,9 @@ func (e *Encoder) validateFrame(frame EncoderFrame) error {
 }
 
 func (e *Encoder) validatedFrameView(frame EncoderFrame) (encoderFrameView, error) {
+	if frame.Duration < 0 || uint64(frame.Duration) > uint64(^uint32(0)) {
+		return encoderFrameView{}, encoderInvalid("frame duration must fit RTP timestamp duration")
+	}
 	width := frame.Width
 	if width == 0 {
 		width = e.cfg.Width
