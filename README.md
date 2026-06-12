@@ -395,6 +395,7 @@ out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if out.Dropped {
 	// Realtime budget drop: no bytes or RTP packets were emitted.
 }
+accessUnit, err := out.AccessUnitData()
 nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
 ```
 

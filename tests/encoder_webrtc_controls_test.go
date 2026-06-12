@@ -8180,6 +8180,16 @@ func TestEncoderEncodeIntoAppendsAndIndexesAfterPrefix(t *testing.T) {
 			if len(out.Data) == len(prefix) {
 				t.Fatalf("EncodeInto output length = prefix length %d, want appended access unit", len(prefix))
 			}
+			accessUnit, err := out.AccessUnitData()
+			if err != nil {
+				t.Fatalf("AccessUnitData: %v", err)
+			}
+			if !bytes.Equal(accessUnit, out.Data[len(prefix):]) {
+				t.Fatalf("AccessUnitData = %x, want encoded suffix %x", accessUnit, out.Data[len(prefix):])
+			}
+			if cap(accessUnit) != len(accessUnit) {
+				t.Fatalf("AccessUnitData cap = %d, want clipped length %d", cap(accessUnit), len(accessUnit))
+			}
 			assertEncodedFrameNALUnitIndexesFrom(t, out, cfg.OutputFormat, len(prefix))
 		})
 	}
@@ -8230,11 +8240,14 @@ func TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData(t *testing.T) {
 
 func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 	valid := goh264.EncodedFrame{
-		Data:     []byte{0x67, 0x42, 0x00, 0x68},
-		NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 0, Size: 3}},
+		Data:     []byte{0, 0, 0, 1, 0x67, 0x42, 0x00, 0x68},
+		NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3}},
 	}
 	if got, err := valid.NALData(0); err != nil || !bytes.Equal(got, []byte{0x67, 0x42, 0x00}) || cap(got) != len(got) {
 		t.Fatalf("valid NALData = %x cap=%d err=%v, want clipped SPS bytes", got, cap(got), err)
+	}
+	if got, err := valid.AccessUnitData(); err != nil || !bytes.Equal(got, []byte{0, 0, 0, 1, 0x67, 0x42, 0x00}) || cap(got) != len(got) {
+		t.Fatalf("valid AccessUnitData = %x cap=%d err=%v, want clipped access-unit bytes", got, cap(got), err)
 	}
 	for _, tt := range []struct {
 		name  string
@@ -8244,13 +8257,30 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "negative index", frame: valid, index: -1},
 		{name: "past end", frame: valid, index: 1},
 		{name: "dropped", frame: goh264.EncodedFrame{Dropped: true, Data: valid.Data, NALUnits: valid.NALUnits}},
-		{name: "negative offset", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: -1, Size: 1}}}},
-		{name: "zero size", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 0}}}},
-		{name: "past data", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 2, Size: 3}}}},
+		{name: "negative offset", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: -1, Size: 1}}}, index: 0},
+		{name: "zero size", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 4}}}, index: 0},
+		{name: "past data", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 6, Size: 3}}}, index: 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if got, err := tt.frame.NALData(tt.index); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
 				t.Fatalf("NALData invalid = %x/%v, want nil ErrInvalidData", got, err)
+			}
+		})
+	}
+	for _, tt := range []struct {
+		name  string
+		frame goh264.EncodedFrame
+	}{
+		{name: "dropped", frame: goh264.EncodedFrame{Dropped: true, Data: valid.Data, NALUnits: valid.NALUnits}},
+		{name: "empty nal list", frame: goh264.EncodedFrame{Data: valid.Data}},
+		{name: "offset before prefix", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 3, Size: 1}}}},
+		{name: "bad prefix", frame: goh264.EncodedFrame{Data: []byte{9, 9, 9, 9, 0x67}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}},
+		{name: "zero size", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 4}}}},
+		{name: "past data", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 6, Size: 3}}}},
+	} {
+		t.Run("access-unit-"+tt.name, func(t *testing.T) {
+			if got, err := tt.frame.AccessUnitData(); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("AccessUnitData invalid = %x/%v, want nil ErrInvalidData", got, err)
 			}
 		})
 	}
@@ -11383,6 +11413,9 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("NALData"); !ok {
 		t.Fatal("EncodedFrame missing NALData convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AccessUnitData"); !ok {
+		t.Fatal("EncodedFrame missing AccessUnitData convenience method")
 	}
 
 	reconfigType := reflect.TypeOf(goh264.EncoderReconfigure{})

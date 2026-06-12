@@ -4,6 +4,7 @@ package goh264
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"time"
 
@@ -305,6 +306,44 @@ func (frame EncodedFrame) NALData(index int) ([]byte, error) {
 		return nil, ErrInvalidData
 	}
 	return frame.Data[unit.Offset:end:end], nil
+}
+
+// AccessUnitData returns the encoded access-unit bytes described by NALUnits.
+//
+// The returned slice is clipped to its length. For EncodeInto calls that append
+// after an existing dst prefix, AccessUnitData excludes the caller prefix.
+func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
+	if frame.Dropped || len(frame.NALUnits) == 0 {
+		return nil, ErrInvalidData
+	}
+	start := maxInt
+	end := 0
+	for _, unit := range frame.NALUnits {
+		if unit.Offset < 4 || unit.Size <= 0 {
+			return nil, ErrInvalidData
+		}
+		unitEnd, err := checkedAddInt(unit.Offset, unit.Size)
+		if err != nil || unitEnd > len(frame.Data) {
+			return nil, ErrInvalidData
+		}
+		prefixStart := unit.Offset - 4
+		prefix := frame.Data[prefixStart:unit.Offset]
+		annexBPrefix := prefix[0] == 0 && prefix[1] == 0 && prefix[2] == 0 && prefix[3] == 1
+		avcPrefix := binary.BigEndian.Uint32(prefix) == uint32(unit.Size)
+		if !annexBPrefix && !avcPrefix {
+			return nil, ErrInvalidData
+		}
+		if prefixStart < start {
+			start = prefixStart
+		}
+		if unitEnd > end {
+			end = unitEnd
+		}
+	}
+	if start >= end {
+		return nil, ErrInvalidData
+	}
+	return frame.Data[start:end:end], nil
 }
 
 // EncoderParameterSets contains caller-owned SPS/PPS helper surfaces.
