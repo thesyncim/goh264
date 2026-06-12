@@ -350,12 +350,13 @@ type Encoder struct {
 // DefaultEncoderConfig returns a realtime 8-bit I420 configuration template for
 // the requested dimensions.
 func DefaultEncoderConfig(width, height int) EncoderConfig {
+	strideY, strideCb, strideCr := defaultEncoderI420Strides(width)
 	return EncoderConfig{
 		Width:                 width,
 		Height:                height,
-		StrideY:               width,
-		StrideCb:              (width + 1) / 2,
-		StrideCr:              (width + 1) / 2,
+		StrideY:               strideY,
+		StrideCb:              strideCb,
+		StrideCr:              strideCr,
 		PixelFormat:           EncoderPixelFormatI420,
 		FrameRateNum:          30,
 		FrameRateDen:          1,
@@ -872,11 +873,12 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 		cfg.RTPTimestampIncrement = increment
 	}
 	if update.Width != 0 || update.Height != 0 {
+		strideY, strideCb, strideCr := defaultEncoderI420Strides(update.Width)
 		cfg.Width = update.Width
 		cfg.Height = update.Height
-		cfg.StrideY = update.Width
-		cfg.StrideCb = (update.Width + 1) / 2
-		cfg.StrideCr = (update.Width + 1) / 2
+		cfg.StrideY = strideY
+		cfg.StrideCb = strideCb
+		cfg.StrideCr = strideCr
 	}
 	if update.DeblockMode != 0 {
 		cfg.DeblockMode = update.DeblockMode
@@ -1073,15 +1075,29 @@ func (e *Encoder) validatedFrameView(frame EncoderFrame) (encoderFrameView, erro
 	if strideY < width {
 		return encoderFrameView{}, encoderInvalid("frame luma stride is smaller than width")
 	}
-	chromaWidth := (width + 1) / 2
-	chromaHeight := (height + 1) / 2
+	chromaWidth, chromaHeight, err := encoderI420ChromaDimensions(width, height)
+	if err != nil {
+		return encoderFrameView{}, err
+	}
 	if strideCb < chromaWidth || strideCr < chromaWidth {
 		return encoderFrameView{}, encoderInvalid("frame chroma stride is smaller than chroma width")
 	}
-	if len(frame.Y) < strideY*height {
+	lumaSamples, err := checkedMulInt(strideY, height)
+	if err != nil {
+		return encoderFrameView{}, encoderInvalid("frame luma plane size overflows")
+	}
+	cbSamples, err := checkedMulInt(strideCb, chromaHeight)
+	if err != nil {
+		return encoderFrameView{}, encoderInvalid("frame chroma plane size overflows")
+	}
+	crSamples, err := checkedMulInt(strideCr, chromaHeight)
+	if err != nil {
+		return encoderFrameView{}, encoderInvalid("frame chroma plane size overflows")
+	}
+	if len(frame.Y) < lumaSamples {
 		return encoderFrameView{}, encoderInvalid("frame luma plane is too small")
 	}
-	if len(frame.Cb) < strideCb*chromaHeight || len(frame.Cr) < strideCr*chromaHeight {
+	if len(frame.Cb) < cbSamples || len(frame.Cr) < crSamples {
 		return encoderFrameView{}, encoderInvalid("frame chroma plane is too small")
 	}
 	return encoderFrameView{
@@ -1588,6 +1604,44 @@ func encoderMacroblockCountChecked(width int, height int) (int, error) {
 		return 0, encoderInvalid("coded macroblock count overflows")
 	}
 	return count, nil
+}
+
+func encoderI420ChromaDimensions(width int, height int) (int, int, error) {
+	chromaWidthInput, err := checkedAddInt(width, 1)
+	if err != nil {
+		return 0, 0, encoderInvalid("I420 chroma width overflows")
+	}
+	chromaHeightInput, err := checkedAddInt(height, 1)
+	if err != nil {
+		return 0, 0, encoderInvalid("I420 chroma height overflows")
+	}
+	return chromaWidthInput / 2, chromaHeightInput / 2, nil
+}
+
+func defaultEncoderI420Strides(width int) (int, int, int) {
+	chromaWidthInput, err := checkedAddInt(width, 1)
+	if err != nil {
+		return width, 0, 0
+	}
+	chromaStride := chromaWidthInput / 2
+	return width, chromaStride, chromaStride
+}
+
+func validateEncoderPlaneGeometry(width int, height int, strideY int, strideCb int, strideCr int) error {
+	_, chromaHeight, err := encoderI420ChromaDimensions(width, height)
+	if err != nil {
+		return err
+	}
+	if _, err := checkedMulInt(strideY, height); err != nil {
+		return encoderInvalid("configured luma plane size overflows")
+	}
+	if _, err := checkedMulInt(strideCb, chromaHeight); err != nil {
+		return encoderInvalid("configured chroma plane size overflows")
+	}
+	if _, err := checkedMulInt(strideCr, chromaHeight); err != nil {
+		return encoderInvalid("configured chroma plane size overflows")
+	}
+	return nil
 }
 
 func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []encoderRawNAL) ([]byte, []EncoderNALUnit, error) {
@@ -2158,6 +2212,9 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	}
 	if cfg.StrideY < cfg.Width || cfg.StrideCb < cfg.Width/2 || cfg.StrideCr < cfg.Width/2 {
 		return cfg, encoderInvalid("strides must cover the configured planes")
+	}
+	if err := validateEncoderPlaneGeometry(cfg.Width, cfg.Height, cfg.StrideY, cfg.StrideCb, cfg.StrideCr); err != nil {
+		return cfg, err
 	}
 	if cfg.FrameRateNum <= 0 || cfg.FrameRateDen <= 0 {
 		return cfg, encoderInvalid("frame rate numerator and denominator must be positive")

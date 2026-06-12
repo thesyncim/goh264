@@ -92,6 +92,14 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 			c.FrameRateDen = 3
 			c.RTPTimestampIncrement = 1
 		}, want: goh264.ErrInvalidData},
+		{name: "configured luma plane size overflow", mutate: func(c *goh264.EncoderConfig) {
+			c.Width = maxIntForTest - 15
+			c.Height = 32
+			c.StrideY = c.Width
+			c.StrideCb = c.Width / 2
+			c.StrideCr = c.Width / 2
+			c.RTPTimestampIncrement = 1
+		}, want: goh264.ErrInvalidData},
 		{name: "undersized luma stride", mutate: func(c *goh264.EncoderConfig) { c.StrideY = 639 }, want: goh264.ErrInvalidData},
 		{name: "unknown pixel format", mutate: func(c *goh264.EncoderConfig) { c.PixelFormat = goh264.EncoderPixelFormat(99) }, want: goh264.ErrUnsupported},
 		{name: "main profile not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.Profile = goh264.EncoderProfileMain }, want: goh264.ErrUnsupported},
@@ -185,6 +193,24 @@ func TestEncoderSetFrameRateRejectsZeroTimestampIncrementWithoutMutation(t *test
 	}
 	if got := enc.Config(); got != before {
 		t.Fatalf("zero-increment SetFrameRate mutated config = %+v, want %+v", got, before)
+	}
+}
+
+func TestEncoderEncodeRejectsFramePlaneSizeOverflowWithoutPanic(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := validI420EncoderFrame(16, 16)
+	frame.Y = nil
+	frame.StrideY = maxIntForTest
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Encode panicked on overflowed frame plane geometry: %v", r)
+		}
+	}()
+	if _, err := enc.Encode(frame); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Encode overflowed frame plane geometry error = %v, want ErrInvalidData", err)
 	}
 }
 

@@ -207,7 +207,9 @@ proves returned `Encode` results remain stable after later encodes across
 access-unit bytes, NAL metadata, and RTP packets,
 verifies frame-shape validation returns
 empty output and leaves RTP sequence, callback, frame-number, timestamp, and
-reference state untouched before the next valid P-skip, and
+reference state untouched before the next valid P-skip, rejects overflowed
+configured and per-frame input-plane geometry without wrapped sizes or panics,
+and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses and VBV-backed `MaxBitrate` bucket
 misses, including credit consumption/refill across transmitted IDR/P-skip and
