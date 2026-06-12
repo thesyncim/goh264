@@ -705,6 +705,9 @@ func (h *H2645SEIUnregistered) decodeUnregisteredUserData(payload []byte) error 
 	if len(payload) < 16 {
 		return ErrInvalidData
 	}
+	if len(payload) == maxInt {
+		return ErrInvalidData
+	}
 	buf := make([]uint8, len(payload)+1)
 	copy(buf, payload)
 	h.Data = append(h.Data, buf[:len(payload)])

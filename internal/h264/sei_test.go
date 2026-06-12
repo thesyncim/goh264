@@ -176,6 +176,16 @@ func TestParseX264BuildMatchesFFmpegQuirk(t *testing.T) {
 	}
 }
 
+func TestDecodeUnregisteredUserDataRejectsOverflowedPayloadSize(t *testing.T) {
+	var sei H2645SEIUnregistered
+	if err := sei.decodeUnregisteredUserData(fakeRBSPBytesLen(maxInt)); err != ErrInvalidData {
+		t.Fatalf("decodeUnregisteredUserData overflow error = %v, want ErrInvalidData", err)
+	}
+	if len(sei.Data) != 0 {
+		t.Fatalf("overflowed payload appended %d entries, want 0", len(sei.Data))
+	}
+}
+
 func TestDecodeSEIBufferingPeriodMissingSPSIsNonFatalMasterError(t *testing.T) {
 	var spsList [maxSPSCount]*SPS
 	if _, err := DecodeSEI(buildSEIRBSP(seiTestMessage{typ: seiTypeBufferingPeriod, payload: seiBufferingPeriodPayload()}), &spsList); err != errParamSetNotFound {
