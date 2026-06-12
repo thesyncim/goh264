@@ -7435,6 +7435,11 @@ func TestEncoderRTPPacketCallbackCanBeClearedAndSkipsNonRTPOutput(t *testing.T) 
 			fourth.Dropped, fourth.IDR, enc.PendingIDR())
 	}
 	assertRTPPacketMetadata(t, fourth.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount+len(second.RTPPackets)+thirdPacketCount))
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, third.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, fourth.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1, 5}, []uint32{0, 1, 2, 3})
 	if firstCallbackCalls != thirdPacketCount {
 		t.Fatalf("replaced callback calls = %d, want still %d", firstCallbackCalls, thirdPacketCount)
 	}
