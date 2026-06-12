@@ -190,7 +190,8 @@ runtime rate, latency/slice, output/header/preset, RTP re-entry payload-size,
 and packetization updates leave config, queued-IDR state, RTP cadence, packets,
 and callbacks intact,
 proves accepted bitrate, frame-rate, RTP payload-size, and deblock setter or
-reconfigure updates preserve a queued IDR until the next successful IDR encode,
+reconfigure updates, including SPS/PPS cadence and recovery-point toggles,
+preserve a queued IDR until the next successful IDR encode,
 proves runtime resolution reset rejects stale-size frames without
 consuming the queued IDR before emitting/decoding a new-size IDR and resuming
 P-skip references at the new dimensions, proves

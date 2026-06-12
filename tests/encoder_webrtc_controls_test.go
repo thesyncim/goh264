@@ -499,14 +499,26 @@ func TestEncoderValidSetterPreservesPendingIDR(t *testing.T) {
 }
 
 func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
+	spsPPSBeforeIDR := false
+	recoveryPointSEI := false
 	tests := []struct {
-		name   string
-		update goh264.EncoderReconfigure
+		name     string
+		update   goh264.EncoderReconfigure
+		wantNALs []uint8
 	}{
-		{name: "bitrate", update: goh264.EncoderReconfigure{TargetBitrate: 800_000, MaxBitrate: 900_000}},
-		{name: "frame rate", update: goh264.EncoderReconfigure{FrameRateNum: 60, FrameRateDen: 1}},
-		{name: "payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 1000}},
-		{name: "deblock", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockDisabled}},
+		{name: "bitrate", update: goh264.EncoderReconfigure{TargetBitrate: 800_000, MaxBitrate: 900_000}, wantNALs: []uint8{7, 8, 5}},
+		{name: "frame rate", update: goh264.EncoderReconfigure{FrameRateNum: 60, FrameRateDen: 1}, wantNALs: []uint8{7, 8, 5}},
+		{name: "payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 1000}, wantNALs: []uint8{7, 8, 5}},
+		{name: "deblock", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockDisabled}, wantNALs: []uint8{7, 8, 5}},
+		{name: "sps pps cadence", update: goh264.EncoderReconfigure{
+			SPSPPSMode:       goh264.EncoderSPSPPSEveryIDR,
+			SPSPPSBeforeIDR:  &spsPPSBeforeIDR,
+			RecoveryPointSEI: &recoveryPointSEI,
+		}, wantNALs: []uint8{7, 8, 5}},
+		{name: "sps pps suppression", update: goh264.EncoderReconfigure{
+			SPSPPSBeforeIDR:  &spsPPSBeforeIDR,
+			RecoveryPointSEI: &recoveryPointSEI,
+		}, wantNALs: []uint8{5}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -543,7 +555,7 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 				t.Fatalf("%s post-valid-reconfigure frame idr=%v pending=%v, want delivered IDR",
 					tt.name, second.IDR, enc.PendingIDR())
 			}
-			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+			assertEncoderNALTypes(t, second.NALUnits, tt.wantNALs)
 		})
 	}
 }
