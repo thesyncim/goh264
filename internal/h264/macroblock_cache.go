@@ -139,11 +139,50 @@ func newMacroblockTables(mbWidth int, mbHeight int, chromaFormatIDC int) (*macro
 	if mbWidth <= 0 || mbHeight <= 0 || chromaFormatIDC < 0 || chromaFormatIDC > 3 {
 		return nil, ErrInvalidData
 	}
-	mbStride := mbWidth + 1
-	bigMBNum := mbStride * (mbHeight + 1)
-	mbArraySize := mbStride * mbHeight
-	rowMBNum := 2 * mbStride
-	bStride := mbWidth * 4
+	mbStride, err := checkedAddInt(mbWidth, 1)
+	if err != nil {
+		return nil, err
+	}
+	mbHeightPlus1, err := checkedAddInt(mbHeight, 1)
+	if err != nil {
+		return nil, err
+	}
+	bigMBNum, err := checkedMulInt(mbStride, mbHeightPlus1)
+	if err != nil {
+		return nil, err
+	}
+	mbArraySize, err := checkedMulInt(mbStride, mbHeight)
+	if err != nil {
+		return nil, err
+	}
+	rowMBNum, err := checkedMulInt(2, mbStride)
+	if err != nil {
+		return nil, err
+	}
+	bStride, err := checkedMulInt(mbWidth, 4)
+	if err != nil {
+		return nil, err
+	}
+	intraPredSize, err := checkedMulInt(rowMBNum, 8)
+	if err != nil {
+		return nil, err
+	}
+	directSize, err := checkedMulInt(bigMBNum, 4)
+	if err != nil {
+		return nil, err
+	}
+	refIndexSize, err := checkedMulInt(4, mbArraySize)
+	if err != nil {
+		return nil, err
+	}
+	motionValRows, err := checkedMulInt(bStride, mbHeight)
+	if err != nil {
+		return nil, err
+	}
+	motionValSize, err := checkedMulInt(motionValRows, 4)
+	if err != nil {
+		return nil, err
+	}
 	chromaYShift := 0
 	if chromaFormatIDC <= 1 {
 		chromaYShift = 1
@@ -161,19 +200,19 @@ func newMacroblockTables(mbWidth int, mbHeight int, chromaFormatIDC int) (*macro
 		CBPTable:        make([]int, bigMBNum),
 		QScaleTable:     make([]uint8, bigMBNum),
 		ChromaPred:      make([]int8, bigMBNum),
-		Intra4x4Pred:    make([]int8, rowMBNum*8),
+		Intra4x4Pred:    make([]int8, intraPredSize),
 		MacroblockTyp:   make([]uint32, bigMBNum),
 		SliceTable:      make([]uint16, bigMBNum),
-		DirectTable:     make([]uint8, bigMBNum*4),
+		DirectTable:     make([]uint8, directSize),
 		ListCounts:      make([]uint8, bigMBNum),
 	}
 	for i := range m.SliceTable {
 		m.SliceTable[i] = ^uint16(0)
 	}
 	for list := 0; list < 2; list++ {
-		m.RefIndex[list] = make([]int8, 4*mbArraySize)
-		m.MotionVal[list] = make([][2]int16, bStride*mbHeight*4)
-		m.MVDTable[list] = make([][2]uint8, rowMBNum*8)
+		m.RefIndex[list] = make([]int8, refIndexSize)
+		m.MotionVal[list] = make([][2]int16, motionValSize)
+		m.MVDTable[list] = make([][2]uint8, intraPredSize)
 	}
 	for y := 0; y < mbHeight; y++ {
 		for x := 0; x < mbWidth; x++ {

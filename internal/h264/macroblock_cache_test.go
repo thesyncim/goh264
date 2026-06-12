@@ -25,6 +25,28 @@ func TestMacroblockTablesUseFFmpegStrides(t *testing.T) {
 	}
 }
 
+func TestMacroblockTablesRejectOverflowedGeometry(t *testing.T) {
+	cases := []struct {
+		name     string
+		mbWidth  int
+		mbHeight int
+	}{
+		{name: "stride add", mbWidth: maxInt, mbHeight: 1},
+		{name: "height add", mbWidth: 1, mbHeight: maxInt},
+		{name: "macroblock table size", mbWidth: maxInt/2 + 1, mbHeight: 2},
+		{name: "row table size", mbWidth: maxInt/2 + 1, mbHeight: 1},
+		{name: "block stride size", mbWidth: maxInt/4 + 1, mbHeight: 1},
+		{name: "motion table size", mbWidth: maxInt/8 + 1, mbHeight: 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := newMacroblockTables(tc.mbWidth, tc.mbHeight, 1); err != ErrInvalidData {
+				t.Fatalf("newMacroblockTables(%d, %d, 1) error = %v, want ErrInvalidData", tc.mbWidth, tc.mbHeight, err)
+			}
+		})
+	}
+}
+
 func TestWriteBackNonZeroCount420And422(t *testing.T) {
 	var cache [h264NonZeroCountCacheSize]uint8
 	for i := range cache {
