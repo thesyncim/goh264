@@ -3214,6 +3214,19 @@ func TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion(t *testing.T)
 			assertEncoderNALTypes(t, second.NALUnits, tt.wantSecondNALs)
 			assertEncoderVCLFirstMBs(t, append(append([]byte(nil), headers.AnnexB...), second.Data...), tt.wantSecondNALs, tt.wantSecondFirst)
 
+			firstVCLCount := len(tt.wantFirstNALs) - 2
+			wantTypes := make([]uint8, 0, firstVCLCount+len(tt.wantSecondNALs))
+			wantFrameNums := make([]uint32, 0, firstVCLCount+len(tt.wantSecondNALs))
+			for range firstVCLCount {
+				wantTypes = append(wantTypes, 5)
+				wantFrameNums = append(wantFrameNums, 0)
+			}
+			for _, nalType := range tt.wantSecondNALs {
+				wantTypes = append(wantTypes, nalType)
+				wantFrameNums = append(wantFrameNums, 1)
+			}
+			assertEncoderVCLFrameNums(t, append(append([]byte(nil), first.Data...), second.Data...), wantTypes, wantFrameNums)
+
 			dec := goh264.NewDecoder()
 			decodedFirst, err := dec.DecodeFrames(first.Data)
 			if err != nil {
@@ -3331,8 +3344,23 @@ func TestEncoderEncodePerMacroblockExactP16x16NoResidualMotionForAnnexBAVCRTP(t 
 				t.Fatalf("decoded per-macroblock P frame key=%v recovery=%+v, want predictive non-recovery frame",
 					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
 			}
+			var stream []byte
+			switch tt.format {
+			case goh264.EncoderOutputAnnexB:
+				stream = append(append([]byte(nil), first.Data...), second.Data...)
+			case goh264.EncoderOutputAVC:
+				stream = append([]byte(nil), headers.AnnexB...)
+				stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
+				stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
+			case goh264.EncoderOutputRTP:
+				stream = append([]byte(nil), headers.AnnexB...)
+				stream = append(stream, annexBFromEncoderRTPPackets(t, first.RTPPackets)...)
+				stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			default:
+				t.Fatalf("unexpected format %v", tt.format)
+			}
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1, 1}, []uint32{0, 0, 1, 1})
 			if tt.format == goh264.EncoderOutputAnnexB {
-				stream := append(append([]byte(nil), first.Data...), second.Data...)
 				wantStream := appendI420FrameBytes(nil, firstFrame)
 				wantStream = appendI420FrameBytes(wantStream, secondFrame)
 				assertFFmpegRawVideoOracle(t, stream, wantStream)
@@ -3932,6 +3960,9 @@ func TestEncoderSliceCountSplitsIDRPSkipAndPIntraPCMAccessUnits(t *testing.T) {
 
 	stream := append(append([]byte(nil), first.Data...), second.Data...)
 	stream = append(stream, third.Data...)
+	assertEncoderVCLFrameNums(t, stream,
+		[]uint8{5, 5, 5, 1, 1, 1, 1, 1, 1},
+		[]uint32{0, 0, 0, 1, 1, 1, 2, 2, 2})
 	want := appendI420FrameBytes(nil, firstFrame)
 	want = appendI420FrameBytes(want, secondFrame)
 	want = appendI420FrameBytes(want, thirdFrame)
