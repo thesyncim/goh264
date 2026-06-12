@@ -1902,8 +1902,33 @@ func TestParseAVCDecoderConfigurationRecordCABAC(t *testing.T) {
 }
 
 func TestDecodeConfiguredAVCFramesRequiresConfiguration(t *testing.T) {
-	if _, err := NewDecoder().DecodeConfiguredAVCFrames([]byte{0, 0, 1, 0x65}); err != ErrInvalidData {
-		t.Fatalf("err = %v, want ErrInvalidData", err)
+	tests := []struct {
+		name string
+		call func(*Decoder) error
+	}{
+		{name: "single non-empty", call: func(dec *Decoder) error {
+			_, err := dec.DecodeConfiguredAVC([]byte{0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "single empty", call: func(dec *Decoder) error {
+			_, err := dec.DecodeConfiguredAVC(nil)
+			return err
+		}},
+		{name: "frames non-empty", call: func(dec *Decoder) error {
+			_, err := dec.DecodeConfiguredAVCFrames([]byte{0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "frames empty", call: func(dec *Decoder) error {
+			_, err := dec.DecodeConfiguredAVCFrames(nil)
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.call(NewDecoder()); err != ErrInvalidData {
+				t.Fatalf("%s err = %v, want ErrInvalidData", tt.name, err)
+			}
+		})
 	}
 }
 
