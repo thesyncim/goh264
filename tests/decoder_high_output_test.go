@@ -165,6 +165,69 @@ func TestFrameRawOutputRejectsNilFrame(t *testing.T) {
 	assertDecoderUint16BufferUnchanged(t, uint16Dst, uint16Before)
 }
 
+func TestFrameRawOutputClassifiesInvalidMetadata(t *testing.T) {
+	tests := []struct {
+		name  string
+		frame Frame
+		want  error
+	}{
+		{
+			name: "invalid-chroma-format",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 4,
+				BitDepthLuma: 8, BitDepthChroma: 8,
+			},
+			want: ErrInvalidData,
+		},
+		{
+			name: "nonpositive-luma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 0, BitDepthChroma: 8,
+			},
+			want: ErrInvalidData,
+		},
+		{
+			name: "unsupported-luma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 11, BitDepthChroma: 11,
+			},
+			want: ErrUnsupported,
+		},
+		{
+			name: "nonpositive-chroma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: 0,
+			},
+			want: ErrInvalidData,
+		},
+		{
+			name: "mismatched-chroma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: 10,
+			},
+			want: ErrUnsupported,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := tt.frame.BytesPerSample(); !errors.Is(err, tt.want) {
+				t.Fatalf("BytesPerSample error = %v, want %v", err, tt.want)
+			}
+			if _, err := tt.frame.RawPixelFormat(); !errors.Is(err, tt.want) {
+				t.Fatalf("RawPixelFormat error = %v, want %v", err, tt.want)
+			}
+			if _, err := tt.frame.RawYUVSize(); !errors.Is(err, tt.want) {
+				t.Fatalf("RawYUVSize error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestFrameAppendRawYUV16AndBytesLEPreserveSamplesAndCrop(t *testing.T) {
 	frame := Frame{
 		Width:           4,
