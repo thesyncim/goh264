@@ -673,6 +673,51 @@ func writeCAVLCResidualSixteenNonTrailingLevels(bw *BitWriter, block []int32, n 
 	return writeCAVLCResidualNonTrailingLevels(bw, block, n, scantable, maxCoeff, predictedNnz, 16, 16)
 }
 
+func writeCAVLCResidualBounded(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
+	if bw == nil || maxCoeff <= 0 || maxCoeff > 16 || len(scantable) < maxCoeff {
+		return 0, ErrInvalidData
+	}
+	var level [16]int32
+	totalCoeff := 0
+	for i := 0; i < maxCoeff; i++ {
+		pos := int(scantable[i])
+		if pos < 0 || n+pos < 0 || n+pos >= len(block) {
+			return 0, ErrInvalidData
+		}
+		v := block[n+pos]
+		if v == 0 {
+			continue
+		}
+		level[totalCoeff] = v
+		totalCoeff++
+	}
+	if totalCoeff == 0 {
+		return writeCAVLCResidualTrailingOnes(bw, block, n, scantable, maxCoeff, predictedNnz)
+	}
+
+	trailingOnes := 0
+	for i := totalCoeff - 1; i >= 0 && trailingOnes < 3; i-- {
+		if level[i] != 1 && level[i] != -1 {
+			break
+		}
+		trailingOnes++
+	}
+	nonTrailing := totalCoeff - trailingOnes
+	if nonTrailing == 0 {
+		return writeCAVLCResidualTrailingOnes(bw, block, n, scantable, maxCoeff, predictedNnz)
+	}
+	if nonTrailing == 1 {
+		if trailingOnes == 0 {
+			return writeCAVLCResidualSingleLevel(bw, block, n, scantable, maxCoeff, predictedNnz)
+		}
+		return writeCAVLCResidualSingleLevelTrailingOnes(bw, block, n, scantable, maxCoeff, predictedNnz)
+	}
+	if trailingOnes != 0 {
+		return 0, ErrInvalidData
+	}
+	return writeCAVLCResidualNonTrailingLevels(bw, block, n, scantable, maxCoeff, predictedNnz, nonTrailing, nonTrailing)
+}
+
 func writeCAVLCResidualSingleLevelTrailingOnes(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
 	if bw == nil || maxCoeff <= 0 || maxCoeff > 16 || len(scantable) < maxCoeff {
 		return 0, ErrInvalidData
