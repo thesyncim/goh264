@@ -244,6 +244,68 @@ func TestDecodeAVCDoesNotAliasCallerBuffer(t *testing.T) {
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeFramesAutoAnnexBDoesNotAliasCallerBuffer(t *testing.T) {
+	packet := decodeHexFixture(t, black16IPAnnexBHex)
+	frames, err := NewDecoder().DecodeFrames(packet)
+	if err != nil {
+		t.Fatalf("DecodeFrames Annex B: %v", err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("frames = %d, want 2", len(frames))
+	}
+	for i := range packet {
+		packet[i] = 0xff
+	}
+	assertFrameMD5Strings(t, frames, []string{
+		"8aaefe0adcea094cfb5161a060bab4e2",
+		"8aaefe0adcea094cfb5161a060bab4e2",
+	})
+}
+
+func TestDecodeFramesAutoAVCDoesNotAliasCallerBuffer(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	packet := annexBToAVC(t, data, 4)
+	frames, err := NewDecoder().DecodeFrames(packet)
+	if err != nil {
+		t.Fatalf("DecodeFrames AVC: %v", err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("frames = %d, want 2", len(frames))
+	}
+	for i := range packet {
+		packet[i] = 0xff
+	}
+	assertFrameMD5Strings(t, frames, []string{
+		"8aaefe0adcea094cfb5161a060bab4e2",
+		"8aaefe0adcea094cfb5161a060bab4e2",
+	})
+}
+
+func TestDecodeAutoAnnexBDoesNotAliasCallerBuffer(t *testing.T) {
+	packet := decodeHexFixture(t, black16AnnexBHex)
+	frame, err := NewDecoder().Decode(packet)
+	if err != nil {
+		t.Fatalf("Decode Annex B: %v", err)
+	}
+	for i := range packet {
+		packet[i] = 0xff
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodeAutoAVCDoesNotAliasCallerBuffer(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	packet := annexBToAVC(t, data, 4)
+	frame, err := NewDecoder().Decode(packet)
+	if err != nil {
+		t.Fatalf("Decode AVC: %v", err)
+	}
+	for i := range packet {
+		packet[i] = 0xff
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestParseAVCDecoderConfigurationRecordRejectPreservesStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
