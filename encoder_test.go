@@ -225,6 +225,38 @@ func TestEncoderNALBufferRejectsOverflow(t *testing.T) {
 	}
 }
 
+func TestEncoderParameterSetsFromH264ClonesHeaderSurfaces(t *testing.T) {
+	src := h264.EncoderParameterSets{
+		SPS:                           []byte{0x67, 0x42, 0x00},
+		PPS:                           []byte{0x68, 0xce},
+		AnnexB:                        []byte{0x00, 0x00, 0x01, 0x67, 0x00, 0x00, 0x01, 0x68},
+		AVCDecoderConfigurationRecord: []byte{0x01, 0x42, 0x00, 0x1f, 0xff},
+	}
+	got := encoderParameterSetsFromH264(src)
+	if !bytes.Equal(got.SPS, src.SPS) ||
+		!bytes.Equal(got.PPS, src.PPS) ||
+		!bytes.Equal(got.AnnexB, src.AnnexB) ||
+		!bytes.Equal(got.AVCDecoderConfigurationRecord, src.AVCDecoderConfigurationRecord) {
+		t.Fatalf("cloned parameter sets = %+v, want source bytes", got)
+	}
+
+	src.SPS[0] = 0xff
+	src.PPS[0] = 0xff
+	src.AnnexB[3] = 0xff
+	src.AVCDecoderConfigurationRecord[0] = 0xff
+	got.SPS[1] = 0xee
+	got.PPS[1] = 0xee
+	if got.SPS[0] != 0x67 ||
+		got.PPS[0] != 0x68 ||
+		got.AnnexB[3] != 0x67 ||
+		got.AVCDecoderConfigurationRecord[0] != 0x01 {
+		t.Fatalf("parameter-set clone aliases source after mutation: %+v", got)
+	}
+	if got.AnnexB[4] != 0x00 || got.AVCDecoderConfigurationRecord[1] != 0x42 {
+		t.Fatalf("raw parameter-set clone aliases another returned surface: %+v", got)
+	}
+}
+
 func TestEncoderParameterSetsFromH264RejectsOverflowedHeaderClones(t *testing.T) {
 	got := encoderParameterSetsFromH264(h264.EncoderParameterSets{
 		SPS:                           fakeEncoderBytesLen(maxInt/2 + 1),
@@ -235,6 +267,31 @@ func TestEncoderParameterSetsFromH264RejectsOverflowedHeaderClones(t *testing.T)
 	if got.SPS != nil || got.PPS != nil || got.AnnexB != nil || got.AVCDecoderConfigurationRecord != nil {
 		t.Fatalf("overflowed parameter-set clones = sps %d pps %d annexb %d avcc %d, want nils",
 			len(got.SPS), len(got.PPS), len(got.AnnexB), len(got.AVCDecoderConfigurationRecord))
+	}
+}
+
+func TestEncoderSEIFromH264ClonesSurfaces(t *testing.T) {
+	src := h264.EncoderSEIMessage{
+		NAL:    []byte{0x06, 0x05, 0x01, 0xaa},
+		AnnexB: []byte{0x00, 0x00, 0x01, 0x06, 0x05, 0x01, 0xaa},
+		AVC:    []byte{0x00, 0x00, 0x00, 0x04, 0x06, 0x05, 0x01, 0xaa},
+	}
+	got := encoderSEIFromH264(src)
+	if !bytes.Equal(got.NAL, src.NAL) ||
+		!bytes.Equal(got.AnnexB, src.AnnexB) ||
+		!bytes.Equal(got.AVC, src.AVC) {
+		t.Fatalf("cloned SEI = %+v, want source bytes", got)
+	}
+
+	src.NAL[0] = 0xff
+	src.AnnexB[3] = 0xff
+	src.AVC[4] = 0xff
+	got.NAL[1] = 0xee
+	if got.NAL[0] != 0x06 || got.AnnexB[3] != 0x06 || got.AVC[4] != 0x06 {
+		t.Fatalf("SEI clone aliases source after mutation: %+v", got)
+	}
+	if got.AnnexB[4] != 0x05 || got.AVC[5] != 0x05 {
+		t.Fatalf("SEI clone aliases another returned surface: %+v", got)
 	}
 }
 
