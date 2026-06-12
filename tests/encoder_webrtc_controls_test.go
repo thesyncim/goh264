@@ -7000,6 +7000,81 @@ func TestEncoderEncodeIntoInvalidFramePreservesPendingIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeIntoOverflowedDestinationPreservesPendingIDRAndLiveState(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 32
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+
+	frame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.EncodeInto(make([]byte, 0, 4096), frame)
+	if err != nil {
+		t.Fatalf("EncodeInto first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+			firstPacketCount, callbackCalls)
+	}
+	beforeCfg := enc.Config()
+
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR did not queue IDR before overflowed EncodeInto")
+	}
+	overflowDst := fakeDecoderRawBytesLen(maxIntForTest - 3)
+	forcedFrame := frame
+	forcedFrame.PTS = int64(cfg.RTPTimestampIncrement)
+	out, err := enc.EncodeInto(overflowDst, forcedFrame)
+	if !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("overflowed EncodeInto error = %v, want ErrInvalidData", err)
+	}
+	if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+		t.Fatalf("overflowed EncodeInto output = %+v, want empty output", out)
+	}
+	if got := enc.Config(); got != beforeCfg {
+		t.Fatalf("overflowed EncodeInto mutated config = %+v, want %+v", got, beforeCfg)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("overflowed EncodeInto consumed pending IDR")
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("overflowed EncodeInto callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+	}
+
+	recoveredFrame := frame
+	recoveredFrame.PTS = int64(cfg.RTPTimestampIncrement)
+	recoveredFrame.Y = append([]byte(nil), frame.Y...)
+	recoveredFrame.Y[0] ^= 0x55
+	recovered, err := enc.EncodeInto(make([]byte, 0, 4096), recoveredFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto after overflowed destination: %v", err)
+	}
+	if recovered.Dropped || !recovered.IDR || enc.PendingIDR() {
+		t.Fatalf("post-overflow output dropped=%v idr=%v pending=%v, want delivered IDR",
+			recovered.Dropped, recovered.IDR, enc.PendingIDR())
+	}
+	if recovered.RTPTime != uint32(recoveredFrame.PTS) {
+		t.Fatalf("post-overflow RTP time = %d, want %d", recovered.RTPTime, recoveredFrame.PTS)
+	}
+	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+		t.Fatalf("post-overflow callbacks = %d, want %d",
+			callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+	}
+}
+
 func assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t *testing.T, cfg goh264.EncoderConfig, label string, wantRTPPackets int, maxAllocs float64) {
 	t.Helper()
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
