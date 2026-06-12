@@ -650,6 +650,30 @@ func (cfg EncoderConfig) ValidateFrame(frame EncoderFrame) error {
 	return enc.validateFrame(frame)
 }
 
+// ParameterSets returns SPS/PPS headers for cfg after normalization.
+//
+// All returned byte slices are caller-owned. cfg is not modified.
+func (cfg EncoderConfig) ParameterSets() (EncoderParameterSets, error) {
+	normalized, err := normalizeEncoderConfig(cfg)
+	if err != nil {
+		return EncoderParameterSets{}, err
+	}
+	enc := Encoder{cfg: normalized}
+	return enc.ParameterSets()
+}
+
+// RecoveryPointSEIMessage returns a recovery-point SEI NAL for cfg after normalization.
+//
+// All returned byte slices are caller-owned. cfg is not modified.
+func (cfg EncoderConfig) RecoveryPointSEIMessage(recoveryFrameCount uint32) (EncoderSEI, error) {
+	normalized, err := normalizeEncoderConfig(cfg)
+	if err != nil {
+		return EncoderSEI{}, err
+	}
+	enc := Encoder{cfg: normalized}
+	return enc.RecoveryPointSEI(recoveryFrameCount)
+}
+
 // Reset clears encoder coding state while preserving configuration and callback.
 //
 // After Reset, the next successfully encoded frame starts a fresh sequence for

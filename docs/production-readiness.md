@@ -225,7 +225,8 @@ recovery-point SEI packaging, and the first IDR frame writer:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 guards public input/result/callback surfaces for integration-facing encoder
 structs, including `EncoderConfig.Normalize`, `EncoderConfig.I420Frame`,
-`EncoderConfig.ValidateFrame`, `EncoderFrame.Clone`, `Encoder.I420Frame`, `Encoder.ValidateFrame`,
+`EncoderConfig.ValidateFrame`, `EncoderConfig.ParameterSets`,
+`EncoderConfig.RecoveryPointSEIMessage`, `EncoderFrame.Clone`, `Encoder.I420Frame`, `Encoder.ValidateFrame`,
 `EncodedFrame.NALData`, and `EncodedFrame.AccessUnitData`, rejects invalid or
 not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and

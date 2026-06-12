@@ -230,6 +230,8 @@ cfg.TargetBitrate = 800_000
 cfg.MaxBitrate = 1_000_000
 cfg.SliceCount = 2
 cfg, err := cfg.Normalize()
+headers, err := cfg.ParameterSets()
+sei, err := cfg.RecoveryPointSEIMessage(0)
 
 enc, err := goh264.NewEncoder(cfg)
 if err != nil {
@@ -247,10 +249,10 @@ err = enc.Reconfigure(goh264.EncoderReconfigure{
 enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
 	// Optional per-packet WebRTC metadata hook.
 })
-headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
+headers, err = enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 avcc := headers.AVCC()
 headersCopy := headers.Clone()
-sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
+sei, err = enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
 seiCopy := sei.Clone()
 frame := enc.I420Frame(y, cb, cr, pts)
 err = cfg.ValidateFrame(frame)
@@ -269,12 +271,15 @@ err = enc.Reset()           // clear encoder coding state, keep config/callback
 ```
 
 `EncoderConfig.Normalize` exposes the exact validated configuration stored by
-`NewEncoder`. `EncoderConfig.ValidateFrame` and `Encoder.ValidateFrame` validate
-frame shape before bitstream work; invalid frames return empty output without
-advancing RTP sequence, callback, frame-number, timestamp, or reference state,
-then valid input resumes as the expected P-skip, or as the queued IDR when a
-prior IDR request was pending. `EncoderFrame.Clone` returns a deep-owned input
-snapshot for retry queues or async handoff.
+`NewEncoder`. `EncoderConfig.ParameterSets` and
+`EncoderConfig.RecoveryPointSEIMessage` generate the same caller-owned helper surfaces
+without constructing a live encoder. `EncoderConfig.ValidateFrame` and
+`Encoder.ValidateFrame` validate frame shape before bitstream work; invalid
+frames return empty output without advancing RTP sequence, callback,
+frame-number, timestamp, or reference state, then valid input resumes as the
+expected P-skip, or as the queued IDR when a prior IDR request was pending.
+`EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
+async handoff.
 Overflowed caller-owned `EncodeInto` destination growth is also rejected across
 Annex B, AVC, and RTP without consuming queued IDR state or advancing
 RTP/callback state, and the same hard-error path preserves P-frame reference

@@ -3221,6 +3221,67 @@ func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 	}
 }
 
+func TestEncoderConfigParameterSetsMatchEncoderHelper(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(638, 478)
+	cfg.FrameRateNum = 30000
+	cfg.FrameRateDen = 1001
+	cfg.InitialQP = 24
+	cfg.Color.SARNum = 1
+	cfg.Color.SARDen = 1
+	cfg.Color.FullRange = true
+	cfg.Color.ColorPrimaries = 1
+	cfg.Color.ColorTransfer = 1
+	cfg.Color.ColorMatrix = 1
+	cfg.RTPMaxPayloadSize = 0
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	originalCfg := cfg
+
+	fromConfig, err := cfg.ParameterSets()
+	if err != nil {
+		t.Fatalf("config ParameterSets: %v", err)
+	}
+	if cfg != originalCfg {
+		t.Fatalf("config ParameterSets mutated source config: %+v", cfg)
+	}
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	fromEncoder, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("encoder ParameterSets: %v", err)
+	}
+	if !reflect.DeepEqual(fromConfig, fromEncoder) {
+		t.Fatalf("config ParameterSets = %+v, want encoder result %+v", fromConfig, fromEncoder)
+	}
+
+	info, err := goh264.NewDecoder().ParseHeadersAnnexB(fromConfig.AnnexB)
+	if err != nil {
+		t.Fatalf("ParseHeadersAnnexB config headers: %v", err)
+	}
+	if info.Width != 638 || info.Height != 478 || info.NumUnitsInTick != 1001 || info.TimeScale != 60000 {
+		t.Fatalf("config header stream info = %+v", info)
+	}
+
+	fromConfig.SPS[0] ^= 0xff
+	fromConfig.AnnexB[0] ^= 0xff
+	again, err := cfg.ParameterSets()
+	if err != nil {
+		t.Fatalf("config ParameterSets after caller mutation: %v", err)
+	}
+	if !reflect.DeepEqual(again, fromEncoder) {
+		t.Fatalf("config ParameterSets aliases caller mutation: %+v, want %+v", again, fromEncoder)
+	}
+
+	invalidCfg := cfg
+	invalidCfg.Profile = goh264.EncoderProfileMain
+	if headers, err := invalidCfg.ParameterSets(); !errors.Is(err, goh264.ErrUnsupported) ||
+		len(headers.SPS) != 0 || len(headers.PPS) != 0 || len(headers.AnnexB) != 0 || len(headers.AVCDecoderConfigurationRecord) != 0 {
+		t.Fatalf("invalid config ParameterSets = %+v/%v, want empty ErrUnsupported", headers, err)
+	}
+}
+
 func TestEncoderParameterSetsReturnCallerOwnedSurfaces(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(638, 478)
 	cfg.FrameRateNum = 30000
@@ -3700,6 +3761,54 @@ func TestEncoderSEICloneDeepCopiesSurfaces(t *testing.T) {
 		bytes.Equal(clone.AnnexB, sei.AnnexB) ||
 		bytes.Equal(clone.AVC, sei.AVC) {
 		t.Fatal("mutating SEI source changed clone")
+	}
+}
+
+func TestEncoderConfigRecoveryPointSEIMatchesEncoderHelper(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPMaxPayloadSize = 0
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	originalCfg := cfg
+
+	fromConfig, err := cfg.RecoveryPointSEIMessage(4)
+	if err != nil {
+		t.Fatalf("config RecoveryPointSEIMessage: %v", err)
+	}
+	if cfg != originalCfg {
+		t.Fatalf("config RecoveryPointSEIMessage mutated source config: %+v", cfg)
+	}
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	fromEncoder, err := enc.RecoveryPointSEI(4)
+	if err != nil {
+		t.Fatalf("encoder RecoveryPointSEI: %v", err)
+	}
+	if !reflect.DeepEqual(fromConfig, fromEncoder) {
+		t.Fatalf("config RecoveryPointSEI = %+v, want encoder result %+v", fromConfig, fromEncoder)
+	}
+
+	fromConfig.NAL[0] ^= 0xff
+	fromConfig.AnnexB[0] ^= 0xff
+	again, err := cfg.RecoveryPointSEIMessage(4)
+	if err != nil {
+		t.Fatalf("config RecoveryPointSEIMessage after caller mutation: %v", err)
+	}
+	if !reflect.DeepEqual(again, fromEncoder) {
+		t.Fatalf("config RecoveryPointSEI aliases caller mutation: %+v, want %+v", again, fromEncoder)
+	}
+
+	invalidCfg := cfg
+	invalidCfg.BFrames = 1
+	if sei, err := invalidCfg.RecoveryPointSEIMessage(4); !errors.Is(err, goh264.ErrUnsupported) ||
+		len(sei.NAL) != 0 || len(sei.AnnexB) != 0 || len(sei.AVC) != 0 {
+		t.Fatalf("invalid config RecoveryPointSEIMessage = %+v/%v, want empty ErrUnsupported", sei, err)
+	}
+	if sei, err := cfg.RecoveryPointSEIMessage(1 << 16); !errors.Is(err, goh264.ErrInvalidData) ||
+		len(sei.NAL) != 0 || len(sei.AnnexB) != 0 || len(sei.AVC) != 0 {
+		t.Fatalf("invalid recovery count = %+v/%v, want empty ErrInvalidData", sei, err)
 	}
 }
 
@@ -11957,6 +12066,12 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderConfig{}).MethodByName("ValidateFrame"); !ok {
 		t.Fatal("EncoderConfig missing ValidateFrame convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderConfig{}).MethodByName("ParameterSets"); !ok {
+		t.Fatal("EncoderConfig missing ParameterSets convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderConfig{}).MethodByName("RecoveryPointSEIMessage"); !ok {
+		t.Fatal("EncoderConfig missing RecoveryPointSEIMessage convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderFrame{}).MethodByName("Clone"); !ok {
 		t.Fatal("EncoderFrame missing Clone convenience method")
