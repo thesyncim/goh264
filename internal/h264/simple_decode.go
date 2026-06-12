@@ -301,8 +301,10 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 			// FFmpeg keeps SEI parse failures non-fatal unless AV_EF_EXPLODE is set.
 			_ = sei.Decode(nal.RBSP, spsList)
 		case NALSlice, NALIDRSlice:
+			dpbSnapshot := dpb.snapshot()
 			returnSliceError := func(err error) ([]*DecodedFrame, error) {
 				st.resetPicture()
+				dpb.restore(dpbSnapshot)
 				return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
 			}
 			sh, payload, err := parseSliceHeaderWithPayload(nal, ppsList)

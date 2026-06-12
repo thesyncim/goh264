@@ -36,6 +36,24 @@ type simpleFrameDPB struct {
 	frameRecovered     uint8
 }
 
+type simpleFrameDPBSnapshot struct {
+	short              []*DecodedFrame
+	long               [simpleMaxLongRefs]*DecodedFrame
+	refMask            map[*DecodedFrame]int32
+	poc                simplePOCContext
+	delayed            []*DecodedFrame
+	hasBFrames         int
+	lastPOCs           [h264MaxDPBFrames]int32
+	lastPOCsInit       bool
+	nextOutputedPOC    int32
+	nextOutputedValid  bool
+	prevInterlaced     bool
+	prevInterlacedSet  bool
+	validRecoveryPoint bool
+	recoveryFrame      int32
+	frameRecovered     uint8
+}
+
 type simpleRefEntry struct {
 	frame            *DecodedFrame
 	picID            uint32
@@ -78,6 +96,69 @@ func (d *simpleFrameDPB) reset() {
 		d.recoveryFrame = -1
 		d.frameRecovered = 0
 	}
+}
+
+func (d *simpleFrameDPB) snapshot() simpleFrameDPBSnapshot {
+	if d == nil {
+		return simpleFrameDPBSnapshot{}
+	}
+	snap := simpleFrameDPBSnapshot{
+		short:              append([]*DecodedFrame(nil), d.short...),
+		long:               d.long,
+		poc:                d.poc,
+		delayed:            append([]*DecodedFrame(nil), d.delayed...),
+		hasBFrames:         d.hasBFrames,
+		lastPOCs:           d.lastPOCs,
+		lastPOCsInit:       d.lastPOCsInit,
+		nextOutputedPOC:    d.nextOutputedPOC,
+		nextOutputedValid:  d.nextOutputedValid,
+		prevInterlaced:     d.prevInterlaced,
+		prevInterlacedSet:  d.prevInterlacedSet,
+		validRecoveryPoint: d.validRecoveryPoint,
+		recoveryFrame:      d.recoveryFrame,
+		frameRecovered:     d.frameRecovered,
+	}
+	if len(d.refMask) != 0 {
+		snap.refMask = make(map[*DecodedFrame]int32, len(d.refMask))
+		for frame, mask := range d.refMask {
+			snap.refMask[frame] = mask
+		}
+	}
+	return snap
+}
+
+func (d *simpleFrameDPB) restore(snap simpleFrameDPBSnapshot) {
+	if d == nil {
+		return
+	}
+	d.short = append(d.short[:0], snap.short...)
+	if len(snap.short) == 0 {
+		d.short = nil
+	}
+	d.long = snap.long
+	if len(snap.refMask) == 0 {
+		d.refMask = nil
+	} else {
+		d.refMask = make(map[*DecodedFrame]int32, len(snap.refMask))
+		for frame, mask := range snap.refMask {
+			d.refMask[frame] = mask
+		}
+	}
+	d.poc = snap.poc
+	d.delayed = append(d.delayed[:0], snap.delayed...)
+	if len(snap.delayed) == 0 {
+		d.delayed = nil
+	}
+	d.hasBFrames = snap.hasBFrames
+	d.lastPOCs = snap.lastPOCs
+	d.lastPOCsInit = snap.lastPOCsInit
+	d.nextOutputedPOC = snap.nextOutputedPOC
+	d.nextOutputedValid = snap.nextOutputedValid
+	d.prevInterlaced = snap.prevInterlaced
+	d.prevInterlacedSet = snap.prevInterlacedSet
+	d.validRecoveryPoint = snap.validRecoveryPoint
+	d.recoveryFrame = snap.recoveryFrame
+	d.frameRecovered = snap.frameRecovered
 }
 
 func (d *simpleFrameDPB) previousInterlacedFrame() bool {

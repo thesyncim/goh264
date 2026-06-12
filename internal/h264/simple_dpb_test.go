@@ -1160,6 +1160,42 @@ func TestSimpleFrameDPBFrameNumGapsBootstrapMidStream(t *testing.T) {
 	}
 }
 
+func TestSimpleFrameDPBSnapshotRestoresFrameNumGaps(t *testing.T) {
+	sps := simpleDPBTestSPS(4)
+	sps.Log2MaxFrameNum = 8
+	kept := simpleDPBTestFrame(sps, 217)
+	dpb := simpleFrameDPB{
+		short: []*DecodedFrame{kept},
+	}
+	dpb.poc.prevFrameNum = 217
+	dpb.setFrameRefMask(kept, PictureFrame)
+	snap := dpb.snapshot()
+	sh := &SliceHeader{
+		NALType:          NALSlice,
+		SPS:              sps,
+		FrameNum:         222,
+		PictureStructure: PictureFrame,
+	}
+
+	if err := dpb.handleFrameNumGaps(sh, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := simpleDPBFrameNums(dpb.short), []uint32{221, 220, 219, 218}; !uint32SlicesEqual(got, want) {
+		t.Fatalf("gap refs before restore = %v, want %v", got, want)
+	}
+
+	dpb.restore(snap)
+	if got, want := simpleDPBFrameNums(dpb.short), []uint32{217}; !uint32SlicesEqual(got, want) {
+		t.Fatalf("gap refs after restore = %v, want %v", got, want)
+	}
+	if dpb.poc.prevFrameNum != 217 {
+		t.Fatalf("prevFrameNum after restore = %d, want 217", dpb.poc.prevFrameNum)
+	}
+	if len(dpb.refMask) != 1 || dpb.frameRefMask(kept) != PictureFrame {
+		t.Fatalf("refMask after restore = %+v", dpb.refMask)
+	}
+}
+
 func TestSimpleFrameDPBSlidingWindowCountsLongRefs(t *testing.T) {
 	sps := simpleDPBTestSPS(2)
 	long := simpleDPBTestFrame(sps, 10)

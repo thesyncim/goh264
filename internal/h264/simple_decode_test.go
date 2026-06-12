@@ -126,7 +126,9 @@ func TestSimpleDecoderResetsPartialPictureAfterDamagedSlice(t *testing.T) {
 	if frames, err := dec.DecodeNALUnits(accessUnits[0]); err != nil || len(frames) != 1 {
 		t.Fatalf("DecodeNALUnits first frames=%d err=%v, want one frame", len(frames), err)
 	}
-	damaged := simpleDecodeTestTruncateFirstVCL(t, accessUnits[1])
+	beforeRefs := append([]uint32(nil), simpleDPBFrameNums(dec.dpb.short)...)
+	gapped := simpleDecodeTestSetFirstVCLFrameNum(t, accessUnits[1], &dec.pps, 2)
+	damaged := simpleDecodeTestTruncateFirstVCL(t, gapped)
 	if frames, err := dec.DecodeNALUnits(damaged); err == nil {
 		t.Fatalf("damaged access unit decoded frames=%d, want error", len(frames))
 	}
@@ -134,6 +136,14 @@ func TestSimpleDecoderResetsPartialPictureAfterDamagedSlice(t *testing.T) {
 		dec.st.loopFilterSlices != nil || dec.st.loopFilterRefFrameIDs != nil || dec.st.haveSlice ||
 		dec.st.frameComplete || dec.st.fieldPairPending || dec.st.sliceNum != 0 {
 		t.Fatalf("damaged slice left partial picture state: %+v", dec.st)
+	}
+	if got := simpleDPBFrameNums(dec.dpb.short); !uint32SlicesEqual(got, beforeRefs) {
+		t.Fatalf("damaged gapped slice left DPB refs = %v, want %v", got, beforeRefs)
+	}
+	for _, frame := range dec.dpb.short {
+		if frame != nil && frame.invalidGap {
+			t.Fatalf("damaged gapped slice left invalid gap ref in %v", simpleDPBFrameNums(dec.dpb.short))
+		}
 	}
 
 	if frames, err := dec.DecodeNALUnits(accessUnits[1]); err != nil || len(frames) != 1 {
@@ -186,6 +196,46 @@ func simpleDecodeTestAccessUnits(t *testing.T, data []byte) [][]NALUnit {
 	return accessUnits
 }
 
+func simpleDecodeTestSetFirstVCLFrameNum(t *testing.T, nals []NALUnit, ppsList *[maxPPSCount]*PPS, frameNum uint32) []NALUnit {
+	t.Helper()
+	out := append([]NALUnit(nil), nals...)
+	for i, nal := range out {
+		if nal.Type != NALSlice && nal.Type != NALIDRSlice {
+			continue
+		}
+		if nal.Type == NALIDRSlice {
+			t.Fatal("first VCL was IDR, want non-IDR slice for frame-num gap test")
+		}
+		rbsp := append([]byte(nil), nal.RBSP...)
+		gb, err := newRBSPBitReader(rbsp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := gb.readUEGolombLong(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := gb.readUEGolomb31(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := gb.readUEGolombLong(); err != nil {
+			t.Fatal(err)
+		}
+		sh, err := ParseSliceHeader(nal, ppsList)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sh.SPS == nil || sh.SPS.Log2MaxFrameNum <= 0 {
+			t.Fatalf("invalid log2_max_frame_num: %+v", sh.SPS)
+		}
+		simpleDecodeTestWriteBits(rbsp, gb.bitPos, uint32(sh.SPS.Log2MaxFrameNum), frameNum)
+		nal.RBSP = rbsp
+		out[i] = nal
+		return out
+	}
+	t.Fatal("no VCL NAL found")
+	return nil
+}
+
 func simpleDecodeTestTruncateFirstVCL(t *testing.T, nals []NALUnit) []NALUnit {
 	t.Helper()
 	var out []NALUnit
@@ -216,6 +266,19 @@ func simpleDecodeTestTruncateFirstVCL(t *testing.T, nals []NALUnit) []NALUnit {
 		t.Fatal("no VCL NAL found")
 	}
 	return out
+}
+
+func simpleDecodeTestWriteBits(buf []byte, bitPos uint32, n uint32, v uint32) {
+	for i := uint32(0); i < n; i++ {
+		byteIndex := (bitPos + i) >> 3
+		bitOffset := 7 - ((bitPos + i) & 7)
+		mask := byte(1 << bitOffset)
+		if (v>>(n-1-i))&1 != 0 {
+			buf[byteIndex] |= mask
+		} else {
+			buf[byteIndex] &^= mask
+		}
+	}
 }
 
 func simpleDecodeTestFixturePath(t *testing.T, name string) string {
