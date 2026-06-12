@@ -363,6 +363,91 @@ func TestWriteCAVLCInterPBoundedMacroblockRejectsInvalid(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCInterPBoundedMacroblockRoundTripsPartitionedResidualThroughDecoder(t *testing.T) {
+	tests := []struct {
+		name     string
+		mb       cavlcInterMacroblockSyntax
+		refCount [2]uint32
+	}{
+		{
+			name: "p16x8",
+			mb: func() cavlcInterMacroblockSyntax {
+				mb := cavlcInterMacroblockSyntax{
+					cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType16x8 | MBTypeP0L0 | MBTypeP1L0, PartitionCount: 2, CBP: 1},
+					Ref:                   [2][4]int32{{1, 0}},
+				}
+				mb.MVD[0][0] = [2]int32{1, -1}
+				mb.MVD[0][8] = [2]int32{-2, 2}
+				return mb
+			}(),
+			refCount: [2]uint32{2, 0},
+		},
+		{
+			name: "p8x16",
+			mb: func() cavlcInterMacroblockSyntax {
+				mb := cavlcInterMacroblockSyntax{
+					cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType8x16 | MBTypeP0L0 | MBTypeP1L0, PartitionCount: 2, CBP: 1},
+					Ref:                   [2][4]int32{{0, 1}},
+				}
+				mb.MVD[0][0] = [2]int32{-1, 1}
+				mb.MVD[0][4] = [2]int32{2, -2}
+				return mb
+			}(),
+			refCount: [2]uint32{2, 0},
+		},
+		{
+			name: "p8x8",
+			mb: func() cavlcInterMacroblockSyntax {
+				mb := cavlcInterMacroblockSyntax{
+					cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType8x8 | MBTypeP0L0 | MBTypeP1L0, PartitionCount: 4, CBP: 1},
+					Ref:                   [2][4]int32{{0, 1, 0, 1}},
+				}
+				for i := 0; i < 4; i++ {
+					mb.SubMBType[i] = MBType16x16 | MBTypeP0L0
+					mb.SubPartitionCount[i] = 1
+					mb.MVD[0][4*i] = [2]int32{int32(i + 1), -int32(i)}
+				}
+				return mb
+			}(),
+			refCount: [2]uint32{2, 0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pps := cavlcFlatQMulPPS()
+			sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+			var writer cavlcResidualContext
+			writer.MB[0] = 1
+			fillCAVLCNonZero(&writer.NonZeroCountCache, int(h264Scan8[0]), 4, 4, 8, 9)
+
+			var bw BitWriter
+			cbpTable, err := writeCAVLCInterPBoundedMacroblock(&bw, &writer, pps, sps, tt.mb, tt.refCount, 20, 20)
+			if err != nil {
+				t.Fatalf("write bounded partitioned P macroblock failed: %v", err)
+			}
+			if cbpTable != 0x1001 {
+				t.Fatalf("writer cbpTable = %#x, want 0x1001", cbpTable)
+			}
+
+			var decoded cavlcResidualContext
+			fillCAVLCNonZero(&decoded.NonZeroCountCache, int(h264Scan8[0]), 4, 4, 8, 9)
+			gb := newBitReader(bw.Bytes())
+			got, err := decoded.decodeCAVLCInterPMacroblock(&gb, pps, sps, 20, tt.refCount, false)
+			if err != nil {
+				t.Fatalf("decode written bounded partitioned P macroblock failed: %v", err)
+			}
+			assertCAVLCInterPMacroblockSyntaxWithCBP(t, got, tt.mb, 1, 20, 0x1001)
+			if decoded.MB[0] != 1 {
+				t.Fatalf("decoded residual coeff = %d, want 1", decoded.MB[0])
+			}
+			if gb.bitPos != bw.BitLen() {
+				t.Fatalf("decoded consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+			}
+		})
+	}
+}
+
 func TestWriteCAVLCInterBNoResidualMacroblockRoundTripsThroughDecoder(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -636,6 +721,128 @@ func TestWriteCAVLCInterBBoundedMacroblockRejectsInvalid(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCInterBBoundedMacroblockRoundTripsPartitionedResidualThroughDecoder(t *testing.T) {
+	tests := []struct {
+		name     string
+		mb       cavlcInterMacroblockSyntax
+		want     cavlcInterMacroblockSyntax
+		refCount [2]uint32
+	}{
+		{
+			name: "b16x8",
+			mb: func() cavlcInterMacroblockSyntax {
+				mb := cavlcInterMacroblockSyntax{
+					cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1, PartitionCount: 2, CBP: 1},
+					Ref:                   [2][4]int32{{1}, {0, 1}},
+				}
+				mb.MVD[0][0] = [2]int32{1, -1}
+				mb.MVD[1][8] = [2]int32{-2, 2}
+				return mb
+			}(),
+			want: func() cavlcInterMacroblockSyntax {
+				mb := cavlcInterMacroblockSyntax{
+					cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType16x8 | MBTypeP0L0 | MBTypeP1L1, PartitionCount: 2, CBP: 1},
+					Ref:                   [2][4]int32{{1, -1, -1, -1}, {-1, 1, -1, -1}},
+				}
+				mb.MVD[0][0] = [2]int32{1, -1}
+				mb.MVD[1][8] = [2]int32{-2, 2}
+				return mb
+			}(),
+			refCount: [2]uint32{2, 2},
+		},
+		{
+			name: "b8x16",
+			mb: func() cavlcInterMacroblockSyntax {
+				mb := cavlcInterMacroblockSyntax{
+					cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType8x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, PartitionCount: 2, CBP: 1},
+					Ref:                   [2][4]int32{{0, 1}, {1, 0}},
+				}
+				mb.MVD[0][0] = [2]int32{1, 0}
+				mb.MVD[1][0] = [2]int32{-1, 0}
+				mb.MVD[0][4] = [2]int32{0, 1}
+				mb.MVD[1][4] = [2]int32{0, -1}
+				return mb
+			}(),
+			want: func() cavlcInterMacroblockSyntax {
+				mb := cavlcInterMacroblockSyntax{
+					cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType8x16 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, PartitionCount: 2, CBP: 1},
+					Ref:                   [2][4]int32{{0, 1, -1, -1}, {1, 0, -1, -1}},
+				}
+				mb.MVD[0][0] = [2]int32{1, 0}
+				mb.MVD[1][0] = [2]int32{-1, 0}
+				mb.MVD[0][4] = [2]int32{0, 1}
+				mb.MVD[1][4] = [2]int32{0, -1}
+				return mb
+			}(),
+			refCount: [2]uint32{2, 2},
+		},
+		{
+			name: "b8x8 explicit",
+			mb: func() cavlcInterMacroblockSyntax {
+				mb := cavlcInterMacroblockSyntax{
+					cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, PartitionCount: 4, CBP: 1},
+					Ref:                   [2][4]int32{{0, 1, 0, 1}, {1, 0, 1, 0}},
+				}
+				for i := 0; i < 4; i++ {
+					mb.SubMBType[i] = MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+					mb.SubPartitionCount[i] = 1
+					mb.MVD[0][4*i] = [2]int32{int32(i + 1), 0}
+					mb.MVD[1][4*i] = [2]int32{0, -int32(i + 1)}
+				}
+				return mb
+			}(),
+			want: func() cavlcInterMacroblockSyntax {
+				mb := cavlcInterMacroblockSyntax{
+					cavlcMacroblockSyntax: cavlcMacroblockSyntax{MBType: MBType8x8 | MBTypeP0L0 | MBTypeP0L1 | MBTypeP1L0 | MBTypeP1L1, PartitionCount: 4, CBP: 1},
+					Ref:                   [2][4]int32{{0, 1, 0, 1}, {1, 0, 1, 0}},
+				}
+				for i := 0; i < 4; i++ {
+					mb.SubMBType[i] = MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+					mb.SubPartitionCount[i] = 1
+					mb.MVD[0][4*i] = [2]int32{int32(i + 1), 0}
+					mb.MVD[1][4*i] = [2]int32{0, -int32(i + 1)}
+				}
+				return mb
+			}(),
+			refCount: [2]uint32{2, 2},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pps := cavlcFlatQMulPPS()
+			sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1, Direct8x8InferenceFlag: 1}
+			var writer cavlcResidualContext
+			writer.MB[0] = 1
+			fillCAVLCNonZero(&writer.NonZeroCountCache, int(h264Scan8[0]), 4, 4, 8, 9)
+
+			var bw BitWriter
+			cbpTable, err := writeCAVLCInterBBoundedMacroblock(&bw, &writer, pps, sps, tt.mb, tt.refCount, 20, 20)
+			if err != nil {
+				t.Fatalf("write bounded partitioned B macroblock failed: %v", err)
+			}
+			if cbpTable != 0x1001 {
+				t.Fatalf("writer cbpTable = %#x, want 0x1001", cbpTable)
+			}
+
+			var decoded cavlcResidualContext
+			fillCAVLCNonZero(&decoded.NonZeroCountCache, int(h264Scan8[0]), 4, 4, 8, 9)
+			gb := newBitReader(bw.Bytes())
+			got, err := decoded.decodeCAVLCInterBMacroblock(&gb, pps, sps, 20, tt.refCount, false)
+			if err != nil {
+				t.Fatalf("decode written bounded partitioned B macroblock failed: %v", err)
+			}
+			assertCAVLCInterBMacroblockSyntaxWithCBP(t, got, tt.want, 1, 20, 0x1001)
+			if decoded.MB[0] != 1 {
+				t.Fatalf("decoded residual coeff = %d, want 1", decoded.MB[0])
+			}
+			if gb.bitPos != bw.BitLen() {
+				t.Fatalf("decoded consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+			}
+		})
+	}
+}
+
 func assertCAVLCInterPMacroblockSyntax(t *testing.T, got cavlcInterMacroblockSyntax, want cavlcInterMacroblockSyntax) {
 	t.Helper()
 	if got.MBType != want.MBType || got.PartitionCount != want.PartitionCount || got.CBP != 0 || got.QScale != 24 {
@@ -654,11 +861,51 @@ func assertCAVLCInterPMacroblockSyntax(t *testing.T, got cavlcInterMacroblockSyn
 	}
 }
 
+func assertCAVLCInterPMacroblockSyntaxWithCBP(t *testing.T, got cavlcInterMacroblockSyntax, want cavlcInterMacroblockSyntax, wantCBP int, wantQScale int, wantCBPTable int) {
+	t.Helper()
+	if got.MBType != want.MBType || got.PartitionCount != want.PartitionCount ||
+		got.CBP != wantCBP || got.QScale != wantQScale || got.CBPTable != wantCBPTable {
+		t.Fatalf("macroblock = type %#x partitions %d cbp/qscale/cbpTable %#x/%d/%#x, want type %#x partitions %d cbp/qscale/cbpTable %#x/%d/%#x",
+			got.MBType, got.PartitionCount, got.CBP, got.QScale, got.CBPTable,
+			want.MBType, want.PartitionCount, wantCBP, wantQScale, wantCBPTable)
+	}
+	if got.SubMBType != want.SubMBType || got.SubPartitionCount != want.SubPartitionCount {
+		t.Fatalf("sub macroblocks = %#v/%#v, want %#v/%#v",
+			got.SubMBType, got.SubPartitionCount, want.SubMBType, want.SubPartitionCount)
+	}
+	if got.Ref[0] != want.Ref[0] {
+		t.Fatalf("refs = %v, want %v", got.Ref[0], want.Ref[0])
+	}
+	if got.MVD[0] != want.MVD[0] {
+		t.Fatalf("mvd = %v, want %v", got.MVD[0], want.MVD[0])
+	}
+}
+
 func assertCAVLCInterBMacroblockSyntax(t *testing.T, got cavlcInterMacroblockSyntax, want cavlcInterMacroblockSyntax) {
 	t.Helper()
 	if got.MBType != want.MBType || got.PartitionCount != want.PartitionCount || got.CBP != 0 || got.QScale != 24 {
 		t.Fatalf("macroblock = type %#x partitions %d cbp/qscale %d/%d, want type %#x partitions %d cbp/qscale 0/24",
 			got.MBType, got.PartitionCount, got.CBP, got.QScale, want.MBType, want.PartitionCount)
+	}
+	if got.SubMBType != want.SubMBType || got.SubPartitionCount != want.SubPartitionCount {
+		t.Fatalf("sub macroblocks = %#v/%#v, want %#v/%#v",
+			got.SubMBType, got.SubPartitionCount, want.SubMBType, want.SubPartitionCount)
+	}
+	if got.Ref != want.Ref {
+		t.Fatalf("refs = %v, want %v", got.Ref, want.Ref)
+	}
+	if got.MVD != want.MVD {
+		t.Fatalf("mvd = %v, want %v", got.MVD, want.MVD)
+	}
+}
+
+func assertCAVLCInterBMacroblockSyntaxWithCBP(t *testing.T, got cavlcInterMacroblockSyntax, want cavlcInterMacroblockSyntax, wantCBP int, wantQScale int, wantCBPTable int) {
+	t.Helper()
+	if got.MBType != want.MBType || got.PartitionCount != want.PartitionCount ||
+		got.CBP != wantCBP || got.QScale != wantQScale || got.CBPTable != wantCBPTable {
+		t.Fatalf("macroblock = type %#x partitions %d cbp/qscale/cbpTable %#x/%d/%#x, want type %#x partitions %d cbp/qscale/cbpTable %#x/%d/%#x",
+			got.MBType, got.PartitionCount, got.CBP, got.QScale, got.CBPTable,
+			want.MBType, want.PartitionCount, wantCBP, wantQScale, wantCBPTable)
 	}
 	if got.SubMBType != want.SubMBType || got.SubPartitionCount != want.SubPartitionCount {
 		t.Fatalf("sub macroblocks = %#v/%#v, want %#v/%#v",
