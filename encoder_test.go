@@ -262,6 +262,25 @@ func TestAppendEncoderSTAPARejectsOverflowedDestination(t *testing.T) {
 	}
 }
 
+func TestEncoderSTAPARejectsInvalidPayloadSizeWithoutMutation(t *testing.T) {
+	nals := []encoderRawNAL{
+		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
+		{raw: []byte{byte(h264.NALPPS)}, parameterSet: true},
+	}
+	if size, count, err := encoderSTAPASize(nals, 0); !errors.Is(err, ErrInvalidData) || size != 0 || count != 0 {
+		t.Fatalf("encoderSTAPASize invalid payload size=%d count=%d err=%v, want zero plan and ErrInvalidData", size, count, err)
+	}
+	dst := []byte{0xaa, 0xbb}
+	before := append([]byte(nil), dst...)
+	got, count, err := appendEncoderSTAPA(dst, nals, 0)
+	if !errors.Is(err, ErrInvalidData) || count != 0 || len(got) != len(dst) {
+		t.Fatalf("appendEncoderSTAPA invalid payload got len=%d count=%d err=%v, want original buffer, count 0, ErrInvalidData", len(got), count, err)
+	}
+	if !bytes.Equal(dst, before) {
+		t.Fatalf("appendEncoderSTAPA invalid payload mutated caller buffer: got %x want %x", dst, before)
+	}
+}
+
 func TestEncoderSTAPASizeRejectsMalformedParameterSets(t *testing.T) {
 	if _, _, err := encoderSTAPASize([]encoderRawNAL{
 		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},

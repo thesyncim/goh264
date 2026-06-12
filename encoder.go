@@ -2301,6 +2301,9 @@ func encoderRTPNALTypeIsParameterSet(typ uint8) bool {
 }
 
 func encoderSTAPASize(nals []encoderRawNAL, maxPayloadSize int) (int, int, error) {
+	if maxPayloadSize < 1 {
+		return 0, 0, encoderInvalid("STAP-A payload size must fit an aggregation header")
+	}
 	size := 1
 	count := 0
 	for _, nal := range nals {
