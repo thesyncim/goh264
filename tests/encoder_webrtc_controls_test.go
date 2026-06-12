@@ -2014,6 +2014,95 @@ func TestEncoderReconfigureSwitchesWebRTCPacketizationControls(t *testing.T) {
 	assertRTPPacketMetadata(t, third.RTPPackets, payloadType, ssrc, uint16(len(first.RTPPackets)+len(second.RTPPackets)))
 }
 
+func TestEncoderSetRTPPacketizationModeControlsLiveOutput(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPMaxPayloadSize = 1200
+	cfg.STAPA = true
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first STAP-A IDR: %v", err)
+	}
+	if len(first.RTPPackets) < 2 || callbackCalls != len(first.RTPPackets) {
+		t.Fatalf("first packets/callbacks = %d/%d, want STAP-A aggregate plus VCL callbacks",
+			len(first.RTPPackets), callbackCalls)
+	}
+	if got := first.RTPPackets[0].Payload[0] & 0x1f; got != 24 {
+		t.Fatalf("first packet payload type = %d, want STAP-A before setter", got)
+	}
+	assertSTAPANALTypes(t, first.RTPPackets[0].Payload, []uint8{7, 8})
+
+	if err := enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false); err != nil {
+		t.Fatalf("SetRTPPacketizationMode mode 0: %v", err)
+	}
+	if got := enc.Config(); got.RTPPacketizationMode != goh264.EncoderRTPPacketizationSingleNAL || got.STAPA {
+		t.Fatalf("packetization config = mode %v stapa %v, want mode 0 without STAP-A",
+			got.RTPPacketizationMode, got.STAPA)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetRTPPacketizationMode queued unexpected IDR")
+	}
+
+	secondFrame := firstFrame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	enc.ForceIDR()
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode forced mode-0 IDR: %v", err)
+	}
+	if !second.IDR || enc.PendingIDR() {
+		t.Fatalf("second output idr=%v pending=%v, want completed IDR", second.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertEncoderRTPMode0RawNALPackets(t, second, cfg.RTPMaxPayloadSize)
+	assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)))
+	if callbackCalls != len(first.RTPPackets)+len(second.RTPPackets) {
+		t.Fatalf("post-setter callbacks = %d, want %d",
+			callbackCalls, len(first.RTPPackets)+len(second.RTPPackets))
+	}
+
+	thirdFrame := secondFrame
+	thirdFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode mode-0 P-skip after setter: %v", err)
+	}
+	if third.IDR || third.KeyFrame {
+		t.Fatalf("third frame idr/key=%v/%v, want P-skip", third.IDR, third.KeyFrame)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{1})
+	assertEncoderRTPMode0RawNALPackets(t, third, cfg.RTPMaxPayloadSize)
+	assertRTPPacketMetadata(t, third.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(first.RTPPackets)+len(second.RTPPackets)))
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, third.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream,
+		[]uint8{5, 5, 1},
+		[]uint32{0, 1, 2},
+	)
+	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(stream)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames packetization setter stream: %v", err)
+	}
+	if len(decoded) != 3 {
+		t.Fatalf("decoded packetization setter frame count = %d, want 3", len(decoded))
+	}
+	for i, wantFrame := range []goh264.EncoderFrame{firstFrame, secondFrame, thirdFrame} {
+		assertDecodedEncoderFrameBytes(t, decoded[i:i+1], appendI420FrameBytes(nil, wantFrame))
+	}
+}
+
 func TestEncoderSetRTPMaxPayloadSizeRetargetsLivePacketization(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPMaxPayloadSize = 1200
