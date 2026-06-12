@@ -788,6 +788,16 @@ func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, e
 // ParseAVCDecoderConfigurationRecord parses an AVC decoder configuration record,
 // stores it for configured-AVC decode calls, and returns stream metadata.
 func (d *Decoder) ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
+	return d.ConfigureAVCDecoderConfigurationRecord(data)
+}
+
+// ConfigureAVCDecoderConfigurationRecord parses an AVC decoder configuration
+// record, stores it for configured-AVC decode calls, and returns stream
+// metadata.
+//
+// ConfigureAVCDecoderConfigurationRecord is the preferred mutating name.
+// ParseAVCDecoderConfigurationRecord remains as a compatibility alias.
+func (d *Decoder) ConfigureAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
 	if d == nil {
 		return AVCDecoderConfiguration{}, ErrInvalidData
 	}
@@ -822,7 +832,7 @@ func (d *Decoder) ParseAVCC(data []byte) (AVCConfig, error) {
 // ConfigureAVCC is the preferred mutating name. ParseAVCC remains as a
 // compatibility alias.
 func (d *Decoder) ConfigureAVCC(data []byte) (AVCConfig, error) {
-	return d.ParseAVCC(data)
+	return d.ConfigureAVCDecoderConfigurationRecord(data)
 }
 
 // AVCConfig returns the currently stored avcC/configured-AVC metadata.

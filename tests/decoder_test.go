@@ -297,6 +297,10 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 			_, err := dec.ParseAVCDecoderConfigurationRecord([]byte{1})
 			return err
 		}},
+		{name: "ConfigureAVCDecoderConfigurationRecord", call: func() error {
+			_, err := dec.ConfigureAVCDecoderConfigurationRecord([]byte{1})
+			return err
+		}},
 		{name: "ParseAVCC", call: func() error {
 			_, err := dec.ParseAVCC([]byte{1})
 			return err
@@ -936,21 +940,35 @@ func TestDecoderConfigureAVCCStoresConfiguration(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	cfg, err := dec.ConfigureAVCC(config)
+	cfg, err := dec.ConfigureAVCDecoderConfigurationRecord(config)
+	if err != nil {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+	}
+	if cfg.NALLengthSize != 4 || cfg.StreamInfo.Width != 16 || cfg.StreamInfo.Height != 16 {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord config = %+v", cfg)
+	}
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after ConfigureAVCDecoderConfigurationRecord: %v", err)
+	}
+	if got != cfg {
+		t.Fatalf("AVCConfig after ConfigureAVCDecoderConfigurationRecord = %+v, want %+v", got, cfg)
+	}
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after ConfigureAVCDecoderConfigurationRecord: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	dec = NewDecoder()
+	cfg, err = dec.ConfigureAVCC(config)
 	if err != nil {
 		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	if cfg.NALLengthSize != 4 || cfg.StreamInfo.Width != 16 || cfg.StreamInfo.Height != 16 {
 		t.Fatalf("ConfigureAVCC config = %+v", cfg)
 	}
-	got, err := dec.AVCConfig()
-	if err != nil {
-		t.Fatalf("AVCConfig after ConfigureAVCC: %v", err)
-	}
-	if got != cfg {
-		t.Fatalf("AVCConfig after ConfigureAVCC = %+v, want %+v", got, cfg)
-	}
-	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[0])
 	if err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames after ConfigureAVCC: %v", err)
 	}

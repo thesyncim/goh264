@@ -31,6 +31,9 @@ var (
 	InspectAVCC                        = goh264.InspectAVCC
 )
 
+var _ = (*Decoder).ConfigureAVCDecoderConfigurationRecord
+var _ = (*Decoder).ConfigureAVCC
+
 type (
 	Decoder                   = goh264.Decoder
 	StreamInfo                = goh264.StreamInfo
