@@ -101,8 +101,9 @@ mixed chroma/luma bit depths.
 
 ## Quick Start: Decode
 
-Decode an Annex B or automatically detected H.264 packet and append raw YUV
-bytes in FFmpeg-compatible plane order:
+For normal stream processing, keep one decoder and feed it access units with
+`DecodeFrames` or `DecodePacketFrames`. Empty calls flush delayed B-frame output.
+The raw-output helpers append pixels in FFmpeg-compatible plane order:
 
 ```go
 package main
@@ -157,26 +158,25 @@ uint16 output. `RawPixelFormat` returns names such as `yuv420p`,
 
 ## Decoder API
 
-Create a decoder with:
+The recommended decoder path is intentionally small:
 
 ```go
 dec := goh264.NewDecoder()
+frames, err := dec.DecodeFrames(packet)      // auto Annex B / configured AVC / avcC
+frames, err = dec.DecodePacketFrames(packet) // packet side data and NEW_EXTRADATA
+frames, err = dec.FlushDelayedFrames()       // end-of-stream delayed output
+err = dec.Reset()                            // clear decoder state
 ```
 
-Common decode entry points:
+Use the format-specific helpers when the packet format is already known:
 
 ```go
-frames, err := dec.DecodeFrames(data)                  // auto Annex B / AVC / config record
-frames, err := dec.DecodeAnnexBFrames(annexB)          // Annex B bytestream
-frames, err := dec.DecodeAVCFrames(packet, lengthSize) // length-prefixed NAL units
-frames, err := dec.DecodeConfiguredAVCFrames(packet)   // after parsing avcC
-frames, err := dec.DecodeConfiguredAVCFrames(nil)      // delayed configured-AVC output
-frames, err := dec.DecodeAVCCFrames(avcc, packet)      // parse avcC, decode packet
-frames, err := dec.DecodeAVCCFrames(avcc, nil)         // delayed avcC output
-frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
-frame, err := dec.FlushDelayedFrame()                  // single delayed B-frame
-cfg, err := dec.AVCConfig()                            // current configured-AVC metadata
-err = dec.Reset()                                      // clear decoder state
+frames, err := dec.DecodeAnnexBFrames(annexB)          // complete Annex B bytestream
+frames, err := dec.DecodeAVCFrames(packet, lengthSize) // complete length-prefixed AVC packet stream
+cfg, err := dec.ParseAVCC(avcc)                        // store avcC for configured AVC
+frames, err := dec.DecodeConfiguredAVCFrames(packet)   // stateful AVC after avcC
+frames, err := dec.DecodeAVCCFrames(avcc, packet)      // update avcC, decode, then drain
+cfg, err = dec.AVCConfig()                             // current configured-AVC metadata
 ```
 
 Single-frame helpers (`Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`,
@@ -184,14 +184,17 @@ Single-frame helpers (`Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`,
 `ErrUnsupported` when a packet produces zero or multiple frames. If a damaged
 packet produces exactly one valid frame before a later decode error, the helper
 returns that frame with the error. For stream processing, prefer `DecodeFrames` or
-`DecodePacketFrames`; they retain decoder reference state across packets and
+`DecodePacketFrames`; they retain decoder reference state across packets, auto
+detect Annex B versus configured AVC, store avcC records when encountered, and
 flush delayed output when called with empty data. `DecodeConfiguredAVCFrames`
-does the same after an AVC configuration record has been parsed. Annex B
-access-unit streams use the same retained reference and delayed B-frame output path.
-`DecodeAVCCFrames` updates the decoder's AVC
-configuration without resetting retained references, then drains delayed output
-for the supplied AVC packet. Passing an empty AVC packet with a configuration
-record drains delayed output without reporting an invalid packet.
+uses the stored avcC length size directly. `DecodeAnnexBFrames` and
+`DecodeAVCFrames` are complete-stream helpers for callers that already know the
+format and length-size.
+
+`DecodeAVCCFrames` updates the decoder's AVC configuration without resetting
+retained references, decodes the supplied AVC packet, and drains delayed output
+before returning. Passing an empty AVC packet with a configuration record updates
+the configuration and drains delayed output without reporting an invalid packet.
 
 Parse headers without decoding full frames:
 
