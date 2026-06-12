@@ -77,6 +77,21 @@ type EncoderI420P16x16NoResidualConfig struct {
 	NALLengthSize              int
 }
 
+type encoderI420P16x16ResidualConfig struct {
+	Width  int
+	Height int
+
+	FrameNum                   uint32
+	InitialQP                  int
+	NextQP                     int
+	DisableDeblockingFilterIDC uint32
+	FirstMBAddr                uint32
+	MacroblockCount            uint32
+	MVDX                       int32
+	MVDY                       int32
+	Coeff                      int32
+}
+
 type EncoderIDRSlice struct {
 	RBSP   []byte
 	NAL    []byte
@@ -354,6 +369,55 @@ func EncodeI420P16x16NoResidualSliceRBSP(cfg EncoderI420P16x16NoResidualConfig) 
 	return bw.Bytes(), nil
 }
 
+func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps *PPS, sps *SPS) ([]byte, error) {
+	if err := validateEncoderI420P16x16ResidualConfig(cfg); err != nil {
+		return nil, err
+	}
+	if pps == nil || sps == nil {
+		return nil, ErrInvalidData
+	}
+
+	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	rbspCap, err := encoderSliceRBSPCapacity(macroblockCount, 16)
+	if err != nil {
+		return nil, err
+	}
+	bw := NewBitWriter(make([]byte, 0, rbspCap))
+	if err := writeEncoderI420PSliceHeader(&bw, EncoderI420PSkipConfig{
+		Width:                      cfg.Width,
+		Height:                     cfg.Height,
+		FrameNum:                   cfg.FrameNum,
+		InitialQP:                  cfg.InitialQP,
+		DisableDeblockingFilterIDC: cfg.DisableDeblockingFilterIDC,
+		FirstMBAddr:                cfg.FirstMBAddr,
+		MacroblockCount:            cfg.MacroblockCount,
+	}); err != nil {
+		return nil, err
+	}
+
+	for i := 0; i < macroblockCount; i++ {
+		if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
+			return nil, err
+		}
+		mb := cavlcInterMacroblockSyntax{
+			cavlcMacroblockSyntax: cavlcMacroblockSyntax{
+				MBType:         MBType16x16 | MBTypeP0L0,
+				PartitionCount: 1,
+				CBP:            1,
+			},
+			Ref: [2][4]int32{{0}},
+		}
+		mb.MVD[0][0] = [2]int32{cfg.MVDX, cfg.MVDY}
+		var residual cavlcResidualContext
+		residual.MB[0] = cfg.Coeff
+		if _, err := writeCAVLCInterPBoundedMacroblock(&bw, &residual, pps, sps, mb, [2]uint32{1, 0}, cfg.InitialQP, cfg.NextQP); err != nil {
+			return nil, err
+		}
+	}
+	bw.WriteRBSPTrailingBits()
+	return bw.Bytes(), nil
+}
+
 func EncodeI420PSkipSliceRBSP(cfg EncoderI420PSkipConfig) ([]byte, error) {
 	if err := validateEncoderI420PSkipConfig(cfg); err != nil {
 		return nil, err
@@ -583,6 +647,25 @@ func validateEncoderI420P16x16NoResidualConfig(cfg EncoderI420P16x16NoResidualCo
 	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
 	if len(cfg.MVDs) > 0 && len(cfg.MVDs) != macroblockCount {
 		return ErrInvalidData
+	}
+	return nil
+}
+
+func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig) error {
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width&1 != 0 || cfg.Height&1 != 0 {
+		return ErrInvalidData
+	}
+	if cfg.FrameNum >= 1<<8 ||
+		cfg.InitialQP < 0 || cfg.InitialQP > 51 ||
+		cfg.NextQP < 0 || cfg.NextQP > 51 ||
+		cfg.DisableDeblockingFilterIDC > 2 {
+		return ErrInvalidData
+	}
+	if cfg.Coeff == 0 {
+		return ErrInvalidData
+	}
+	if err := validateEncoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount); err != nil {
+		return err
 	}
 	return nil
 }
