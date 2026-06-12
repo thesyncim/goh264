@@ -464,6 +464,16 @@ func (sets EncoderParameterSets) AVCC() []byte {
 	return sets.AVCDecoderConfigurationRecord
 }
 
+// Clone returns a deep-owned copy of the parameter-set helper surfaces.
+func (sets EncoderParameterSets) Clone() EncoderParameterSets {
+	return EncoderParameterSets{
+		SPS:                           cloneByteSlice(sets.SPS),
+		PPS:                           cloneByteSlice(sets.PPS),
+		AnnexB:                        cloneByteSlice(sets.AnnexB),
+		AVCDecoderConfigurationRecord: cloneByteSlice(sets.AVCDecoderConfigurationRecord),
+	}
+}
+
 // EncoderSEI contains caller-owned recovery-point SEI helper surfaces.
 //
 // Each byte slice returned by RecoveryPointSEI is isolated from later calls and
@@ -472,6 +482,15 @@ type EncoderSEI struct {
 	NAL    []byte
 	AnnexB []byte
 	AVC    []byte
+}
+
+// Clone returns a deep-owned copy of the SEI helper surfaces.
+func (sei EncoderSEI) Clone() EncoderSEI {
+	return EncoderSEI{
+		NAL:    cloneByteSlice(sei.NAL),
+		AnnexB: cloneByteSlice(sei.AnnexB),
+		AVC:    cloneByteSlice(sei.AVC),
+	}
 }
 
 // EncoderReconfigure contains optional runtime encoder updates.

@@ -3185,6 +3185,40 @@ func TestEncoderParameterSetsReturnCallerOwnedSurfaces(t *testing.T) {
 	}
 }
 
+func TestEncoderParameterSetsCloneDeepCopiesSurfaces(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(638, 478))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets: %v", err)
+	}
+	clone := headers.Clone()
+	if !bytes.Equal(clone.SPS, headers.SPS) ||
+		!bytes.Equal(clone.PPS, headers.PPS) ||
+		!bytes.Equal(clone.AnnexB, headers.AnnexB) ||
+		!bytes.Equal(clone.AVCDecoderConfigurationRecord, headers.AVCDecoderConfigurationRecord) {
+		t.Fatalf("Clone = %+v, want byte-identical copy of %+v", clone, headers)
+	}
+	if &clone.SPS[0] == &headers.SPS[0] ||
+		&clone.PPS[0] == &headers.PPS[0] ||
+		&clone.AnnexB[0] == &headers.AnnexB[0] ||
+		&clone.AVCDecoderConfigurationRecord[0] == &headers.AVCDecoderConfigurationRecord[0] {
+		t.Fatal("EncoderParameterSets.Clone aliases source storage")
+	}
+	headers.SPS[0] ^= 0x1f
+	headers.PPS[0] ^= 0x1f
+	headers.AnnexB[0] ^= 0xff
+	headers.AVCDecoderConfigurationRecord[0] ^= 0xff
+	if bytes.Equal(clone.SPS, headers.SPS) ||
+		bytes.Equal(clone.PPS, headers.PPS) ||
+		bytes.Equal(clone.AnnexB, headers.AnnexB) ||
+		bytes.Equal(clone.AVCDecoderConfigurationRecord, headers.AVCDecoderConfigurationRecord) {
+		t.Fatal("mutating parameter-set source changed clone")
+	}
+}
+
 func TestEncoderParameterSetsSurviveLaterParameterSetCall(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(638, 478)
 	cfg.FrameRateNum = 30000
@@ -3542,6 +3576,36 @@ func TestEncoderRecoveryPointSEIExposesWebRTCRecoverySignal(t *testing.T) {
 	}
 	if second.KeyFrame || second.SideData.RecoveryPoint == nil || second.SideData.RecoveryPoint.RecoveryFrameCount != 4 {
 		t.Fatalf("delayed recovery frame key=%t side=%+v, want non-key recovery count 4", second.KeyFrame, second.SideData.RecoveryPoint)
+	}
+}
+
+func TestEncoderSEICloneDeepCopiesSurfaces(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	sei, err := enc.RecoveryPointSEI(0)
+	if err != nil {
+		t.Fatalf("RecoveryPointSEI: %v", err)
+	}
+	clone := sei.Clone()
+	if !bytes.Equal(clone.NAL, sei.NAL) ||
+		!bytes.Equal(clone.AnnexB, sei.AnnexB) ||
+		!bytes.Equal(clone.AVC, sei.AVC) {
+		t.Fatalf("Clone = %+v, want byte-identical copy of %+v", clone, sei)
+	}
+	if &clone.NAL[0] == &sei.NAL[0] ||
+		&clone.AnnexB[0] == &sei.AnnexB[0] ||
+		&clone.AVC[0] == &sei.AVC[0] {
+		t.Fatal("EncoderSEI.Clone aliases source storage")
+	}
+	sei.NAL[0] ^= 0x1f
+	sei.AnnexB[0] ^= 0xff
+	sei.AVC[0] ^= 0xff
+	if bytes.Equal(clone.NAL, sei.NAL) ||
+		bytes.Equal(clone.AnnexB, sei.AnnexB) ||
+		bytes.Equal(clone.AVC, sei.AVC) {
+		t.Fatal("mutating SEI source changed clone")
 	}
 }
 
@@ -11799,6 +11863,12 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCC"); !ok {
 		t.Fatal("EncoderParameterSets missing AVCC convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("Clone"); !ok {
+		t.Fatal("EncoderParameterSets missing Clone convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderSEI{}).MethodByName("Clone"); !ok {
+		t.Fatal("EncoderSEI missing Clone convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("NALData"); !ok {
 		t.Fatal("EncodedFrame missing NALData convenience method")

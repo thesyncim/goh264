@@ -396,7 +396,9 @@ enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRT
 })
 headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 avcc := headers.AVCC()
+headersCopy := headers.Clone()
 sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
+seiCopy := sei.Clone()
 frame := enc.I420Frame(y, cb, cr, pts)
 err = enc.ValidateFrame(frame)
 out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
