@@ -2945,6 +2945,68 @@ func TestEncoderReconfigureUpdatesRateControlQPDropAndGOPControls(t *testing.T) 
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1, 5}, []uint32{0, 1, 2, 3})
 }
 
+func TestEncoderSetGOPControlsAutomaticIDRCadence(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	cfg.GOPSize = 10000
+	cfg.IDRInterval = 10000
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	if err := enc.SetGOP(2, 2); err != nil {
+		t.Fatalf("SetGOP: %v", err)
+	}
+	if got := enc.Config(); got.GOPSize != 2 || got.IDRInterval != 2 {
+		t.Fatalf("GOP controls = %d/%d, want 2/2", got.GOPSize, got.IDRInterval)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetGOP queued unexpected IDR")
+	}
+
+	secondFrame := firstFrame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode post-SetGOP P-skip: %v", err)
+	}
+	if second.Dropped || second.IDR || second.KeyFrame || enc.PendingIDR() {
+		t.Fatalf("post-SetGOP second frame dropped=%v idr=%v key=%v pending=%v, want delivered P-skip",
+			second.Dropped, second.IDR, second.KeyFrame, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+	thirdFrame := firstFrame
+	thirdFrame.PTS = secondFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	third, err := enc.Encode(thirdFrame)
+	if err != nil {
+		t.Fatalf("Encode automatic IDR after SetGOP: %v", err)
+	}
+	if third.Dropped || !third.IDR || enc.PendingIDR() {
+		t.Fatalf("post-SetGOP third frame dropped=%v idr=%v pending=%v, want automatic IDR",
+			third.Dropped, third.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{7, 8, 5})
+
+	stream := append([]byte(nil), first.Data...)
+	stream = append(stream, second.Data...)
+	stream = append(stream, third.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 5}, []uint32{0, 1, 2})
+}
+
 func TestEncoderReconfigureAcceptsExplicitZeroQP(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
