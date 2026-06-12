@@ -2114,7 +2114,7 @@ func filmGrainFromH264(src h264.H2645SEIFilmGrainCharacteristics) *FilmGrainChar
 }
 
 func cloneByteSlices(src [][]byte) [][]byte {
-	if len(src) == 0 {
+	if len(src) == 0 || len(src) > maxInt/32 {
 		return nil
 	}
 	out := make([][]byte, len(src))

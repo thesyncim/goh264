@@ -184,12 +184,47 @@ func TestFrameSideDataFromH264RejectsOverflowedS12MTimecodeClone(t *testing.T) {
 	}
 }
 
+func TestFrameSideDataFromH264ClonesUserDataUnregistered(t *testing.T) {
+	src := h264.DecodedFrameSideData{UserDataUnregistered: [][]byte{{0x01, 0x02}, {0x03}}}
+	got := frameSideDataFromH264(src, 0, 0)
+	if len(got.UserDataUnregistered) != 2 ||
+		len(got.UserDataUnregistered[0]) != 2 ||
+		got.UserDataUnregistered[0][0] != 0x01 ||
+		got.UserDataUnregistered[1][0] != 0x03 {
+		t.Fatalf("unregistered user data = %x", got.UserDataUnregistered)
+	}
+	src.UserDataUnregistered[0][0] = 0xff
+	if got.UserDataUnregistered[0][0] != 0x01 {
+		t.Fatalf("unregistered user data aliases source: %x", got.UserDataUnregistered)
+	}
+}
+
+func TestFrameSideDataFromH264RejectsOverflowedUserDataListClone(t *testing.T) {
+	src := h264.DecodedFrameSideData{UserDataUnregistered: fakeByteSlicesLen(maxInt/32 + 1)}
+	got := frameSideDataFromH264(src, 0, 0)
+	if got.UserDataUnregistered != nil {
+		t.Fatalf("overflowed unregistered user data list = len %d, want nil", len(got.UserDataUnregistered))
+	}
+}
+
 func fakeEncoderBytesLen(n int) []byte {
 	if n <= 0 {
 		return nil
 	}
 	var b byte
 	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&b)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeByteSlicesLen(n int) [][]byte {
+	if n <= 0 {
+		return nil
+	}
+	var b []byte
+	return *(*[][]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(&b)),
 		Len:  n,
 		Cap:  n,
