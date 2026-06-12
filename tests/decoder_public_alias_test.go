@@ -25,6 +25,9 @@ var (
 	ErrInvalidData = goh264.ErrInvalidData
 	ErrUnsupported = goh264.ErrUnsupported
 	NewDecoder     = goh264.NewDecoder
+
+	ParseAVCDecoderConfigurationRecord = goh264.ParseAVCDecoderConfigurationRecord
+	ParseAVCC                          = goh264.ParseAVCC
 )
 
 type (

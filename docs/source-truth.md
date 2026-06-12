@@ -108,6 +108,8 @@ public `Decoder.Reset` clearing configured-AVC metadata and delayed B-frame
 output before fresh Annex B or avcC reuse,
 compressed packet input ownership across configured AVC and Annex B delayed
 B-frame output,
+package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` metadata
+inspection without decoder-state mutation,
 malformed standalone AVC decoder configuration records preserving the last
 stored configured-AVC state,
 malformed AVC/Annex B `NEW_EXTRADATA` non-fatal packet-side-data guards,

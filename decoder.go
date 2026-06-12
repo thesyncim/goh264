@@ -58,6 +58,21 @@ type AVCDecoderConfiguration struct {
 // after parsing an avcC record.
 type AVCConfig = AVCDecoderConfiguration
 
+// ParseAVCDecoderConfigurationRecord parses an AVC decoder configuration record
+// without changing decoder state.
+func ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
+	cfg, err := h264.DecodeAVCDecoderConfigurationRecord(data)
+	if err != nil {
+		return AVCDecoderConfiguration{}, err
+	}
+	return avcDecoderConfigurationFromH264(cfg)
+}
+
+// ParseAVCC parses an avcC record without changing decoder state.
+func ParseAVCC(data []byte) (AVCConfig, error) {
+	return ParseAVCDecoderConfigurationRecord(data)
+}
+
 // PacketSideDataType identifies auxiliary packet metadata accepted by Packet.
 type PacketSideDataType uint8
 
@@ -773,6 +788,10 @@ func (d *Decoder) ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderCon
 		return AVCDecoderConfiguration{}, err
 	}
 	d.storeAVCDecoderConfiguration(cfg)
+	return avcDecoderConfigurationFromH264(cfg)
+}
+
+func avcDecoderConfigurationFromH264(cfg h264.AVCDecoderConfigurationRecord) (AVCDecoderConfiguration, error) {
 	sps := cfg.SPS[cfg.FirstSPSID]
 	if sps == nil {
 		return AVCDecoderConfiguration{}, ErrInvalidData

@@ -840,6 +840,62 @@ func TestAVCCConvenienceAPIsMatchConfigurationRecordBehavior(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config4, samples4 := annexBToAVCConfigAndSamples(t, data, 4)
+	config3, samples3 := annexBToAVCConfigAndSamples(t, data, 3)
+	if len(samples4) != 2 || len(samples3) != 2 {
+		t.Fatalf("samples = %d/%d, want 2/2", len(samples4), len(samples3))
+	}
+
+	dec := NewDecoder()
+	stateful, err := dec.ParseAVCC(config4)
+	if err != nil {
+		t.Fatalf("stateful ParseAVCC: %v", err)
+	}
+	stateless, err := ParseAVCC(config4)
+	if err != nil {
+		t.Fatalf("package ParseAVCC: %v", err)
+	}
+	if stateless != stateful {
+		t.Fatalf("package ParseAVCC = %+v, want stateful result %+v", stateless, stateful)
+	}
+	statelessRecord, err := ParseAVCDecoderConfigurationRecord(config3)
+	if err != nil {
+		t.Fatalf("package ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+	if statelessRecord.NALLengthSize != 3 || statelessRecord.StreamInfo.Width != 16 || statelessRecord.StreamInfo.Height != 16 {
+		t.Fatalf("package ParseAVCDecoderConfigurationRecord = %+v, want length-size 3 black16 config", statelessRecord)
+	}
+
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after package parsers: %v", err)
+	}
+	if got != stateful {
+		t.Fatalf("AVCConfig after package parsers = %+v, want original stateful config %+v", got, stateful)
+	}
+	if _, err := dec.DecodeConfiguredAVCFrames(samples4[0]); err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after package parsers: %v", err)
+	}
+
+	damaged := append([]byte(nil), config3...)
+	damaged = damaged[:len(damaged)-1]
+	if _, err := ParseAVCC(damaged); err == nil {
+		t.Fatal("package ParseAVCC damaged config returned nil error")
+	}
+	got, err = dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after damaged package ParseAVCC: %v", err)
+	}
+	if got != stateful {
+		t.Fatalf("AVCConfig after damaged package ParseAVCC = %+v, want original stateful config %+v", got, stateful)
+	}
+	if _, err := dec.DecodeConfiguredAVCFrames(samples4[1]); err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after damaged package ParseAVCC: %v", err)
+	}
+}
+
 func TestDecoderAVCConfigReportsStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config4, samples4 := annexBToAVCConfigAndSamples(t, data, 4)

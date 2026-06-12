@@ -1,52 +1,46 @@
 # goh264
 
-Pure-Go H.264 codec, decoder-first and source-shaped from FFmpeg `libavcodec`.
+Pure-Go H.264 codec workbench, decoder-first and source-shaped from FFmpeg
+`libavcodec`.
 
-`goh264` currently implements an active Go port of the FFmpeg `n8.0.1` H.264
-decoder path, pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`. Encoder
-support is now in scope for realtime/WebRTC use, tracked in
-[docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md). The encoder
-API currently exposes a tested realtime/WebRTC control contract and valid
-SPS/PPS parameter-set plus recovery-point SEI generation. The first admitted
-bitstream paths cover 8-bit I420 Constrained Baseline IDR IntraPCM, P-skip for
-identical references, exact macroblock-aligned P16x16 no-residual prediction for
-frame-wide and per-macroblock even integer-pel shifts up to 8 pixels plus
-odd-pixel luma shifts when chroma is constant, and changed-frame P IntraPCM recovery
-pictures with Annex B, AVC, configured multi-slice output, RTP packetization-mode 0
-single-NAL output, and RTP packetization-mode 1 output, proved by local decode,
-FFmpeg rawvideo decode, configured AVC and RTP exact-P16 decode,
-recovery-point side data, RTP mode-0 IDR/P-frame reassembly, RTP FU-A
-reassembly, STAP-A parameter-set aggregation tests, and encode-time `MaxFrameSize`/`SliceMaxBytes`
-budget guards with hard-error and dropped-frame paths plus runtime RTP/output,
-rate-control, QP, GOP/IDR, and deblock reconfiguration gates.
-The goal is not a loose rewrite: internal codec paths keep upstream state
-machines, syntax handling, math, and edge cases recognizable, then prove
-behavior against oracle vectors.
+This repository is an active port of the FFmpeg `n8.0.1` H.264 decoder path,
+pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`. The decoder is the mature
+side of the project: public Annex B, AVC, avcC, packet, raw-output, side-data,
+and delayed-output surfaces are covered by unit, corpus, FATE, and FFmpeg-oracle
+tests.
 
-- **Pure Go decoder path** - no cgo and no Go module dependencies.
-- **Realtime/WebRTC encoder scope** - tested encoder controls cover explicit
-  bitrate, latency, keyframe, packetization, profile/level, runtime
-  reconfiguration controls including rate-control/QP/GOP/deblock updates,
-  out-of-band SPS/PPS/avcC headers, and crop-aware SPS/encoded visible output
-  plus recovery-point SEI packaging and
-  `SliceCount`-backed multi-slice output plus frame/slice byte-budget reject
-  and realtime drop guards, with first IDR IntraPCM, P-skip, exact P16x16
-  no-residual, and P IntraPCM output paths.
-- **Annex B and AVC input surfaces** - automatic packet splitting, explicit
-  Annex B / length-prefixed AVC APIs, and AVC decoder configuration records.
-- **Raw frame output** - `Frame` exposes Y/Cb/Cr planes, crop, strides, VUI
-  fields, high-bit-depth planes, and raw YUV helpers.
-- **Harness-first parity** - public FFmpeg FATE and auxiliary H.264 vectors are
-  imported as an explicit inventory, executable where decoder-facing, with a
-  red ledger kept for any future known-failing rows instead of hiding them.
-  The `tests` package contains the all-at-once decoder TDD contract: every
-  imported public ref must be in the executable manifest or in the documented
-  exclusion list.
-- **Active port, not v1** - the public decoder-compliance matrix is green, with
-  broader unselected codec lanes still guarded.
-- **Release evidence over claims** - no production tag is planned until the
-  public vector gates, upstream audit, allocation/performance evidence, and
-  translation ledger all agree.
+The encoder is intentionally narrower. It exposes a tested realtime/WebRTC API
+and admits a guarded Constrained Baseline I420 subset today: IDR IntraPCM,
+identical-reference P-skip, bounded exact P16x16 no-residual prediction, changed
+P IntraPCM recovery frames, AVC/Annex B output, configured multi-slice output,
+and RTP packetization modes 0 and 1. Broader motion search, residual coding,
+rate-control behavior, and production performance evidence are still in flight.
+
+## What Works Today
+
+- **Decoder:** pure Go, no cgo, no module dependencies.
+- **Inputs:** Annex B bytestreams, length-prefixed AVC packets, avcC decoder
+  configuration records, packet `NEW_EXTRADATA`, and auto-detected packets.
+- **Output:** decoded Y/Cb/Cr planes, crop metadata, VUI/timing fields,
+  high-bit-depth planes, raw YUV byte/sample helpers, frame cloning, and
+  side-data cloning.
+- **State:** streaming decode keeps references and delayed B-frame output across
+  calls; empty decode calls flush delayed output.
+- **Encoder:** usable as an experimental realtime/WebRTC surface for the
+  admitted Baseline paths listed above.
+- **Verification:** the selected public-vector decoder matrix is green with no
+  known-red rows.
+
+## Not Yet Production
+
+No release tag should be treated as production. The remaining work is mainly
+quality hardening, API cleanup, allocation/performance evidence, and broader
+encoder coverage. The detailed status lives in:
+
+- [docs/production-readiness.md](docs/production-readiness.md)
+- [docs/source-truth.md](docs/source-truth.md)
+- [docs/translation-ledger.md](docs/translation-ledger.md)
+- [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md)
 
 ## Install
 
@@ -59,7 +53,7 @@ Requires Go 1.24 or newer.
 FFmpeg is not required to import the package. FFmpeg is used by the oracle,
 corpus-fetch, extraction, and benchmark scripts.
 
-## Status Snapshot (2026-06-05)
+## Status Snapshot
 
 Current public-vector matrix:
 
@@ -81,166 +75,19 @@ and is checked by the freshness/matrix gates when populated.
 contract that keeps the inventory, manifest, exclusions, and failure ledger in
 lockstep.
 
-Encoder status: `DefaultEncoderConfig`, `EncoderConfig.Normalize`,
-`NewEncoder`, `ParameterSets`, `RecoveryPointSEI`, `ValidateFrame`,
-`Encode`/`EncodeInto`, PLI/FIR/force-IDR,
-bitrate/framerate/payload/slice reconfiguration, runtime rate-control, QP,
-frame-drop, GOP/IDR, deblock, SPS/PPS cadence modes, runtime output-format and
-RTP packetization reconfiguration, including RTP-to-configured-AVC forced
-IDR/P-skip decode and configured-AVC-to-RTP re-entry, and the WebRTC control
-fields plus encoded-frame/NAL/RTP packet/callback result surfaces are public
-and covered by `tests/encoder_webrtc_controls_test.go`. Valid 8-bit I420
-constrained-baseline realtime configs are admitted as control state; SPS/PPS
-parameter sets, Annex B sequence headers, avcC records, crop metadata,
-in-band/out-of-band/every-IDR cadence, and recovery-point SEI Annex B/AVC NAL
-surfaces are generated and parser-proved, with caller mutation/append isolation
-and pending-IDR state preservation proved across repeated header and SEI helper
-calls plus accepted bitrate, frame-rate, RTP payload-size, and deblock setter or
-reconfigure updates, including SPS/PPS cadence and recovery-point toggles.
-`Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
-Annex B, AVC, configured `SliceCount` multi-slice VCL output, RTP
-packetization-mode 0 single-NAL packets, and RTP packetization-mode 1,
-including FU-A fragmentation and STAP-A parameter-set aggregation with callback
-metadata and packet isolation,
-payload-type/SSRC/sequence metadata, full RTP packet headers, marker-bit
-boundaries, clipped per-packet RTP payload views over packet data, RTP packet
-storage mutation-guarded as isolated from `EncodedFrame.Data`, including
-caller-backed `EncodeInto` output buffers, oversize
-mode-0 rejection, and optional RTP packet callbacks with
-packet index/count, frame timing, mode 0/1 IDR/P-frame single-NAL payload form,
-NAL type/count, FU-A start/end, parameter-set metadata, and callback packet
-storage isolated from returned RTP packets. RTP timestamps honor explicit frame PTS and advance
-zero-PTS frames from frame duration or `RTPTimestampIncrement`. `MaxFrameSize`
-and `SliceMaxBytes` are enforced before frame/reference/packet state advances:
-`FrameDropDisabled` preserves the hard-error path, while
-`FrameDropToBitrate` returns `EncodedFrame.Dropped` without emitted bytes or RTP
-packets for explicit byte-budget misses or VBV-backed `MaxBitrate` bucket
-misses, advances the RTP timestamp timeline, and has deterministic
-credit-consumption/refill proof across transmitted IDR/P-skip and dropped
-changed-P frames. Runtime frame-drop mode switches are proved to toggle the
-derived bitrate budget before the next frame. Runtime max-bitrate/VBV lowering
-is proved to reset stale credit before the next frame, and `SetBitrate`
-lowering is proved to reset stale frame-budget credit before the next frame.
-`SetFrameRate` changes are
-proved to reset frame-budget credit and apply the new RTP cadence across drop
-and recovery. `FrameDropLate` is proved to bypass the derived bitrate budget
-when the encode-time budget admits the frame. ConstantQP mode is proved to
-bypass the derived bitrate budget, including after runtime switches through CBR.
-Runtime reconfiguration now covers SPS/PPS cadence, Annex B/AVC/RTP output
-format, RTP packetization mode 0/1, STAP-A aggregation, payload type, SSRC, and
-custom RTP timestamp increments plus rate-control mode, VBV size,
-initial/min/max QP, frame-drop mode, GOP/IDR cadence, and deblock mode without
-mutating state on invalid updates, including invalid frame-rate,
-latency/slice, output/header/preset controls, and invalid RTP re-entry payload
-sizing. Runtime resolution reset is proved to reject stale-size frames without
-consuming the queued IDR, then
-emit/decode a new-size IDR and resume P-skip references at the new dimensions.
-`SetRTPMaxPayloadSize`
-is proved to retarget live RTP FU-A fragmentation before the next P-frame while
-preserving sequence and decode state, including invalid-update rollback.
-Runtime `RecoveryPointSEI` toggles are proved to add, suppress, and restore
-changed-P recovery side data without forcing IDR. Runtime SPS/PPS cadence
-switches are proved to control forced-IDR header emission across out-of-band,
-every-IDR, suppressed in-band, and restored in-band modes while the stream
-remains decodable. QP updates queue an IDR/PPS refresh so the emitted parameter
-sets match the active slice QP.
-A combined RTP/Annex B/RTP control-loop stress test now proves QP refresh, late
-drop recovery, packet metadata retargeting, paused RTP sequence/callback state
-while no RTP packets are emitted, and local decode after RTP re-entry.
-Identical frames after a decoded reference can use a guarded CAVLC P-skip slice
-across disabled, enabled, and slice-boundary deblock controls; a
-macroblock-aligned frame whose macroblocks exactly match bounded integer-pel
-shifts of the stored reference up to 8 pixels can use guarded CAVLC P16x16
-no-residual slices with Annex B local/FFmpeg, configured AVC, RTP reassembly,
-and mixed per-macroblock vector decode proof under disabled multi-macroblock
-deblock plus single-macroblock enabled/slice-boundary deblock. Odd-pixel luma
-shifts are admitted only when both 4:2:0 chroma planes
-are constant, with Annex B, configured AVC, RTP reassembly, and RTP mode-0
-single-NAL proof; patterned chroma is proved to fall back to the guarded P
-IntraPCM path across the same output surfaces. Changed frames can use a
-guarded CAVLC P IntraPCM slice in the same admitted deblock scope with
-recovery-point SEI emission when enabled, while forced keyframe requests still
-emit IDR; cropped I420 input emits SPS crop metadata and local/FFmpeg decode
-sees the cropped visible frame. Internal writer primitives cover raw
-bit/Exp-Golomb
-writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
-configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
-first Baseline IDR, P-skip, P16x16 no-residual, and P IntraPCM slice payloads.
-Internal P16x16 residual slice proofs now cover bounded per-macroblock
-luma CAVLC coefficient positions, multi-coefficient luma blocks, chroma-DC
-including multi-coefficient DC blocks, chroma-AC including multi-coefficient
-AC blocks, combined chroma-DC+AC CAVLC coefficients, and combined multi-plane
-residual slices including nonzero-range partial slices, plus bounded chroma-DC
-and chroma-AC coefficient positions, through syntax decode and frame macroblock
-table writeback,
-including nonzero `first_mb_in_slice` range isolation, per-macroblock QP
-deltas, and stateful residual nonzero-count context across consecutive
-macroblocks.
-Motion-search P prediction, residual CAVLC coding, rate-control feedback, and
-broader realtime allocation/performance evidence remain pending beyond the
-admitted IDR/P-frame Annex B/AVC/RTP canaries, which now include odd-pixel
-constant-chroma P16 and patterned-chroma P IntraPCM fallback allocation and
-benchmark rows across Annex B, AVC, RTP, and RTP mode 0, per-macroblock
-exact-P16 allocation and benchmark rows, 8-pixel exact-P16 edge-search allocation and
-benchmark rows, RTP P-IntraPCM, RTP STAP-A forced-IDR and changed-P benchmark rows, and
-RTP drop-path benchmark rows, and packetization-mode 0 IDR/P-frame allocation and benchmark rows including
-exact-P16 edge search. The admitted forced-IDR and P IntraPCM fallback hot
-paths build raw SPS/PPS and recovery-point SEI NALs directly for `EncodeInto`,
-with checked budgets of <=8 allocations for Annex B/AVC forced IDR, <=10 for
-RTP forced IDR/FU-A and STAP-A, <=6 for Annex B/AVC odd-patterned fallback, <=8 for RTP
-odd-patterned fallback, <=5 for Annex B/AVC per-macroblock exact P16x16, and
-<=7 for RTP per-macroblock exact P16x16, <=12 for Annex B/AVC changed
-P IntraPCM, <=16 for RTP changed P IntraPCM, and <=7 for Annex B/AVC/RTP
-`EncodeInto` max-frame-size and slice-max-bytes drops plus <=8 for Annex
-B/AVC/RTP late drops.
-
-Green coverage includes compact Baseline/Main/High conformance rows, selected
-FRext and high-bit-depth fixtures, High12/High14 CAVLC and CABAC B deblock
-rows including implicit and explicit weighted B, High12/High14 CAVLC/CABAC 4:2:2/4:4:4
-unweighted I/P plus CAVLC/CABAC luma-only/luma+chroma weighted-P no-deblock, frame-deblock,
-and slice-boundary rows, High10 4:2:2/4:4:4
-CAVLC/CABAC implicit and explicit weighted B frame and slice-boundary deblock plus weighted-P frame and slice-boundary rows, I/P/B slices, CAVLC and
-CABAC, weighted and direct motion paths including High12/High14 CAVLC/CABAC
-direct-sub residual, deblock modes, selected field/PAFF/MBAFF rows
-including High10 4:2:2/4:4:4 unweighted top/bottom field I/P/B guards for deblock modes 0/1/2,
-High10 4:2:2/4:4:4 weighted-B and weighted-P top/bottom field guards for deblock modes 0/1/2,
-internal High12/High14 4:2:2/4:4:4 weighted-B plus luma-weighted, luma+chroma-weighted, and source-normalized chroma-only weighted-P top/bottom field guards for deblock modes 0/1/2,
-internal High9 4:2:2/4:4:4 weighted-P frame-deblock modes 0/1 plus weighted-P, unweighted-B, implicit/explicit weighted-B, and I/P slice-boundary mode-2 validation and loop-filter guards,
-public High12/High14 4:2:0 frame-MBAFF CAVLC IntraPCM, P-skip, and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, and luma+chroma-residual rows plus P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows,
-reinit metadata rows, lossless High444
+Decoder coverage includes compact Baseline/Main/High rows, selected FRext and
+high-bit-depth fixtures, I/P/B slices, CAVLC and CABAC, weighted and direct
+motion paths, selected field/PAFF/MBAFF rows, lossless High444
 transform-bypass rows, configured AVC surfaces, container-extracted Annex B
-vectors, and SEI side-data surfaces.
-Public malformed-input safety coverage includes deterministic corrupt packet
-rows plus a bounded no-panic fuzz target over Annex B, AVC, configured AVC,
-auto-detect, and packet side-data decode surfaces.
-Stateful damaged-packet recovery guards prove configured AVC, AVC with a
-configuration record, packet `NEW_EXTRADATA`, and auto-detected Annex B
-valid-damaged-valid sequences return an error for the damaged packet without
-poisoning the next valid decode, and valid frames decoded before a later
-damaged slice in the same packet are returned alongside that error, including
-the sole valid frame on single-frame decode helpers and delayed B-frame prefix
-output from configuration-record one-shot decode. Packet
-`NEW_EXTRADATA` recovery also proves malformed AVC and Annex B extradata is
-non-fatal, does not replace the last good decoder configuration or reference
-state, and lets the current valid packet decode, including Annex B side data
-that contains a valid foreign SPS before a malformed PPS. Direct avcC parse,
-configuration-record decode, valid packet AVC and Annex B `NEW_EXTRADATA`, and
-auto-detected avcC admission all store decoder configuration state without
-retaining caller-owned side-data, configuration, or packet buffers after the
-decode call returns.
-Malformed in-band SPS/PPS NALs are skipped without
-replacing the last good parameter sets on configured AVC and mixed
-configured-AVC/Annex B decode paths.
+vectors, malformed packet recovery, side-data surfaces, and bounded public
+no-panic fuzz coverage.
 
-Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader high-bit-depth
-field/inter streams beyond the public High12/High14 frame-MBAFF IntraPCM/P-skip and field-coded/frame-coded P16x16/P16x8/P8x16/P8x8 no-residual, luma-residual, luma+chroma-residual, and P16x16/P16x8/P8x16/P8x8 mode-1/mode-2 deblock rows plus internal High10/High12/High14 field weighted-B/weighted-P guard matrices,
-broader damaged-slice error resilience, threading/SIMD and
-bulk allocation hardening, and exact libavcodec delayed-output behavior.
-Intentionally unsupported at the pinned FFmpeg parity boundary: FMO, which
-FFmpeg n8.0.1 compiles out and rejects while parsing PPS slice groups, and
-11/13-bit luma depths, which FFmpeg rejects at PPS admission. SPS admission also
-mirrors FFmpeg's unsupported boundaries for `chroma_format_idc > 3`, separate
-color planes, and mixed chroma/luma bit depths.
+Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader
+high-bit-depth field/inter streams, broader damaged-slice error resilience,
+threading/SIMD, bulk allocation hardening, and exact libavcodec delayed-output
+edge behavior. Intentionally unsupported at the pinned FFmpeg parity boundary:
+FMO, 11/13-bit luma depths, `chroma_format_idc > 3`, separate color planes, and
+mixed chroma/luma bit depths.
 
 ## Quick Start
 
@@ -314,8 +161,8 @@ frames, err := dec.DecodeAnnexBFrames(annexB)          // Annex B bytestream
 frames, err := dec.DecodeAVCFrames(packet, lengthSize) // length-prefixed NAL units
 frames, err := dec.DecodeConfiguredAVCFrames(packet)   // after parsing avcC
 frames, err := dec.DecodeConfiguredAVCFrames(nil)      // delayed configured-AVC output
-frames, err := dec.DecodeAVCCFrames(avcc, packet)
-frames, err := dec.DecodeAVCCFrames(avcc, nil) // delayed avcC output
+frames, err := dec.DecodeAVCCFrames(avcc, packet)      // parse avcC, decode packet
+frames, err := dec.DecodeAVCCFrames(avcc, nil)         // delayed avcC output
 frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
 frame, err := dec.FlushDelayedFrame()                  // single delayed B-frame
 cfg, err := dec.AVCConfig()                            // current configured-AVC metadata
@@ -342,12 +189,16 @@ Parse headers without decoding full frames:
 info, err := dec.ParseHeadersAnnexB(data)
 info, err := dec.ParseHeadersAVC(packet, nalLengthSize)
 cfg, err := dec.ParseAVCC(avcc)
+cfg, err := goh264.ParseAVCC(avcc) // stateless avcC inspection
 ```
 
 Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are transactional:
 partially parsed SPS/PPS state is not committed over a previous valid
 configuration, and delayed configured-AVC B-frame output remains available for
 flush after the rejected parse.
+Decoder `ParseAVCC` stores the configuration for later configured-AVC decode;
+package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` parse the
+same metadata without mutating decoder state.
 
 Packet side-data support mirrors FFmpeg-facing surfaces used by the port:
 

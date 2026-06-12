@@ -198,6 +198,10 @@ Direct avcC parse, configuration-record decode, valid packet AVC and Annex B
 `NEW_EXTRADATA`, and auto-detected avcC admission also prove the stored decoder
 configuration state does not retain caller-owned side-data, configuration, or
 packet buffers after return.
+Package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` provide the
+same avcC metadata inspection without touching decoder state, including damaged
+configuration rejection that leaves an existing decoder configuration and
+delayed-output path usable.
 Malformed standalone AVC decoder configuration records are also guarded: failed
 `ParseAVCDecoderConfigurationRecord` and auto-detected `DecodeFrames` config
 updates leave the last stored configuration usable for configured AVC decode.
