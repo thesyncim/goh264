@@ -1222,6 +1222,8 @@ func TestDecodePacketFramesIgnoresMalformedStructuredPacketSideData(t *testing.T
 
 func TestDecodePacketFramesStructuredPacketSideDataFirstEntryWins(t *testing.T) {
 	matrix := [9]int32{65536, 0, 0, 0, 65536, 0, 0, 0, 1 << 30}
+	primaries := [3][2]uint16{{30000, 35000}, {10000, 20000}, {15000, 25000}}
+	white := [2]uint16{15635, 16450}
 	frame, err := NewDecoder().DecodePacket(Packet{
 		Data: decodeHexFixture(t, black16AnnexBHex),
 		SideData: []PacketSideData{
@@ -1234,6 +1236,28 @@ func TestDecodePacketFramesStructuredPacketSideDataFirstEntryWins(t *testing.T) 
 			)},
 			{Type: PacketSideDataContentLightLevel, Data: []byte{0x03}},
 			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(1000, 250)},
+			{Type: PacketSideDataSpherical, Data: []byte{0x04}},
+			{Type: PacketSideDataSpherical, Data: decoderPacketSphericalSideData(
+				int32(SphericalProjectionEquirectangular), 1, 2, 3, 4, 5, 6, 7, 8,
+			)},
+			{Type: PacketSideDataAmbientViewingEnvironment, Data: []byte{0x05}},
+			{Type: PacketSideDataAmbientViewingEnvironment, Data: decoderPacketAmbientViewingSideData(12345, 25000, 16667)},
+			{Type: PacketSideDataMasteringDisplayMetadata, Data: []byte{0x06}},
+			{Type: PacketSideDataMasteringDisplayMetadata, Data: decoderPacketMasteringDisplaySideData(primaries, white, 10000000, 100, true, true)},
+			{Type: PacketSideData3DReferenceDisplays, Data: []byte{0x07}},
+			{Type: PacketSideData3DReferenceDisplays, Data: decoderPacketReferenceDisplaysSideData(
+				12, true, 9,
+				[]ReferenceDisplay{{
+					LeftViewID:                 3,
+					RightViewID:                4,
+					ExponentRefDisplayWidth:    2,
+					MantissaRefDisplayWidth:    33,
+					ExponentRefViewingDistance: 5,
+					MantissaRefViewingDistance: 44,
+					AdditionalShiftPresentFlag: true,
+					NumSampleShift:             -7,
+				}},
+			)},
 		},
 	})
 	if err != nil {
@@ -1242,7 +1266,11 @@ func TestDecodePacketFramesStructuredPacketSideDataFirstEntryWins(t *testing.T) 
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 	if frame.SideData.DisplayOrientation != nil ||
 		frame.SideData.Stereo3D != nil ||
-		frame.SideData.ContentLight != nil {
+		frame.SideData.ContentLight != nil ||
+		frame.SideData.Spherical != nil ||
+		frame.SideData.AmbientViewing != nil ||
+		frame.SideData.MasteringDisplay != nil ||
+		frame.SideData.ReferenceDisplays != nil {
 		t.Fatalf("later duplicate structured packet side data overrode malformed first entry: %+v", frame.SideData)
 	}
 }
