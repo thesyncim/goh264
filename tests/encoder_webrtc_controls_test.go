@@ -7363,6 +7363,9 @@ func TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs(t *testi
 			stream = append(stream, annexBFromEncodedFrame(t, first, cfg.OutputFormat)...)
 			stream = append(stream, annexBFromEncodedFrame(t, second, cfg.OutputFormat)...)
 			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+			wantStream := appendI420FrameBytes(nil, firstFrame)
+			wantStream = appendI420FrameBytes(wantStream, secondFrame)
+			assertFFmpegRawVideoOracle(t, stream, wantStream)
 		})
 	}
 }
