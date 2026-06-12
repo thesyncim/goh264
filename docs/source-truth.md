@@ -140,11 +140,12 @@ metadata, recovery-point SEI packaging, IDR IntraPCM Annex B/AVC frame
 generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
 bounded exact macroblock-aligned P16x16 no-residual prediction with
 8-pixel integer-pel search, including mixed per-macroblock vectors and
-odd-pixel luma motion only when both 4:2:0 chroma planes are constant,
+odd-pixel luma motion only with disabled deblock and constant 4:2:0 chroma,
 Annex B/configured AVC/RTP plus mode-0
 packetization proof for both admitted constant-chroma motion and patterned-chroma
 P IntraPCM fallback, and enabled/slice-boundary deblock proof including
-multi-macroblock uniform motion plus guarded mixed per-macroblock fallback,
+multi-macroblock uniform motion plus guarded mixed per-macroblock and odd-pixel
+fallback,
 changed-frame P IntraPCM
 recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 runtime resolution reset that rejects stale-size frames without consuming the

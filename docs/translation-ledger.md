@@ -76,8 +76,9 @@ malformed replacement avcC record is rejected before it overwrites the last good
 stored configured-AVC state.
 
 Current encoder evidence addendum: the odd-pixel P16x16 guard now has separate
-constant-chroma admission and patterned-chroma P IntraPCM fallback coverage for
-behavior plus direct VCL frame-number continuity across Annex B, AVC, and RTP;
+disabled-deblock constant-chroma admission and patterned-chroma or deblock
+P IntraPCM fallback coverage plus direct VCL frame-number continuity across
+Annex B, AVC, and RTP;
 changed-P IntraPCM recovery over AVC/RTP also has direct VCL frame-number proof.
 Annex B P IntraPCM fallback and changed-frame recovery now have direct VCL
 frame-number proof across disabled, default, and slice-boundary deblock controls.

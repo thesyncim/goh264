@@ -304,9 +304,11 @@ The admitted encoder contract is deliberately narrow:
 Current emitted frame types are IDR IntraPCM, identical-reference P-skip, exact
 macroblock-aligned frame-wide or per-macroblock P16x16 no-residual, and
 changed-frame P IntraPCM. Output can be split into configured multi-slice VCL
-NALs. Exact P16x16 is admitted for disabled, enabled, and slice-boundary deblock
-frames, including multi-macroblock frames. Changed-frame P IntraPCM recovery
-pictures carry recovery-point SEI when enabled.
+NALs. Exact P16x16 is admitted for disabled-deblock frames and for
+chroma-aligned uniform-motion enabled/slice-boundary deblock frames, including
+multi-macroblock frames. Guarded mixed-vector and odd-pixel deblock cases fall
+back to P IntraPCM recovery. Changed-frame P IntraPCM recovery pictures carry
+recovery-point SEI when enabled.
 
 RTP output currently covers:
 

@@ -134,10 +134,10 @@ output, plus configured `SliceCount` multi-slice VCL output, guarded CAVLC
 P-skip slices for identical frames, a guarded exact macroblock-aligned CAVLC P16x16
 no-residual path for bounded frame-wide and per-macroblock integer-pel shifted
 references up to 8 pixels, including enabled and slice-boundary deblock.
-Odd-pixel luma shifts are admitted only when
-both 4:2:0 chroma planes are constant, with Annex B, configured AVC, RTP
-reassembly, and RTP mode-0 single-NAL proof; patterned chroma is guarded to
-fall back to P IntraPCM across the same output surfaces.
+Odd-pixel luma shifts are admitted only with disabled deblock and constant
+4:2:0 chroma planes, with Annex B, configured AVC, RTP reassembly, and RTP
+mode-0 single-NAL proof; patterned chroma and enabled/slice-boundary deblock
+are guarded to fall back to P IntraPCM.
 Guarded CAVLC P IntraPCM slices handle changed frames after a reference across
 disabled, enabled, and slice-boundary deblock controls. Changed-frame P
 IntraPCM recovery pictures carry recovery-point SEI when enabled, across Annex

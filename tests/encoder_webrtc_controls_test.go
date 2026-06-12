@@ -4891,6 +4891,78 @@ func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionWithConstantChroma(t *t
 	}
 }
 
+func TestEncoderEncodeOddPixelExactP16x16FallsBackWithDeblockControls(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		deblock     goh264.EncoderDeblockMode
+		wantDeblock int32
+	}{
+		{name: "enabled", deblock: goh264.EncoderDeblockEnabled, wantDeblock: 1},
+		{name: "slice-boundary", deblock: goh264.EncoderDeblockSliceBoundary, wantDeblock: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(32, 32)
+			cfg.OutputFormat = goh264.EncoderOutputAnnexB
+			cfg.DeblockMode = tt.deblock
+			cfg.RTPMaxPayloadSize = 0
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
+
+			firstFrame := patternedI420EncoderFrame(32, 32)
+			setConstantI420Chroma(&firstFrame, 128, 64)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+			secondFrame := integerMotionI420EncoderFrame(firstFrame, 1, 0)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode odd-pixel exact P16x16 fallback with deblock %s: %v", tt.name, err)
+			}
+			if second.KeyFrame || second.IDR {
+				t.Fatalf("odd-pixel exact P16x16 fallback deblock %s key=%v idr=%v, want recovery P frame",
+					tt.name, second.KeyFrame, second.IDR)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+			secondWithHeaders := append(append([]byte(nil), headers.AnnexB...), second.Data...)
+			assertEncoderVCLDeblocks(t, secondWithHeaders, []uint8{1}, []int32{tt.wantDeblock})
+
+			dec := goh264.NewDecoder()
+			decodedFirst, err := dec.DecodeFrames(first.Data)
+			if err != nil {
+				t.Fatalf("Decode first IDR: %v", err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			decodedSecond, err := dec.DecodeFrames(second.Data)
+			if err != nil {
+				t.Fatalf("Decode odd-pixel exact P16x16 fallback with deblock %s: %v", tt.name, err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			if !decodedSecond[0].KeyFrame ||
+				decodedSecond[0].SideData.RecoveryPoint == nil ||
+				decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+				t.Fatalf("decoded odd-pixel exact P16x16 fallback deblock %s key=%v recovery=%+v, want immediate recovery frame",
+					tt.name, decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+			}
+
+			stream := append(append([]byte(nil), first.Data...), second.Data...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+			wantStream := appendI420FrameBytes(nil, firstFrame)
+			wantStream = appendI420FrameBytes(wantStream, secondFrame)
+			assertFFmpegRawVideoOracle(t, stream, wantStream)
+		})
+	}
+}
+
 func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
 	for _, tt := range []struct {
 		name   string

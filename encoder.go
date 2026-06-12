@@ -1617,6 +1617,9 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView, dst []encoderP16
 
 	if dx, dy, ok := encoderI420FindFrameP16x16NoResidualMotion(ref, view, &constantChromaKnown, &constantChroma); ok {
 		mv := encoderP16x16MotionVector{x: int32(dx * 4), y: int32(dy * 4)}
+		if e.cfg.DeblockMode != EncoderDeblockDisabled && !encoderP16x16MotionVectorChromaAligned(mv) {
+			return nil, false
+		}
 		for mbAddr := 0; mbAddr < macroblockCount; mbAddr++ {
 			dst = append(dst, mv)
 		}
@@ -1630,23 +1633,30 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView, dst []encoderP16
 		}
 		dst = append(dst, encoderP16x16MotionVector{x: int32(dx * 4), y: int32(dy * 4)})
 	}
-	if e.cfg.DeblockMode != EncoderDeblockDisabled && !encoderP16x16MotionVectorsUniform(dst) {
+	if e.cfg.DeblockMode != EncoderDeblockDisabled && !encoderP16x16MotionVectorsDeblockSafe(dst) {
 		return nil, false
 	}
 	return dst, true
 }
 
-func encoderP16x16MotionVectorsUniform(mvs []encoderP16x16MotionVector) bool {
+func encoderP16x16MotionVectorsDeblockSafe(mvs []encoderP16x16MotionVector) bool {
 	if len(mvs) <= 1 {
-		return true
+		return len(mvs) == 0 || encoderP16x16MotionVectorChromaAligned(mvs[0])
 	}
 	first := mvs[0]
+	if !encoderP16x16MotionVectorChromaAligned(first) {
+		return false
+	}
 	for _, mv := range mvs[1:] {
 		if mv != first {
 			return false
 		}
 	}
 	return true
+}
+
+func encoderP16x16MotionVectorChromaAligned(mv encoderP16x16MotionVector) bool {
+	return mv.x%8 == 0 && mv.y%8 == 0
 }
 
 func encoderI420FindFrameP16x16NoResidualMotion(ref *encoderReferenceFrame, view encoderFrameView, constantChromaKnown *bool, constantChroma *bool) (int, int, bool) {
