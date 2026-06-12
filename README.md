@@ -26,7 +26,7 @@ but it is not quality-parity with a production H.264 encoder.
 
 | Area | Quality state | Strong evidence today | Missing before production parity |
 | --- | --- | --- | --- |
-| Decoder | Mature, still pre-release | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Final release evidence, every selected release gate green together, exact parity on remaining unselected field/MBAFF/damaged-edge behavior |
+| Decoder | Best-covered, still pre-release | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Final release evidence, every selected release gate green together, exact parity on remaining unselected field/MBAFF/damaged-edge behavior |
 | Encoder | Experimental admitted subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual coding, mature rate control, wider packetizer/control breadth, oracle-backed bitstream parity, reviewed allocation/performance evidence |
 | Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, release readiness, or performance evidence |
 
@@ -259,6 +259,9 @@ profile, HDR10+, and LCEVC side data.
 `Packet.Clone`, `PacketSideData.Clone`, `Frame.Clone`, and
 `FrameSideData.Clone` provide deep-owned snapshots for retained packets and
 decoded output metadata.
+Structured side-data entries are decoded only when their payload validates;
+byte-oriented packet side data such as A53 captions, ICC profile, HDR10+, and
+LCEVC is copied into frame side data for caller-owned retention.
 Duplicate packet side data follows first-entry semantics: empty or malformed
 first active-format, S12M timecode, ICC profile, HDR10+, and LCEVC entries
 suppress later duplicates.
