@@ -6422,11 +6422,12 @@ func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 	}
 	bad = frame
 	bad.PTS = int64(cfg.RTPTimestampIncrement)
+	bad.ForceIDR = true
 	bad.Color.SARNum = 1
 	if out, err := enc.Encode(bad); !errors.Is(err, goh264.ErrInvalidData) {
-		t.Fatalf("Encode partial frame SAR error = %v, want ErrInvalidData", err)
+		t.Fatalf("Encode invalid ForceIDR frame color error = %v, want ErrInvalidData", err)
 	} else if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
-		t.Fatalf("invalid frame color output = %+v, want empty output", out)
+		t.Fatalf("invalid ForceIDR frame color output = %+v, want empty output", out)
 	}
 	if callbackCalls != firstPacketCount {
 		t.Fatalf("invalid frames invoked callbacks = %d, want still %d", callbackCalls, firstPacketCount)
