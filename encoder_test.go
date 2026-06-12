@@ -164,6 +164,31 @@ func TestEncoderNALBufferRejectsOverflow(t *testing.T) {
 	}
 }
 
+func TestEncoderParameterSetsFromH264RejectsOverflowedHeaderClones(t *testing.T) {
+	got := encoderParameterSetsFromH264(h264.EncoderParameterSets{
+		SPS:                           fakeEncoderBytesLen(maxInt/2 + 1),
+		PPS:                           fakeEncoderBytesLen(maxInt/2 + 1),
+		AnnexB:                        fakeEncoderBytesLen(maxInt/2 + 1),
+		AVCDecoderConfigurationRecord: fakeEncoderBytesLen(maxInt/2 + 1),
+	})
+	if got.SPS != nil || got.PPS != nil || got.AnnexB != nil || got.AVCDecoderConfigurationRecord != nil {
+		t.Fatalf("overflowed parameter-set clones = sps %d pps %d annexb %d avcc %d, want nils",
+			len(got.SPS), len(got.PPS), len(got.AnnexB), len(got.AVCDecoderConfigurationRecord))
+	}
+}
+
+func TestEncoderSEIFromH264RejectsOverflowedSurfaceClones(t *testing.T) {
+	got := encoderSEIFromH264(h264.EncoderSEIMessage{
+		NAL:    fakeEncoderBytesLen(maxInt/2 + 1),
+		AnnexB: fakeEncoderBytesLen(maxInt/2 + 1),
+		AVC:    fakeEncoderBytesLen(maxInt/2 + 1),
+	})
+	if got.NAL != nil || got.AnnexB != nil || got.AVC != nil {
+		t.Fatalf("overflowed SEI clones = nal %d annexb %d avc %d, want nils",
+			len(got.NAL), len(got.AnnexB), len(got.AVC))
+	}
+}
+
 func TestFrameSideDataFromH264ClonesS12MTimecodes(t *testing.T) {
 	src := h264.DecodedFrameSideData{S12MTimecodes: []uint32{0x11223344, 0x55667788}}
 	got := frameSideDataFromH264(src, 0, 0)

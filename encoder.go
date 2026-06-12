@@ -433,12 +433,16 @@ func (e *Encoder) ParameterSets() (EncoderParameterSets, error) {
 	if err != nil {
 		return EncoderParameterSets{}, err
 	}
+	return encoderParameterSetsFromH264(sets), nil
+}
+
+func encoderParameterSetsFromH264(sets h264.EncoderParameterSets) EncoderParameterSets {
 	return EncoderParameterSets{
-		SPS:                           append([]byte(nil), sets.SPS...),
-		PPS:                           append([]byte(nil), sets.PPS...),
-		AnnexB:                        append([]byte(nil), sets.AnnexB...),
-		AVCDecoderConfigurationRecord: append([]byte(nil), sets.AVCDecoderConfigurationRecord...),
-	}, nil
+		SPS:                           cloneByteSlice(sets.SPS),
+		PPS:                           cloneByteSlice(sets.PPS),
+		AnnexB:                        cloneByteSlice(sets.AnnexB),
+		AVCDecoderConfigurationRecord: cloneByteSlice(sets.AVCDecoderConfigurationRecord),
+	}
 }
 
 func (e *Encoder) parameterSetConfig() (h264.EncoderParameterSetConfig, error) {
@@ -491,11 +495,15 @@ func (e *Encoder) RecoveryPointSEI(recoveryFrameCount uint32) (EncoderSEI, error
 	if err != nil {
 		return EncoderSEI{}, err
 	}
+	return encoderSEIFromH264(sei), nil
+}
+
+func encoderSEIFromH264(sei h264.EncoderSEIMessage) EncoderSEI {
 	return EncoderSEI{
-		NAL:    append([]byte(nil), sei.NAL...),
-		AnnexB: append([]byte(nil), sei.AnnexB...),
-		AVC:    append([]byte(nil), sei.AVC...),
-	}, nil
+		NAL:    cloneByteSlice(sei.NAL),
+		AnnexB: cloneByteSlice(sei.AnnexB),
+		AVC:    cloneByteSlice(sei.AVC),
+	}
 }
 
 // Encode encodes one frame using encoder-owned output storage.
