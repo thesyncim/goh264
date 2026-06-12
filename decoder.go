@@ -618,7 +618,12 @@ func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, e
 	if err != nil {
 		return StreamInfo{}, err
 	}
-	return d.parseHeaders(nals)
+	info, err := d.parseHeaders(nals)
+	if err != nil {
+		return StreamInfo{}, err
+	}
+	d.avcNALLengthSize = nalLengthSize
+	return info, nil
 }
 
 // ParseAVCDecoderConfigurationRecord parses an AVC decoder configuration record,
