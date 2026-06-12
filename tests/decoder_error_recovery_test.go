@@ -846,6 +846,39 @@ func TestDecodePacketFramesAnnexBNewExtradataClearsAVCLengthState(t *testing.T) 
 	}
 }
 
+func TestDecodePacketAnnexBNewExtradataClearsAVCLengthState(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	extradata, _ := annexBParameterSetsAndPacket(t, data)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 2)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	firstAnnexB := avcSampleToAnnexB(t, samples[0], 2)
+
+	dec := NewDecoder()
+	frame, err := dec.DecodePacket(Packet{
+		Data:     samples[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	frame, err = dec.DecodePacket(Packet{
+		Data:     firstAnnexB,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata}},
+	})
+	if err != nil {
+		t.Fatalf("decode single Annex B after Annex B extradata side data: %v", err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	if out, err := dec.DecodeConfiguredAVCFrames(samples[1]); err != ErrInvalidData {
+		t.Fatalf("DecodeConfiguredAVCFrames after single Annex B extradata frames=%d err=%v, want ErrInvalidData", len(out), err)
+	}
+}
+
 func TestDecodePacketAnnexBNewExtradataRejectPreservesAVCLengthState(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 2)
