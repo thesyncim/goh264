@@ -7906,6 +7906,78 @@ func TestEncoderEncodeIntoInvalidFramePreservesPendingIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeInvalidFramePreservesPendingIDR(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 32
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+
+	frame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+			firstPacketCount, callbackCalls)
+	}
+
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR did not queue IDR")
+	}
+	beforeCfg := enc.Config()
+	bad := frame
+	bad.PTS = int64(cfg.RTPTimestampIncrement)
+	bad.Width = 32
+	out, err := enc.Encode(bad)
+	if !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Encode invalid frame error = %v, want ErrInvalidData", err)
+	}
+	if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+		t.Fatalf("invalid Encode output = %+v, want empty output", out)
+	}
+	if got := enc.Config(); got != beforeCfg {
+		t.Fatalf("invalid Encode mutated config = %+v, want %+v", got, beforeCfg)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("invalid Encode cleared pending IDR")
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("invalid Encode callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+	}
+
+	next := frame
+	next.PTS = int64(cfg.RTPTimestampIncrement)
+	next.Y = append([]byte(nil), frame.Y...)
+	next.Y[0] ^= 0x55
+	recovered, err := enc.Encode(next)
+	if err != nil {
+		t.Fatalf("Encode after invalid frame: %v", err)
+	}
+	if recovered.Dropped || !recovered.IDR || enc.PendingIDR() {
+		t.Fatalf("post-invalid output dropped=%v idr=%v pending=%v, want delivered IDR",
+			recovered.Dropped, recovered.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+		t.Fatalf("post-invalid callbacks = %d, want %d",
+			callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+	}
+}
+
 func TestEncoderEncodeIntoOverflowedDestinationPreservesPendingIDRAndLiveState(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
