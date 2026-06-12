@@ -35,6 +35,96 @@ func TestDecodeCAVLCMBType(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCMBTypeRoundTripsThroughDecoder(t *testing.T) {
+	t.Run("p inter table", func(t *testing.T) {
+		for _, info := range h264PMBTypeInfo {
+			assertCAVLCMBTypeWriteRoundTrip(t, PictureTypeP, PictureTypeP, cavlcMacroblockSyntax{
+				MBType:         info.Type,
+				PartitionCount: info.PartitionCount,
+			})
+		}
+	})
+	t.Run("b inter table", func(t *testing.T) {
+		for _, info := range h264BMBTypeInfo {
+			assertCAVLCMBTypeWriteRoundTrip(t, PictureTypeB, PictureTypeB, cavlcMacroblockSyntax{
+				MBType:         info.Type,
+				PartitionCount: info.PartitionCount,
+			})
+		}
+	})
+	t.Run("i table", func(t *testing.T) {
+		for _, info := range h264IMBTypeInfo {
+			assertCAVLCMBTypeWriteRoundTrip(t, PictureTypeI, PictureTypeI, cavlcMacroblockSyntax{
+				MBType:             info.Type,
+				Intra16x16PredMode: info.PredMode,
+				CBP:                int(info.CBP),
+			})
+		}
+	})
+	t.Run("p intra fallback", func(t *testing.T) {
+		assertCAVLCMBTypeWriteRoundTrip(t, PictureTypeP, PictureTypeP, cavlcMacroblockSyntax{
+			MBType:             MBTypeIntra16x16,
+			Intra16x16PredMode: 3,
+			CBP:                47,
+		})
+	})
+	t.Run("b intra fallback", func(t *testing.T) {
+		assertCAVLCMBTypeWriteRoundTrip(t, PictureTypeB, PictureTypeB, cavlcMacroblockSyntax{
+			MBType:             MBTypeIntraPCM,
+			Intra16x16PredMode: -1,
+			CBP:                -1,
+		})
+	})
+	t.Run("si adjusted intra", func(t *testing.T) {
+		assertCAVLCMBTypeWriteRoundTrip(t, PictureTypeSI, PictureTypeI, cavlcMacroblockSyntax{
+			MBType:             MBTypeIntra16x16,
+			Intra16x16PredMode: 2,
+			CBP:                0,
+		})
+	})
+}
+
+func assertCAVLCMBTypeWriteRoundTrip(t *testing.T, sliceType int32, sliceTypeNoS int32, mb cavlcMacroblockSyntax) {
+	t.Helper()
+	var bw BitWriter
+	if err := writeCAVLCMBType(&bw, sliceType, sliceTypeNoS, mb); err != nil {
+		t.Fatalf("write mb type %+v failed: %v", mb, err)
+	}
+	gb := newBitReader(bw.Bytes())
+	got, err := decodeCAVLCMBType(&gb, sliceType, sliceTypeNoS)
+	if err != nil {
+		t.Fatalf("decode written mb type %+v failed: %v", mb, err)
+	}
+	if got.MBType != mb.MBType || got.PartitionCount != mb.PartitionCount ||
+		got.Intra16x16PredMode != mb.Intra16x16PredMode || got.CBP != mb.CBP {
+		t.Fatalf("mb = type %#x part %d pred %d cbp %d, want type %#x part %d pred %d cbp %d",
+			got.MBType, got.PartitionCount, got.Intra16x16PredMode, got.CBP,
+			mb.MBType, mb.PartitionCount, mb.Intra16x16PredMode, mb.CBP)
+	}
+	if gb.bitPos != bw.BitLen() {
+		t.Fatalf("decoded consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+	}
+}
+
+func TestWriteCAVLCMBTypeRejectsInvalid(t *testing.T) {
+	var bw BitWriter
+	for _, tt := range []struct {
+		name string
+		err  error
+	}{
+		{name: "nil writer", err: writeCAVLCMBType(nil, PictureTypeP, PictureTypeP, cavlcMacroblockSyntax{MBType: MBType16x16 | MBTypeP0L0, PartitionCount: 1})},
+		{name: "bad slice", err: writeCAVLCMBType(&bw, PictureTypeSP, PictureTypeSP, cavlcMacroblockSyntax{MBType: MBTypeIntra4x4, CBP: -1})},
+		{name: "bad p partition", err: writeCAVLCMBType(&bw, PictureTypeP, PictureTypeP, cavlcMacroblockSyntax{MBType: MBType16x16 | MBTypeP0L0, PartitionCount: 2})},
+		{name: "bad intra cbp", err: writeCAVLCMBType(&bw, PictureTypeI, PictureTypeI, cavlcMacroblockSyntax{MBType: MBTypeIntra16x16, Intra16x16PredMode: 0, CBP: 7})},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.err != ErrInvalidData {
+				t.Fatalf("write mb type error = %v, want ErrInvalidData", tt.err)
+			}
+		})
+	}
+}
+
 func TestDecodeCAVLCCBP(t *testing.T) {
 	cases := []struct {
 		name         string

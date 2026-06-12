@@ -265,6 +265,56 @@ func decodeCAVLCMBType(gb *bitReader, sliceType int32, sliceTypeNoS int32) (cavl
 	return mb, nil
 }
 
+func writeCAVLCMBType(bw *BitWriter, sliceType int32, sliceTypeNoS int32, mb cavlcMacroblockSyntax) error {
+	if bw == nil {
+		return ErrInvalidData
+	}
+	if sliceTypeNoS == PictureTypeB {
+		for raw, info := range h264BMBTypeInfo {
+			if info.Type == mb.MBType && info.PartitionCount == mb.PartitionCount {
+				return bw.WriteUEGolomb(uint32(raw))
+			}
+		}
+		raw, err := cavlcIMBTypeRaw(mb)
+		if err != nil {
+			return err
+		}
+		return bw.WriteUEGolomb(uint32(raw + len(h264BMBTypeInfo)))
+	}
+	if sliceTypeNoS == PictureTypeP {
+		for raw, info := range h264PMBTypeInfo {
+			if info.Type == mb.MBType && info.PartitionCount == mb.PartitionCount {
+				return bw.WriteUEGolomb(uint32(raw))
+			}
+		}
+		raw, err := cavlcIMBTypeRaw(mb)
+		if err != nil {
+			return err
+		}
+		return bw.WriteUEGolomb(uint32(raw + len(h264PMBTypeInfo)))
+	}
+	if sliceTypeNoS != PictureTypeI {
+		return ErrInvalidData
+	}
+	raw, err := cavlcIMBTypeRaw(mb)
+	if err != nil {
+		return err
+	}
+	if sliceType == PictureTypeSI && raw > 0 {
+		raw++
+	}
+	return bw.WriteUEGolomb(uint32(raw))
+}
+
+func cavlcIMBTypeRaw(mb cavlcMacroblockSyntax) (int, error) {
+	for raw, info := range h264IMBTypeInfo {
+		if info.Type == mb.MBType && info.PredMode == mb.Intra16x16PredMode && int(info.CBP) == mb.CBP {
+			return raw, nil
+		}
+	}
+	return 0, ErrInvalidData
+}
+
 func decodeCAVLCCBP(gb *bitReader, mbType uint32, decodeChroma bool, cbp int) (int, error) {
 	if !isIntra16x16(mbType) {
 		raw, err := gb.readUEGolombLong()
