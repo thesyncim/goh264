@@ -3670,8 +3670,10 @@ func TestEncoderSliceCountFeedsRTPMode1SingleNALPackets(t *testing.T) {
 		t.Fatalf("NewEncoder: %v", err)
 	}
 
+	var callbackPackets []goh264.EncoderRTPPacket
 	var callbackMetadata []goh264.EncoderRTPPacketMetadata
-	enc.SetRTPPacketCallback(func(_ goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackPackets = append(callbackPackets, pkt)
 		callbackMetadata = append(callbackMetadata, meta)
 	})
 
@@ -3685,9 +3687,11 @@ func TestEncoderSliceCountFeedsRTPMode1SingleNALPackets(t *testing.T) {
 	if len(out.RTPPackets) != len(out.NALUnits) {
 		t.Fatalf("RTP packets = %d, want one packet per NAL %d", len(out.RTPPackets), len(out.NALUnits))
 	}
-	if len(callbackMetadata) != len(out.RTPPackets) {
-		t.Fatalf("callback metadata = %d, want packet count %d", len(callbackMetadata), len(out.RTPPackets))
+	if len(callbackPackets) != len(out.RTPPackets) || len(callbackMetadata) != len(out.RTPPackets) {
+		t.Fatalf("callback packets/meta = %d/%d, want packet count %d",
+			len(callbackPackets), len(callbackMetadata), len(out.RTPPackets))
 	}
+	assertEncoderRTPSingleNALCallbackMetadata(t, callbackPackets, callbackMetadata, out, frame, cfg, true, true)
 
 	var vclPackets int
 	for i, pkt := range out.RTPPackets {

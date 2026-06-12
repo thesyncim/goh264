@@ -159,7 +159,7 @@ Annex B/AVC/RTP, returned `Encode` result stability across later encodes, and
 `SetRTPPacketCallback` reports callback-style packet metadata for
 packet index/count, frame PTS/DTS/RTP time, keyframe/IDR flags, STAP-A/FU-A/
 single-NAL payload form including mode 0/1 IDR/P frames with P-skip, exact
-P16x16, odd-pixel constant chroma, P IntraPCM fallback rows, and changed-P
+P16x16, multi-slice IDR, odd-pixel constant chroma, P IntraPCM fallback rows, and changed-P
 STAP-A recovery SEI single-NAL packets, NAL type/count,
 FU-A start/end, parameter-set packets, and callback packet storage isolated from
 returned RTP packets while preserving the clipped payload-over-packet-data

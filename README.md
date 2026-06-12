@@ -402,8 +402,8 @@ FU-A/STAP-A output with small-payload STAP-A fallback to non-aggregated mode-1
 packets plus accurate fallback-IDR and post-fallback P-skip callback payload
 metadata and callback packet isolation, RTP packet storage isolated from `EncodedFrame.Data`,
 optional per-packet callback metadata including mode 0/1
-IDR/P-frame single-NAL packets for P-skip, exact P16x16, odd-pixel constant
-chroma, and P IntraPCM fallback rows with callback packet storage isolated from
+IDR/P-frame single-NAL packets for multi-slice IDR, P-skip, exact P16x16,
+odd-pixel constant chroma, and P IntraPCM fallback rows with callback packet storage isolated from
 the returned RTP packets, mode-0 oversize rejection live-state rollback for
 queued-IDR and P-frame paths, and automatic
 timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now

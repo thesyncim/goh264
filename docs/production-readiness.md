@@ -271,8 +271,8 @@ clipped packet payload views over packet data, packet storage isolated from
 `EncodedFrame.Data` including caller-backed `EncodeInto` output buffers, shared
 packet metadata guards for header fields and clipped packet slices, checked
 access-unit and RTP packet storage-size overflow rejection, and optional RTP callback metadata including mode 0/1
-IDR/P-frame single-NAL packets for P-skip, exact P16x16, odd-pixel constant
-chroma, and P IntraPCM fallback rows with callback packet storage isolated from
+IDR/P-frame single-NAL packets for multi-slice IDR, P-skip, exact P16x16,
+odd-pixel constant chroma, and P IntraPCM fallback rows with callback packet storage isolated from
 returned RTP packets while preserving the same clipped payload-over-packet-data
 shape. It also proves identical
 second frames can emit
