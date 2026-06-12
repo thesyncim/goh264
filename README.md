@@ -19,16 +19,16 @@ behavior, and production performance evidence are still in flight.
 
 ## Quality And Parity Status
 
-This project is not production-ready as a complete codec package yet. The
-decoder has the strongest evidence and is the current parity focus; the encoder
-is an admitted realtime/WebRTC subset with many public API contracts covered,
-but it is not quality-parity with a production H.264 encoder.
+This project is still hardening as a complete codec package. The decoder has
+the strongest evidence and is the current parity focus; the encoder is an
+admitted realtime/WebRTC subset with many public API contracts covered, but it
+is still below quality parity with a production H.264 encoder.
 
 | Area | Quality state | Strong evidence today | Missing before production parity |
 | --- | --- | --- | --- |
 | Decoder | Best-covered, still hardening | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Final production evidence, every selected gate green together, exact parity on remaining unselected field/MBAFF/damaged-edge behavior |
 | Encoder | Experimental admitted subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, public residual macroblock admission, mature rate control, wider packetizer/control breadth, oracle-backed bitstream parity, reviewed allocation/performance evidence |
-| Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, production readiness, or performance evidence |
+| Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, production acceptance, or performance evidence |
 
 ## What Works Today
 
@@ -46,11 +46,11 @@ but it is not quality-parity with a production H.264 encoder.
 - **Verification:** the selected public-vector decoder matrix is green with no
   known-red rows.
 
-## Not Yet Production
+## Hardening Scope
 
-Do not treat the current module as production-ready. The remaining work is
-mainly quality hardening, API cleanup, allocation/performance evidence, and
-broader encoder coverage. The detailed status lives in:
+Treat the current module as still hardening. The remaining work is mainly
+quality evidence, API cleanup, allocation/performance evidence, and broader
+encoder coverage. The detailed status lives in:
 
 - [docs/production-readiness.md](docs/production-readiness.md)
 - [docs/source-truth.md](docs/source-truth.md)
@@ -689,7 +689,7 @@ and a local performance-evidence bundle runner now exist, while checked-in
 reviewed profile artifacts, a larger performance corpus, and an in-process
 libavcodec baseline are still pending. Treat the decoder as still under
 hardening for throughput-sensitive use until
-[docs/production-readiness.md](docs/production-readiness.md) has those release
+[docs/production-readiness.md](docs/production-readiness.md) has those evidence
 artifacts.
 
 ## Project Layout
@@ -745,7 +745,7 @@ No tag should be treated as production until a release-evidence pass proves:
   writer, allocation, and benchmark gates.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
-- Encoder support remains non-production until
+- Encoder support stays in the admitted subset until
   [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md) has matching
   broader motion-search P prediction, residual bitstream implementation,
   rate-control behavior, remaining packetizer breadth, controls, and oracle
@@ -759,7 +759,7 @@ and admitted encoder runners, and requires a clean worktree unless
 The decoder release-evidence runner writes logs under
 `.artifacts/h264-release-evidence/` by default and fails while
 `testdata/h264/realvectors/failures.jsonl` contains known-red rows unless
-`GOH264_RELEASE_ALLOW_KNOWN_RED=1` is set for a non-release diagnostic run. It
+`GOH264_RELEASE_ALLOW_KNOWN_RED=1` is set for a local diagnostic run. It
 also requires a clean worktree unless `GOH264_RELEASE_ALLOW_DIRTY=1` is set for
 diagnostics.
 The encoder release-evidence runner writes logs under

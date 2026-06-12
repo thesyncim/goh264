@@ -47,7 +47,7 @@ if [[ "${GOH264_FULL_RELEASE_ALLOW_DIRTY:-0}" != "1" ]]; then
         {
             printf '\nworktree-clean: failed\n'
             printf '%s\n' "$status"
-            printf 'set GOH264_FULL_RELEASE_ALLOW_DIRTY=1 only for non-release diagnostics\n'
+            printf 'set GOH264_FULL_RELEASE_ALLOW_DIRTY=1 only for local diagnostics\n'
         } | tee -a "$summary" >&2
         exit 1
     fi

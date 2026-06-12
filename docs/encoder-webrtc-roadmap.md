@@ -396,7 +396,7 @@ Encoder tests need independent evidence, not only local decode:
 
 ## Production Bar
 
-Encoder support is not production-ready until:
+Encoder support stays in the admitted subset until:
 
 - The decoder production bar remains green.
 - The encoder controls above are represented by tests.

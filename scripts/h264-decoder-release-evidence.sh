@@ -33,6 +33,25 @@ run_env_gate() {
     run_gate "$name" env "$@"
 }
 
+run_go_test_gate() {
+    local name="$1"
+    local pkg="$2"
+    local pattern="$3"
+    shift 3
+    local list_log="$out_dir/$name-list.log"
+    {
+        printf '\n== %s-list ==\n' "$name"
+        printf 'command: go test %q -list %q\n' "$pkg" "$pattern"
+    } | tee -a "$summary"
+    go test "$pkg" -list "$pattern" 2>&1 | tee "$list_log"
+    if ! grep -Eq '^(Test|Benchmark|Fuzz|Example)' "$list_log"; then
+        printf 'status: fail (no matching tests)\n' | tee -a "$summary" >&2
+        exit 1
+    fi
+    printf 'status: pass\n' | tee -a "$summary"
+    run_gate "$name" go test "$pkg" -run "$pattern" "$@"
+}
+
 {
     printf 'commit=%s\n' "$(git rev-parse HEAD)"
     printf 'branch=%s\n' "$(git branch --show-current)"
@@ -53,7 +72,7 @@ if [[ "${GOH264_RELEASE_ALLOW_DIRTY:-0}" != "1" ]]; then
         {
             printf '\nworktree-clean: failed\n'
             printf '%s\n' "$status"
-            printf 'set GOH264_RELEASE_ALLOW_DIRTY=1 only for non-release diagnostics\n'
+            printf 'set GOH264_RELEASE_ALLOW_DIRTY=1 only for local diagnostics\n'
         } | tee -a "$summary" >&2
         exit 1
     fi
@@ -64,11 +83,11 @@ run_gate git-diff-check git diff --check
 run_gate git-diff-cached-check git diff --cached --check
 run_gate go-vet go vet ./...
 run_gate go-test-all go test ./...
-run_gate decoder-api-surfaces go test ./tests -run '^(TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference|TestParseHeadersAVCIncompatibleHeadersDoNotUseStalePFrameReference|TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset|TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration|TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset|TestDecodeFramesStandaloneMultiSPSConfigurationResetsForNonFirstActiveSPS|TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecodePacketFramesAnnexBMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecoderAVCConfigUsesAVCCFirstSPSForMultiSPSConfiguration|TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration)$' -count=1 -v
-run_gate decoder-ref-modifications go test ./internal/h264 -run '^(TestSimpleFrameDPBRejectsMissingShortRefModificationTarget|TestSimpleFrameDPBRejectsMissingLongRefModificationTarget|TestSimpleFrameDPBReordersShortRefs|TestSimpleFrameDPBReordersLongRefs)$' -count=1 -v
+run_go_test_gate decoder-api-surfaces ./tests '^(TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference|TestParseHeadersAVCIncompatibleHeadersDoNotUseStalePFrameReference|TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset|TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration|TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset|TestDecodeFramesStandaloneMultiSPSConfigurationResetsForNonFirstActiveSPS|TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecodePacketFramesAnnexBMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecoderAVCConfigUsesAVCCFirstSPSForMultiSPSConfiguration|TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration)$' -count=1 -v
+run_go_test_gate decoder-ref-modifications ./internal/h264 '^(TestSimpleFrameDPBRejectsMissingShortRefModificationTarget|TestSimpleFrameDPBRejectsMissingLongRefModificationTarget|TestSimpleFrameDPBReordersShortRefs|TestSimpleFrameDPBReordersLongRefs)$' -count=1 -v
 
 if [[ -s testdata/h264/realvectors/failures.jsonl && "${GOH264_RELEASE_ALLOW_KNOWN_RED:-0}" != "1" ]]; then
-    printf '\nknown-red-failures: testdata/h264/realvectors/failures.jsonl is not empty; set GOH264_RELEASE_ALLOW_KNOWN_RED=1 only for non-release diagnostics\n' | tee -a "$summary" >&2
+    printf '\nknown-red-failures: testdata/h264/realvectors/failures.jsonl is not empty; set GOH264_RELEASE_ALLOW_KNOWN_RED=1 only for local diagnostics\n' | tee -a "$summary" >&2
     exit 1
 fi
 printf '\nknown-red-failures: none\n' | tee -a "$summary"

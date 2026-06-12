@@ -152,12 +152,12 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 	}
 	readme := string(data)
 	for _, phrase := range []string{
-		"not production-ready as a complete codec package yet",
-		"not quality-parity with a production H.264 encoder",
+		"still hardening as a complete codec package",
+		"still below quality parity with a production H.264 encoder",
 		"Examples",
 		"API smoke tests only",
 		"oracle-backed bitstream parity",
-		"production readiness",
+		"production acceptance",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md missing quality/parity status phrase %q", phrase)
@@ -166,8 +166,12 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 	for _, forbidden := range []string{
 		"pre" + "-release",
 		"pre" + "-production",
+		"not production-ready",
+		"non-production",
+		"non-release",
 		"release " + "tag",
 		"release " + "readiness",
+		"release " + "artifacts",
 		"de" + "precate",
 		"de" + "precated",
 		"de" + "precation",
@@ -235,6 +239,14 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		}
 	}
 	for _, phrase := range []string{
+		"run_go_test_gate()",
+		"go test \"$pkg\" -list \"$pattern\"",
+		"status: fail (no matching tests)",
+		"run_go_test_gate encoder-contract ./tests",
+		"run_go_test_gate encoder-api-surfaces ./tests",
+		"run_go_test_gate encoder-residual-boundary ./tests",
+		"run_go_test_gate encoder-allocation-canary ./tests",
+		"run_go_test_gate encoder-writers ./internal/h264",
 		"encoder-api-surfaces",
 		"TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData",
 		"TestEncoderReconfigureZeroScalarFieldsAreNoOps",
@@ -251,6 +263,17 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 	} {
 		if !strings.Contains(script, phrase) {
 			t.Fatalf("encoder release evidence script missing API-surface gate phrase %q", phrase)
+		}
+	}
+	for _, forbidden := range []string{
+		"run_gate encoder-contract go test",
+		"run_gate encoder-api-surfaces go test",
+		"run_gate encoder-residual-boundary go test",
+		"run_gate encoder-allocation-canary go test",
+		"run_gate encoder-writers go test",
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Fatalf("encoder release evidence script should preflight focused gate %q", forbidden)
 		}
 	}
 }
@@ -275,6 +298,11 @@ func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		}
 	}
 	for _, phrase := range []string{
+		"run_go_test_gate()",
+		"go test \"$pkg\" -list \"$pattern\"",
+		"status: fail (no matching tests)",
+		"run_go_test_gate decoder-api-surfaces ./tests",
+		"run_go_test_gate decoder-ref-modifications ./internal/h264",
 		"decoder-api-surfaces",
 		"decoder-ref-modifications",
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
@@ -293,6 +321,14 @@ func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	} {
 		if !strings.Contains(script, phrase) {
 			t.Fatalf("decoder release evidence script missing focused gate phrase %q", phrase)
+		}
+	}
+	for _, forbidden := range []string{
+		"run_gate decoder-api-surfaces go test",
+		"run_gate decoder-ref-modifications go test",
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Fatalf("decoder release evidence script should preflight focused gate %q", forbidden)
 		}
 	}
 }

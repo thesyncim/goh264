@@ -26,6 +26,25 @@ run_gate() {
     printf 'status: pass\n' | tee -a "$summary"
 }
 
+run_go_test_gate() {
+    local name="$1"
+    local pkg="$2"
+    local pattern="$3"
+    shift 3
+    local list_log="$out_dir/$name-list.log"
+    {
+        printf '\n== %s-list ==\n' "$name"
+        printf 'command: go test %q -list %q\n' "$pkg" "$pattern"
+    } | tee -a "$summary"
+    go test "$pkg" -list "$pattern" 2>&1 | tee "$list_log"
+    if ! grep -Eq '^(Test|Benchmark|Fuzz|Example)' "$list_log"; then
+        printf 'status: fail (no matching tests)\n' | tee -a "$summary" >&2
+        exit 1
+    fi
+    printf 'status: pass\n' | tee -a "$summary"
+    run_gate "$name" go test "$pkg" -run "$pattern" "$@"
+}
+
 {
     printf 'commit=%s\n' "$(git rev-parse HEAD)"
     printf 'branch=%s\n' "$(git branch --show-current)"
@@ -43,7 +62,7 @@ if [[ "${GOH264_ENCODER_RELEASE_ALLOW_DIRTY:-0}" != "1" ]]; then
         {
             printf '\nworktree-clean: failed\n'
             printf '%s\n' "$status"
-            printf 'set GOH264_ENCODER_RELEASE_ALLOW_DIRTY=1 only for non-release diagnostics\n'
+            printf 'set GOH264_ENCODER_RELEASE_ALLOW_DIRTY=1 only for local diagnostics\n'
         } | tee -a "$summary" >&2
         exit 1
     fi
@@ -54,11 +73,11 @@ run_gate git-diff-check git diff --check
 run_gate git-diff-cached-check git diff --cached --check
 run_gate go-vet go vet ./...
 run_gate go-test-all go test ./...
-run_gate encoder-contract go test ./tests -run '^TestEncoder' -count=1 -v
-run_gate encoder-api-surfaces go test ./tests -run '^(TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData|TestEncoderReconfigureZeroScalarFieldsAreNoOps|TestEncoderZeroValueExplicitSettersRejectWithoutMutation|TestEncoderNonRTPConfigsRejectInvalidRTPControls|TestEncoderInvalidRTPControlsRejectForNonRTPOutputsWithoutMutation|TestEncoderReconfigureOutputFormatQueuesIDRBoundary|TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata|TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata)$' -count=1 -v
-run_gate encoder-residual-boundary go test ./tests -run '^TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs$' -count=1 -v
-run_gate encoder-allocation-canary go test ./tests -run '^TestEncoderEncodeIntoAllocationCanary$' -count=1 -v
-run_gate encoder-writers go test ./internal/h264 -run '^(TestBitWriter|TestAppendNAL|TestAppendAVC|TestBuildEncoder|TestAppendSEI|TestCAVLCWriteResidual|TestWriteCAVLCInterPBoundedMacroblock|TestEncodeI420P16x16ResidualSliceRBSP)' -count=1 -v
+run_go_test_gate encoder-contract ./tests '^TestEncoder' -count=1 -v
+run_go_test_gate encoder-api-surfaces ./tests '^(TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData|TestEncoderReconfigureZeroScalarFieldsAreNoOps|TestEncoderZeroValueExplicitSettersRejectWithoutMutation|TestEncoderNonRTPConfigsRejectInvalidRTPControls|TestEncoderInvalidRTPControlsRejectForNonRTPOutputsWithoutMutation|TestEncoderReconfigureOutputFormatQueuesIDRBoundary|TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata|TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata)$' -count=1 -v
+run_go_test_gate encoder-residual-boundary ./tests '^TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs$' -count=1 -v
+run_go_test_gate encoder-allocation-canary ./tests '^TestEncoderEncodeIntoAllocationCanary$' -count=1 -v
+run_go_test_gate encoder-writers ./internal/h264 '^(TestBitWriter|TestAppendNAL|TestAppendAVC|TestBuildEncoder|TestAppendSEI|TestCAVLCWriteResidual|TestWriteCAVLCInterPBoundedMacroblock|TestEncodeI420P16x16ResidualSliceRBSP)' -count=1 -v
 run_gate encoder-benchmem go test . -run '^$' -bench "$bench_pattern" -benchmem -benchtime "$bench_time"
 
 printf '\nall encoder release-evidence gates passed\n' | tee -a "$summary"
