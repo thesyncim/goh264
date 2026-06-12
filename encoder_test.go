@@ -2,7 +2,12 @@
 
 package goh264
 
-import "testing"
+import (
+	"errors"
+	"reflect"
+	"testing"
+	"unsafe"
+)
 
 func TestAppendEncoderP16x16NoResidualMVDsUsesSliceLocalPrediction(t *testing.T) {
 	for _, tt := range []struct {
@@ -76,6 +81,47 @@ func TestAppendEncoderP16x16NoResidualMVDsUsesSliceLocalPrediction(t *testing.T)
 			}
 		})
 	}
+}
+
+func TestEncoderAccessUnitOutputSizeRejectsOverflow(t *testing.T) {
+	nals := []encoderRawNAL{
+		{raw: fakeEncoderBytesLen(maxInt - 2)},
+		{raw: fakeEncoderBytesLen(1)},
+	}
+	if _, err := encoderAccessUnitOutputSize(EncoderOutputAnnexB, nals); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("encoderAccessUnitOutputSize overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestEncoderRTPMode1StoragePlanRejectsOverflow(t *testing.T) {
+	nals := []encoderRawNAL{
+		{raw: fakeEncoderBytesLen(maxInt - 1)},
+	}
+	if _, _, err := encoderRTPMode1StoragePlan(nals, 3, false); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("encoderRTPMode1StoragePlan overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestPacketizeEncoderRTPSingleNALRejectsStorageOverflow(t *testing.T) {
+	nals := []encoderRawNAL{
+		{raw: fakeEncoderBytesLen(maxInt - 4)},
+		{raw: fakeEncoderBytesLen(1)},
+	}
+	if _, err := packetizeEncoderRTPSingleNAL(nals, maxInt, 0); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("packetizeEncoderRTPSingleNAL storage overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
+func fakeEncoderBytesLen(n int) []byte {
+	if n <= 0 {
+		return nil
+	}
+	var b byte
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&b)),
+		Len:  n,
+		Cap:  n,
+	}))
 }
 
 func TestEncoderBitrateFrameBudgetBytes(t *testing.T) {

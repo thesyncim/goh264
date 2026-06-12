@@ -1695,9 +1695,23 @@ func encoderAccessUnitOutputSize(format EncoderOutputFormat, nals []encoderRawNA
 			if uint64(len(nal.raw)) > uint64(^uint32(0)) {
 				return 0, encoderInvalid("encoder NAL is too large for AVC output")
 			}
-			size += 4 + len(nal.raw)
+			next, err := checkedAddInt(size, 4)
+			if err != nil {
+				return 0, encoderInvalid("encoder access-unit size overflows")
+			}
+			size, err = checkedAddInt(next, len(nal.raw))
+			if err != nil {
+				return 0, encoderInvalid("encoder access-unit size overflows")
+			}
 		case EncoderOutputAnnexB, EncoderOutputRTP:
-			size += 4 + len(nal.raw)
+			next, err := checkedAddInt(size, 4)
+			if err != nil {
+				return 0, encoderInvalid("encoder access-unit size overflows")
+			}
+			size, err = checkedAddInt(next, len(nal.raw))
+			if err != nil {
+				return 0, encoderInvalid("encoder access-unit size overflows")
+			}
 		default:
 			return 0, encoderInvalid("unknown encoder output format")
 		}
@@ -1841,8 +1855,20 @@ func packetizeEncoderRTPSingleNAL(nals []encoderRawNAL, maxPayloadSize int, time
 	if maxPayloadSize < 1 {
 		return nil, encoderInvalid("RTP max payload size must fit a NAL header")
 	}
+	payloadSize, err := encoderRawNALPayloadStorageSize(nals)
+	if err != nil {
+		return nil, err
+	}
+	headerSize, err := checkedMulInt(12, len(nals))
+	if err != nil {
+		return nil, encoderInvalid("RTP packet storage size overflows")
+	}
+	storageSize, err := checkedAddInt(payloadSize, headerSize)
+	if err != nil {
+		return nil, encoderInvalid("RTP packet storage size overflows")
+	}
 	packets := make([]EncoderRTPPacket, 0, len(nals))
-	data := make([]byte, 0, encoderRawNALPayloadStorageSize(nals)+12*len(nals))
+	data := make([]byte, 0, storageSize)
 	for _, nal := range nals {
 		if len(nal.raw) == 0 {
 			return nil, encoderInvalid("empty encoder NAL")
@@ -1870,8 +1896,16 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 	if err != nil {
 		return nil, err
 	}
+	headerSize, err := checkedMulInt(12, packetCap)
+	if err != nil {
+		return nil, encoderInvalid("RTP packet storage size overflows")
+	}
+	storageSize, err := checkedAddInt(payloadCap, headerSize)
+	if err != nil {
+		return nil, encoderInvalid("RTP packet storage size overflows")
+	}
 	packets := make([]EncoderRTPPacket, 0, packetCap)
-	data := make([]byte, 0, payloadCap+12*packetCap)
+	data := make([]byte, 0, storageSize)
 	for i := 0; i < len(nals); {
 		if stapa && nals[i].parameterSet {
 			packetStart := len(data)
@@ -1936,12 +1970,16 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 	return packets, nil
 }
 
-func encoderRawNALPayloadStorageSize(nals []encoderRawNAL) int {
+func encoderRawNALPayloadStorageSize(nals []encoderRawNAL) (int, error) {
 	size := 0
 	for _, nal := range nals {
-		size += len(nal.raw)
+		next, err := checkedAddInt(size, len(nal.raw))
+		if err != nil {
+			return 0, encoderInvalid("RTP payload storage size overflows")
+		}
+		size = next
 	}
-	return size
+	return size, nil
 }
 
 func encoderRTPMode1StoragePlan(nals []encoderRawNAL, maxPayloadSize int, stapa bool) (int, int, error) {
@@ -1954,8 +1992,15 @@ func encoderRTPMode1StoragePlan(nals []encoderRawNAL, maxPayloadSize int, stapa 
 				return 0, 0, err
 			}
 			if count >= 2 {
-				packetCount++
-				payloadSize += size
+				var addErr error
+				packetCount, addErr = checkedAddInt(packetCount, 1)
+				if addErr != nil {
+					return 0, 0, encoderInvalid("RTP packet count overflows")
+				}
+				payloadSize, addErr = checkedAddInt(payloadSize, size)
+				if addErr != nil {
+					return 0, 0, encoderInvalid("RTP payload storage size overflows")
+				}
 				i += count
 				continue
 			}
@@ -1965,16 +2010,41 @@ func encoderRTPMode1StoragePlan(nals []encoderRawNAL, maxPayloadSize int, stapa 
 			return 0, 0, encoderInvalid("empty encoder NAL")
 		}
 		if len(nal.raw) <= maxPayloadSize {
-			packetCount++
-			payloadSize += len(nal.raw)
+			var addErr error
+			packetCount, addErr = checkedAddInt(packetCount, 1)
+			if addErr != nil {
+				return 0, 0, encoderInvalid("RTP packet count overflows")
+			}
+			payloadSize, addErr = checkedAddInt(payloadSize, len(nal.raw))
+			if addErr != nil {
+				return 0, 0, encoderInvalid("RTP payload storage size overflows")
+			}
 			i++
 			continue
 		}
 		fragmentPayload := len(nal.raw) - 1
 		maxFragment := maxPayloadSize - 2
-		fragmentCount := (fragmentPayload + maxFragment - 1) / maxFragment
-		packetCount += fragmentCount
-		payloadSize += fragmentPayload + 2*fragmentCount
+		fragmentCount := fragmentPayload / maxFragment
+		if fragmentPayload%maxFragment != 0 {
+			fragmentCount++
+		}
+		var addErr error
+		packetCount, addErr = checkedAddInt(packetCount, fragmentCount)
+		if addErr != nil {
+			return 0, 0, encoderInvalid("RTP packet count overflows")
+		}
+		fuHeaderSize, addErr := checkedMulInt(2, fragmentCount)
+		if addErr != nil {
+			return 0, 0, encoderInvalid("RTP payload storage size overflows")
+		}
+		fragmentStorageSize, addErr := checkedAddInt(fragmentPayload, fuHeaderSize)
+		if addErr != nil {
+			return 0, 0, encoderInvalid("RTP payload storage size overflows")
+		}
+		payloadSize, addErr = checkedAddInt(payloadSize, fragmentStorageSize)
+		if addErr != nil {
+			return 0, 0, encoderInvalid("RTP payload storage size overflows")
+		}
 		i++
 	}
 	return packetCount, payloadSize, nil
@@ -2127,11 +2197,15 @@ func encoderSTAPASize(nals []encoderRawNAL, maxPayloadSize int) (int, int, error
 		if len(nal.raw) > 0xffff {
 			return 0, 0, encoderInvalid("encoder NAL is too large for STAP-A")
 		}
-		need := 2 + len(nal.raw)
-		if size+need > maxPayloadSize {
+		need, err := checkedAddInt(2, len(nal.raw))
+		if err != nil {
+			return 0, 0, encoderInvalid("STAP-A payload size overflows")
+		}
+		nextSize, err := checkedAddInt(size, need)
+		if err != nil || nextSize > maxPayloadSize {
 			break
 		}
-		size += need
+		size = nextSize
 		count++
 	}
 	return size, count, nil
@@ -2152,8 +2226,13 @@ func appendEncoderSTAPA(dst []byte, nals []encoderRawNAL, maxPayloadSize int) ([
 		if len(nal.raw) > 0xffff {
 			return dst[:start], 0, encoderInvalid("encoder NAL is too large for STAP-A")
 		}
-		need := 2 + len(nal.raw)
-		if len(dst)-start+need > maxPayloadSize {
+		need, err := checkedAddInt(2, len(nal.raw))
+		if err != nil {
+			return dst[:start], 0, encoderInvalid("STAP-A payload size overflows")
+		}
+		currentSize := len(dst) - start
+		nextSize, err := checkedAddInt(currentSize, need)
+		if err != nil || nextSize > maxPayloadSize {
 			break
 		}
 		if nri := nal.raw[0] & 0x60; nri > maxNRI {
