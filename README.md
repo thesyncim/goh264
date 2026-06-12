@@ -325,7 +325,8 @@ Accepted encoder setup values today:
 | Input | 8-bit I420, even width/height, valid I420 crop and strides | Other pixel formats, odd I420 dimensions, invalid crop/stride geometry |
 | Profile/tools | `EncoderProfileConstrainedBaseline` or `EncoderProfileBaseline`, `EncoderEntropyCAVLC`, `Transform8x8=false`, `MaxReferenceFrames=1`, `BFrames=0` | Main/High profiles, CABAC, 8x8 transform, multiple refs, B-frames |
 | Runtime | `Workers=1` for deterministic mode; `Workers>1` only with `Deterministic=false` and no parallel throughput guarantee yet; `SliceCount` from 1 through coded macroblock count; `IntraRefresh=false` | Deterministic multi-worker encode, too many slices, enabled intra refresh |
-| Rate/budget | CBR/VBR/ConstantQP, QP range 0..51, non-negative VBV/frame/slice/time budgets | Bad bitrate ordering, QP outside 0..51, negative budgets |
+| Rate/budget | CBR or ConstantQP, QP range 0..51, non-negative VBV/frame/slice/time budgets | VBR until it drives quality decisions, bad bitrate ordering, QP outside 0..51, negative budgets |
+| Preset | `EncoderPresetRealtime` | Balanced/Quality presets until they drive mode decisions |
 | Output | Annex B, AVC samples, or RTP | Unknown output formats |
 | RTP | packetization-mode 0 with payload size >= 2; packetization-mode 1 with payload size >= 3; STAP-A only in mode 1; DON disabled; payload type 0..127 | Mode-0 STAP-A, DON/interleaved mode, payload type >127, undersized RTP payloads |
 

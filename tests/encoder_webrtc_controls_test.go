@@ -599,6 +599,9 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 		{name: "8x8 transform not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.Transform8x8 = true }, want: goh264.ErrUnsupported},
 		{name: "multiple references not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.MaxReferenceFrames = 2 }, want: goh264.ErrUnsupported},
 		{name: "b frames disabled", mutate: func(c *goh264.EncoderConfig) { c.BFrames = 1 }, want: goh264.ErrUnsupported},
+		{name: "vbr not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.RateControl = goh264.EncoderRateControlVBR }, want: goh264.ErrUnsupported},
+		{name: "balanced preset not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.Preset = goh264.EncoderPresetBalanced }, want: goh264.ErrUnsupported},
+		{name: "quality preset not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.Preset = goh264.EncoderPresetQuality }, want: goh264.ErrUnsupported},
 		{name: "bad bitrate", mutate: func(c *goh264.EncoderConfig) { c.TargetBitrate = 0 }, want: goh264.ErrInvalidData},
 		{name: "max bitrate below target", mutate: func(c *goh264.EncoderConfig) { c.MaxBitrate = c.TargetBitrate - 1 }, want: goh264.ErrInvalidData},
 		{name: "bad qp range", mutate: func(c *goh264.EncoderConfig) { c.MinQP = 40; c.MaxQP = 20 }, want: goh264.ErrInvalidData},
@@ -897,11 +900,11 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		t.Fatalf("disabled runtime limits = frame %d slice %d time %d, want zeroes",
 			got.MaxFrameSize, got.SliceMaxBytes, got.MaxEncodeTimeUS)
 	}
-	if err := enc.SetPreset(goh264.EncoderPresetQuality); err != nil {
+	if err := enc.SetPreset(goh264.EncoderPresetRealtime); err != nil {
 		t.Fatalf("SetPreset valid: %v", err)
 	}
-	if got := enc.Config(); got.Preset != goh264.EncoderPresetQuality {
-		t.Fatalf("preset = %v, want quality", got.Preset)
+	if got := enc.Config(); got.Preset != goh264.EncoderPresetRealtime {
+		t.Fatalf("preset = %v, want realtime", got.Preset)
 	}
 	if err := enc.SetSliceCount(2); err != nil {
 		t.Fatalf("SetSliceCount valid: %v", err)
@@ -962,7 +965,7 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		MaxEncodeTimeUS:   5_000,
 		SliceCount:        2,
 		SliceMaxBytes:     700,
-		Preset:            goh264.EncoderPresetBalanced,
+		Preset:            goh264.EncoderPresetRealtime,
 		ForceIDR:          true,
 		SPSPPSBeforeIDR:   &noParameterSetsBeforeIDR,
 		RecoveryPointSEI:  &noRecoveryPointSEI,
@@ -978,7 +981,7 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		got.MaxEncodeTimeUS != 5_000 ||
 		got.SliceCount != 2 ||
 		got.SliceMaxBytes != 700 ||
-		got.Preset != goh264.EncoderPresetBalanced ||
+		got.Preset != goh264.EncoderPresetRealtime ||
 		got.SPSPPSBeforeIDR ||
 		got.RecoveryPointSEI {
 		t.Fatalf("reconfigured encoder = %+v, want realtime update applied", got)
@@ -3182,7 +3185,7 @@ func TestEncoderRealtimeControlLoopStressPreservesPacketAndReferenceState(t *tes
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
 		OutputFormat:    goh264.EncoderOutputAnnexB,
 		SPSPPSMode:      goh264.EncoderSPSPPSEveryIDR,
-		RateControl:     goh264.EncoderRateControlVBR,
+		RateControl:     goh264.EncoderRateControlConstantQP,
 		InitialQP:       &initialQP,
 		MinQP:           &minQP,
 		MaxQP:           &maxQP,
@@ -3195,7 +3198,7 @@ func TestEncoderRealtimeControlLoopStressPreservesPacketAndReferenceState(t *tes
 	got := enc.Config()
 	if got.OutputFormat != goh264.EncoderOutputAnnexB ||
 		got.SPSPPSMode != goh264.EncoderSPSPPSEveryIDR ||
-		got.RateControl != goh264.EncoderRateControlVBR ||
+		got.RateControl != goh264.EncoderRateControlConstantQP ||
 		got.InitialQP != initialQP ||
 		got.MinQP != minQP ||
 		got.MaxQP != maxQP ||
@@ -3380,7 +3383,7 @@ func TestEncoderReconfigureUpdatesRateControlQPDropAndGOPControls(t *testing.T) 
 	minQP := 12
 	maxQP := 40
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
-		RateControl:   goh264.EncoderRateControlVBR,
+		RateControl:   goh264.EncoderRateControlConstantQP,
 		VBVBufferSize: &vbv,
 		InitialQP:     &initialQP,
 		MinQP:         &minQP,
@@ -3392,7 +3395,7 @@ func TestEncoderReconfigureUpdatesRateControlQPDropAndGOPControls(t *testing.T) 
 		t.Fatalf("Reconfigure runtime rate controls: %v", err)
 	}
 	got := enc.Config()
-	if got.RateControl != goh264.EncoderRateControlVBR ||
+	if got.RateControl != goh264.EncoderRateControlConstantQP ||
 		got.VBVBufferSize != vbv ||
 		got.InitialQP != initialQP ||
 		got.MinQP != minQP ||
@@ -3607,11 +3610,11 @@ func TestEncoderSetPresetPreservesLiveReference(t *testing.T) {
 	}
 	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
 
-	if err := enc.SetPreset(goh264.EncoderPresetQuality); err != nil {
-		t.Fatalf("SetPreset quality: %v", err)
+	if err := enc.SetPreset(goh264.EncoderPresetRealtime); err != nil {
+		t.Fatalf("SetPreset realtime: %v", err)
 	}
-	if got := enc.Config().Preset; got != goh264.EncoderPresetQuality {
-		t.Fatalf("preset = %v, want quality", got)
+	if got := enc.Config().Preset; got != goh264.EncoderPresetRealtime {
+		t.Fatalf("preset = %v, want realtime", got)
 	}
 	if enc.PendingIDR() {
 		t.Fatal("SetPreset queued unexpected IDR")
@@ -3644,6 +3647,77 @@ func TestEncoderSetPresetPreservesLiveReference(t *testing.T) {
 	stream := append([]byte(nil), first.Data...)
 	stream = append(stream, second.Data...)
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+}
+
+func TestEncoderRejectsUnsupportedQualityModesWithoutMutation(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(*goh264.Encoder) error
+	}{
+		{name: "SetRateControl VBR", call: func(enc *goh264.Encoder) error {
+			return enc.SetRateControl(goh264.EncoderRateControlVBR)
+		}},
+		{name: "Reconfigure VBR", call: func(enc *goh264.Encoder) error {
+			return enc.Reconfigure(goh264.EncoderReconfigure{
+				RateControl: goh264.EncoderRateControlVBR,
+				ForceIDR:    true,
+			})
+		}},
+		{name: "SetPreset balanced", call: func(enc *goh264.Encoder) error {
+			return enc.SetPreset(goh264.EncoderPresetBalanced)
+		}},
+		{name: "SetPreset quality", call: func(enc *goh264.Encoder) error {
+			return enc.SetPreset(goh264.EncoderPresetQuality)
+		}},
+		{name: "Reconfigure quality preset", call: func(enc *goh264.Encoder) error {
+			return enc.Reconfigure(goh264.EncoderReconfigure{
+				Preset:   goh264.EncoderPresetQuality,
+				ForceIDR: true,
+			})
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = goh264.EncoderOutputAnnexB
+			cfg.RTPMaxPayloadSize = 0
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+			}
+
+			enc.ForceIDR()
+			before := enc.Config()
+			if err := tt.call(enc); !errors.Is(err, goh264.ErrUnsupported) {
+				t.Fatalf("%s error = %v, want ErrUnsupported", tt.name, err)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("%s mutated config = %+v, want %+v", tt.name, got, before)
+			}
+			if !enc.PendingIDR() {
+				t.Fatalf("%s cleared existing pending IDR", tt.name)
+			}
+
+			secondFrame := firstFrame
+			secondFrame.Y[0] ^= 0x11
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("%s Encode after unsupported update: %v", tt.name, err)
+			}
+			if !second.IDR || enc.PendingIDR() {
+				t.Fatalf("%s post-reject output idr=%v pending=%v, want existing forced IDR to remain",
+					tt.name, second.IDR, enc.PendingIDR())
+			}
+		})
+	}
 }
 
 func TestEncoderReconfigureAcceptsExplicitZeroQP(t *testing.T) {
@@ -7884,7 +7958,7 @@ func TestEncoderReconfigureZeroScalarFieldsAreNoOps(t *testing.T) {
 		MaxEncodeTimeUS:   10_000,
 		SliceCount:        2,
 		SliceMaxBytes:     2048,
-		Preset:            goh264.EncoderPresetBalanced,
+		Preset:            goh264.EncoderPresetRealtime,
 		GOPSize:           90,
 		IDRInterval:       30,
 		OutputFormat:      goh264.EncoderOutputRTP,

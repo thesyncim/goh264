@@ -30,7 +30,7 @@ defaults:
   time base, timestamps, and color/VUI metadata.
 - Profile/level: profile, constraint flags, level, entropy mode, deblock mode,
   transform size, reference count, and SPS/PPS cadence.
-- Rate control: CBR/VBR-like mode, target bitrate, max bitrate, buffer/VBV
+- Rate control: CBR/ConstantQP mode, target bitrate, max bitrate, buffer/VBV
   size, max frame size, initial/min/max QP, quality/speed preset, and bitrate
   update while running.
 - Realtime latency: zero-lookahead mode, frame dropping policy, maximum encode

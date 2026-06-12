@@ -64,10 +64,17 @@ type EncoderRateControlMode uint8
 
 const (
 	EncoderRateControlCBR EncoderRateControlMode = iota + 1
+	// EncoderRateControlVBR is reserved for a future quality-driven VBR mode.
+	// It is not admitted by NewEncoder yet.
 	EncoderRateControlVBR
 	EncoderRateControlConstantQP
 )
 
+// EncoderPreset selects speed/quality tradeoff policy.
+//
+// NewEncoder currently admits EncoderPresetRealtime only. Balanced and Quality
+// are exported compatibility values for future mode-decision work and currently
+// validate as unsupported.
 type EncoderPreset uint8
 
 const maxEncoderRawNALListLen = maxInt / 64
@@ -3339,7 +3346,9 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		cfg.RateControl = EncoderRateControlCBR
 	}
 	switch cfg.RateControl {
-	case EncoderRateControlCBR, EncoderRateControlVBR, EncoderRateControlConstantQP:
+	case EncoderRateControlCBR, EncoderRateControlConstantQP:
+	case EncoderRateControlVBR:
+		return cfg, encoderUnsupported("VBR rate control is planned but not admitted until it drives encoder quality decisions")
 	default:
 		return cfg, encoderInvalid("unknown rate-control mode")
 	}
@@ -3371,7 +3380,9 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		cfg.Preset = EncoderPresetRealtime
 	}
 	switch cfg.Preset {
-	case EncoderPresetRealtime, EncoderPresetBalanced, EncoderPresetQuality:
+	case EncoderPresetRealtime:
+	case EncoderPresetBalanced, EncoderPresetQuality:
+		return cfg, encoderUnsupported("non-realtime presets are planned but not admitted until they drive encoder mode decisions")
 	default:
 		return cfg, encoderInvalid("unknown encoder preset")
 	}
