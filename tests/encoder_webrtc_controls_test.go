@@ -11686,6 +11686,37 @@ func TestEncodedFrameCloneDeepCopiesResultStorage(t *testing.T) {
 				}
 			}
 
+			outDataBeforeCloneMutation := append([]byte(nil), out.Data...)
+			outRTPPacketsBeforeCloneMutation := cloneEncoderRTPPackets(out.RTPPackets)
+			if len(clone.Data) != 0 {
+				clone.Data[0] ^= 0xff
+			}
+			for i := range clone.RTPPackets {
+				if len(clone.RTPPackets[i].Data) != 0 {
+					clone.RTPPackets[i].Data[0] ^= 0xff
+				}
+				if len(clone.RTPPackets[i].Payload) != 0 {
+					clone.RTPPackets[i].Payload[0] ^= 0xff
+				}
+			}
+			if !bytes.Equal(out.Data, outDataBeforeCloneMutation) {
+				t.Fatal("mutating clone Data changed original Data")
+			}
+			if !reflect.DeepEqual(out.RTPPackets, outRTPPacketsBeforeCloneMutation) {
+				t.Fatal("mutating clone RTP packets changed original RTP packets")
+			}
+			if len(clone.Data) != 0 {
+				clone.Data[0] ^= 0xff
+			}
+			for i := range clone.RTPPackets {
+				if len(clone.RTPPackets[i].Data) != 0 {
+					clone.RTPPackets[i].Data[0] ^= 0xff
+				}
+				if len(clone.RTPPackets[i].Payload) != 0 {
+					clone.RTPPackets[i].Payload[0] ^= 0xff
+				}
+			}
+
 			for i := range out.Data {
 				out.Data[i] ^= 0xff
 			}
