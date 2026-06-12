@@ -457,6 +457,11 @@ func TestFrameHighOutputRejectsWrongSurface(t *testing.T) {
 	if _, err := high.AppendRawYUV(nil); err != ErrUnsupported {
 		t.Fatalf("AppendRawYUV high error = %v, want ErrUnsupported", err)
 	}
+	byteDst, byteBefore := decoderPrefilledByteBuffer()
+	if got, err := high.AppendRawYUV(byteDst); err != ErrUnsupported || len(got) != len(byteDst) {
+		t.Fatalf("AppendRawYUV high got len=%d err=%v, want original buffer and ErrUnsupported", len(got), err)
+	}
+	assertDecoderByteBufferUnchanged(t, byteDst, byteBefore)
 
 	eight := Frame{
 		Width: 2, Height: 2, ChromaFormatIDC: 0,
@@ -466,6 +471,11 @@ func TestFrameHighOutputRejectsWrongSurface(t *testing.T) {
 	if _, err := eight.AppendRawYUV16(nil); err != ErrUnsupported {
 		t.Fatalf("AppendRawYUV16 8-bit error = %v, want ErrUnsupported", err)
 	}
+	uint16Dst, uint16Before := decoderPrefilledUint16Buffer()
+	if got, err := eight.AppendRawYUV16(uint16Dst); err != ErrUnsupported || len(got) != len(uint16Dst) {
+		t.Fatalf("AppendRawYUV16 8-bit got len=%d err=%v, want original buffer and ErrUnsupported", len(got), err)
+	}
+	assertDecoderUint16BufferUnchanged(t, uint16Dst, uint16Before)
 }
 
 func TestFrameHighOutputRejectsInvalidGeometryAndDepth(t *testing.T) {
