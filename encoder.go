@@ -1301,6 +1301,44 @@ func (e *Encoder) SetMaxEncodeTimeUS(us int) error {
 	return nil
 }
 
+// SetSPSPPSMode updates in-band/out-of-band SPS/PPS emission policy.
+//
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetSPSPPSMode(mode EncoderSPSPPSMode) error {
+	return e.Reconfigure(EncoderReconfigure{SPSPPSMode: mode})
+}
+
+// SetRecoveryPointSEI enables or disables recovery-point SEI emission for
+// non-IDR recovery pictures.
+//
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetRecoveryPointSEI(enabled bool) error {
+	return e.Reconfigure(EncoderReconfigure{RecoveryPointSEI: &enabled})
+}
+
+// SetOutputFormat updates the emitted access-unit container.
+//
+// A successful output-format update queues an IDR so the next emitted access
+// unit can carry a clean boundary for the new container.
+func (e *Encoder) SetOutputFormat(format EncoderOutputFormat) error {
+	return e.Reconfigure(EncoderReconfigure{
+		OutputFormat: format,
+		ForceIDR:     true,
+	})
+}
+
+// SetRTPPacketizationMode updates RTP H.264 packetization controls.
+//
+// stapa enables STAP-A aggregation when mode is
+// EncoderRTPPacketizationNonInterleaved. Invalid updates leave the encoder
+// configuration and coding state unchanged.
+func (e *Encoder) SetRTPPacketizationMode(mode EncoderRTPPacketizationMode, stapa bool) error {
+	return e.Reconfigure(EncoderReconfigure{
+		RTPPacketizationMode: &mode,
+		STAPA:                &stapa,
+	})
+}
+
 // SetRTPPacketCallback installs an optional synchronous callback for emitted RTP
 // packets.
 //

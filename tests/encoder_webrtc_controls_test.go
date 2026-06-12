@@ -755,6 +755,33 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		t.Fatalf("disabled runtime limits = frame %d slice %d time %d, want zeroes",
 			got.MaxFrameSize, got.SliceMaxBytes, got.MaxEncodeTimeUS)
 	}
+	if err := enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand); err != nil {
+		t.Fatalf("SetSPSPPSMode valid: %v", err)
+	}
+	if err := enc.SetRecoveryPointSEI(false); err != nil {
+		t.Fatalf("SetRecoveryPointSEI valid: %v", err)
+	}
+	if err := enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false); err != nil {
+		t.Fatalf("SetRTPPacketizationMode valid: %v", err)
+	}
+	if got := enc.Config(); got.SPSPPSMode != goh264.EncoderSPSPPSOutOfBand ||
+		got.RecoveryPointSEI ||
+		got.RTPPacketizationMode != goh264.EncoderRTPPacketizationSingleNAL ||
+		got.STAPA {
+		t.Fatalf("explicit runtime controls = spspps %v recovery %v packetization %v stapa %v, want out-of-band/false/mode0/false",
+			got.SPSPPSMode, got.RecoveryPointSEI, got.RTPPacketizationMode, got.STAPA)
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR did not queue IDR before output-format setter")
+	}
+	if err := enc.SetOutputFormat(goh264.EncoderOutputAVC); err != nil {
+		t.Fatalf("SetOutputFormat valid: %v", err)
+	}
+	if got := enc.Config(); got.OutputFormat != goh264.EncoderOutputAVC || !enc.PendingIDR() {
+		t.Fatalf("SetOutputFormat state = format %v pending %v, want AVC and queued IDR",
+			got.OutputFormat, enc.PendingIDR())
+	}
 
 	noParameterSetsBeforeIDR := false
 	noRecoveryPointSEI := false
@@ -826,6 +853,15 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 		}},
 		{name: "SetMaxEncodeTimeUS", call: func(enc *goh264.Encoder) error {
 			return enc.SetMaxEncodeTimeUS(-1)
+		}},
+		{name: "SetSPSPPSMode", call: func(enc *goh264.Encoder) error {
+			return enc.SetSPSPPSMode(goh264.EncoderSPSPPSMode(99))
+		}},
+		{name: "SetOutputFormat", call: func(enc *goh264.Encoder) error {
+			return enc.SetOutputFormat(goh264.EncoderOutputFormat(99))
+		}},
+		{name: "SetRTPPacketizationMode", call: func(enc *goh264.Encoder) error {
+			return enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationMode(99), false)
 		}},
 	}
 	for _, tt := range tests {
@@ -1914,6 +1950,46 @@ func TestEncoderReconfigureSwitchesOutputFormatForForcedIDR(t *testing.T) {
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, secondFrame))
 	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
 	stream = append(stream, second.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
+}
+
+func TestEncoderSetOutputFormatQueuesIDRBoundary(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	frame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first RTP IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	if err := enc.SetOutputFormat(goh264.EncoderOutputAVC); err != nil {
+		t.Fatalf("SetOutputFormat AVC: %v", err)
+	}
+	if got := enc.Config(); got.OutputFormat != goh264.EncoderOutputAVC || !enc.PendingIDR() {
+		t.Fatalf("SetOutputFormat state = format %v pending %v, want AVC and queued IDR",
+			got.OutputFormat, enc.PendingIDR())
+	}
+
+	frame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode AVC IDR after SetOutputFormat: %v", err)
+	}
+	if !second.IDR || len(second.RTPPackets) != 0 {
+		t.Fatalf("SetOutputFormat output idr=%v rtpPackets=%d, want AVC IDR without RTP",
+			second.IDR, len(second.RTPPackets))
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncodedFrame(t, second, goh264.EncoderOutputAVC)...)
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 }
 
@@ -12942,6 +13018,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
 		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize",
 		"SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
+		"SetSPSPPSMode", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
 		"SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {

@@ -233,8 +233,10 @@ suppress later duplicates.
 
 ## Encoder API (Experimental)
 
-The encoder API is a WebRTC/realtime control contract while implementation is
-still landing:
+The encoder surface is intentionally split into a small recommended realtime
+path and lower-level escape hatches. Prefer the explicit setters for live
+controls; use `Reconfigure` only when a grouped update needs fields that do not
+yet have a dedicated helper.
 
 ```go
 cfg := goh264.DefaultEncoderConfig(640, 480)
@@ -250,36 +252,25 @@ if err != nil {
 	// Invalid controls return ErrInvalidData; unsupported future tools return ErrUnsupported.
 }
 enc.HandlePLI() // queues the next frame as an IDR request
+err = enc.SetBitrate(700_000, 900_000)
+err = enc.SetFrameRate(30, 1)
 err = enc.SetRTPMaxPayloadSize(1200)
 err = enc.SetMaxFrameSize(0)    // disable the access-unit byte budget
 err = enc.SetSliceMaxBytes(0)   // disable the per-slice byte budget
 err = enc.SetMaxEncodeTimeUS(0) // disable the late-frame time budget
-mode0 := goh264.EncoderRTPPacketizationSingleNAL
-stapa := false
-err = enc.Reconfigure(goh264.EncoderReconfigure{
-	RTPPacketizationMode: &mode0,
-	STAPA:                &stapa,
-	ForceIDR:             true,
-})
+err = enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand)
+err = enc.SetRecoveryPointSEI(true)
+err = enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false)
+err = enc.SetOutputFormat(goh264.EncoderOutputAVC) // queues an IDR boundary
 enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
 	// Optional per-packet WebRTC metadata hook.
 })
 headers, err = enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 avcc := headers.AVCC()
-ownedSPS := headers.AppendSPS(nil)
-ownedPPS := headers.AppendPPS(nil)
-ownedAnnexBHeaders := headers.AppendAnnexB(nil)
-ownedAVCC := headers.AppendAVCC(nil)
-headersCopy := headers.Clone()
 sei, err = enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
-ownedSEINAL := sei.AppendNAL(nil)
-ownedSEIAnnexB := sei.AppendAnnexB(nil)
-ownedSEIAVC := sei.AppendAVC(nil)
-seiCopy := sei.Clone()
 frame := enc.I420Frame(y, cb, cr, pts)
 err = cfg.ValidateFrame(frame)
 err = enc.ValidateFrame(frame)
-frameCopy, err := frame.Clone()
 out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if out.Dropped {
 	// Realtime budget drop: no bytes or RTP packets were emitted.
@@ -288,15 +279,6 @@ accessUnit, err := out.AccessUnitData()
 nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
 packet0, err := out.RTPPacketData(0)
 payload0, err := out.RTPPayloadData(0)
-packet0Bytes, err := out.RTPPackets[0].PacketData()
-payload0Bytes, err := out.RTPPackets[0].PayloadData()
-ownedAccessUnit, err := out.AppendAccessUnitData(nil)
-ownedNAL0, err := out.AppendNALData(nil, 0)
-ownedPacket0, err := out.AppendRTPPacketData(nil, 0)
-ownedPayload0, err := out.AppendRTPPayloadData(nil, 0)
-ownedPacket0Bytes, err := out.RTPPackets[0].AppendPacketData(nil)
-ownedPayload0Bytes, err := out.RTPPackets[0].AppendPayloadData(nil)
-ownedRTPPacket0, err := out.RTPPackets[0].Clone()
 owned, err := out.Clone()   // deep-owned snapshot for async retention
 err = enc.Reset()           // clear encoder coding state, keep config/callback
 ```
@@ -318,8 +300,18 @@ that are currently intended to be stable enough for integration work:
 - `SetMaxFrameSize`, `SetSliceMaxBytes`, and `SetMaxEncodeTimeUS` provide
   explicit runtime setters for size and latency budgets; passing zero disables
   the corresponding budget.
+- `SetSPSPPSMode`, `SetRecoveryPointSEI`, `SetOutputFormat`, and
+  `SetRTPPacketizationMode` cover common output/cadence changes without
+  constructing an `EncoderReconfigure` value. `SetOutputFormat` queues an IDR
+  boundary after a valid update.
+- `EncoderReconfigure` remains the grouped low-level update surface for
+  resolution, QP, GOP, deblock, RTP header fields, and bundled force-IDR
+  changes.
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
   async handoff.
+- Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
+  payload helpers have `Append...` forms for caller-owned retention buffers and
+  `Clone` forms for async snapshots.
 - Overflowed caller-owned `EncodeInto` destination growth is rejected across
   Annex B, AVC, and RTP without consuming queued IDR state or advancing
   RTP/callback state. The same hard-error path preserves P-frame reference and
