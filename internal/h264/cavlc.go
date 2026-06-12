@@ -713,9 +713,91 @@ func writeCAVLCResidualBounded(bw *BitWriter, block []int32, n int, scantable []
 		return writeCAVLCResidualSingleLevelTrailingOnes(bw, block, n, scantable, maxCoeff, predictedNnz)
 	}
 	if trailingOnes != 0 {
-		return 0, ErrInvalidData
+		return writeCAVLCResidualNonTrailingLevelsTrailingOnes(bw, block, n, scantable, maxCoeff, predictedNnz, nonTrailing, nonTrailing)
 	}
 	return writeCAVLCResidualNonTrailingLevels(bw, block, n, scantable, maxCoeff, predictedNnz, nonTrailing, nonTrailing)
+}
+
+func writeCAVLCResidualNonTrailingLevelsTrailingOnes(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int, minNonTrailing int, maxAdmittedNonTrailing int) (int, error) {
+	if bw == nil || maxCoeff <= 0 || maxCoeff > 16 || len(scantable) < maxCoeff {
+		return 0, ErrInvalidData
+	}
+	if minNonTrailing < 2 || maxAdmittedNonTrailing < minNonTrailing || maxAdmittedNonTrailing > 16 {
+		return 0, ErrInvalidData
+	}
+	var scanIndex [16]int
+	var level [16]int32
+	totalCoeff := 0
+	for i := 0; i < maxCoeff; i++ {
+		pos := int(scantable[i])
+		if pos < 0 || n+pos < 0 || n+pos >= len(block) {
+			return 0, ErrInvalidData
+		}
+		v := block[n+pos]
+		if v == 0 {
+			continue
+		}
+		scanIndex[totalCoeff] = i
+		level[totalCoeff] = v
+		totalCoeff++
+	}
+
+	trailingOnes := 0
+	for i := totalCoeff - 1; i >= 0 && trailingOnes < 3; i-- {
+		if level[i] != 1 && level[i] != -1 {
+			break
+		}
+		trailingOnes++
+	}
+	nonTrailing := totalCoeff - trailingOnes
+	if trailingOnes == 0 || nonTrailing < minNonTrailing || nonTrailing > maxAdmittedNonTrailing {
+		return 0, ErrInvalidData
+	}
+	for i := 0; i < nonTrailing; i++ {
+		if level[i] == 0 || level[i] == 1 || level[i] == -1 {
+			return 0, ErrInvalidData
+		}
+	}
+
+	if err := writeCAVLCCoeffToken(bw, totalCoeff, trailingOnes, predictedNnz, maxCoeff); err != nil {
+		return 0, err
+	}
+	for i := totalCoeff - 1; i >= nonTrailing; i-- {
+		if level[i] < 0 {
+			bw.WriteBit(1)
+		} else {
+			bw.WriteBit(0)
+		}
+	}
+
+	initialSuffixLength := 0
+	if totalCoeff > 10 && trailingOnes < 3 {
+		initialSuffixLength = 1
+	}
+	suffixLength, err := writeCAVLCFirstLevelWithTrailingOnes(bw, level[nonTrailing-1], initialSuffixLength, trailingOnes)
+	if err != nil {
+		return 0, err
+	}
+	for i := nonTrailing - 2; i >= 0; i-- {
+		if err := writeCAVLCSubsequentLevel(bw, level[i], suffixLength); err != nil {
+			return 0, err
+		}
+		suffixLength = cavlcSuffixLengthAfterSubsequentLevel(level[i], suffixLength)
+	}
+
+	totalZeros := scanIndex[totalCoeff-1] + 1 - totalCoeff
+	if err := writeCAVLCTotalZeros(bw, totalZeros, totalCoeff, maxCoeff); err != nil {
+		return 0, err
+	}
+	zerosLeft := totalZeros
+	for i := totalCoeff - 2; i >= 0 && zerosLeft > 0; i-- {
+		runBefore := scanIndex[i+1] - scanIndex[i] - 1
+		if err := writeCAVLCRunBefore(bw, runBefore, zerosLeft); err != nil {
+			return 0, err
+		}
+		zerosLeft -= runBefore
+	}
+	return totalCoeff, nil
 }
 
 func writeCAVLCResidualSingleLevelTrailingOnes(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
@@ -793,6 +875,26 @@ func writeCAVLCFirstLevel(bw *BitWriter, level int32) error {
 	return err
 }
 
+func writeCAVLCFirstLevelWithTrailingOnes(bw *BitWriter, level int32, suffixLength int, trailingOnes int) (int, error) {
+	if trailingOnes < 0 || trailingOnes > 3 {
+		return 0, ErrInvalidData
+	}
+	if trailingOnes < 3 {
+		return writeCAVLCFirstLevelWithSuffix(bw, level, suffixLength)
+	}
+	if bw == nil || level == 0 || suffixLength != 0 {
+		return 0, ErrInvalidData
+	}
+	code, err := cavlcLevelCode(level)
+	if err != nil {
+		return 0, err
+	}
+	if err := writeCAVLCLevelCode(bw, code); err != nil {
+		return 0, err
+	}
+	return cavlcSuffixLengthAfterFirstLevel(level, code), nil
+}
+
 func writeCAVLCFirstLevelWithSuffix(bw *BitWriter, level int32, suffixLength int) (int, error) {
 	if bw == nil || level == 0 || level == 1 || level == -1 || suffixLength < 0 || suffixLength > 1 {
 		return 0, ErrInvalidData
@@ -825,9 +927,16 @@ func cavlcFirstLevelCode(level int32) (int64, error) {
 	if level < 0 {
 		adjusted = level + 1
 	}
-	code := int64(adjusted)*2 - 2
-	if adjusted < 0 {
-		code = int64(-adjusted)*2 - 1
+	return cavlcLevelCode(adjusted)
+}
+
+func cavlcLevelCode(level int32) (int64, error) {
+	if level == 0 {
+		return 0, ErrInvalidData
+	}
+	code := int64(level)*2 - 2
+	if level < 0 {
+		code = int64(-level)*2 - 1
 	}
 	if code < 0 {
 		return 0, ErrInvalidData

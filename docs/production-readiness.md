@@ -19,7 +19,7 @@ allocation budgets, and oracle evidence land.
 The encoder bitstream-writer residual work is still deliberately bounded, but
 the CAVLC single-level and single-level-plus-trailing-ones residual writers now
 round-trip both short and decoder-supported prefix-14/prefix-15 first-level
-codes, and two-, three-, four-, five-, six-, seven-, eight-, nine-, ten-, eleven-, twelve-, thirteen-, fourteen-, fifteen-, and sixteen-non-trailing-level writers plus a conservative bounded dispatcher now round-trip subsequent
+codes, and two-, three-, four-, five-, six-, seven-, eight-, nine-, ten-, eleven-, twelve-, thirteen-, fourteen-, fifteen-, and sixteen-non-trailing-level writers plus a bounded dispatcher including multi-level-plus-trailing-one shapes now round-trip subsequent
 suffix-length transitions plus the totalCoeff>10 first-level suffix transition, before broader residual macroblock admission.
 
 Harness-first status:
