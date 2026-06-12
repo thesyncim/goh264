@@ -2361,6 +2361,11 @@ func TestEncoderHeaderHelpersPreservePendingIDR(t *testing.T) {
 			second.IDR, enc.PendingIDR())
 	}
 	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLFrameNums(t,
+		append(append([]byte(nil), first.Data...), second.Data...),
+		[]uint8{5, 5},
+		[]uint32{0, 1},
+	)
 }
 
 func TestEncoderParameterSetsExposeWebRTCCrop(t *testing.T) {
