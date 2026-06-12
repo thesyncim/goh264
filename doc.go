@@ -16,8 +16,9 @@
 //
 // Encoder API shape:
 //
-//   - Start from DefaultEncoderConfig, normalize or validate it, then construct
-//     an Encoder with NewEncoder.
+//   - Start from DefaultRealtimeEncoderConfig, normalize or validate it, then
+//     construct an Encoder with NewEncoder. DefaultEncoderConfig remains as a
+//     compatibility alias.
 //   - Use explicit runtime setters for ordinary bitrate, frame-rate, GOP,
 //     geometry, slice, header, packetization, RTP, and recovery-SEI controls.
 //   - Use Reconfigure only for grouped low-level updates, grouped Limits, or

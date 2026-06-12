@@ -221,7 +221,11 @@ same stateful update rule when it carries avcC or Annex B parameter-set data:
 compatible updates retain references; incompatible active SPS changes reset
 picture state before decoding.
 
-Parse headers without decoding full frames:
+Configure or inspect headers without decoding full frames. The decoder methods
+are stateful: `ParseHeadersAnnexB` stores SPS/PPS state, and `ParseHeadersAVC`
+also stores the AVC NAL length size used by later
+`DecodeConfiguredAVCFrames` calls. Use the package-level inspect functions for
+stateless avcC metadata:
 
 ```go
 info, err := dec.ParseHeadersAnnexB(data)
@@ -235,11 +239,12 @@ partially parsed SPS/PPS state is not committed over a previous valid
 configuration, and delayed configured-AVC B-frame output remains available for
 flush after the rejected parse.
 Decoder `ConfigureAVCDecoderConfigurationRecord` and `ConfigureAVCC` store the
-configuration for later configured-AVC decode; decoder `ParseAVCDecoderConfigurationRecord`
-and `ParseAVCC` remain compatibility aliases. Package-level `InspectAVCC`,
-`InspectAVCDecoderConfigurationRecord`, `ParseAVCC`, and
-`ParseAVCDecoderConfigurationRecord` parse the same metadata without mutating
-decoder state.
+configuration for later configured-AVC decode; decoder
+`ParseAVCDecoderConfigurationRecord` and `ParseAVCC` remain compatibility
+aliases. Package-level `InspectAVCC` and `InspectAVCDecoderConfigurationRecord`
+are the preferred stateless names; package-level `ParseAVCC` and
+`ParseAVCDecoderConfigurationRecord` remain compatibility aliases that parse the
+same metadata without mutating decoder state.
 
 Preferred avcC names:
 
@@ -302,8 +307,9 @@ Choose the encoder surface by what the caller owns:
 
 | Need | Use |
 | --- | --- |
-| Start from a supported realtime baseline | `DefaultEncoderConfig` |
-| Validate and see the exact stored setup before construction | `EncoderConfig.Normalize` or `Validate` |
+| Start from a supported realtime/WebRTC baseline | `DefaultRealtimeEncoderConfig`; `DefaultEncoderConfig` is a compatibility alias |
+| Validate and see the exact setup before construction | `EncoderConfig.Normalize` or `Validate` |
+| Read the exact live setup after accepted setters | `Encoder.Config` |
 | Validate one input frame without mutating encoder state | `EncoderConfig.ValidateFrame` or `Encoder.ValidateFrame` |
 | Generate SPS/PPS or recovery SEI without a live encoder | `EncoderConfig.ParameterSets` or `RecoveryPointSEIMessage` |
 | Encode with encoder-owned access-unit storage | `Encode` |
@@ -324,7 +330,7 @@ Accepted encoder setup values today:
 | RTP | packetization-mode 0 with payload size >= 2; packetization-mode 1 with payload size >= 3; STAP-A only in mode 1; DON disabled; payload type 0..127 | Mode-0 STAP-A, DON/interleaved mode, payload type >127, undersized RTP payloads |
 
 ```go
-cfg := goh264.DefaultEncoderConfig(640, 480)
+cfg := goh264.DefaultRealtimeEncoderConfig(640, 480)
 cfg.TargetBitrate = 800_000
 cfg.MaxBitrate = 1_000_000
 cfg.SliceCount = 2
@@ -390,7 +396,8 @@ if err != nil {
 	log.Fatal(err)
 }
 frame := enc.I420Frame(y, cb, cr, pts)
-must(cfg.ValidateFrame(frame))
+liveCfg := enc.Config()
+must(liveCfg.ValidateFrame(frame))
 must(enc.ValidateFrame(frame))
 out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if err != nil {
@@ -437,6 +444,8 @@ that are currently intended to be stable enough for integration work:
 
 - `EncoderConfig.Normalize` exposes the exact validated configuration stored by
   `NewEncoder`.
+- `Encoder.Config` returns the exact normalized live configuration after
+  accepted runtime setters and `Reconfigure` updates.
 - `EncoderConfig.ParameterSets` and `EncoderConfig.RecoveryPointSEIMessage`
   generate caller-owned helper surfaces without constructing a live encoder.
   Header and SEI results include append helpers for retaining individual byte

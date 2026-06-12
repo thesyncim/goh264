@@ -60,6 +60,8 @@ type AVCConfig = AVCDecoderConfiguration
 
 // ParseAVCDecoderConfigurationRecord parses an AVC decoder configuration record
 // without changing decoder state.
+//
+// InspectAVCDecoderConfigurationRecord is the preferred stateless name.
 func ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
 	return InspectAVCDecoderConfigurationRecord(data)
 }
@@ -78,6 +80,8 @@ func InspectAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration,
 }
 
 // ParseAVCC parses an avcC record without changing decoder state.
+//
+// InspectAVCC is the preferred stateless avcC name.
 func ParseAVCC(data []byte) (AVCConfig, error) {
 	return ParseAVCDecoderConfigurationRecord(data)
 }
@@ -765,7 +769,8 @@ func framesFromH264(frames []*h264.DecodedFrame) []*Frame {
 	return out
 }
 
-// ParseHeadersAnnexB parses Annex B parameter sets and returns stream metadata.
+// ParseHeadersAnnexB parses Annex B parameter sets, stores SPS/PPS state for
+// later stateful decode calls, and returns stream metadata.
 func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
 	if d == nil {
 		return StreamInfo{}, ErrInvalidData
@@ -777,7 +782,9 @@ func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
 	return d.parseHeaders(nals)
 }
 
-// ParseHeadersAVC parses AVC parameter sets and returns stream metadata.
+// ParseHeadersAVC parses AVC parameter sets, stores SPS/PPS state and the AVC
+// NAL length size for later DecodeConfiguredAVCFrames calls, and returns stream
+// metadata.
 func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, error) {
 	if d == nil {
 		return StreamInfo{}, ErrInvalidData
@@ -808,8 +815,9 @@ func (d *Decoder) ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderCon
 // metadata. Storing a configuration resets decoder picture state for a new
 // configured-AVC stream.
 //
-// ConfigureAVCDecoderConfigurationRecord is the preferred mutating name.
-// ParseAVCDecoderConfigurationRecord remains as a compatibility alias.
+// ConfigureAVCDecoderConfigurationRecord is the long-form mutating name.
+// ConfigureAVCC is the preferred short avcC API. ParseAVCDecoderConfigurationRecord
+// remains as a compatibility alias.
 func (d *Decoder) ConfigureAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
 	if d == nil {
 		return AVCDecoderConfiguration{}, ErrInvalidData

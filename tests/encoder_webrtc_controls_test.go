@@ -18,7 +18,10 @@ import (
 )
 
 func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
-	cfg := goh264.DefaultEncoderConfig(640, 480)
+	cfg := goh264.DefaultRealtimeEncoderConfig(640, 480)
+	if alias := goh264.DefaultEncoderConfig(640, 480); alias != cfg {
+		t.Fatalf("DefaultEncoderConfig alias differs from DefaultRealtimeEncoderConfig")
+	}
 	enc, err := goh264.NewEncoder(cfg)
 	if err != nil {
 		t.Fatalf("NewEncoder default: %v", err)

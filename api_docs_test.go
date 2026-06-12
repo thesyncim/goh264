@@ -66,6 +66,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 
 	encoderType := reflect.TypeOf((*Encoder)(nil))
 	for _, name := range []string{
+		"Config",
 		"ValidateFrame",
 		"Encode",
 		"EncodeInto",
@@ -122,6 +123,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}
 
 	for _, name := range []string{
+		"DefaultRealtimeEncoderConfig",
 		"DefaultEncoderConfig",
 		"Clone",
 		"Append",
@@ -180,7 +182,8 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 	for _, required := range []string{
 		"must(enc.SetBitrate",
 		"must(enc.SetLimits",
-		"must(cfg.ValidateFrame",
+		"liveCfg := enc.Config()",
+		"must(liveCfg.ValidateFrame",
 		"must(enc.ValidateFrame",
 		"must(enc.Reset",
 		"admitted control, budget",
@@ -330,6 +333,25 @@ func TestREADMEEncoderAdmittedValuesTableDocumentsUnsupportedKnobs(t *testing.T)
 	}
 }
 
+func TestREADMEEncoderDocumentsRealtimeDefaultAndLiveConfig(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+	for _, phrase := range []string{
+		"supported realtime/WebRTC baseline",
+		"`DefaultRealtimeEncoderConfig`; `DefaultEncoderConfig` is a compatibility alias",
+		"Read the exact live setup after accepted setters",
+		"`Encoder.Config`",
+		"Encoder.Config` returns the exact normalized live configuration",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md realtime default/live config docs missing %q", phrase)
+		}
+	}
+}
+
 func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {
@@ -394,15 +416,20 @@ func TestPublicCommentsDocumentStateLifecycleBoundaries(t *testing.T) {
 	decoder := string(decoderData)
 	encoder := string(encoderData)
 	for _, phrase := range []string{
+		"ParseHeadersAVC parses AVC parameter sets, stores SPS/PPS state and the AVC\n// NAL length size for later DecodeConfiguredAVCFrames calls",
 		"Storing a configuration resets decoder picture state for a new",
 		"ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,\n// resets decoder picture state",
 		"ConfigureAVCC parses an avcC record, stores it for configured-AVC decode\n// calls, resets decoder picture state",
+		"ConfigureAVCC is the preferred short avcC API",
 	} {
 		if !strings.Contains(decoder, phrase) {
 			t.Fatalf("decoder public comments missing lifecycle phrase %q", phrase)
 		}
 	}
 	for _, phrase := range []string{
+		"DefaultRealtimeEncoderConfig returns a realtime/WebRTC-oriented 8-bit I420",
+		"DefaultEncoderConfig remains as a compatibility alias",
+		"Config returns a copy of the current normalized encoder configuration",
 		"Reset clears encoder coding state while preserving configuration and RTP callback",
 		"After Reset, the next successfully encoded frame starts a fresh sequence",
 	} {

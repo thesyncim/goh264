@@ -18,6 +18,11 @@ const (
 	EncoderPixelFormatI420 EncoderPixelFormat = iota + 1
 )
 
+// EncoderProfile selects H.264 profile syntax.
+//
+// NewEncoder currently admits EncoderProfileConstrainedBaseline and
+// EncoderProfileBaseline. Main and High are exported compatibility values for a
+// future wider encoder surface and currently validate as unsupported.
 type EncoderProfile uint8
 
 const (
@@ -27,6 +32,11 @@ const (
 	EncoderProfileHigh
 )
 
+// EncoderEntropyMode selects entropy coding syntax.
+//
+// NewEncoder currently admits EncoderEntropyCAVLC. CABAC is exported as a
+// compatibility value for future wider profiles and currently validates as
+// unsupported.
 type EncoderEntropyMode uint8
 
 const (
@@ -121,9 +131,10 @@ type EncoderColorConfig struct {
 
 // EncoderConfig controls encoder setup.
 //
-// Start from DefaultEncoderConfig and override the fields needed by the
-// integration. NewEncoder and Validate normalize derived defaults and reject
-// invalid or not-yet-admitted controls.
+// Start from DefaultRealtimeEncoderConfig and override the fields needed by the
+// integration. DefaultEncoderConfig remains as a compatibility alias. NewEncoder
+// and Validate normalize derived defaults and reject invalid or not-yet-admitted
+// controls.
 type EncoderConfig struct {
 	Width        int
 	Height       int
@@ -806,9 +817,9 @@ type Encoder struct {
 	rtpPacketCallback  EncoderRTPPacketCallback
 }
 
-// DefaultEncoderConfig returns a realtime 8-bit I420 configuration template for
-// the requested dimensions.
-func DefaultEncoderConfig(width, height int) EncoderConfig {
+// DefaultRealtimeEncoderConfig returns a realtime/WebRTC-oriented 8-bit I420
+// configuration template for the requested dimensions.
+func DefaultRealtimeEncoderConfig(width, height int) EncoderConfig {
 	strideY, strideCb, strideCr := defaultEncoderI420Strides(width)
 	return EncoderConfig{
 		Width:                 width,
@@ -852,6 +863,14 @@ func DefaultEncoderConfig(width, height int) EncoderConfig {
 		RTPPayloadType:        96,
 		RTPTimestampIncrement: 3000,
 	}
+}
+
+// DefaultEncoderConfig returns DefaultRealtimeEncoderConfig.
+//
+// DefaultEncoderConfig remains as a compatibility alias for the preferred
+// realtime-specific name.
+func DefaultEncoderConfig(width, height int) EncoderConfig {
+	return DefaultRealtimeEncoderConfig(width, height)
 }
 
 // NewEncoder validates and normalizes cfg, then returns a fresh encoder.
@@ -931,7 +950,8 @@ func (e *Encoder) Reset() error {
 	return nil
 }
 
-// Config returns the current normalized encoder configuration.
+// Config returns a copy of the current normalized encoder configuration,
+// including accepted runtime setter and Reconfigure updates.
 func (e *Encoder) Config() EncoderConfig {
 	if e == nil {
 		return EncoderConfig{}

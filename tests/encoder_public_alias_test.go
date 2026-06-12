@@ -5,8 +5,9 @@ package goh264_test
 import goh264 "github.com/thesyncim/goh264"
 
 var (
-	DefaultEncoderConfig = goh264.DefaultEncoderConfig
-	NewEncoder           = goh264.NewEncoder
+	DefaultRealtimeEncoderConfig = goh264.DefaultRealtimeEncoderConfig
+	DefaultEncoderConfig         = goh264.DefaultEncoderConfig
+	NewEncoder                   = goh264.NewEncoder
 )
 
 type (
