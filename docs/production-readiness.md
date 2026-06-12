@@ -420,6 +420,6 @@ per-macroblock signed MVDs, per-macroblock nonzero luma coefficients, bounded pe
 Cb/Cr chroma-DC coefficients, and consecutive-macroblock `mb_qp_delta` state
 through parser, CAVLC frame-macroblock decode, predicted motion writeback, and
 nonzero-count/CBP table writeback.
-Broader motion-search
-P prediction, residual CAVLC coding, rate-control feedback, broader allocation
-budgets, and realtime performance gates remain pending.
+Broader motion-search P prediction, public residual macroblock admission,
+rate-control feedback, broader allocation budgets, and realtime performance
+gates remain pending.

@@ -4,18 +4,18 @@ Pure-Go H.264 codec workbench, decoder-first and source-shaped from FFmpeg
 `libavcodec`.
 
 This repository is an active port of the FFmpeg `n8.0.1` H.264 decoder path,
-pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`. The decoder is the mature
-side of the project: public Annex B, AVC, avcC, packet, raw-output, side-data,
-and delayed-output surfaces are covered by unit, corpus, FATE, and FFmpeg-oracle
-tests.
+pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`. The decoder is the
+best-covered side of the project: public Annex B, AVC, avcC, packet,
+raw-output, side-data, and delayed-output surfaces are covered by unit, corpus,
+FATE, and FFmpeg-oracle tests.
 
 The encoder is intentionally narrower. It has a tested realtime/WebRTC-facing
 API and admits a guarded Constrained Baseline I420 subset today: IDR IntraPCM,
 identical-reference P-skip, bounded exact P16x16 no-residual prediction, changed
 P IntraPCM recovery frames, AVC/Annex B output, configured multi-slice output,
 and RTP packetization modes 0 and 1. The API is usable for integration testing,
-but broader motion search, residual coding, rate-control behavior, and
-production performance evidence are still in flight.
+but broader motion search, public residual macroblock admission, rate-control
+behavior, and production performance evidence are still in flight.
 
 ## Quality And Parity Status
 
@@ -27,7 +27,7 @@ but it is not quality-parity with a production H.264 encoder.
 | Area | Quality state | Strong evidence today | Missing before production parity |
 | --- | --- | --- | --- |
 | Decoder | Best-covered, still pre-release | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Final release evidence, every selected release gate green together, exact parity on remaining unselected field/MBAFF/damaged-edge behavior |
-| Encoder | Experimental admitted subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual coding, mature rate control, wider packetizer/control breadth, oracle-backed bitstream parity, reviewed allocation/performance evidence |
+| Encoder | Experimental admitted subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, public residual macroblock admission, mature rate control, wider packetizer/control breadth, oracle-backed bitstream parity, reviewed allocation/performance evidence |
 | Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, release readiness, or performance evidence |
 
 ## What Works Today

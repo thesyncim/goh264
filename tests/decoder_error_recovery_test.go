@@ -679,17 +679,33 @@ func TestDecodeAVCFramesWithConfigurationRecordRejectPreservesStoredConfiguratio
 		t.Fatal(err)
 	}
 
-	damagedConfig := append([]byte(nil), config...)
-	damagedConfig = damagedConfig[:len(damagedConfig)-1]
-	if out, err := dec.DecodeAVCFramesWithConfigurationRecord(damagedConfig, samples[0]); err == nil {
-		t.Fatalf("damaged avcC with packet decoded frames=%d, want error", len(out))
-	}
+	for _, tt := range []struct {
+		name string
+		call func(config, data []byte) ([]*Frame, error)
+	}{
+		{
+			name: "long form",
+			call: dec.DecodeAVCFramesWithConfigurationRecord,
+		},
+		{
+			name: "short form",
+			call: dec.DecodeAVCCFrames,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			damagedConfig := append([]byte(nil), config...)
+			damagedConfig = damagedConfig[:len(damagedConfig)-1]
+			if out, err := tt.call(damagedConfig, samples[0]); err == nil {
+				t.Fatalf("damaged avcC with packet decoded frames=%d, want error", len(out))
+			}
 
-	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
-	if err != nil {
-		t.Fatalf("decode after damaged avcC DecodeAVCFramesWithConfigurationRecord: %v", err)
+			frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+			if err != nil {
+				t.Fatalf("decode after damaged avcC %s: %v", tt.name, err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+		})
 	}
-	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
 func TestDecodePacketFramesAVCRecoversAfterDamagedSlicePacket(t *testing.T) {

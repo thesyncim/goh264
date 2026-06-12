@@ -1006,15 +1006,27 @@ func TestDecoderConfigureAVCCRejectsMalformedWithoutMutation(t *testing.T) {
 		call func(*Decoder, []byte) (AVCConfig, error)
 	}{
 		{
-			name: "long form",
+			name: "configure long form",
 			call: func(dec *Decoder, data []byte) (AVCConfig, error) {
 				return dec.ConfigureAVCDecoderConfigurationRecord(data)
 			},
 		},
 		{
-			name: "short form",
+			name: "configure short form",
 			call: func(dec *Decoder, data []byte) (AVCConfig, error) {
 				return dec.ConfigureAVCC(data)
+			},
+		},
+		{
+			name: "parse compatibility long form",
+			call: func(dec *Decoder, data []byte) (AVCConfig, error) {
+				return dec.ParseAVCDecoderConfigurationRecord(data)
+			},
+		},
+		{
+			name: "parse compatibility short form",
+			call: func(dec *Decoder, data []byte) (AVCConfig, error) {
+				return dec.ParseAVCC(data)
 			},
 		},
 	} {

@@ -17,12 +17,19 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	readme := string(data)
 
 	decoderType := reflect.TypeOf((*Decoder)(nil))
+	packageDecoderFunctions := map[string]any{
+		"InspectAVCDecoderConfigurationRecord": InspectAVCDecoderConfigurationRecord,
+		"InspectAVCC":                          InspectAVCC,
+	}
 	for _, name := range []string{
 		"DecodeFrames",
 		"DecodePacketFrames",
 		"DecodeAnnexBFrames",
 		"DecodeAVCFrames",
-		"ParseAVCC",
+		"ConfigureAVCDecoderConfigurationRecord",
+		"ConfigureAVCC",
+		"InspectAVCDecoderConfigurationRecord",
+		"InspectAVCC",
 		"DecodeConfiguredAVCFrames",
 		"Decode",
 		"DecodePacket",
@@ -31,7 +38,11 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"DecodeConfiguredAVC",
 		"DecodeAVCC",
 	} {
-		if _, ok := decoderType.MethodByName(name); !ok {
+		if _, ok := packageDecoderFunctions[name]; ok {
+			if reflect.TypeOf(packageDecoderFunctions[name]).Kind() != reflect.Func {
+				t.Fatalf("README decoder chooser name %s is not a package function", name)
+			}
+		} else if _, ok := decoderType.MethodByName(name); !ok {
 			t.Fatalf("README decoder chooser names missing Decoder.%s", name)
 		}
 		requireREADMECodeName(t, readme, name)

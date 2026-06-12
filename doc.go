@@ -25,7 +25,7 @@
 //   - Use EncodeInto when the caller owns access-unit storage, and Encode when
 //     encoder-owned storage is sufficient.
 //
-// The decoder is the mature side of the module. The encoder deliberately admits
-// a narrower Constrained Baseline I420 subset while its broader production
-// coverage is still being hardened.
+// The decoder is the best-covered side of the module. The encoder deliberately
+// admits a narrower Constrained Baseline I420 subset while its broader
+// production coverage is still being hardened.
 package goh264

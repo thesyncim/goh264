@@ -54,6 +54,7 @@ var _ = (*Decoder).DecodeAVCCFrames
 var _ = (*Decoder).ParseHeadersAnnexB
 var _ = (*Decoder).ParseHeadersAVC
 var _ = (*Decoder).ParseAVCDecoderConfigurationRecord
+var _ = (*Decoder).ParseAVCC
 var _ = (*Decoder).AVCConfig
 
 var _ = (PacketSideData).Clone
