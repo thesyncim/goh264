@@ -184,6 +184,33 @@ func TestBitWriterRejectsOutOfRangeSyntax(t *testing.T) {
 	}
 }
 
+func TestBitWriterRejectsOverflowedBitPosition(t *testing.T) {
+	overflowed := NewBitWriter(fakeRBSPBytesLen(maxBitWriterByteLen + 1))
+	if overflowed.ByteAligned() {
+		t.Fatal("overflowed initial writer reports byte aligned")
+	}
+	if got := overflowed.BitLen(); got != ^uint32(0) {
+		t.Fatalf("overflowed initial writer bit length = %d, want max uint32", got)
+	}
+	if err := overflowed.WriteBits(0, 1); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed initial writer WriteBits err = %v, want ErrInvalidData", err)
+	}
+	if err := overflowed.WriteAlignedBytes([]byte{0}); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed initial writer WriteAlignedBytes err = %v, want ErrInvalidData", err)
+	}
+
+	full := NewBitWriter(fakeRBSPBytesLen(maxBitWriterByteLen))
+	if !full.ByteAligned() {
+		t.Fatal("max-sized writer should still be byte aligned")
+	}
+	if err := full.WriteAlignedBytes([]byte{0}); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("max-sized writer extension err = %v, want ErrInvalidData", err)
+	}
+	if err := full.WriteBits(0, 8); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("max-sized writer bit extension err = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestAppendNALRejectsOverflowedEscapedSize(t *testing.T) {
 	rbsp := fakeRBSPBytesLen(maxInt)
 	prefix := []byte{0xaa}

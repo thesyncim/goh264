@@ -9,11 +9,15 @@ package h264
 import "math/bits"
 
 type BitWriter struct {
-	buf    []byte
-	bitPos uint32
+	buf     []byte
+	bitPos  uint32
+	invalid bool
 }
 
 func NewBitWriter(dst []byte) BitWriter {
+	if len(dst) > maxBitWriterByteLen {
+		return BitWriter{buf: dst, bitPos: ^uint32(0), invalid: true}
+	}
 	return BitWriter{
 		buf:    dst,
 		bitPos: uint32(len(dst)) * 8,
@@ -35,17 +39,20 @@ func (bw *BitWriter) Bytes() []byte {
 }
 
 func (bw *BitWriter) ByteAligned() bool {
-	return bw == nil || bw.bitPos&7 == 0
+	return bw == nil || (!bw.invalid && bw.bitPos&7 == 0)
 }
 
 func (bw *BitWriter) WriteZeroAlign() {
+	if bw == nil || bw.invalid {
+		return
+	}
 	for bw.bitPos&7 != 0 {
 		bw.WriteBit(0)
 	}
 }
 
 func (bw *BitWriter) WriteAlignedBytes(src []byte) error {
-	if bw == nil || !bw.ByteAligned() {
+	if bw == nil || bw.invalid || !bw.ByteAligned() || len(src) > maxBitWriterByteLen || uint64(len(src))*8 > uint64(^uint32(0)-bw.bitPos) {
 		return ErrInvalidData
 	}
 	bw.buf = append(bw.buf, src...)
@@ -54,6 +61,12 @@ func (bw *BitWriter) WriteAlignedBytes(src []byte) error {
 }
 
 func (bw *BitWriter) WriteBit(v uint32) {
+	if bw == nil || bw.invalid || bw.bitPos == ^uint32(0) {
+		if bw != nil {
+			bw.invalid = true
+		}
+		return
+	}
 	if bw.bitPos&7 == 0 {
 		bw.buf = append(bw.buf, 0)
 	}
@@ -64,7 +77,7 @@ func (bw *BitWriter) WriteBit(v uint32) {
 }
 
 func (bw *BitWriter) WriteBits(v uint32, n uint32) error {
-	if n > 32 {
+	if bw == nil || bw.invalid || n > 32 || n > ^uint32(0)-bw.bitPos {
 		return ErrInvalidData
 	}
 	for i := n; i > 0; i-- {
@@ -99,11 +112,16 @@ func (bw *BitWriter) WriteSEGolomb(v int32) error {
 }
 
 func (bw *BitWriter) WriteRBSPTrailingBits() {
+	if bw == nil || bw.invalid {
+		return
+	}
 	bw.WriteBit(1)
 	for bw.bitPos&7 != 0 {
 		bw.WriteBit(0)
 	}
 }
+
+const maxBitWriterByteLen = int(^uint32(0) / 8)
 
 func AppendEBSP(dst []byte, rbsp []byte) []byte {
 	zeros := 0
