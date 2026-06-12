@@ -8888,6 +8888,120 @@ func TestEncoderReconfigureRecoveryPointSEITogglesChangedPFrames(t *testing.T) {
 	}
 }
 
+func TestEncoderSetRecoveryPointSEITogglesChangedPFrames(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	enabledFrame := patternedI420EncoderFrame(16, 16)
+	enabledFrame.Y[0] ^= 0x21
+	enabledFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	enabled, err := enc.Encode(enabledFrame)
+	if err != nil {
+		t.Fatalf("Encode recovery-enabled P IntraPCM: %v", err)
+	}
+	assertEncoderNALTypes(t, enabled.NALUnits, []uint8{6, 1})
+
+	if err := enc.SetRecoveryPointSEI(false); err != nil {
+		t.Fatalf("SetRecoveryPointSEI off: %v", err)
+	}
+	if got := enc.Config(); got.RecoveryPointSEI {
+		t.Fatalf("RecoveryPointSEI config = %v, want false", got.RecoveryPointSEI)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetRecoveryPointSEI false queued unexpected IDR")
+	}
+
+	disabledFrame := patternedI420EncoderFrame(16, 16)
+	disabledFrame.Y[1] ^= 0x42
+	disabledFrame.PTS = enabledFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	disabled, err := enc.Encode(disabledFrame)
+	if err != nil {
+		t.Fatalf("Encode recovery-disabled P IntraPCM: %v", err)
+	}
+	assertEncoderNALTypes(t, disabled.NALUnits, []uint8{1})
+
+	if err := enc.SetRecoveryPointSEI(true); err != nil {
+		t.Fatalf("SetRecoveryPointSEI on: %v", err)
+	}
+	if got := enc.Config(); !got.RecoveryPointSEI {
+		t.Fatalf("RecoveryPointSEI config = %v, want true", got.RecoveryPointSEI)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetRecoveryPointSEI true queued unexpected IDR")
+	}
+
+	reenabledFrame := patternedI420EncoderFrame(16, 16)
+	reenabledFrame.Y[2] ^= 0x63
+	reenabledFrame.PTS = disabledFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	reenabled, err := enc.Encode(reenabledFrame)
+	if err != nil {
+		t.Fatalf("Encode recovery-reenabled P IntraPCM: %v", err)
+	}
+	assertEncoderNALTypes(t, reenabled.NALUnits, []uint8{6, 1})
+
+	stream := append(append([]byte(nil), first.Data...), enabled.Data...)
+	stream = append(stream, disabled.Data...)
+	stream = append(stream, reenabled.Data...)
+	assertEncoderVCLFrameNums(t, stream,
+		[]uint8{5, 1, 1, 1},
+		[]uint32{0, 1, 2, 3},
+	)
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+
+	decodedEnabled, err := dec.DecodeFrames(enabled.Data)
+	if err != nil {
+		t.Fatalf("Decode recovery-enabled P IntraPCM: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedEnabled, appendI420FrameBytes(nil, enabledFrame))
+	if !decodedEnabled[0].KeyFrame ||
+		decodedEnabled[0].SideData.RecoveryPoint == nil ||
+		decodedEnabled[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("enabled recovery side data key=%v recovery=%+v, want immediate recovery point",
+			decodedEnabled[0].KeyFrame, decodedEnabled[0].SideData.RecoveryPoint)
+	}
+
+	decodedDisabled, err := dec.DecodeFrames(disabled.Data)
+	if err != nil {
+		t.Fatalf("Decode recovery-disabled P IntraPCM: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedDisabled, appendI420FrameBytes(nil, disabledFrame))
+	if decodedDisabled[0].KeyFrame || decodedDisabled[0].SideData.RecoveryPoint != nil {
+		t.Fatalf("disabled recovery side data key=%v recovery=%+v, want no recovery point",
+			decodedDisabled[0].KeyFrame, decodedDisabled[0].SideData.RecoveryPoint)
+	}
+
+	decodedReenabled, err := dec.DecodeFrames(reenabled.Data)
+	if err != nil {
+		t.Fatalf("Decode recovery-reenabled P IntraPCM: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedReenabled, appendI420FrameBytes(nil, reenabledFrame))
+	if !decodedReenabled[0].KeyFrame ||
+		decodedReenabled[0].SideData.RecoveryPoint == nil ||
+		decodedReenabled[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+		t.Fatalf("reenabled recovery side data key=%v recovery=%+v, want immediate recovery point",
+			decodedReenabled[0].KeyFrame, decodedReenabled[0].SideData.RecoveryPoint)
+	}
+}
+
 func TestEncoderEncodeForceIDRBypassesPSkipReference(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
