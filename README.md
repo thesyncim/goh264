@@ -94,7 +94,8 @@ parameter sets, Annex B sequence headers, avcC records, crop metadata,
 in-band/out-of-band/every-IDR cadence, and recovery-point SEI Annex B/AVC NAL
 surfaces are generated and parser-proved, with caller mutation/append isolation
 and pending-IDR state preservation proved across repeated header and SEI helper
-calls plus accepted bitrate, frame-rate, and RTP payload-size setter updates.
+calls plus accepted bitrate, frame-rate, RTP payload-size, and deblock setter or
+reconfigure updates.
 `Encode`/`EncodeInto` now emit source-shaped IDR IntraPCM access units for
 Annex B, AVC, configured `SliceCount` multi-slice VCL output, RTP
 packetization-mode 0 single-NAL packets, and RTP packetization-mode 1,

@@ -498,6 +498,56 @@ func TestEncoderValidSetterPreservesPendingIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
+	tests := []struct {
+		name   string
+		update goh264.EncoderReconfigure
+	}{
+		{name: "bitrate", update: goh264.EncoderReconfigure{TargetBitrate: 800_000, MaxBitrate: 900_000}},
+		{name: "frame rate", update: goh264.EncoderReconfigure{FrameRateNum: 60, FrameRateDen: 1}},
+		{name: "payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 1000}},
+		{name: "deblock", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockDisabled}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+			}
+
+			enc.ForceIDR()
+			if !enc.PendingIDR() {
+				t.Fatalf("%s ForceIDR did not queue IDR", tt.name)
+			}
+			if err := enc.Reconfigure(tt.update); err != nil {
+				t.Fatalf("%s valid reconfigure: %v", tt.name, err)
+			}
+			if !enc.PendingIDR() {
+				t.Fatalf("%s valid reconfigure cleared pending IDR", tt.name)
+			}
+
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.Y[0] ^= 0x41
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("%s Encode after valid reconfigure: %v", tt.name, err)
+			}
+			if !second.IDR || enc.PendingIDR() {
+				t.Fatalf("%s post-valid-reconfigure frame idr=%v pending=%v, want delivered IDR",
+					tt.name, second.IDR, enc.PendingIDR())
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+		})
+	}
+}
+
 func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 	tests := []struct {
 		name   string
