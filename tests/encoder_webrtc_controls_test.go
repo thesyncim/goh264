@@ -582,6 +582,7 @@ func TestEncoderDroppedFramePreservesPendingIDR(t *testing.T) {
 						t.Fatalf("lower %s: %v", budget.name, err)
 					}
 					changed := patternedI420EncoderFrame(16, 16)
+					changed.PTS = 1234
 					changed.Y[0] ^= 0x3d
 					dropped, err := enc.Encode(changed)
 					if err != nil {
@@ -589,6 +590,10 @@ func TestEncoderDroppedFramePreservesPendingIDR(t *testing.T) {
 					}
 					if !dropped.Dropped || dropped.IDR || len(dropped.Data) != 0 || len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 {
 						t.Fatalf("budgeted forced IDR output = %+v, want empty dropped metadata", dropped)
+					}
+					if dropped.PTS != changed.PTS || dropped.DTS != changed.PTS || dropped.RTPTime != uint32(changed.PTS) {
+						t.Fatalf("budgeted forced IDR metadata pts/dts/rtp = %d/%d/%d, want %d/%d/%d",
+							dropped.PTS, dropped.DTS, dropped.RTPTime, changed.PTS, changed.PTS, uint32(changed.PTS))
 					}
 					if !enc.PendingIDR() {
 						t.Fatal("budgeted drop cleared pending IDR")
