@@ -92,6 +92,9 @@ func EncodeRecoveryPointSEIPayload(cfg EncoderRecoveryPointSEIConfig) ([]byte, e
 }
 
 func AppendSEIRBSP(dst []byte, payloadType uint32, payload []byte) []byte {
+	if uint64(len(payload)) > uint64(^uint32(0)) {
+		return nil
+	}
 	dst = appendEncoderSEIHeaderValue(dst, payloadType)
 	dst = appendEncoderSEIHeaderValue(dst, uint32(len(payload)))
 	dst = append(dst, payload...)

@@ -5,7 +5,9 @@ package h264
 import (
 	"bytes"
 	"errors"
+	"reflect"
 	"testing"
+	"unsafe"
 )
 
 func TestBuildEncoderRecoveryPointSEIRoundTripsThroughParsers(t *testing.T) {
@@ -125,6 +127,15 @@ func TestAppendSEIRBSPWritesExtendedHeaders(t *testing.T) {
 	}
 }
 
+func TestAppendSEIRBSPRejectsOverflowedPayloadSize(t *testing.T) {
+	if uint64(maxInt) <= uint64(^uint32(0)) {
+		t.Skip("synthetic SEI payload overflow requires 64-bit int")
+	}
+	if got := AppendSEIRBSP(nil, seiTypeRecoveryPoint, fakeEncoderSEIPayloadLen(uint64(^uint32(0))+1)); got != nil {
+		t.Fatalf("overflowed SEI RBSP payload produced len %d, want nil", len(got))
+	}
+}
+
 func assertEncoderRecoveryPointPayload(t *testing.T, rbsp []byte, recoveryFrameCount uint32, exactMatch bool, brokenLink bool, changingSliceGroupIDC uint8) {
 	t.Helper()
 	if len(rbsp) < 3 || rbsp[0] != seiTypeRecoveryPoint {
@@ -163,4 +174,16 @@ func assertEncoderRecoveryPointPayload(t *testing.T, rbsp []byte, recoveryFrameC
 	if gotChanging != uint32(changingSliceGroupIDC) {
 		t.Fatalf("payload changing_slice_group_idc = %d, want %d", gotChanging, changingSliceGroupIDC)
 	}
+}
+
+func fakeEncoderSEIPayloadLen(n uint64) []byte {
+	if n == 0 || n > uint64(maxInt) {
+		return nil
+	}
+	var b byte
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&b)),
+		Len:  int(n),
+		Cap:  int(n),
+	}))
 }
