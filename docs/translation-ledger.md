@@ -70,6 +70,8 @@ Current encoder evidence addendum: the odd-pixel P16x16 guard now has separate
 constant-chroma admission and patterned-chroma P IntraPCM fallback coverage for
 behavior plus direct VCL frame-number continuity across Annex B, AVC, and RTP;
 changed-P IntraPCM recovery over AVC/RTP also has direct VCL frame-number proof.
+Annex B P IntraPCM fallback and changed-frame recovery now have direct VCL
+frame-number proof across disabled, default, and slice-boundary deblock controls.
 RTP packetization-mode 0 IDR/P-frame single-NAL reassembly now has direct VCL
 frame-number proof across P-skip, exact P16x16, odd-pixel fallback, and changed-P
 IntraPCM rows. Mode 0/1 RTP callbacks, caller-buffer `EncodeInto` allocation

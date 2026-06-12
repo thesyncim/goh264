@@ -3671,6 +3671,7 @@ func TestEncoderEncodeWideExactP16x16RequiresDeblockDisabled(t *testing.T) {
 	}
 
 	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 	wantStream := appendI420FrameBytes(nil, firstFrame)
 	wantStream = appendI420FrameBytes(wantStream, secondFrame)
 	assertFFmpegRawVideoOracle(t, stream, wantStream)
@@ -3723,6 +3724,7 @@ func TestEncoderEncodeChangedSecondFrameUsesPIntraPCM(t *testing.T) {
 	}
 
 	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 	wantStream := appendI420FrameBytes(nil, firstFrame)
 	wantStream = appendI420FrameBytes(wantStream, secondFrame)
 	assertFFmpegRawVideoOracle(t, stream, wantStream)
@@ -3778,6 +3780,7 @@ func TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithDefaultDeblock(t *testi
 	}
 
 	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 	wantStream := appendI420FrameBytes(nil, firstFrame)
 	wantStream = appendI420FrameBytes(wantStream, secondFrame)
 	assertFFmpegRawVideoOracle(t, stream, wantStream)
@@ -3823,6 +3826,7 @@ func TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithSliceBoundaryDeblock(t 
 	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
 
 	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 	wantStream := appendI420FrameBytes(nil, firstFrame)
 	wantStream = appendI420FrameBytes(wantStream, secondFrame)
 	assertFFmpegRawVideoOracle(t, stream, wantStream)
