@@ -1004,6 +1004,105 @@ func TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUse
 	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
 }
 
+func TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset(t *testing.T) {
+	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	multiConfig, _ := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
+	pps1PSkip := decoderPSkipAVCSampleWithPPSID(t, 32, 16, 1, 1)
+
+	dec := NewDecoder()
+	out, err := dec.DecodeAVCCFrames(config16, samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames 16x16 IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	out, err = dec.DecodeAVCCFrames(multiConfig, pps1PSkip)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 PPS1 P-skip after multi-SPS avcC update = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+
+	out, err = dec.DecodeAVCCFrames(config32, samples32[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames 32x16 IDR after multi-SPS stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
+func TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset(t *testing.T) {
+	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	multiConfig, _ := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
+	pps1PSkip := decoderPSkipAVCSampleWithPPSID(t, 32, 16, 1, 1)
+
+	dec := NewDecoder()
+	out, err := dec.DecodePacketFrames(Packet{
+		Data:     samples16[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     pps1PSkip,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: multiConfig}},
+	})
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 PPS1 P-skip after multi-SPS NEW_EXTRADATA = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     samples32[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config32}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 32x16 IDR after multi-SPS stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
+func TestDecodePacketFramesAnnexBMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset(t *testing.T) {
+	extradata16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
+	extradata32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	_, multiAnnexB := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
+	pps1PSkip := decoderPSkipAnnexBSampleWithPPSID(t, 32, 16, 1, 1)
+
+	dec := NewDecoder()
+	out, err := dec.DecodePacketFrames(Packet{
+		Data:     packets16[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 Annex B NEW_EXTRADATA IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     pps1PSkip,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: multiAnnexB}},
+	})
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 PPS1 Annex B P-skip after multi-SPS NEW_EXTRADATA = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     packets32[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata32}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 32x16 Annex B IDR after multi-SPS stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
 func encodeDecoderAVCTestStream(t *testing.T, width int, height int) ([]byte, [][]byte, []goh264.EncoderFrame) {
 	t.Helper()
 	cfg := goh264.DefaultEncoderConfig(width, height)
@@ -1069,6 +1168,100 @@ func encodeDecoderAnnexBTestStream(t *testing.T, width int, height int) ([]byte,
 	return append([]byte(nil), headers.AnnexB...),
 		[][]byte{append([]byte(nil), firstOut.Data...), append([]byte(nil), secondOut.Data...)},
 		[]goh264.EncoderFrame{first, second}
+}
+
+func decoderMultiSPSPPSUpdate(t *testing.T, firstWidth int, firstHeight int, nextWidth int, nextHeight int) ([]byte, []byte) {
+	t.Helper()
+	first := decoderParameterSetNALs(t, firstWidth, firstHeight, 0, 0)
+	next := decoderParameterSetNALs(t, nextWidth, nextHeight, 1, 1)
+
+	avcc, err := h264.AppendAVCDecoderConfigurationRecord(nil, 66, 0xc0, 31, 4,
+		[][]byte{first.SPS, next.SPS},
+		[][]byte{first.PPS, next.PPS},
+	)
+	if err != nil {
+		t.Fatalf("AppendAVCDecoderConfigurationRecord multi-SPS update: %v", err)
+	}
+
+	annexB := appendAnnexBNAL(nil, first.SPS)
+	annexB = appendAnnexBNAL(annexB, first.PPS)
+	annexB = appendAnnexBNAL(annexB, next.SPS)
+	annexB = appendAnnexBNAL(annexB, next.PPS)
+	return avcc, annexB
+}
+
+func decoderParameterSetNALs(t *testing.T, width int, height int, spsID uint32, ppsID uint32) h264.EncoderParameterSetNALs {
+	t.Helper()
+	sets, err := h264.BuildEncoderParameterSetNALs(h264.EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		SPSID:              spsID,
+		PPSID:              ppsID,
+		Width:              width,
+		Height:             height,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          26,
+		NALLengthSize:      4,
+	})
+	if err != nil {
+		t.Fatalf("BuildEncoderParameterSetNALs %dx%d ids %d/%d: %v", width, height, spsID, ppsID, err)
+	}
+	return sets
+}
+
+func decoderPSkipAVCSampleWithPPSID(t *testing.T, width int, height int, ppsID uint32, frameNum uint32) []byte {
+	t.Helper()
+	rbsp := decoderPSkipRBSPWithPPSID(t, width, height, ppsID, frameNum)
+	out, err := h264.AppendAVCNAL(nil, 4, 2, h264.NALSlice, rbsp)
+	if err != nil {
+		t.Fatalf("AppendAVCNAL PPS%d P-skip: %v", ppsID, err)
+	}
+	return out
+}
+
+func decoderPSkipAnnexBSampleWithPPSID(t *testing.T, width int, height int, ppsID uint32, frameNum uint32) []byte {
+	t.Helper()
+	rbsp := decoderPSkipRBSPWithPPSID(t, width, height, ppsID, frameNum)
+	out, err := h264.AppendAnnexBNAL(nil, 2, h264.NALSlice, rbsp)
+	if err != nil {
+		t.Fatalf("AppendAnnexBNAL PPS%d P-skip: %v", ppsID, err)
+	}
+	return out
+}
+
+func decoderPSkipRBSPWithPPSID(t *testing.T, width int, height int, ppsID uint32, frameNum uint32) []byte {
+	t.Helper()
+	bw := h264.NewBitWriter(make([]byte, 0, 16))
+	if err := bw.WriteUEGolomb(0); err != nil { // first_mb_in_slice
+		t.Fatalf("write first_mb_in_slice: %v", err)
+	}
+	if err := bw.WriteUEGolomb(0); err != nil { // slice_type P
+		t.Fatalf("write slice_type: %v", err)
+	}
+	if err := bw.WriteUEGolomb(ppsID); err != nil {
+		t.Fatalf("write pic_parameter_set_id: %v", err)
+	}
+	if err := bw.WriteBits(frameNum, 8); err != nil {
+		t.Fatalf("write frame_num: %v", err)
+	}
+	bw.WriteBit(0)                              // num_ref_idx_active_override_flag
+	bw.WriteBit(0)                              // ref_pic_list_modification_flag_l0
+	bw.WriteBit(0)                              // adaptive_ref_pic_marking_mode_flag
+	if err := bw.WriteSEGolomb(0); err != nil { // slice_qp_delta
+		t.Fatalf("write slice_qp_delta: %v", err)
+	}
+	if err := bw.WriteUEGolomb(1); err != nil { // disable_deblocking_filter_idc
+		t.Fatalf("write disable_deblocking_filter_idc: %v", err)
+	}
+	mbCount := ((width + 15) >> 4) * ((height + 15) >> 4)
+	if err := bw.WriteUEGolomb(uint32(mbCount)); err != nil {
+		t.Fatalf("write mb_skip_run: %v", err)
+	}
+	bw.WriteRBSPTrailingBits()
+	return bw.Bytes()
 }
 
 func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {

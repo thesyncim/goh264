@@ -219,7 +219,9 @@ an unrelated stream where the decoder cannot infer the boundary from avcC,
 call `Reset` before storing the new avcC. `PacketSideDataNewExtradata` uses the
 same stateful update rule when it carries avcC or Annex B parameter-set data:
 compatible updates retain references; incompatible active SPS changes reset
-picture state before decoding.
+picture state before decoding. When an update carries multiple SPS/PPS entries,
+the reset decision follows the packet's slice-selected PPS/SPS when that packet
+can be parsed.
 
 Configure or inspect headers without decoding full frames. The decoder methods
 are stateful: `ParseHeadersAnnexB` stores SPS/PPS state, and `ParseHeadersAVC`

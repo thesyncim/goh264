@@ -197,6 +197,9 @@ malformed AVC and Annex B extradata as non-fatal side data: the current valid
 packet still decodes against the last good configuration and reference state,
 including when Annex B side data stages a valid foreign SPS before a malformed
 PPS.
+Multi-SPS/PPS avcC and Annex B `NEW_EXTRADATA` updates are guarded as well: the
+DPB reset decision follows the packet's slice-selected PPS/SPS when available,
+so a non-first active SPS cannot reuse references from the previous stream.
 Direct avcC parse, configuration-record decode, valid packet AVC and Annex B
 `NEW_EXTRADATA`, and auto-detected avcC admission also prove the stored decoder
 configuration state does not retain caller-owned side-data, configuration, or
