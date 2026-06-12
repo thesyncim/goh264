@@ -7099,6 +7099,100 @@ func TestEncoderEncodeIntoOverflowedDestinationPreservesPendingIDRAndLiveState(t
 	}
 }
 
+func TestEncoderEncodeIntoPFrameOverflowedDestinationPreservesLiveState(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		format goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", format: goh264.EncoderOutputAnnexB},
+		{name: "avc", format: goh264.EncoderOutputAVC},
+		{name: "rtp", format: goh264.EncoderOutputRTP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.OutputFormat = tt.format
+			if cfg.OutputFormat == goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 32
+			} else {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			var callbackCalls int
+			enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+				callbackCalls++
+			})
+
+			frame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.EncodeInto(make([]byte, 0, 4096), frame)
+			if err != nil {
+				t.Fatalf("EncodeInto first IDR: %v", err)
+			}
+			if !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+			}
+			firstPacketCount := len(first.RTPPackets)
+			if cfg.OutputFormat == goh264.EncoderOutputRTP {
+				if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+					t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+						firstPacketCount, callbackCalls)
+				}
+			} else if firstPacketCount != 0 || callbackCalls != 0 {
+				t.Fatalf("non-RTP first packets/callbacks = %d/%d, want none", firstPacketCount, callbackCalls)
+			}
+			beforeCfg := enc.Config()
+
+			pFrame := frame
+			pFrame.PTS = int64(cfg.RTPTimestampIncrement)
+			out, err := enc.EncodeInto(fakeDecoderRawBytesLen(maxIntForTest-3), pFrame)
+			if !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("overflowed P-frame EncodeInto error = %v, want ErrInvalidData", err)
+			}
+			if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+				t.Fatalf("overflowed P-frame EncodeInto output = %+v, want empty output", out)
+			}
+			if got := enc.Config(); got != beforeCfg {
+				t.Fatalf("overflowed P-frame EncodeInto mutated config = %+v, want %+v", got, beforeCfg)
+			}
+			if enc.PendingIDR() {
+				t.Fatal("overflowed P-frame EncodeInto queued unexpected IDR")
+			}
+			if callbackCalls != firstPacketCount {
+				t.Fatalf("overflowed P-frame callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+			}
+
+			recovered, err := enc.EncodeInto(make([]byte, 0, 4096), pFrame)
+			if err != nil {
+				t.Fatalf("EncodeInto after overflowed P-frame destination: %v", err)
+			}
+			if recovered.Dropped || recovered.IDR || enc.PendingIDR() {
+				t.Fatalf("post-overflow P-frame output dropped=%v idr=%v pending=%v, want delivered P-skip",
+					recovered.Dropped, recovered.IDR, enc.PendingIDR())
+			}
+			if recovered.RTPTime != uint32(pFrame.PTS) {
+				t.Fatalf("post-overflow P-frame RTP time = %d, want %d", recovered.RTPTime, pFrame.PTS)
+			}
+			assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
+			assertEncodedFrameNALUnitIndexes(t, recovered, cfg.OutputFormat)
+			if cfg.OutputFormat != goh264.EncoderOutputAVC {
+				assertEncoderVCLFrameNums(t, append(append([]byte(nil), first.Data...), recovered.Data...), []uint8{5, 1}, []uint32{0, 1})
+			}
+			if cfg.OutputFormat == goh264.EncoderOutputRTP {
+				assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+			} else if len(recovered.RTPPackets) != 0 {
+				t.Fatalf("non-RTP recovered P-frame packets = %d, want none", len(recovered.RTPPackets))
+			}
+			if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+				t.Fatalf("post-overflow P-frame callbacks = %d, want %d",
+					callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+			}
+		})
+	}
+}
+
 func assertEncoderEncodeIntoOddPatternedChromaFallbackAllocationCanary(t *testing.T, cfg goh264.EncoderConfig, label string, wantRTPPackets int, maxAllocs float64) {
 	t.Helper()
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled

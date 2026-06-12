@@ -181,8 +181,9 @@ deterministic max-bitrate credit consumption/refill across transmitted and
 dropped frames, caller-buffer `EncodeInto` budget drops with empty returned
 output, paused callbacks, preserved reference/frame/packet state, overflowed
 `EncodeInto` destination growth hard-error rollback with queued-IDR preservation
-across Annex B/AVC/RTP, overflowed bitrate budget derivation rejection,
-overflowed input-plane geometry rejection, and P-skip
+and P-frame reference/frame-number preservation across Annex B/AVC/RTP,
+overflowed bitrate budget derivation rejection, overflowed input-plane geometry
+rejection, and P-skip
 recovery, runtime frame-drop mode switches that toggle the derived bitrate
 budget before the next frame, runtime max-bitrate/VBV lowering that resets stale
 credit before the next frame, `SetBitrate` lowering that resets stale

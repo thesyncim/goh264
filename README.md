@@ -386,7 +386,8 @@ frame-number, timestamp, or reference state, then valid input resumes as the
 expected P-skip, or as the queued IDR when a prior IDR request was pending.
 Overflowed caller-owned `EncodeInto` destination growth is also rejected across
 Annex B, AVC, and RTP without consuming queued IDR state or advancing
-RTP/callback state.
+RTP/callback state, and the same hard-error path preserves P-frame reference
+and frame-number state before the next P-skip.
 They emit the admitted IDR IntraPCM, identical-reference P-skip, exact
 macroblock-aligned frame-wide or per-macroblock P16x16 no-residual, or
 changed-frame P IntraPCM frame path, optionally split into configured
