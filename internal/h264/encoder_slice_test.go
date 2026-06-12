@@ -402,18 +402,7 @@ func TestBuildEncoderI420P16x16NoResidualSliceWritesPerMacroblockMVDs(t *testing
 }
 
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesCAVLCMacroblock(t *testing.T) {
-	pps := cavlcFlatQMulPPS()
-	sps := &SPS{
-		BitDepthLuma:           8,
-		ChromaFormatIDC:        1,
-		Log2MaxFrameNum:        8,
-		FrameMBSOnlyFlag:       1,
-		Direct8x8InferenceFlag: 1,
-	}
-	pps.SPS = sps
-	pps.RefCount = [2]uint32{1, 1}
-	pps.InitQP = 20
-	pps.DeblockingFilterParametersPresent = 1
+	pps, sps := encoderResidualSliceTestPPS(20)
 
 	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
 		Width:                      16,
@@ -466,9 +455,71 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesCAVLCMacroblock(t *testing.T) {
 	}
 }
 
+func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockSyntax(t *testing.T) {
+	pps, sps := encoderResidualSliceTestPPS(20)
+	wantMVDs := []EncoderMotionVectorDelta{
+		{X: 2, Y: -1},
+		{X: -3, Y: 4},
+	}
+	wantCoeffs := []int32{1, -2}
+
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+		Width:                      32,
+		Height:                     16,
+		FrameNum:                   8,
+		InitialQP:                  20,
+		NextQP:                     23,
+		DisableDeblockingFilterIDC: 1,
+		MVDs:                       wantMVDs,
+		Coeffs:                     wantCoeffs,
+	}, pps, sps)
+	if err != nil {
+		t.Fatalf("encode residual slice rbsp: %v", err)
+	}
+
+	var ppsList [maxPPSCount]*PPS
+	ppsList[0] = pps
+	sh, payload, err := parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("parse residual P slice header: %v", err)
+	}
+	if sh.FirstMBAddr != 0 || sh.SliceTypeNoS != PictureTypeP || sh.FrameNum != 8 ||
+		sh.RefCount[0] != 1 || sh.QScale != 20 || sh.DeblockingFilter != 0 {
+		t.Fatalf("slice header = %+v", sh)
+	}
+
+	qscale := int(sh.QScale)
+	for i := range wantMVDs {
+		skipRun, err := payload.readUEGolombLong()
+		if err != nil {
+			t.Fatalf("read generated residual P skip run[%d]: %v", i, err)
+		}
+		if skipRun != 0 {
+			t.Fatalf("skip run[%d] = %d, want 0", i, skipRun)
+		}
+		var decoded cavlcResidualContext
+		got, err := decoded.decodeCAVLCInterPMacroblock(&payload, pps, sps, qscale, [2]uint32{1, 0}, false)
+		if err != nil {
+			t.Fatalf("decode generated residual P macroblock[%d]: %v", i, err)
+		}
+		if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 1 ||
+			got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != 0x1001 {
+			t.Fatalf("decoded mb[%d] type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x",
+				i, got.MBType, got.CBP, got.QScale, got.ChromaQP, got.CBPTable)
+		}
+		if got.MVD[0][0] != ([2]int32{wantMVDs[i].X, wantMVDs[i].Y}) || decoded.MB[0] != wantCoeffs[i] {
+			t.Fatalf("decoded mb[%d] motion/residual = %v/%d, want [%d %d]/%d",
+				i, got.MVD[0][0], decoded.MB[0], wantMVDs[i].X, wantMVDs[i].Y, wantCoeffs[i])
+		}
+		qscale = got.QScale
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("residual P payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+}
+
 func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
-	pps := cavlcFlatQMulPPS()
-	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+	pps, sps := encoderResidualSliceTestPPS(20)
 	valid := encoderI420P16x16ResidualConfig{
 		Width:                      16,
 		Height:                     16,
@@ -501,6 +552,28 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
+		{name: "bad mvd count", run: func() error {
+			next := valid
+			next.Width = 32
+			next.MVDs = []EncoderMotionVectorDelta{{X: 1, Y: 0}}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad coeff count", run: func() error {
+			next := valid
+			next.Width = 32
+			next.Coeffs = []int32{1}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "zero per-macroblock coeff", run: func() error {
+			next := valid
+			next.Width = 32
+			next.Coeff = 0
+			next.Coeffs = []int32{1, 0}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
 		{name: "bad range", run: func() error {
 			next := valid
 			next.FirstMBAddr = 1
@@ -514,6 +587,22 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			}
 		})
 	}
+}
+
+func encoderResidualSliceTestPPS(initQP int) (*PPS, *SPS) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{
+		BitDepthLuma:           8,
+		ChromaFormatIDC:        1,
+		Log2MaxFrameNum:        8,
+		FrameMBSOnlyFlag:       1,
+		Direct8x8InferenceFlag: 1,
+	}
+	pps.SPS = sps
+	pps.RefCount = [2]uint32{1, 1}
+	pps.InitQP = int32(initQP)
+	pps.DeblockingFilterParametersPresent = 1
+	return pps, sps
 }
 
 func TestBuildEncoderI420IntraPCMPSliceWritesParseableHeader(t *testing.T) {

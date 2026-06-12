@@ -362,7 +362,10 @@ baseline SPS/PPS, recovery-point SEI syntax, and Baseline IDR, P-skip, and
 P16x16 no-residual slice syntax including
 per-macroblock MVD emission, with the P16x16 writer and public exact-motion
 encoder path proved through local Annex B decode, FFmpeg rawvideo decode, and
-mixed per-macroblock Annex B/AVC/RTP decode after an IDR reference frame.
+mixed per-macroblock Annex B/AVC/RTP decode after an IDR reference frame, plus
+an internal Baseline P16x16 luma-residual slice proof for per-macroblock signed
+MVDs, per-macroblock nonzero coefficients, and consecutive-macroblock
+`mb_qp_delta` state through parser and CAVLC macroblock decode.
 Broader motion-search
 P prediction, residual CAVLC coding, rate-control feedback, broader allocation
 budgets, and realtime performance gates remain pending.

@@ -89,7 +89,9 @@ type encoderI420P16x16ResidualConfig struct {
 	MacroblockCount            uint32
 	MVDX                       int32
 	MVDY                       int32
+	MVDs                       []EncoderMotionVectorDelta
 	Coeff                      int32
+	Coeffs                     []int32
 }
 
 type EncoderIDRSlice struct {
@@ -395,7 +397,16 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		return nil, err
 	}
 
+	qscale := cfg.InitialQP
 	for i := 0; i < macroblockCount; i++ {
+		mvdX, mvdY := cfg.MVDX, cfg.MVDY
+		if len(cfg.MVDs) > 0 {
+			mvdX, mvdY = cfg.MVDs[i].X, cfg.MVDs[i].Y
+		}
+		coeff := cfg.Coeff
+		if len(cfg.Coeffs) > 0 {
+			coeff = cfg.Coeffs[i]
+		}
 		if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
 			return nil, err
 		}
@@ -407,12 +418,13 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 			},
 			Ref: [2][4]int32{{0}},
 		}
-		mb.MVD[0][0] = [2]int32{cfg.MVDX, cfg.MVDY}
+		mb.MVD[0][0] = [2]int32{mvdX, mvdY}
 		var residual cavlcResidualContext
-		residual.MB[0] = cfg.Coeff
-		if _, err := writeCAVLCInterPBoundedMacroblock(&bw, &residual, pps, sps, mb, [2]uint32{1, 0}, cfg.InitialQP, cfg.NextQP); err != nil {
+		residual.MB[0] = coeff
+		if _, err := writeCAVLCInterPBoundedMacroblock(&bw, &residual, pps, sps, mb, [2]uint32{1, 0}, qscale, cfg.NextQP); err != nil {
 			return nil, err
 		}
+		qscale = cfg.NextQP
 	}
 	bw.WriteRBSPTrailingBits()
 	return bw.Bytes(), nil
@@ -661,11 +673,26 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 		cfg.DisableDeblockingFilterIDC > 2 {
 		return ErrInvalidData
 	}
-	if cfg.Coeff == 0 {
-		return ErrInvalidData
-	}
 	if err := validateEncoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount); err != nil {
 		return err
+	}
+	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	if len(cfg.MVDs) > 0 && len(cfg.MVDs) != macroblockCount {
+		return ErrInvalidData
+	}
+	if len(cfg.Coeffs) > 0 {
+		if len(cfg.Coeffs) != macroblockCount {
+			return ErrInvalidData
+		}
+		for _, coeff := range cfg.Coeffs {
+			if coeff == 0 {
+				return ErrInvalidData
+			}
+		}
+		return nil
+	}
+	if cfg.Coeff == 0 {
+		return ErrInvalidData
 	}
 	return nil
 }
