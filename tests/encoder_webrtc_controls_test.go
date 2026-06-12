@@ -560,6 +560,98 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderValidOutputReconfigurePreservesPendingIDR(t *testing.T) {
+	t.Run("avc out-of-band", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+		if err != nil {
+			t.Fatalf("Encode first IDR: %v", err)
+		}
+		if !first.IDR || enc.PendingIDR() {
+			t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+		}
+
+		enc.ForceIDR()
+		if !enc.PendingIDR() {
+			t.Fatal("ForceIDR did not queue IDR before AVC reconfigure")
+		}
+		if err := enc.Reconfigure(goh264.EncoderReconfigure{
+			OutputFormat: goh264.EncoderOutputAVC,
+			SPSPPSMode:   goh264.EncoderSPSPPSOutOfBand,
+		}); err != nil {
+			t.Fatalf("Reconfigure AVC output: %v", err)
+		}
+		if !enc.PendingIDR() {
+			t.Fatal("AVC output reconfigure cleared pending IDR")
+		}
+
+		frame := patternedI420EncoderFrame(16, 16)
+		frame.Y[0] ^= 0x41
+		second, err := enc.Encode(frame)
+		if err != nil {
+			t.Fatalf("Encode after AVC output reconfigure: %v", err)
+		}
+		if second.Dropped || !second.IDR || enc.PendingIDR() {
+			t.Fatalf("AVC output frame dropped=%v idr=%v pending=%v, want delivered IDR",
+				second.Dropped, second.IDR, enc.PendingIDR())
+		}
+		if len(second.RTPPackets) != 0 {
+			t.Fatalf("AVC output RTP packets = %d, want 0", len(second.RTPPackets))
+		}
+		assertEncoderNALTypes(t, second.NALUnits, []uint8{5})
+	})
+
+	t.Run("rtp metadata", func(t *testing.T) {
+		cfg := goh264.DefaultEncoderConfig(16, 16)
+		cfg.DeblockMode = goh264.EncoderDeblockDisabled
+		enc, err := goh264.NewEncoder(cfg)
+		if err != nil {
+			t.Fatalf("NewEncoder: %v", err)
+		}
+		first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+		if err != nil {
+			t.Fatalf("Encode first IDR: %v", err)
+		}
+		if !first.IDR || enc.PendingIDR() {
+			t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+		}
+
+		payloadType := uint8(113)
+		ssrc := uint32(0x10293847)
+		enc.ForceIDR()
+		if !enc.PendingIDR() {
+			t.Fatal("ForceIDR did not queue IDR before RTP metadata reconfigure")
+		}
+		if err := enc.Reconfigure(goh264.EncoderReconfigure{
+			RTPPayloadType: &payloadType,
+			RTPSSRC:        &ssrc,
+		}); err != nil {
+			t.Fatalf("Reconfigure RTP metadata: %v", err)
+		}
+		if !enc.PendingIDR() {
+			t.Fatal("RTP metadata reconfigure cleared pending IDR")
+		}
+
+		frame := patternedI420EncoderFrame(16, 16)
+		frame.Y[0] ^= 0x37
+		second, err := enc.Encode(frame)
+		if err != nil {
+			t.Fatalf("Encode after RTP metadata reconfigure: %v", err)
+		}
+		if second.Dropped || !second.IDR || enc.PendingIDR() {
+			t.Fatalf("RTP metadata frame dropped=%v idr=%v pending=%v, want delivered IDR",
+				second.Dropped, second.IDR, enc.PendingIDR())
+		}
+		assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+		assertRTPPacketMetadata(t, second.RTPPackets, payloadType, ssrc, uint16(len(first.RTPPackets)))
+	})
+}
+
 func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 	mode0 := goh264.EncoderRTPPacketizationSingleNAL
 	stapa := true
