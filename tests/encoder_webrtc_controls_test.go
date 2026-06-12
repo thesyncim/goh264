@@ -7284,12 +7284,35 @@ func TestEncoderRTPPacketCallbackCanBeClearedAndSkipsNonRTPOutput(t *testing.T) 
 	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
 		calls++
 	})
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode RTP before clearing callback: %v", err)
+	}
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || calls != firstPacketCount {
+		t.Fatalf("initial RTP packets/callbacks = %d/%d, want nonzero matching count", firstPacketCount, calls)
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before clearing callback did not queue IDR")
+	}
 	enc.SetRTPPacketCallback(nil)
-	if _, err := enc.Encode(patternedI420EncoderFrame(16, 16)); err != nil {
+	if !enc.PendingIDR() {
+		t.Fatal("clearing RTP callback cleared pending IDR")
+	}
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y[0] ^= 0x22
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
 		t.Fatalf("Encode RTP after clearing callback: %v", err)
 	}
-	if calls != 0 {
-		t.Fatalf("cleared callback calls = %d, want 0", calls)
+	if second.Dropped || !second.IDR || enc.PendingIDR() {
+		t.Fatalf("post-clear frame dropped=%v idr=%v pending=%v, want delivered IDR",
+			second.Dropped, second.IDR, enc.PendingIDR())
+	}
+	assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if calls != firstPacketCount {
+		t.Fatalf("cleared callback calls = %d, want still %d", calls, firstPacketCount)
 	}
 }
 
