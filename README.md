@@ -398,7 +398,8 @@ pictures carry recovery-point SEI when enabled. RTP output includes payloads
 plus complete RTP
 packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1
 FU-A/STAP-A output with small-payload STAP-A fallback to non-aggregated mode-1
-packets and accurate fallback callback payload metadata, RTP packet storage isolated from `EncodedFrame.Data`,
+packets plus accurate fallback-IDR and post-fallback P-skip callback payload
+metadata, RTP packet storage isolated from `EncodedFrame.Data`,
 optional per-packet callback metadata including mode 0/1
 IDR/P-frame single-NAL packets for P-skip, exact P16x16, odd-pixel constant
 chroma, and P IntraPCM fallback rows with callback packet storage isolated from

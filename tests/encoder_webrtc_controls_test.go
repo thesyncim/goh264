@@ -6020,6 +6020,21 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 		t.Fatalf("post-STAP-A-fallback callbacks = %d, want %d",
 			len(callbackMetadata), firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets))
 	}
+	recoveredMetadata := callbackMetadata[firstPacketCount+len(fallback.RTPPackets):]
+	for i, meta := range recoveredMetadata {
+		if meta.PacketIndex != i || meta.PacketCount != len(recovered.RTPPackets) ||
+			meta.FramePTS != pFrame.PTS || meta.FrameDTS != pFrame.PTS ||
+			meta.RTPTime != recovered.RTPTime || meta.KeyFrame || meta.IDR {
+			t.Fatalf("post-STAP-A-fallback callback meta[%d] = %+v, want non-IDR P-skip timing/index fields", i, meta)
+		}
+		if meta.PayloadFormat != goh264.EncoderRTPPayloadSingleNAL ||
+			meta.NALUnitType != 1 ||
+			meta.NALUnitCount != 1 ||
+			!meta.StartOfNAL || !meta.EndOfNAL ||
+			meta.ParameterSet {
+			t.Fatalf("post-STAP-A-fallback callback meta[%d] = %+v, want single-NAL P-slice", i, meta)
+		}
+	}
 }
 
 func TestEncoderEncodeIntoLateDropPreservesCallerBuffer(t *testing.T) {
