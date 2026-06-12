@@ -1704,7 +1704,7 @@ func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutatio
 	badPayloadType := uint8(128)
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
 		RTPPayloadType: &badPayloadType,
-		ForceIDR:      true,
+		ForceIDR:       true,
 	}); !errors.Is(err, goh264.ErrInvalidData) {
 		t.Fatalf("Reconfigure bad payload type error = %v, want ErrInvalidData", err)
 	}
@@ -6737,6 +6737,93 @@ func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 	assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
 	if callbackCalls != firstPacketCount+len(second.RTPPackets) {
 		t.Fatalf("post-invalid callbacks = %d, want %d", callbackCalls, firstPacketCount+len(second.RTPPackets))
+	}
+}
+
+func TestEncoderEncodeIntoInvalidFramePreservesPendingIDR(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 32
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+
+	frame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.EncodeInto(make([]byte, 0, 4096), frame)
+	if err != nil {
+		t.Fatalf("EncodeInto first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+			firstPacketCount, callbackCalls)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*goh264.EncoderFrame)
+	}{
+		{name: "missing luma", mutate: func(f *goh264.EncoderFrame) { f.Y = nil }},
+		{name: "mismatched width", mutate: func(f *goh264.EncoderFrame) { f.Width = 32 }},
+		{name: "invalid frame color", mutate: func(f *goh264.EncoderFrame) { f.Color.SARNum = 1 }},
+		{name: "negative pts", mutate: func(f *goh264.EncoderFrame) { f.PTS = -1 }},
+		{name: "overflow duration", mutate: func(f *goh264.EncoderFrame) { f.Duration = int64(^uint32(0)) + 1 }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enc.ForceIDR()
+			if !enc.PendingIDR() {
+				t.Fatalf("%s ForceIDR did not queue IDR", tt.name)
+			}
+			beforeCfg := enc.Config()
+			bad := frame
+			bad.PTS = int64(cfg.RTPTimestampIncrement)
+			tt.mutate(&bad)
+
+			dst, beforeDst := encoderPrefilledCallerBuffer()
+			out, err := enc.EncodeInto(dst, bad)
+			if !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("%s EncodeInto error = %v, want ErrInvalidData", tt.name, err)
+			}
+			if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+				t.Fatalf("%s invalid output = %+v, want empty output", tt.name, out)
+			}
+			assertEncoderCallerBufferUnchanged(t, dst, beforeDst)
+			if got := enc.Config(); got != beforeCfg {
+				t.Fatalf("%s invalid EncodeInto mutated config = %+v, want %+v", tt.name, got, beforeCfg)
+			}
+			if !enc.PendingIDR() {
+				t.Fatalf("%s invalid EncodeInto cleared pending IDR", tt.name)
+			}
+			if callbackCalls != firstPacketCount {
+				t.Fatalf("%s invalid EncodeInto callbacks = %d, want still %d",
+					tt.name, callbackCalls, firstPacketCount)
+			}
+
+			next := frame
+			next.PTS = int64(cfg.RTPTimestampIncrement)
+			next.Y = append([]byte(nil), frame.Y...)
+			next.Y[0] ^= 0x55
+			second, err := enc.EncodeInto(make([]byte, 0, 4096), next)
+			if err != nil {
+				t.Fatalf("%s EncodeInto after invalid frame: %v", tt.name, err)
+			}
+			if second.Dropped || !second.IDR || enc.PendingIDR() {
+				t.Fatalf("%s post-invalid output dropped=%v idr=%v pending=%v, want delivered IDR",
+					tt.name, second.Dropped, second.IDR, enc.PendingIDR())
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+			firstPacketCount = callbackCalls
+		})
 	}
 }
 

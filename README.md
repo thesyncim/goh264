@@ -368,7 +368,7 @@ if out.Dropped {
 `Encode` and `EncodeInto` validate frame shape before bitstream work; invalid
 frames return empty output without advancing RTP sequence, callback,
 frame-number, timestamp, or reference state, then valid input resumes as the
-expected P-skip.
+expected P-skip, or as the queued IDR when a prior IDR request was pending.
 They emit the admitted IDR IntraPCM, identical-reference P-skip, exact
 macroblock-aligned frame-wide or per-macroblock P16x16 no-residual, or
 changed-frame P IntraPCM frame path, optionally split into configured
