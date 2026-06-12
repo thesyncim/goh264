@@ -106,6 +106,17 @@ func TestEncoderAccessUnitHelpersRejectOverflowedNALCount(t *testing.T) {
 	}
 }
 
+func TestAppendEncoderAccessUnitRejectsOverflowedDestination(t *testing.T) {
+	nals := []encoderRawNAL{{raw: []byte{byte(h264.NALSlice)}}}
+	for _, format := range []EncoderOutputFormat{EncoderOutputAnnexB, EncoderOutputAVC} {
+		dst := fakeEncoderBytesLen(maxInt - 4)
+		got, units, err := appendEncoderAccessUnit(dst, format, nals)
+		if !errors.Is(err, ErrInvalidData) || len(got) != len(dst) || units != nil {
+			t.Fatalf("format %v overflow got len=%d units=%v err=%v, want original buffer, nil units, ErrInvalidData", format, len(got), units, err)
+		}
+	}
+}
+
 func TestEncoderRTPMode1StoragePlanRejectsOverflow(t *testing.T) {
 	nals := []encoderRawNAL{
 		{raw: fakeEncoderBytesLen(maxInt - 1)},

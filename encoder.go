@@ -1714,6 +1714,13 @@ func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []enco
 	if len(nals) > maxEncoderRawNALListLen {
 		return dst, nil, encoderInvalid("encoder NAL count overflows")
 	}
+	outputSize, err := encoderAccessUnitOutputSize(format, nals)
+	if err != nil {
+		return dst, nil, err
+	}
+	if _, err := checkedAddInt(len(dst), outputSize); err != nil {
+		return dst, nil, encoderInvalid("encoder access-unit destination size overflows")
+	}
 	units := make([]EncoderNALUnit, 0, len(nals))
 	for _, nal := range nals {
 		if len(nal.raw) == 0 {
