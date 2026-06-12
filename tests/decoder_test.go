@@ -604,6 +604,36 @@ func TestDecodePacketFramesEmptyPacketIgnoresNewExtradata(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketFramesEmptyPacketIgnoresMalformedNewExtradata(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+	damagedConfig := append([]byte(nil), config...)
+	damagedConfig = damagedConfig[:len(damagedConfig)-1]
+	frames, err := dec.DecodePacketFrames(Packet{
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedConfig}},
+	})
+	if err != nil {
+		t.Fatalf("empty packet flush with malformed NEW_EXTRADATA: %v", err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("empty packet flush frames = %d, want 0", len(frames))
+	}
+
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after empty packet malformed NEW_EXTRADATA: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodePacketEmptyPacketIgnoresNewExtradataWithoutDelayedFrame(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config4, samples4 := annexBToAVCConfigAndSamples(t, data, 4)
@@ -629,6 +659,36 @@ func TestDecodePacketEmptyPacketIgnoresNewExtradataWithoutDelayedFrame(t *testin
 	frames, err := dec.DecodeConfiguredAVCFrames(samples4[0])
 	if err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames after single-frame empty packet NEW_EXTRADATA: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodePacketEmptyPacketIgnoresMalformedNewExtradataWithoutDelayedFrame(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+	damagedConfig := append([]byte(nil), config...)
+	damagedConfig = damagedConfig[:len(damagedConfig)-1]
+	frame, err := dec.DecodePacket(Packet{
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedConfig}},
+	})
+	if err != ErrUnsupported {
+		t.Fatalf("single-frame empty packet flush with malformed NEW_EXTRADATA error = %v, want ErrUnsupported", err)
+	}
+	if frame != nil {
+		t.Fatalf("single-frame empty packet flush frame = %+v, want nil", frame)
+	}
+
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after single-frame empty packet malformed NEW_EXTRADATA: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }

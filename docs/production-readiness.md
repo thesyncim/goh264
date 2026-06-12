@@ -144,7 +144,8 @@ for 2/3/4-byte AVC length sizes. Packet decode with repeated valid
 `NEW_EXTRADATA` also preserves B-frame reorder state through delayed flush, and
 frame-list and single-frame empty-packet flush ignore malformed replacement
 `NEW_EXTRADATA` without blocking delayed output or replacing stored AVC
-configuration.
+configuration, including when no delayed frame is available and the single-frame
+helper reports `ErrUnsupported`.
 Successful and malformed Annex B/AVC header parses preserve delayed
 configured-AVC B-frame flush state.
 
