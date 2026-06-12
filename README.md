@@ -251,8 +251,15 @@ enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRT
 })
 headers, err = enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 avcc := headers.AVCC()
+ownedSPS := headers.AppendSPS(nil)
+ownedPPS := headers.AppendPPS(nil)
+ownedAnnexBHeaders := headers.AppendAnnexB(nil)
+ownedAVCC := headers.AppendAVCC(nil)
 headersCopy := headers.Clone()
 sei, err = enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
+ownedSEINAL := sei.AppendNAL(nil)
+ownedSEIAnnexB := sei.AppendAnnexB(nil)
+ownedSEIAVC := sei.AppendAVC(nil)
 seiCopy := sei.Clone()
 frame := enc.I420Frame(y, cb, cr, pts)
 err = cfg.ValidateFrame(frame)
@@ -280,6 +287,8 @@ The admitted encoder contract is deliberately narrow:
   `NewEncoder`.
 - `EncoderConfig.ParameterSets` and `EncoderConfig.RecoveryPointSEIMessage`
   generate caller-owned helper surfaces without constructing a live encoder.
+  Header and SEI results include append helpers for retaining individual byte
+  surfaces in caller-managed buffers.
 - `EncoderConfig.ValidateFrame` and `Encoder.ValidateFrame` validate frame shape
   before bitstream work. Invalid frames return empty output without advancing
   RTP sequence, callback, frame-number, timestamp, or reference state. The next

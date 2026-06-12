@@ -515,6 +515,26 @@ func (sets EncoderParameterSets) AVCC() []byte {
 	return sets.AVCDecoderConfigurationRecord
 }
 
+// AppendSPS appends a caller-owned copy of the SPS NAL to dst.
+func (sets EncoderParameterSets) AppendSPS(dst []byte) []byte {
+	return append(dst, sets.SPS...)
+}
+
+// AppendPPS appends a caller-owned copy of the PPS NAL to dst.
+func (sets EncoderParameterSets) AppendPPS(dst []byte) []byte {
+	return append(dst, sets.PPS...)
+}
+
+// AppendAnnexB appends a caller-owned copy of the Annex B parameter sets to dst.
+func (sets EncoderParameterSets) AppendAnnexB(dst []byte) []byte {
+	return append(dst, sets.AnnexB...)
+}
+
+// AppendAVCC appends a caller-owned copy of the AVC decoder configuration record to dst.
+func (sets EncoderParameterSets) AppendAVCC(dst []byte) []byte {
+	return append(dst, sets.AVCDecoderConfigurationRecord...)
+}
+
 // Clone returns a deep-owned copy of the parameter-set helper surfaces.
 func (sets EncoderParameterSets) Clone() EncoderParameterSets {
 	return EncoderParameterSets{
@@ -533,6 +553,21 @@ type EncoderSEI struct {
 	NAL    []byte
 	AnnexB []byte
 	AVC    []byte
+}
+
+// AppendNAL appends a caller-owned copy of the SEI NAL to dst.
+func (sei EncoderSEI) AppendNAL(dst []byte) []byte {
+	return append(dst, sei.NAL...)
+}
+
+// AppendAnnexB appends a caller-owned copy of the Annex B SEI NAL to dst.
+func (sei EncoderSEI) AppendAnnexB(dst []byte) []byte {
+	return append(dst, sei.AnnexB...)
+}
+
+// AppendAVC appends a caller-owned copy of the AVC SEI NAL to dst.
+func (sei EncoderSEI) AppendAVC(dst []byte) []byte {
+	return append(dst, sei.AVC...)
 }
 
 // Clone returns a deep-owned copy of the SEI helper surfaces.

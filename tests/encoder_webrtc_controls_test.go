@@ -3374,6 +3374,53 @@ func TestEncoderParameterSetsCloneDeepCopiesSurfaces(t *testing.T) {
 	}
 }
 
+func TestEncoderParameterSetsAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(638, 478))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets: %v", err)
+	}
+
+	prefix := []byte{0xde, 0xad}
+	sps := headers.AppendSPS(append([]byte(nil), prefix...))
+	pps := headers.AppendPPS(append([]byte(nil), prefix...))
+	annexB := headers.AppendAnnexB(append([]byte(nil), prefix...))
+	avcc := headers.AppendAVCC(append([]byte(nil), prefix...))
+
+	if want := append(prefix, headers.SPS...); !bytes.Equal(sps, want) {
+		t.Fatalf("AppendSPS = %x, want %x", sps, want)
+	}
+	if want := append(prefix, headers.PPS...); !bytes.Equal(pps, want) {
+		t.Fatalf("AppendPPS = %x, want %x", pps, want)
+	}
+	if want := append(prefix, headers.AnnexB...); !bytes.Equal(annexB, want) {
+		t.Fatalf("AppendAnnexB = %x, want %x", annexB, want)
+	}
+	if want := append(prefix, headers.AVCDecoderConfigurationRecord...); !bytes.Equal(avcc, want) {
+		t.Fatalf("AppendAVCC = %x, want %x", avcc, want)
+	}
+
+	headers.SPS[0] ^= 0xff
+	headers.PPS[0] ^= 0xff
+	headers.AnnexB[0] ^= 0xff
+	headers.AVCDecoderConfigurationRecord[0] ^= 0xff
+	if bytes.Equal(sps[len(prefix):], headers.SPS) ||
+		bytes.Equal(pps[len(prefix):], headers.PPS) ||
+		bytes.Equal(annexB[len(prefix):], headers.AnnexB) ||
+		bytes.Equal(avcc[len(prefix):], headers.AVCDecoderConfigurationRecord) {
+		t.Fatal("parameter-set append helper output aliases source after mutation")
+	}
+	if _, err := goh264.NewDecoder().ParseHeadersAnnexB(annexB[len(prefix):]); err != nil {
+		t.Fatalf("ParseHeadersAnnexB appended AnnexB: %v", err)
+	}
+	if _, err := goh264.NewDecoder().ParseAVCDecoderConfigurationRecord(avcc[len(prefix):]); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord appended avcC: %v", err)
+	}
+}
+
 func TestEncoderParameterSetsSurviveLaterParameterSetCall(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(638, 478)
 	cfg.FrameRateNum = 30000
@@ -3761,6 +3808,40 @@ func TestEncoderSEICloneDeepCopiesSurfaces(t *testing.T) {
 		bytes.Equal(clone.AnnexB, sei.AnnexB) ||
 		bytes.Equal(clone.AVC, sei.AVC) {
 		t.Fatal("mutating SEI source changed clone")
+	}
+}
+
+func TestEncoderSEIAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	sei, err := enc.RecoveryPointSEI(4)
+	if err != nil {
+		t.Fatalf("RecoveryPointSEI: %v", err)
+	}
+
+	prefix := []byte{0xca, 0xfe}
+	nal := sei.AppendNAL(append([]byte(nil), prefix...))
+	annexB := sei.AppendAnnexB(append([]byte(nil), prefix...))
+	avc := sei.AppendAVC(append([]byte(nil), prefix...))
+	if want := append(prefix, sei.NAL...); !bytes.Equal(nal, want) {
+		t.Fatalf("AppendNAL = %x, want %x", nal, want)
+	}
+	if want := append(prefix, sei.AnnexB...); !bytes.Equal(annexB, want) {
+		t.Fatalf("AppendAnnexB = %x, want %x", annexB, want)
+	}
+	if want := append(prefix, sei.AVC...); !bytes.Equal(avc, want) {
+		t.Fatalf("AppendAVC = %x, want %x", avc, want)
+	}
+
+	sei.NAL[0] ^= 0xff
+	sei.AnnexB[0] ^= 0xff
+	sei.AVC[0] ^= 0xff
+	if bytes.Equal(nal[len(prefix):], sei.NAL) ||
+		bytes.Equal(annexB[len(prefix):], sei.AnnexB) ||
+		bytes.Equal(avc[len(prefix):], sei.AVC) {
+		t.Fatal("SEI append helper output aliases source after mutation")
 	}
 }
 
@@ -12179,8 +12260,29 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCC"); !ok {
 		t.Fatal("EncoderParameterSets missing AVCC convenience method")
 	}
+	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AppendSPS"); !ok {
+		t.Fatal("EncoderParameterSets missing AppendSPS convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AppendPPS"); !ok {
+		t.Fatal("EncoderParameterSets missing AppendPPS convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AppendAnnexB"); !ok {
+		t.Fatal("EncoderParameterSets missing AppendAnnexB convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AppendAVCC"); !ok {
+		t.Fatal("EncoderParameterSets missing AppendAVCC convenience method")
+	}
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("Clone"); !ok {
 		t.Fatal("EncoderParameterSets missing Clone convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderSEI{}).MethodByName("AppendNAL"); !ok {
+		t.Fatal("EncoderSEI missing AppendNAL convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderSEI{}).MethodByName("AppendAnnexB"); !ok {
+		t.Fatal("EncoderSEI missing AppendAnnexB convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderSEI{}).MethodByName("AppendAVC"); !ok {
+		t.Fatal("EncoderSEI missing AppendAVC convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderSEI{}).MethodByName("Clone"); !ok {
 		t.Fatal("EncoderSEI missing Clone convenience method")
