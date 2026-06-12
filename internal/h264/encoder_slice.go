@@ -876,8 +876,8 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	} else if (cfg.ChromaDCCoeffCb == 0) != (cfg.ChromaDCCoeffCr == 0) {
 		return ErrInvalidData
 	}
-	hasLegacyChromaDC := len(cfg.ChromaDCCoeffs) > 0 || cfg.ChromaDCCoeffCb != 0 || cfg.ChromaDCCoeffCr != 0
-	if !hasLegacyChromaDC && (len(cfg.ChromaDCCoeffPositions) > 0 || cfg.ChromaDCCoeffPos != 0) {
+	hasCompatibilityChromaDC := len(cfg.ChromaDCCoeffs) > 0 || cfg.ChromaDCCoeffCb != 0 || cfg.ChromaDCCoeffCr != 0
+	if !hasCompatibilityChromaDC && (len(cfg.ChromaDCCoeffPositions) > 0 || cfg.ChromaDCCoeffPos != 0) {
 		return ErrInvalidData
 	}
 	if len(cfg.ChromaDCCoeffPositions) > 0 {
@@ -909,8 +909,8 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	} else if (cfg.ChromaACCoeffCb == 0) != (cfg.ChromaACCoeffCr == 0) {
 		return ErrInvalidData
 	}
-	hasLegacyChromaAC := len(cfg.ChromaACCoeffs) > 0 || cfg.ChromaACCoeffCb != 0 || cfg.ChromaACCoeffCr != 0
-	if !hasLegacyChromaAC && (len(cfg.ChromaACCoeffPositions) > 0 || cfg.ChromaACCoeffPos != 0) {
+	hasCompatibilityChromaAC := len(cfg.ChromaACCoeffs) > 0 || cfg.ChromaACCoeffCb != 0 || cfg.ChromaACCoeffCr != 0
+	if !hasCompatibilityChromaAC && (len(cfg.ChromaACCoeffPositions) > 0 || cfg.ChromaACCoeffPos != 0) {
 		return ErrInvalidData
 	}
 	if len(cfg.ChromaACCoeffPositions) > 0 {

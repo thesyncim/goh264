@@ -752,12 +752,13 @@ func (sei EncoderSEI) Clone() EncoderSEI {
 //
 // Non-zero scalar fields replace the matching EncoderConfig field. Pointer
 // fields update when non-nil, including explicit false or zero values where
-// valid. Limits is the preferred zero-capable grouped budget update. The legacy
+// valid. Limits is the preferred zero-capable grouped budget update. The
 // MaxFrameSizeLimit, MaxEncodeTimeUSLimit, and SliceMaxBytesLimit fields remain
-// zero-capable forms for the MaxFrameSize, MaxEncodeTimeUS, and SliceMaxBytes
-// scalar fields. Reconfigure validates the resulting configuration before
-// changing encoder state; invalid updates leave the encoder unchanged. ForceIDR
-// queues an IDR request even when no config field changes.
+// compatibility zero-capable forms for the MaxFrameSize, MaxEncodeTimeUS, and
+// SliceMaxBytes scalar fields. Reconfigure validates the resulting
+// configuration before changing encoder state; invalid updates leave the
+// encoder unchanged. ForceIDR queues an IDR request even when no config field
+// changes.
 type EncoderReconfigure struct {
 	TargetBitrate         int
 	MaxBitrate            int

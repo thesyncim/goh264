@@ -8035,19 +8035,19 @@ func TestEncoderReconfigureLimitsGroupUpdatesBudgetsAtomically(t *testing.T) {
 	}
 
 	zeroLimits := goh264.EncoderLimits{}
-	legacyMaxFrameSize := 8192
-	legacySliceMaxBytes := 8192
-	legacyMaxEncodeTimeUS := 20_000
+	compatMaxFrameSize := 8192
+	compatSliceMaxBytes := 8192
+	compatMaxEncodeTimeUS := 20_000
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
 		MaxFrameSize:         8192,
 		SliceMaxBytes:        8192,
 		MaxEncodeTimeUS:      20_000,
-		MaxFrameSizeLimit:    &legacyMaxFrameSize,
-		SliceMaxBytesLimit:   &legacySliceMaxBytes,
-		MaxEncodeTimeUSLimit: &legacyMaxEncodeTimeUS,
+		MaxFrameSizeLimit:    &compatMaxFrameSize,
+		SliceMaxBytesLimit:   &compatSliceMaxBytes,
+		MaxEncodeTimeUSLimit: &compatMaxEncodeTimeUS,
 		Limits:               &zeroLimits,
 	}); err != nil {
-		t.Fatalf("Reconfigure grouped limits with legacy fields: %v", err)
+		t.Fatalf("Reconfigure grouped limits with compatibility fields: %v", err)
 	}
 	if got := enc.Config(); got.MaxFrameSize != 0 || got.SliceMaxBytes != 0 || got.MaxEncodeTimeUS != 0 {
 		t.Fatalf("post-Reconfigure grouped zero limits config = %+v, want all budgets disabled", got)
@@ -12223,19 +12223,19 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 			Payload: packetData[12:],
 		}},
 	}
-	legacyValid := valid
-	legacyValid.OutputFormat = 0
+	compatValid := valid
+	compatValid.OutputFormat = 0
 	if got, err := valid.RTPPacketData(0); err != nil || !bytes.Equal(got, packetData) || cap(got) != len(got) {
 		t.Fatalf("valid RTPPacketData = %x cap=%d err=%v, want clipped packet bytes", got, cap(got), err)
 	}
 	if got, err := valid.RTPPayloadData(0); err != nil || !bytes.Equal(got, []byte{0x65, 0x88, 0x99}) || cap(got) != len(got) {
 		t.Fatalf("valid RTPPayloadData = %x cap=%d err=%v, want clipped payload bytes", got, cap(got), err)
 	}
-	if got, err := legacyValid.RTPPacketData(0); err != nil || !bytes.Equal(got, packetData) {
-		t.Fatalf("legacy RTPPacketData = %x/%v, want packet bytes", got, err)
+	if got, err := compatValid.RTPPacketData(0); err != nil || !bytes.Equal(got, packetData) {
+		t.Fatalf("compatibility RTPPacketData = %x/%v, want packet bytes", got, err)
 	}
-	if got, err := legacyValid.RTPPayloadData(0); err != nil || !bytes.Equal(got, []byte{0x65, 0x88, 0x99}) {
-		t.Fatalf("legacy RTPPayloadData = %x/%v, want payload bytes", got, err)
+	if got, err := compatValid.RTPPayloadData(0); err != nil || !bytes.Equal(got, []byte{0x65, 0x88, 0x99}) {
+		t.Fatalf("compatibility RTPPayloadData = %x/%v, want payload bytes", got, err)
 	}
 	annexBFrameWithRTPPackets := valid
 	annexBFrameWithRTPPackets.OutputFormat = goh264.EncoderOutputAnnexB
