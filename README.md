@@ -267,6 +267,7 @@ err = enc.SetResolution(640, 480)
 err = enc.SetDeblockMode(goh264.EncoderDeblockDisabled)
 err = enc.SetRTPMaxPayloadSize(1200)
 err = enc.SetMaxFrameSize(0)    // disable the access-unit byte budget
+err = enc.SetPreset(goh264.EncoderPresetRealtime)
 err = enc.SetSliceCount(2)
 err = enc.SetSliceMaxBytes(0)   // disable the per-slice byte budget
 err = enc.SetMaxEncodeTimeUS(0) // disable the late-frame time budget
@@ -316,7 +317,7 @@ that are currently intended to be stable enough for integration work:
   the corresponding budget.
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
   `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
-  `SetDeblockMode`, `SetSliceCount`, `SetSPSPPSMode`,
+  `SetDeblockMode`, `SetPreset`, `SetSliceCount`, `SetSPSPPSMode`,
   `SetSPSPPSBeforeIDR`, `SetRecoveryPointSEI`,
   `SetOutputFormat`, `SetRTPPacketizationMode`, and `SetRTPMetadata` cover
   common quality, budget, geometry, output, cadence, packetization, and RTP

@@ -1363,6 +1363,13 @@ func (e *Encoder) SetMaxEncodeTimeUS(us int) error {
 	return nil
 }
 
+// SetPreset updates the runtime encoder preset.
+//
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetPreset(preset EncoderPreset) error {
+	return e.Reconfigure(EncoderReconfigure{Preset: preset})
+}
+
 // SetSliceCount updates the number of VCL slices emitted per frame.
 //
 // Invalid updates leave the encoder configuration and coding state unchanged.

@@ -65,7 +65,7 @@ VCL frame-number continuity intact across Annex B, AVC, and RTP where the
 controls apply, including rejected updates bundled with ForceIDR requests.
 Common runtime bitrate, rate-control, VBV, frame-drop, QP, frame-rate, RTP
 timestamp increment, GOP/IDR cadence, resolution, deblock, payload-size,
-size/latency budget, slice count, SPS/PPS cadence, output/cadence, RTP
+size/latency budget, preset, slice count, SPS/PPS cadence, output/cadence, RTP
 packetization, and RTP payload metadata controls now have explicit setter
 helpers; `EncoderReconfigure` remains the grouped update path for bundled
 multi-field changes and explicit ForceIDR requests.

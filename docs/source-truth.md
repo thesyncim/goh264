@@ -203,7 +203,7 @@ credit before the next frame, `SetBitrate` lowering that resets stale
 frame-budget credit before the next frame, `SetFrameRate` changes that reset
 frame-budget credit and apply the updated RTP cadence across drop/recovery
 while rolling back derived RTP timestamp overflow or zero-increment underflow,
-explicit max-frame-size, slice-byte, encode-time, slice-count, and
+explicit max-frame-size, slice-byte, encode-time, preset, slice-count, and
 SPS/PPS-before-IDR setters with zero-valued runtime budget disablement,
 `FrameDropLate` bypass of the derived bitrate budget when the encode-time budget
 admits the frame,

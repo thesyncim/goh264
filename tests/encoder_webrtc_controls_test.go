@@ -461,6 +461,9 @@ func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 		{name: "SetMaxEncodeTimeUS", call: func() error {
 			return enc.SetMaxEncodeTimeUS(0)
 		}},
+		{name: "SetPreset", call: func() error {
+			return enc.SetPreset(goh264.EncoderPresetRealtime)
+		}},
 		{name: "SetSliceCount", call: func() error {
 			return enc.SetSliceCount(1)
 		}},
@@ -849,6 +852,12 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		t.Fatalf("disabled runtime limits = frame %d slice %d time %d, want zeroes",
 			got.MaxFrameSize, got.SliceMaxBytes, got.MaxEncodeTimeUS)
 	}
+	if err := enc.SetPreset(goh264.EncoderPresetQuality); err != nil {
+		t.Fatalf("SetPreset valid: %v", err)
+	}
+	if got := enc.Config(); got.Preset != goh264.EncoderPresetQuality {
+		t.Fatalf("preset = %v, want quality", got.Preset)
+	}
 	if err := enc.SetSliceCount(2); err != nil {
 		t.Fatalf("SetSliceCount valid: %v", err)
 	}
@@ -984,6 +993,9 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 		}},
 		{name: "SetMaxEncodeTimeUS", call: func(enc *goh264.Encoder) error {
 			return enc.SetMaxEncodeTimeUS(-1)
+		}},
+		{name: "SetPreset", call: func(enc *goh264.Encoder) error {
+			return enc.SetPreset(goh264.EncoderPreset(99))
 		}},
 		{name: "SetSliceCount", call: func(enc *goh264.Encoder) error {
 			return enc.SetSliceCount(-1)
@@ -13154,7 +13166,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 		"SetFrameDropMode", "SetQP", "SetFrameRate", "SetRTPTimestampIncrement",
 		"SetGOP", "SetResolution", "SetDeblockMode", "SetRTPMaxPayloadSize",
 		"SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
-		"SetSliceCount", "SetSPSPPSMode", "SetSPSPPSBeforeIDR", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
+		"SetPreset", "SetSliceCount", "SetSPSPPSMode", "SetSPSPPSBeforeIDR", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
 		"SetRTPMetadata", "SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
