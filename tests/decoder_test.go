@@ -908,6 +908,68 @@ func TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset(t *testing.T) {
 	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[1]))
 }
 
+func TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference(t *testing.T) {
+	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) != 2 || len(samples32) != 2 {
+		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
+	}
+
+	dec := NewDecoder()
+	out, err := dec.DecodeAVCCFrames(config16, samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames 16x16 IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	out, err = dec.DecodeAVCCFrames(config32, samples32[1])
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 P-skip after incompatible avcC update = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+
+	out, err = dec.DecodeAVCCFrames(config32, samples32[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames 32x16 IDR after stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
+func TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference(t *testing.T) {
+	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) != 2 || len(samples32) != 2 {
+		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
+	}
+
+	dec := NewDecoder()
+	out, err := dec.DecodePacketFrames(Packet{
+		Data:     samples16[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     samples32[1],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config32}},
+	})
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 P-skip after incompatible NEW_EXTRADATA = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+
+	out, err = dec.DecodePacketFrames(Packet{Data: samples32[0]})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 32x16 IDR after stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
 func encodeDecoderAVCTestStream(t *testing.T, width int, height int) ([]byte, [][]byte, []goh264.EncoderFrame) {
 	t.Helper()
 	cfg := goh264.DefaultEncoderConfig(width, height)

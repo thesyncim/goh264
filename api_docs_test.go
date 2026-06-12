@@ -269,9 +269,11 @@ func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
 	}
 	readme := strings.Join(strings.Fields(string(data)), " ")
 	for _, phrase := range []string{
-		"without resetting retained references",
+		"Compatible in-stream avcC updates retain references",
+		"incompatible active SPS changes reset picture state",
+		"old references are not visible to the new stream",
 		"IDR-bound stream switches",
-		"unrelated stream where old references must not be visible",
+		"unrelated stream where the decoder cannot infer the boundary from avcC",
 		"call `Reset` before storing the new avcC",
 		"PacketSideDataNewExtradata",
 		"uses the same stateful update rule",

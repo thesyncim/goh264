@@ -923,10 +923,73 @@ func (d *Decoder) storeAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationR
 }
 
 func (d *Decoder) updateAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationRecord) {
+	resetDPB := d.avcConfigurationNeedsDPBReset(cfg)
 	d.sps = cfg.SPS
 	d.pps = cfg.PPS
 	d.avcNALLengthSize = cfg.NALLengthSize
+	if resetDPB {
+		_ = d.simple.StoreAVCDecoderConfiguration(cfg)
+		return
+	}
 	_ = d.simple.UpdateParamSets(d.sps, d.pps)
+}
+
+func (d *Decoder) avcConfigurationNeedsDPBReset(cfg h264.AVCDecoderConfigurationRecord) bool {
+	if d == nil || d.avcNALLengthSize == 0 {
+		return false
+	}
+	if cfg.FirstSPSID >= uint32(len(cfg.SPS)) {
+		return false
+	}
+	next := cfg.SPS[cfg.FirstSPSID]
+	if next == nil {
+		return false
+	}
+	if d.avcActiveSPSID() != cfg.FirstSPSID {
+		return true
+	}
+	prev := d.sps[cfg.FirstSPSID]
+	return avcSPSRequiresDPBReset(prev, next)
+}
+
+func (d *Decoder) avcActiveSPSID() uint32 {
+	for _, pps := range d.pps {
+		if pps != nil {
+			return pps.SPSID
+		}
+	}
+	for i, sps := range d.sps {
+		if sps != nil {
+			return uint32(i)
+		}
+	}
+	return 0
+}
+
+func avcSPSRequiresDPBReset(prev *h264.SPS, next *h264.SPS) bool {
+	if prev == nil || next == nil {
+		return false
+	}
+	return prev.ProfileIDC != next.ProfileIDC ||
+		prev.ConstraintSetFlags != next.ConstraintSetFlags ||
+		prev.ChromaFormatIDC != next.ChromaFormatIDC ||
+		prev.BitDepthLuma != next.BitDepthLuma ||
+		prev.BitDepthChroma != next.BitDepthChroma ||
+		prev.Width != next.Width ||
+		prev.Height != next.Height ||
+		prev.MBWidth != next.MBWidth ||
+		prev.MBHeight != next.MBHeight ||
+		prev.FrameMBSOnlyFlag != next.FrameMBSOnlyFlag ||
+		prev.MBAFF != next.MBAFF ||
+		prev.Crop != next.Crop ||
+		prev.CropLeft != next.CropLeft ||
+		prev.CropRight != next.CropRight ||
+		prev.CropTop != next.CropTop ||
+		prev.CropBottom != next.CropBottom ||
+		prev.RefFrameCount != next.RefFrameCount ||
+		prev.PocType != next.PocType ||
+		prev.Log2MaxFrameNum != next.Log2MaxFrameNum ||
+		prev.Log2MaxPocLSB != next.Log2MaxPocLSB
 }
 
 func (d *Decoder) decodeNewExtradata(data []byte) error {

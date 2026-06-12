@@ -208,14 +208,16 @@ uses the stored avcC length size directly. `DecodeAnnexBFrames` and
 `DecodeAVCFrames` are complete-stream helpers for callers that already know the
 format and length-size.
 
-`DecodeAVCCFrames` updates the decoder's AVC configuration without resetting
-retained references, decodes the supplied AVC packet, and drains delayed output
-before returning. Passing an empty AVC packet with a configuration record updates
+`DecodeAVCCFrames` updates the decoder's AVC configuration, decodes the
+supplied AVC packet, and drains delayed output before returning. Compatible
+in-stream avcC updates retain references; incompatible active SPS changes reset
+picture state before the packet is decoded so old references are not visible to
+the new stream. Passing an empty AVC packet with a configuration record updates
 the configuration and drains delayed output without reporting an invalid packet.
 Use this for ordinary in-stream avcC updates and IDR-bound stream switches. For
-an unrelated stream where old references must not be visible, call `Reset`
-before storing the new avcC. `PacketSideDataNewExtradata` uses the same
-stateful update rule when it carries avcC data.
+an unrelated stream where the decoder cannot infer the boundary from avcC,
+call `Reset` before storing the new avcC. `PacketSideDataNewExtradata` uses the
+same stateful update rule when it carries avcC data.
 
 Parse headers without decoding full frames:
 
