@@ -657,6 +657,16 @@ func TestEncoderFrameRateInvalidUpdatesPreserveLiveState(t *testing.T) {
 	if got := enc.Config(); got != before {
 		t.Fatalf("invalid frame-rate Reconfigure mutated config = %+v, want %+v", got, before)
 	}
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		FrameRateNum: 0,
+		FrameRateDen: 1,
+		ForceIDR:     true,
+	}); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Reconfigure zero frame-rate numerator with ForceIDR error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("invalid frame-rate ForceIDR Reconfigure mutated config = %+v, want %+v", got, before)
+	}
 	if enc.PendingIDR() {
 		t.Fatal("invalid frame-rate updates queued unexpected IDR")
 	}
