@@ -511,6 +511,66 @@ func writeCAVLCResidualTrailingOnes(bw *BitWriter, block []int32, n int, scantab
 	return totalCoeff, nil
 }
 
+func writeCAVLCResidualSingleLevel(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
+	if bw == nil || maxCoeff <= 0 || maxCoeff > 16 || len(scantable) < maxCoeff {
+		return 0, ErrInvalidData
+	}
+	coeffIndex := -1
+	level := int32(0)
+	for i := 0; i < maxCoeff; i++ {
+		pos := int(scantable[i])
+		if pos < 0 || n+pos < 0 || n+pos >= len(block) {
+			return 0, ErrInvalidData
+		}
+		v := block[n+pos]
+		if v == 0 {
+			continue
+		}
+		if v == 1 || v == -1 || coeffIndex >= 0 {
+			return 0, ErrInvalidData
+		}
+		coeffIndex = i
+		level = v
+	}
+	if coeffIndex < 0 {
+		return writeCAVLCResidualTrailingOnes(bw, block, n, scantable, maxCoeff, predictedNnz)
+	}
+
+	if err := writeCAVLCCoeffToken(bw, 1, 0, predictedNnz, maxCoeff); err != nil {
+		return 0, err
+	}
+	if err := writeCAVLCFirstLevel(bw, level); err != nil {
+		return 0, err
+	}
+	totalZeros := coeffIndex
+	if err := writeCAVLCTotalZeros(bw, totalZeros, 1, maxCoeff); err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
+func writeCAVLCFirstLevel(bw *BitWriter, level int32) error {
+	if bw == nil || level == 0 || level == 1 || level == -1 {
+		return ErrInvalidData
+	}
+	adjusted := level - 1
+	if level < 0 {
+		adjusted = level + 1
+	}
+	code := int64(adjusted)*2 - 2
+	if adjusted < 0 {
+		code = int64(-adjusted)*2 - 1
+	}
+	if code < 0 || code > 13 {
+		return ErrInvalidData
+	}
+	for i := int64(0); i < code; i++ {
+		bw.WriteBit(0)
+	}
+	bw.WriteBit(1)
+	return nil
+}
+
 func readCAVLCLevels(gb *bitReader, totalCoeff int, trailingOnes int) ([16]int32, error) {
 	var level [16]int32
 	if totalCoeff <= 0 || totalCoeff > 16 || trailingOnes < 0 || trailingOnes > 3 || trailingOnes > totalCoeff {
