@@ -127,6 +127,26 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}
 }
 
+func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+	for _, phrase := range []string{
+		"not production-ready as a complete codec package yet",
+		"not quality-parity with a production H.264 encoder",
+		"Examples",
+		"API smoke tests only",
+		"oracle-backed bitstream parity",
+		"release readiness",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md missing quality/parity status phrase %q", phrase)
+		}
+	}
+}
+
 func requireREADMECodeName(t *testing.T, readme string, name string) {
 	t.Helper()
 	if !strings.Contains(readme, "`"+name+"`") && !strings.Contains(readme, name) {

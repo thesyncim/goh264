@@ -17,6 +17,19 @@ and RTP packetization modes 0 and 1. The API is usable for integration testing,
 but broader motion search, residual coding, rate-control behavior, and
 production performance evidence are still in flight.
 
+## Quality And Parity Status
+
+This project is not production-ready as a complete codec package yet. The
+decoder has the strongest evidence and is the current parity focus; the encoder
+is an admitted realtime/WebRTC subset with many public API contracts covered,
+but it is not quality-parity with a production H.264 encoder.
+
+| Area | Quality state | Strong evidence today | Missing before production parity |
+| --- | --- | --- | --- |
+| Decoder | Mature, still pre-release | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Final release evidence, every selected release gate green together, exact parity on remaining unselected field/MBAFF/damaged-edge behavior |
+| Encoder | Experimental admitted subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual coding, mature rate control, wider packetizer/control breadth, oracle-backed bitstream parity, reviewed allocation/performance evidence |
+| Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, release readiness, or performance evidence |
+
 ## What Works Today
 
 - **Decoder:** pure Go, no cgo, no module dependencies.
@@ -43,14 +56,6 @@ encoder coverage. The detailed status lives in:
 - [docs/source-truth.md](docs/source-truth.md)
 - [docs/translation-ledger.md](docs/translation-ledger.md)
 - [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md)
-
-## Maturity At A Glance
-
-| Area | Current state | Use it for | Do not assume |
-| --- | --- | --- | --- |
-| Decoder API | Mature public surface with broad oracle coverage | Annex B/AVC decode experiments, corpus validation, raw-frame export, side-data inspection | Final production release evidence, exact parity on every unselected field/MBAFF edge |
-| Encoder API | Experimental but intentionally shaped for realtime/WebRTC integration | Exercising admitted Baseline IDR/P-skip/P16x16/P-IntraPCM paths, RTP packetization, control-loop integration | General-purpose H.264 encoding, broad motion search, residual coding, mature rate control |
-| Performance | Harnesses and allocation canaries exist | Local trend checks and regression detection | Reviewed release-grade throughput claims |
 
 ## Install
 
