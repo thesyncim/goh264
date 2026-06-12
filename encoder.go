@@ -1141,12 +1141,16 @@ func (e *Encoder) referenceMatches(view encoderFrameView) bool {
 	if !ref.valid || ref.width != view.width || ref.height != view.height {
 		return false
 	}
-	if len(ref.y) != view.width*view.height {
+	lumaSize, chromaSize, ok := encoderI420ReferencePlaneSizes(view)
+	if !ok {
+		return false
+	}
+	if len(ref.y) != lumaSize {
 		return false
 	}
 	chromaWidth := view.width / 2
 	chromaHeight := view.height / 2
-	if len(ref.cb) != chromaWidth*chromaHeight || len(ref.cr) != chromaWidth*chromaHeight {
+	if len(ref.cb) != chromaSize || len(ref.cr) != chromaSize {
 		return false
 	}
 	for y := 0; y < view.height; y++ {
@@ -1182,17 +1186,23 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView, dst []encoderP16
 	if !ref.valid || ref.width != view.width || ref.height != view.height {
 		return nil, false
 	}
-	if len(ref.y) != view.width*view.height {
+	lumaSize, chromaSize, ok := encoderI420ReferencePlaneSizes(view)
+	if !ok {
 		return nil, false
 	}
-	chromaWidth := view.width / 2
-	chromaHeight := view.height / 2
-	if len(ref.cb) != chromaWidth*chromaHeight || len(ref.cr) != chromaWidth*chromaHeight {
+	if len(ref.y) != lumaSize {
+		return nil, false
+	}
+	if len(ref.cb) != chromaSize || len(ref.cr) != chromaSize {
 		return nil, false
 	}
 
 	macroblocksPerRow := view.width >> 4
-	macroblockCount := macroblocksPerRow * (view.height >> 4)
+	macroblockRows := view.height >> 4
+	macroblockCount, err := checkedMulInt(macroblocksPerRow, macroblockRows)
+	if err != nil {
+		return nil, false
+	}
 	if cap(dst) < macroblockCount {
 		e.p16MVs = resizeEncoderP16x16MVs(e.p16MVs, macroblockCount)
 		dst = e.p16MVs[:0]
@@ -1517,14 +1527,19 @@ func clampEncoderReferenceCoord(v int, limit int) int {
 }
 
 func (e *Encoder) storeReference(view encoderFrameView) {
+	lumaSize, chromaSize, ok := encoderI420ReferencePlaneSizes(view)
+	if !ok {
+		e.reference = encoderReferenceFrame{}
+		return
+	}
 	chromaWidth := view.width / 2
 	chromaHeight := view.height / 2
 	ref := &e.reference
 	ref.width = view.width
 	ref.height = view.height
-	ref.y = resizeEncoderReferencePlane(ref.y, view.width*view.height)
-	ref.cb = resizeEncoderReferencePlane(ref.cb, chromaWidth*chromaHeight)
-	ref.cr = resizeEncoderReferencePlane(ref.cr, chromaWidth*chromaHeight)
+	ref.y = resizeEncoderReferencePlane(ref.y, lumaSize)
+	ref.cb = resizeEncoderReferencePlane(ref.cb, chromaSize)
+	ref.cr = resizeEncoderReferencePlane(ref.cr, chromaSize)
 	for y := 0; y < view.height; y++ {
 		copy(ref.y[y*view.width:(y+1)*view.width], view.y[y*view.strideY:y*view.strideY+view.width])
 	}
@@ -1533,6 +1548,23 @@ func (e *Encoder) storeReference(view encoderFrameView) {
 		copy(ref.cr[y*chromaWidth:(y+1)*chromaWidth], view.cr[y*view.strideCr:y*view.strideCr+chromaWidth])
 	}
 	ref.valid = true
+}
+
+func encoderI420ReferencePlaneSizes(view encoderFrameView) (int, int, bool) {
+	if view.width <= 0 || view.height <= 0 {
+		return 0, 0, false
+	}
+	lumaSize, err := checkedMulInt(view.width, view.height)
+	if err != nil {
+		return 0, 0, false
+	}
+	chromaWidth := view.width / 2
+	chromaHeight := view.height / 2
+	chromaSize, err := checkedMulInt(chromaWidth, chromaHeight)
+	if err != nil {
+		return 0, 0, false
+	}
+	return lumaSize, chromaSize, true
 }
 
 func resizeEncoderReferencePlane(buf []byte, size int) []byte {

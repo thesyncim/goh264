@@ -112,6 +112,50 @@ func TestPacketizeEncoderRTPSingleNALRejectsStorageOverflow(t *testing.T) {
 	}
 }
 
+func TestEncoderReferenceHelpersRejectOverflowedGeometry(t *testing.T) {
+	view := encoderFrameView{
+		width:  maxInt/2 + 1,
+		height: 16,
+	}
+	ref := encoderReferenceFrame{
+		valid:  true,
+		width:  view.width,
+		height: view.height,
+	}
+	enc := &Encoder{
+		cfg:       EncoderConfig{DeblockMode: EncoderDeblockDisabled},
+		reference: ref,
+	}
+	if enc.referenceMatches(view) {
+		t.Fatal("referenceMatches accepted overflowed geometry")
+	}
+	if got, ok := enc.p16x16NoResidualMotion(view, nil); ok || got != nil {
+		t.Fatalf("p16x16NoResidualMotion = %v/%t, want nil/false", got, ok)
+	}
+	enc.storeReference(view)
+	if enc.reference.valid {
+		t.Fatal("storeReference kept overflowed geometry valid")
+	}
+}
+
+func TestEncoderReferencePlaneSizesRejectOverflow(t *testing.T) {
+	tests := []struct {
+		name string
+		view encoderFrameView
+	}{
+		{name: "luma", view: encoderFrameView{width: maxInt/2 + 1, height: 3}},
+		{name: "chroma", view: encoderFrameView{width: maxInt, height: 4}},
+		{name: "nonpositive", view: encoderFrameView{width: 0, height: 16}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, _, ok := encoderI420ReferencePlaneSizes(tt.view); ok {
+				t.Fatalf("encoderI420ReferencePlaneSizes(%+v) ok, want false", tt.view)
+			}
+		})
+	}
+}
+
 func fakeEncoderBytesLen(n int) []byte {
 	if n <= 0 {
 		return nil
