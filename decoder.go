@@ -641,9 +641,9 @@ func (d *Decoder) DecodeConfiguredAVC(data []byte) (*Frame, error) {
 // DecodeConfiguredAVCFrames decodes a stateful AVC packet using the stored AVC
 // configuration.
 //
-// The stored configuration is set by ParseAVCDecoderConfigurationRecord or by a
-// prior AVC decoder configuration record passed to DecodeFrames. Passing empty
-// data flushes delayed frames.
+// The stored configuration is set by ConfigureAVCDecoderConfigurationRecord,
+// ConfigureAVCC, or by a prior AVC decoder configuration record passed to
+// DecodeFrames. Passing empty data flushes delayed frames.
 func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	if d == nil || d.avcNALLengthSize == 0 {
 		return nil, ErrInvalidData
@@ -796,6 +796,9 @@ func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, e
 
 // ParseAVCDecoderConfigurationRecord parses an AVC decoder configuration record,
 // stores it for configured-AVC decode calls, and returns stream metadata.
+//
+// ParseAVCDecoderConfigurationRecord remains as a compatibility alias for
+// ConfigureAVCDecoderConfigurationRecord.
 func (d *Decoder) ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
 	return d.ConfigureAVCDecoderConfigurationRecord(data)
 }
@@ -831,6 +834,8 @@ func avcDecoderConfigurationFromH264(cfg h264.AVCDecoderConfigurationRecord) (AV
 
 // ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,
 // and returns stream metadata.
+//
+// ParseAVCC remains as a compatibility alias for ConfigureAVCC.
 func (d *Decoder) ParseAVCC(data []byte) (AVCConfig, error) {
 	return d.ParseAVCDecoderConfigurationRecord(data)
 }

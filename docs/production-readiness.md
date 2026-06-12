@@ -198,13 +198,15 @@ Direct avcC parse, configuration-record decode, valid packet AVC and Annex B
 `NEW_EXTRADATA`, and auto-detected avcC admission also prove the stored decoder
 configuration state does not retain caller-owned side-data, configuration, or
 packet buffers after return.
-Package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` provide the
-same avcC metadata inspection without touching decoder state, including damaged
-configuration rejection that leaves an existing decoder configuration and
-delayed-output path usable.
+Package-level `InspectAVCC` and `InspectAVCDecoderConfigurationRecord` provide
+the preferred stateless avcC metadata inspection without touching decoder state;
+package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` remain
+compatibility aliases. Damaged configuration rejection leaves an existing
+decoder configuration and delayed-output path usable.
 Malformed standalone AVC decoder configuration records are also guarded: failed
-`ParseAVCDecoderConfigurationRecord` and auto-detected `DecodeFrames` config
-updates leave the last stored configuration usable for configured AVC decode.
+`ConfigureAVCDecoderConfigurationRecord`, compatibility parse aliases, and
+auto-detected `DecodeFrames` config updates leave the last stored configuration
+usable for configured AVC decode.
 In-band malformed SPS/PPS NALs are also guarded as non-fatal: they do not
 replace the last good parameter sets before the next valid slice on configured
 AVC or mixed configured-AVC/Annex B public decode paths.
