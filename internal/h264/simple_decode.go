@@ -619,6 +619,10 @@ func mergePacketSideDataIntoDecodedFrame(dst *DecodedFrameSideData, src DecodedF
 }
 
 func cloneReferenceDisplays(src AV3DReferenceDisplaysInfo) AV3DReferenceDisplaysInfo {
+	if len(src.Displays) > maxInt/16 {
+		src.Displays = nil
+		return src
+	}
 	src.Displays = append([]AV3DReferenceDisplay(nil), src.Displays...)
 	return src
 }

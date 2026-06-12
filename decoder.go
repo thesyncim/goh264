@@ -1724,6 +1724,9 @@ func masteringDisplayFromPacketMetadata(src h264.AVMasteringDisplayMetadata) *Ma
 }
 
 func referenceDisplaysFromPacketSideDataValue(src h264.AV3DReferenceDisplaysInfo) *ReferenceDisplaysInfo {
+	if len(src.Displays) > maxInt/16 {
+		return nil
+	}
 	out := &ReferenceDisplaysInfo{
 		PrecRefDisplayWidth:    src.PrecRefDisplayWidth,
 		RefViewingDistanceFlag: src.RefViewingDistanceFlag != 0,

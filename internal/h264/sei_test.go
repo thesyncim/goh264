@@ -340,6 +340,22 @@ func TestMergePacketSideDataIntoDecodedFrameRejectsOverflowedClones(t *testing.T
 	}
 }
 
+func TestMergePacketSideDataIntoDecodedFrameRejectsOverflowedReferenceDisplaysClone(t *testing.T) {
+	var dst DecodedFrameSideData
+	mergePacketSideDataIntoDecodedFrame(&dst, DecodedFrameSideData{
+		ReferenceDisplays: AV3DReferenceDisplaysInfo{
+			Present:  1,
+			Displays: fakeReferenceDisplaysLen(maxInt/16 + 1),
+		},
+	})
+	if dst.ReferenceDisplays.Present == 0 {
+		t.Fatal("reference displays present flag was not preserved")
+	}
+	if dst.ReferenceDisplays.Displays != nil {
+		t.Fatalf("overflowed reference displays = len %d, want nil", len(dst.ReferenceDisplays.Displays))
+	}
+}
+
 func fakeBytesLen(n int) []uint8 {
 	if n <= 0 {
 		return nil
@@ -371,6 +387,18 @@ func fakeUint32sLen(n int) []uint32 {
 	var v uint32
 	return *(*[]uint32)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(&v)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeReferenceDisplaysLen(n int) []AV3DReferenceDisplay {
+	if n <= 0 {
+		return nil
+	}
+	var display AV3DReferenceDisplay
+	return *(*[]AV3DReferenceDisplay)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&display)),
 		Len:  n,
 		Cap:  n,
 	}))

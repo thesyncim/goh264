@@ -315,6 +315,19 @@ func TestFrameSideDataFromH264RejectsOverflowedBytePayloads(t *testing.T) {
 	}
 }
 
+func TestFrameSideDataFromH264RejectsOverflowedReferenceDisplaysClone(t *testing.T) {
+	src := h264.DecodedFrameSideData{
+		ReferenceDisplays: h264.AV3DReferenceDisplaysInfo{
+			Present:  1,
+			Displays: fakeReferenceDisplaysLen(maxInt/16 + 1),
+		},
+	}
+	got := frameSideDataFromH264(src, 0, 0)
+	if got.ReferenceDisplays != nil {
+		t.Fatalf("overflowed reference displays = %d, want nil", len(got.ReferenceDisplays.Displays))
+	}
+}
+
 func TestCloneEncoderRTPPacketClonesSharedPayloadStorage(t *testing.T) {
 	data := []byte{0x80, 0x60, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0x65, 0xaa}
 	pkt := EncoderRTPPacket{Data: data, Payload: data[12:]}
@@ -412,6 +425,18 @@ func fakeUint16SliceLen(n int) []uint16 {
 	var v uint16
 	return *(*[]uint16)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(&v)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeReferenceDisplaysLen(n int) []h264.AV3DReferenceDisplay {
+	if n <= 0 {
+		return nil
+	}
+	var display h264.AV3DReferenceDisplay
+	return *(*[]h264.AV3DReferenceDisplay)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&display)),
 		Len:  n,
 		Cap:  n,
 	}))
