@@ -597,6 +597,78 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesThroughFrameMacroblockPath(t *t
 	}
 }
 
+func TestEncodeI420P16x16ResidualSliceRBSPDecodesChromaDCThroughFramePath(t *testing.T) {
+	pps, sps := encoderResidualSliceTestPPS(20)
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+		Width:                      16,
+		Height:                     16,
+		FrameNum:                   10,
+		InitialQP:                  20,
+		NextQP:                     23,
+		DisableDeblockingFilterIDC: 1,
+		MVDX:                       2,
+		MVDY:                       -1,
+		Coeff:                      1,
+		ChromaDCCoeffCb:            1,
+		ChromaDCCoeffCr:            -1,
+	}, pps, sps)
+	if err != nil {
+		t.Fatalf("encode residual chroma DC slice rbsp: %v", err)
+	}
+
+	var ppsList [maxPPSCount]*PPS
+	ppsList[0] = pps
+	sh, payload, err := parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("parse residual chroma DC P slice header: %v", err)
+	}
+	skipRun, err := payload.readUEGolombLong()
+	if err != nil {
+		t.Fatalf("read generated residual chroma DC P skip run: %v", err)
+	}
+	if skipRun != 0 {
+		t.Fatalf("skip run = %d, want 0", skipRun)
+	}
+	var decoded cavlcResidualContext
+	got, err := decoded.decodeCAVLCInterPMacroblock(&payload, pps, sps, int(sh.QScale), [2]uint32{1, 0}, false)
+	if err != nil {
+		t.Fatalf("decode generated residual chroma DC P macroblock: %v", err)
+	}
+	if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 0x11 ||
+		got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != 0x1011 {
+		t.Fatalf("decoded chroma DC mb type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x",
+			got.MBType, got.CBP, got.QScale, got.ChromaQP, got.CBPTable)
+	}
+	if decoded.MB[0] != 1 || decoded.MB[256] != 1 || decoded.MB[512] != -1 {
+		t.Fatalf("decoded residual luma/chroma = %d/%d/%d, want 1/1/-1", decoded.MB[0], decoded.MB[256], decoded.MB[512])
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("residual chroma DC payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+
+	sh, payload, err = parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("reparse residual chroma DC P slice header: %v", err)
+	}
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	frameGot, err := m.decodeCAVLCFrameSliceMacroblock(&payload, sh, &state, 0, 13)
+	if err != nil {
+		t.Fatalf("decode generated residual chroma DC P frame macroblock: %v", err)
+	}
+	if frameGot.CBP != 0x11 || frameGot.CBPTable != 0x1011 || frameGot.QScale != 23 ||
+		m.CBPTable[0] != 0x1011 || m.QScaleTable[0] != 23 || m.SliceTable[0] != 13 {
+		t.Fatalf("frame chroma DC result/table cbp/cbpTable/q = %#x/%#x/%d table %#x/%d/%d",
+			frameGot.CBP, frameGot.CBPTable, frameGot.QScale, m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	if m.NonZeroCount[0][0] != 1 {
+		t.Fatalf("frame chroma DC luma nnz = %d, want 1", m.NonZeroCount[0][0])
+	}
+}
+
 func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 	valid := encoderI420P16x16ResidualConfig{
@@ -650,6 +722,26 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			next.Width = 32
 			next.Coeff = 0
 			next.Coeffs = []int32{1, 0}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "partial chroma dc scalar", run: func() error {
+			next := valid
+			next.ChromaDCCoeffCb = 1
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad chroma dc count", run: func() error {
+			next := valid
+			next.Width = 32
+			next.ChromaDCCoeffs = [][2]int32{{1, -1}}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "partial per-macroblock chroma dc", run: func() error {
+			next := valid
+			next.Width = 32
+			next.ChromaDCCoeffs = [][2]int32{{1, -1}, {1, 0}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
