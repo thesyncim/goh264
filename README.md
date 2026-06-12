@@ -227,13 +227,15 @@ same metadata without mutating decoder state.
 Packet side-data support mirrors FFmpeg-facing surfaces used by the port:
 
 ```go
+sideData := []goh264.PacketSideData{
+	{Type: goh264.PacketSideDataNewExtradata, Data: avcc},
+	{Type: goh264.PacketSideDataA53ClosedCaptions, Data: cc},
+}
 frames, err := dec.DecodePacketFrames(goh264.Packet{
-	Data: packet,
-	SideData: []goh264.PacketSideData{
-		{Type: goh264.PacketSideDataNewExtradata, Data: avcc},
-	},
+	Data:     packet,
+	SideData: sideData,
 })
-ownedPacket := goh264.Packet{Data: packet}.Clone()
+ownedPacket := goh264.Packet{Data: packet, SideData: sideData}.Clone()
 ```
 
 `Frame` includes dimensions, crop, chroma format, bit depth, SAR/VUI fields,
@@ -241,6 +243,9 @@ timing fields, keyframe/interlace flags, raw planes, and parsed SEI/packet side
 data such as A53 captions, S12M timecode, stereo 3D, spherical video, mastering
 display metadata, content light metadata, display orientation, film grain, ICC
 profile, HDR10+, and LCEVC side data.
+`Packet.Clone`, `PacketSideData.Clone`, `Frame.Clone`, and
+`FrameSideData.Clone` provide deep-owned snapshots for retained packets and
+decoded output metadata.
 Duplicate packet side data follows first-entry semantics: empty or malformed
 first active-format, S12M timecode, ICC profile, HDR10+, and LCEVC entries
 suppress later duplicates.

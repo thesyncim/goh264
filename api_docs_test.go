@@ -37,6 +37,22 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		requireREADMECodeName(t, readme, name)
 	}
 
+	for _, tt := range []struct {
+		typeName string
+		typ      reflect.Type
+		method   string
+	}{
+		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "Clone"},
+		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "Clone"},
+		{typeName: "Frame", typ: reflect.TypeOf((*Frame)(nil)), method: "Clone"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "Clone"},
+	} {
+		if _, ok := tt.typ.MethodByName(tt.method); !ok {
+			t.Fatalf("README decoder ownership names missing %s.%s", tt.typeName, tt.method)
+		}
+		requireREADMECodeName(t, readme, tt.typeName)
+	}
+
 	encoderType := reflect.TypeOf((*Encoder)(nil))
 	for _, name := range []string{
 		"ValidateFrame",
