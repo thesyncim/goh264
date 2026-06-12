@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	goh264 "github.com/thesyncim/goh264"
 	"github.com/thesyncim/goh264/internal/h264"
 )
 
@@ -867,6 +868,76 @@ func TestAVCCConvenienceAPIsMatchConfigurationRecordBehavior(t *testing.T) {
 		t.Fatalf("DecodeConfiguredAVCFrames after DecodeAVCC: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset(t *testing.T) {
+	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) != 2 || len(samples32) != 2 {
+		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
+	}
+
+	dec := NewDecoder()
+	out, err := dec.DecodeAVCCFrames(config16, samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames 16x16 IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+	out, err = dec.DecodeConfiguredAVCFrames(samples16[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames 16x16 P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+
+	out, err = dec.DecodeAVCCFrames(config32, samples32[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames 32x16 IDR after 16x16 stream: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after 32x16 switch: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.Width != 32 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after 32x16 switch = %+v, want 32x16 length-size 4", got)
+	}
+	out, err = dec.DecodeConfiguredAVCFrames(samples32[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames 32x16 P-skip after switch: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[1]))
+}
+
+func encodeDecoderAVCTestStream(t *testing.T, width int, height int) ([]byte, [][]byte, []goh264.EncoderFrame) {
+	t.Helper()
+	cfg := goh264.DefaultEncoderConfig(width, height)
+	cfg.OutputFormat = goh264.EncoderOutputAVC
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder %dx%d: %v", width, height, err)
+	}
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets %dx%d: %v", width, height, err)
+	}
+	first := patternedI420EncoderFrame(width, height)
+	firstOut, err := enc.Encode(first)
+	if err != nil {
+		t.Fatalf("Encode first %dx%d: %v", width, height, err)
+	}
+	second := first
+	second.PTS = int64(cfg.RTPTimestampIncrement)
+	secondOut, err := enc.Encode(second)
+	if err != nil {
+		t.Fatalf("Encode second %dx%d: %v", width, height, err)
+	}
+	if !firstOut.IDR || secondOut.IDR || len(firstOut.Data) == 0 || len(secondOut.Data) == 0 {
+		t.Fatalf("encoded %dx%d IDR/P state first idr=%v bytes=%d second idr=%v bytes=%d",
+			width, height, firstOut.IDR, len(firstOut.Data), secondOut.IDR, len(secondOut.Data))
+	}
+	return headers.AVCDecoderConfigurationRecord, [][]byte{firstOut.Data, secondOut.Data}, []goh264.EncoderFrame{first, second}
 }
 
 func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {

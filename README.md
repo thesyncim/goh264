@@ -212,6 +212,9 @@ format and length-size.
 retained references, decodes the supplied AVC packet, and drains delayed output
 before returning. Passing an empty AVC packet with a configuration record updates
 the configuration and drains delayed output without reporting an invalid packet.
+Use this for ordinary in-stream avcC updates and IDR-bound stream switches. For
+an unrelated stream where old references must not be visible, call `Reset`
+before storing the new avcC.
 
 Parse headers without decoding full frames:
 

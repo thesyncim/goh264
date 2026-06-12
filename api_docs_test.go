@@ -239,6 +239,24 @@ func TestREADMEEncoderAdmittedValuesTableDocumentsUnsupportedKnobs(t *testing.T)
 	}
 }
 
+func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := strings.Join(strings.Fields(string(data)), " ")
+	for _, phrase := range []string{
+		"without resetting retained references",
+		"IDR-bound stream switches",
+		"unrelated stream where old references must not be visible",
+		"call `Reset` before storing the new avcC",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md decoder avcC state guidance missing %q", phrase)
+		}
+	}
+}
+
 func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	data, err := os.ReadFile("examples_test.go")
 	if err != nil {
