@@ -365,7 +365,8 @@ encoder path proved through local Annex B decode, FFmpeg rawvideo decode, and
 mixed per-macroblock Annex B/AVC/RTP decode after an IDR reference frame, plus
 an internal Baseline P16x16 luma-residual slice proof for per-macroblock signed
 MVDs, per-macroblock nonzero coefficients, and consecutive-macroblock
-`mb_qp_delta` state through parser and CAVLC macroblock decode.
+`mb_qp_delta` state through parser, CAVLC frame-macroblock decode, predicted
+motion writeback, and nonzero-count table writeback.
 Broader motion-search
 P prediction, residual CAVLC coding, rate-control feedback, broader allocation
 budgets, and realtime performance gates remain pending.

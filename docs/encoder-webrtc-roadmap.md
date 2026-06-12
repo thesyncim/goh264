@@ -252,8 +252,9 @@ and a parse-proved Baseline P16x16 no-residual writer that emits explicit
 P_L0_16x16 macroblocks with constant or per-macroblock signed MVD syntax and
 zero CBP. An internal Baseline P16x16 luma-residual slice writer now carries
 per-macroblock signed MVD and nonzero coefficient inputs through parser and
-CAVLC macroblock decode proof while preserving stateful `mb_qp_delta` emission
-across consecutive residual macroblocks. A public decode oracle proves SPS/PPS + IDR IntraPCM + P16x16
+CAVLC frame-macroblock decode/writeback proof while preserving predicted motion,
+nonzero-count tables, and stateful `mb_qp_delta` emission across consecutive
+residual macroblocks. A public decode oracle proves SPS/PPS + IDR IntraPCM + P16x16
 no-residual output through local Annex B decode and FFmpeg rawvideo decode. A
 parse-proved Baseline P IntraPCM writer emits `mb_skip_run=0` plus P-slice
 `mb_type=30` macroblocks. The current IDR, P-skip, P16x16 no-residual, and P
