@@ -266,6 +266,15 @@ func TestEncoderFrameCloneDeepCopiesInputPlanes(t *testing.T) {
 		t.Fatal("Clone Cr aliases source")
 	}
 
+	clone.Y[1] ^= 0xff
+	clone.Cb[1] ^= 0xff
+	clone.Cr[1] ^= 0xff
+	if clone.Y[1] == frame.Y[1] ||
+		clone.Cb[1] == frame.Cb[1] ||
+		clone.Cr[1] == frame.Cr[1] {
+		t.Fatal("mutating cloned input frame changed source")
+	}
+
 	for i := range frame.Y {
 		frame.Y[i] ^= 0xff
 	}
@@ -4479,6 +4488,16 @@ func TestEncoderParameterSetsCloneDeepCopiesSurfaces(t *testing.T) {
 		bytes.Equal(clone.AVCDecoderConfigurationRecord, headers.AVCDecoderConfigurationRecord) {
 		t.Fatal("mutating parameter-set source changed clone")
 	}
+	clone.SPS[1] ^= 0x1f
+	clone.PPS[1] ^= 0x1f
+	clone.AnnexB[1] ^= 0xff
+	clone.AVCDecoderConfigurationRecord[1] ^= 0xff
+	if clone.SPS[1] == headers.SPS[1] ||
+		clone.PPS[1] == headers.PPS[1] ||
+		clone.AnnexB[1] == headers.AnnexB[1] ||
+		clone.AVCDecoderConfigurationRecord[1] == headers.AVCDecoderConfigurationRecord[1] {
+		t.Fatal("mutating cloned parameter sets changed source")
+	}
 }
 
 func TestEncoderParameterSetsAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
@@ -4915,6 +4934,14 @@ func TestEncoderSEICloneDeepCopiesSurfaces(t *testing.T) {
 		bytes.Equal(clone.AnnexB, sei.AnnexB) ||
 		bytes.Equal(clone.AVC, sei.AVC) {
 		t.Fatal("mutating SEI source changed clone")
+	}
+	clone.NAL[1] ^= 0x1f
+	clone.AnnexB[1] ^= 0xff
+	clone.AVC[1] ^= 0xff
+	if clone.NAL[1] == sei.NAL[1] ||
+		clone.AnnexB[1] == sei.AnnexB[1] ||
+		clone.AVC[1] == sei.AVC[1] {
+		t.Fatal("mutating cloned SEI changed source")
 	}
 }
 
@@ -11436,6 +11463,10 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 	}
 	if &clone.Data[12] != &clone.Payload[0] {
 		t.Fatalf("Clone payload does not point into cloned packet data")
+	}
+	clone.Payload[1] ^= 0xff
+	if clone.Payload[1] == valid.Payload[1] || clone.Data[13] == valid.Data[13] {
+		t.Fatal("mutating cloned RTP payload changed source")
 	}
 
 	for _, tt := range []struct {
