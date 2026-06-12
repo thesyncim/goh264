@@ -1622,6 +1622,9 @@ func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 	negativeMaxFrameSize := -1
 	negativeSliceMaxBytes := -1
 	negativeMaxEncodeTimeUS := -1
+	negativeGroupedMaxFrameSize := goh264.EncoderLimits{MaxFrameSize: -1, SliceMaxBytes: 2048, MaxEncodeTimeUS: 10_000}
+	negativeGroupedSliceMaxBytes := goh264.EncoderLimits{MaxFrameSize: 4096, SliceMaxBytes: -1, MaxEncodeTimeUS: 10_000}
+	negativeGroupedMaxEncodeTimeUS := goh264.EncoderLimits{MaxFrameSize: 4096, SliceMaxBytes: 2048, MaxEncodeTimeUS: -1}
 	tests := []struct {
 		name    string
 		update  goh264.EncoderReconfigure
@@ -1635,6 +1638,9 @@ func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 		{name: "negative max frame size pointer", update: goh264.EncoderReconfigure{MaxFrameSizeLimit: &negativeMaxFrameSize}, wantErr: goh264.ErrInvalidData},
 		{name: "negative slice max bytes pointer", update: goh264.EncoderReconfigure{SliceMaxBytesLimit: &negativeSliceMaxBytes}, wantErr: goh264.ErrInvalidData},
 		{name: "negative max encode time pointer", update: goh264.EncoderReconfigure{MaxEncodeTimeUSLimit: &negativeMaxEncodeTimeUS}, wantErr: goh264.ErrInvalidData},
+		{name: "negative grouped max frame size", update: goh264.EncoderReconfigure{Limits: &negativeGroupedMaxFrameSize}, wantErr: goh264.ErrInvalidData},
+		{name: "negative grouped slice max bytes", update: goh264.EncoderReconfigure{Limits: &negativeGroupedSliceMaxBytes}, wantErr: goh264.ErrInvalidData},
+		{name: "negative grouped max encode time", update: goh264.EncoderReconfigure{Limits: &negativeGroupedMaxEncodeTimeUS}, wantErr: goh264.ErrInvalidData},
 		{name: "mode-0 STAP-A", update: goh264.EncoderReconfigure{
 			RTPPacketizationMode: &mode0,
 			STAPA:                &stapa,
@@ -1699,6 +1705,9 @@ func TestEncoderInvalidReconfigureWithForceIDRDoesNotQueueIDR(t *testing.T) {
 	negativeMaxFrameSize := -1
 	negativeSliceMaxBytes := -1
 	negativeMaxEncodeTimeUS := -1
+	negativeGroupedMaxFrameSize := goh264.EncoderLimits{MaxFrameSize: -1, SliceMaxBytes: 2048, MaxEncodeTimeUS: 10_000}
+	negativeGroupedSliceMaxBytes := goh264.EncoderLimits{MaxFrameSize: 4096, SliceMaxBytes: -1, MaxEncodeTimeUS: 10_000}
+	negativeGroupedMaxEncodeTimeUS := goh264.EncoderLimits{MaxFrameSize: 4096, SliceMaxBytes: 2048, MaxEncodeTimeUS: -1}
 	tests := []struct {
 		name    string
 		update  goh264.EncoderReconfigure
@@ -1712,6 +1721,9 @@ func TestEncoderInvalidReconfigureWithForceIDRDoesNotQueueIDR(t *testing.T) {
 		{name: "negative max frame size pointer", update: goh264.EncoderReconfigure{MaxFrameSizeLimit: &negativeMaxFrameSize, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
 		{name: "negative slice max bytes pointer", update: goh264.EncoderReconfigure{SliceMaxBytesLimit: &negativeSliceMaxBytes, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
 		{name: "negative max encode time pointer", update: goh264.EncoderReconfigure{MaxEncodeTimeUSLimit: &negativeMaxEncodeTimeUS, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+		{name: "negative grouped max frame size", update: goh264.EncoderReconfigure{Limits: &negativeGroupedMaxFrameSize, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+		{name: "negative grouped slice max bytes", update: goh264.EncoderReconfigure{Limits: &negativeGroupedSliceMaxBytes, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+		{name: "negative grouped max encode time", update: goh264.EncoderReconfigure{Limits: &negativeGroupedMaxEncodeTimeUS, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
 		{name: "bad output format", update: goh264.EncoderReconfigure{OutputFormat: goh264.EncoderOutputFormat(99), ForceIDR: true}, wantErr: goh264.ErrInvalidData},
 		{name: "mode-0 STAP-A", update: goh264.EncoderReconfigure{
 			RTPPacketizationMode: &mode0,
