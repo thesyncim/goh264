@@ -145,6 +145,19 @@ func TestSimpleFrameDPBReordersShortRefs(t *testing.T) {
 	}
 }
 
+func TestSimpleFrameDPBRejectsMissingShortRefModificationTarget(t *testing.T) {
+	sps := simpleDPBTestSPS(4)
+	ref := simpleDPBTestFrame(sps, 2)
+	dpb := simpleFrameDPB{short: []*DecodedFrame{ref}}
+	sh := simpleDPBTestPHeader(sps, 3, 1)
+	sh.NBRefModifications[0] = 1
+	sh.RefModifications[0][0] = RefModification{Op: 0, Val: 1}
+
+	if _, err := dpb.buildPRefList(sh); err != ErrInvalidData {
+		t.Fatalf("missing short ref modification error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestSimpleFrameDPBAppendsLongRefsToDefaultPList(t *testing.T) {
 	sps := simpleDPBTestSPS(4)
 	short := simpleDPBTestFrame(sps, 2)
@@ -179,6 +192,19 @@ func TestSimpleFrameDPBReordersLongRefs(t *testing.T) {
 	}
 	if len(list) != 2 || list[0] != long || list[1] != short {
 		t.Fatalf("reordered list = %p/%p, want long/short %p/%p", list[0], list[1], long, short)
+	}
+}
+
+func TestSimpleFrameDPBRejectsMissingLongRefModificationTarget(t *testing.T) {
+	sps := simpleDPBTestSPS(3)
+	short := simpleDPBTestFrame(sps, 2)
+	dpb := simpleFrameDPB{short: []*DecodedFrame{short}}
+	sh := simpleDPBTestPHeader(sps, 3, 1)
+	sh.NBRefModifications[0] = 1
+	sh.RefModifications[0][0] = RefModification{Op: 2, Val: 1}
+
+	if _, err := dpb.buildPRefList(sh); err != ErrInvalidData {
+		t.Fatalf("missing long ref modification error = %v, want ErrInvalidData", err)
 	}
 }
 

@@ -1013,6 +1013,9 @@ func (d *simpleFrameDPB) applyRefModificationsEntries(list []simpleRefEntry, sh 
 				poc:              poc,
 			}
 		}
+		if entry.frame == nil {
+			return nil, ErrInvalidData
+		}
 		i := int(index)
 		if ref != nil {
 			for ; i+1 < refCount; i++ {
