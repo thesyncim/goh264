@@ -251,7 +251,7 @@ Baseline P-skip writer that emits `mb_skip_run` for the selected slice range
 and a parse-proved Baseline P16x16 no-residual writer that emits explicit
 P_L0_16x16 macroblocks with constant or per-macroblock signed MVD syntax and
 zero CBP. An internal Baseline P16x16 luma/chroma-DC residual slice writer now carries
-per-macroblock signed MVD, nonzero luma coefficient, and bounded Cb/Cr chroma-DC
+per-macroblock signed MVD, nonzero luma coefficient, and bounded per-macroblock Cb/Cr chroma-DC
 coefficient inputs through parser and CAVLC frame-macroblock decode/writeback
 proof while preserving predicted motion, nonzero-count/CBP tables, and stateful
 `mb_qp_delta` emission across consecutive residual macroblocks. A public decode oracle proves SPS/PPS + IDR IntraPCM + P16x16
