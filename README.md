@@ -449,6 +449,9 @@ that are currently intended to be stable enough for integration work:
   `Clone` forms for async snapshots.
 - `EncodedFrame.OutputFormat` records the emitted result format, including
   dropped frames, so callers do not need to infer format from packet presence.
+- For RTP output, `EncodedFrame.Data` remains an Annex B access-unit view for
+  `AccessUnitData` and `NALData`; send packet bytes from `RTPPackets`,
+  `RTPPacketData`, or `RTPPayloadData`.
 - Overflowed caller-owned `EncodeInto` destination growth is rejected across
   Annex B, AVC, and RTP without consuming queued IDR state or advancing
   RTP/callback state. The same hard-error path preserves P-frame reference and

@@ -11832,6 +11832,32 @@ func TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData(t *testing.T) {
 	if len(out.Data) == 0 || len(out.RTPPackets) == 0 {
 		t.Fatalf("RTP output data/packets = %d/%d, want nonzero", len(out.Data), len(out.RTPPackets))
 	}
+	if !bytes.HasPrefix(out.Data, []byte{0, 0, 0, 1}) {
+		t.Fatalf("RTP EncodedFrame.Data prefix = %x, want Annex B start code", out.Data[:min(len(out.Data), 4)])
+	}
+	accessUnit, err := out.AccessUnitData()
+	if err != nil {
+		t.Fatalf("RTP AccessUnitData: %v", err)
+	}
+	if !bytes.Equal(accessUnit, out.Data) {
+		t.Fatal("RTP AccessUnitData does not expose EncodedFrame.Data access-unit view")
+	}
+	if got, err := out.NALData(0); err != nil {
+		t.Fatalf("RTP NALData(0): %v", err)
+	} else if len(got) == 0 || len(got) >= len(out.Data) || bytes.Equal(got, out.Data) {
+		t.Fatalf("RTP NALData(0) = %x, want clipped raw NAL bytes from Data", got)
+	}
+	packet0, err := out.RTPPacketData(0)
+	if err != nil {
+		t.Fatalf("RTPPacketData(0): %v", err)
+	}
+	payload0, err := out.RTPPayloadData(0)
+	if err != nil {
+		t.Fatalf("RTPPayloadData(0): %v", err)
+	}
+	if bytes.Equal(packet0, out.Data) || bytes.Equal(payload0, out.Data) {
+		t.Fatal("RTP packet helper bytes unexpectedly match EncodedFrame.Data access-unit bytes")
+	}
 	packetsBefore := cloneEncoderRTPPackets(out.RTPPackets)
 	for i := range out.Data {
 		out.Data[i] ^= 0xff

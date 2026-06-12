@@ -409,10 +409,12 @@ type EncoderRTPPacketCallback func(packet EncoderRTPPacket, metadata EncoderRTPP
 
 // EncodedFrame is the result of one encoder call.
 //
-// OutputFormat records the format requested for this result. Data contains the
-// encoded access unit in OutputFormat. NALUnits index into Data. RTPPackets is
-// populated only for EncoderOutputRTP and owns storage separate from Data. When
-// Dropped is true, no bytes, NAL units, or RTP packets were emitted.
+// OutputFormat records the format requested for this result. For Annex B and
+// AVC output, Data contains the encoded access unit in that container. For RTP
+// output, Data contains an Annex B access-unit view for NAL/access-unit helpers;
+// RTPPackets contains the complete RTP packets and owns storage separate from
+// Data. NALUnits index into Data. When Dropped is true, no bytes, NAL units, or
+// RTP packets were emitted.
 type EncodedFrame struct {
 	OutputFormat EncoderOutputFormat
 	Data         []byte

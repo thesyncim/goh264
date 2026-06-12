@@ -191,6 +191,27 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 	}
 }
 
+func TestREADMEEncoderRTPDataSurfaceDocumentsPacketBytes(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+	for _, phrase := range []string{
+		"For RTP output",
+		"`EncodedFrame.Data` remains an Annex B access-unit view",
+		"`AccessUnitData`",
+		"`NALData`",
+		"`RTPPackets`",
+		"`RTPPacketData`",
+		"`RTPPayloadData`",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md missing RTP data-surface phrase %q", phrase)
+		}
+	}
+}
+
 func TestREADMEEncoderSampleKeepsRTPHelpersInRTPBranch(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {
