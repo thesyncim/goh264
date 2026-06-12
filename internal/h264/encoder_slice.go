@@ -77,6 +77,11 @@ type EncoderI420P16x16NoResidualConfig struct {
 	NALLengthSize              int
 }
 
+type encoderResidualCoefficient struct {
+	Pos   int
+	Value int32
+}
+
 type encoderI420P16x16ResidualConfig struct {
 	Width  int
 	Height int
@@ -95,6 +100,7 @@ type encoderI420P16x16ResidualConfig struct {
 	Coeffs                     []int32
 	CoeffPos                   int
 	CoeffPositions             []int
+	LumaCoefficients           [][]encoderResidualCoefficient
 	ChromaDCCoeffCb            int32
 	ChromaDCCoeffCr            int32
 	ChromaDCCoeffs             [][2]int32
@@ -392,8 +398,14 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		return nil, ErrInvalidData
 	}
 
-	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
+	firstMBAddr, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
 	rbspCap, err := encoderSliceRBSPCapacity(macroblockCount, 16)
+	if err != nil {
+		return nil, err
+	}
+	mbWidth := (cfg.Width + 15) >> 4
+	mbHeight := (cfg.Height + 15) >> 4
+	contextTables, err := newMacroblockTables(mbWidth, mbHeight, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -411,6 +423,7 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 	}
 
 	qscale := cfg.InitialQP
+	const residualSliceContextNum = uint16(1)
 	for i := 0; i < macroblockCount; i++ {
 		mvdX, mvdY := cfg.MVDX, cfg.MVDY
 		if len(cfg.MVDs) > 0 {
@@ -424,6 +437,7 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		if len(cfg.CoeffPositions) > 0 {
 			coeffPos = cfg.CoeffPositions[i]
 		}
+		lumaCoefficients := cfg.LumaCoefficients
 		nextQP := cfg.NextQP
 		if len(cfg.NextQPs) > 0 {
 			nextQP = cfg.NextQPs[i]
@@ -466,12 +480,33 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		}
 		mb.MVD[0][0] = [2]int32{mvdX, mvdY}
 		var residual cavlcResidualContext
-		residual.MB[coeffPos] = coeff
+		mbAddr := firstMBAddr + i
+		mbXY := mbAddr%mbWidth + (mbAddr/mbWidth)*contextTables.MBStride
+		neighbors, err := contextTables.fillDecodeNeighborsFrame(mbXY, residualSliceContextNum, mb.MBType)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := contextTables.fillResidualDecodeCaches(&residual, neighbors.residualNeighbors(mb.MBType, false)); err != nil {
+			return nil, err
+		}
+		if len(lumaCoefficients) > 0 {
+			for _, luma := range lumaCoefficients[i] {
+				residual.MB[luma.Pos] = luma.Value
+			}
+		} else {
+			residual.MB[coeffPos] = coeff
+		}
 		residual.MB[256+chromaDCPos] = chromaDCCb
 		residual.MB[512+chromaDCPos] = chromaDCCr
 		residual.MB[256+chromaACPos] = chromaACCb
 		residual.MB[512+chromaACPos] = chromaACCr
 		if _, err := writeCAVLCInterPBoundedMacroblock(&bw, &residual, pps, sps, mb, [2]uint32{1, 0}, qscale, nextQP); err != nil {
+			return nil, err
+		}
+		if err := contextTables.writeBackMacroblockTables(mbXY, mb.MBType, mb.CBPTable, mb.QScale, residualSliceContextNum); err != nil {
+			return nil, err
+		}
+		if err := contextTables.writeBackNonZeroCount(mbXY, &residual.NonZeroCountCache); err != nil {
 			return nil, err
 		}
 		qscale = nextQP
@@ -736,19 +771,13 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	if len(cfg.CoeffPositions) > 0 && len(cfg.CoeffPositions) != macroblockCount {
 		return ErrInvalidData
 	}
+	if len(cfg.LumaCoefficients) > 0 && len(cfg.LumaCoefficients) != macroblockCount {
+		return ErrInvalidData
+	}
 	for _, qp := range cfg.NextQPs {
 		if qp < 0 || qp > 51 {
 			return ErrInvalidData
 		}
-	}
-	if len(cfg.CoeffPositions) > 0 {
-		for _, pos := range cfg.CoeffPositions {
-			if pos < 0 || pos >= 16 {
-				return ErrInvalidData
-			}
-		}
-	} else if cfg.CoeffPos < 0 || cfg.CoeffPos >= 16 {
-		return ErrInvalidData
 	}
 	if len(cfg.ChromaDCCoeffs) > 0 && len(cfg.ChromaDCCoeffs) != macroblockCount {
 		return ErrInvalidData
@@ -762,17 +791,44 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	if len(cfg.ChromaACCoeffPositions) > 0 && len(cfg.ChromaACCoeffPositions) != macroblockCount {
 		return ErrInvalidData
 	}
-	if len(cfg.Coeffs) > 0 {
-		if len(cfg.Coeffs) != macroblockCount {
+	if len(cfg.LumaCoefficients) > 0 {
+		if len(cfg.Coeffs) > 0 || len(cfg.CoeffPositions) > 0 || cfg.Coeff != 0 || cfg.CoeffPos != 0 {
 			return ErrInvalidData
 		}
-		for _, coeff := range cfg.Coeffs {
-			if coeff == 0 {
+		for _, coeffs := range cfg.LumaCoefficients {
+			if len(coeffs) == 0 || len(coeffs) > 16 {
+				return ErrInvalidData
+			}
+			var seen [16]bool
+			for _, coeff := range coeffs {
+				if coeff.Pos < 0 || coeff.Pos >= 16 || coeff.Value == 0 || seen[coeff.Pos] {
+					return ErrInvalidData
+				}
+				seen[coeff.Pos] = true
+			}
+		}
+	} else if len(cfg.CoeffPositions) > 0 {
+		for _, pos := range cfg.CoeffPositions {
+			if pos < 0 || pos >= 16 {
 				return ErrInvalidData
 			}
 		}
-	} else if cfg.Coeff == 0 {
+	} else if cfg.CoeffPos < 0 || cfg.CoeffPos >= 16 {
 		return ErrInvalidData
+	}
+	if len(cfg.LumaCoefficients) == 0 {
+		if len(cfg.Coeffs) > 0 {
+			if len(cfg.Coeffs) != macroblockCount {
+				return ErrInvalidData
+			}
+			for _, coeff := range cfg.Coeffs {
+				if coeff == 0 {
+					return ErrInvalidData
+				}
+			}
+		} else if cfg.Coeff == 0 {
+			return ErrInvalidData
+		}
 	}
 	if len(cfg.ChromaDCCoeffs) > 0 {
 		for _, coeff := range cfg.ChromaDCCoeffs {
