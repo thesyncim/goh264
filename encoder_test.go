@@ -374,6 +374,17 @@ func TestFramesFromH264RejectsOverflowedFrameList(t *testing.T) {
 	}
 }
 
+func TestFramesFromH264WithErrorRejectsOverflowedFrameList(t *testing.T) {
+	wantErr := errors.New("decode failed after output")
+	got, err := framesFromH264WithError(fakeDecodedFramesLen(maxInt/8+1), wantErr)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("overflowed frame list error = %v, want %v", err, wantErr)
+	}
+	if got != nil {
+		t.Fatalf("overflowed frame list with error converted to len %d, want nil", len(got))
+	}
+}
+
 func TestPacketFrameSideDataFromPacketClonesBytePayloads(t *testing.T) {
 	captions := []byte{0x01, 0x02}
 	icc := []byte{0x03}
