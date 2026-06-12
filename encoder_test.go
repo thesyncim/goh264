@@ -190,6 +190,16 @@ func TestPacketizeEncoderRTPSingleNALRejectsStorageOverflow(t *testing.T) {
 	}
 }
 
+func TestPacketizeEncoderRTPRejectsInvalidPayloadSizeWithoutPackets(t *testing.T) {
+	nals := []encoderRawNAL{{raw: []byte{byte(h264.NALSlice)}}}
+	if packets, err := packetizeEncoderRTPSingleNAL(nals, 0, 0); !errors.Is(err, ErrInvalidData) || packets != nil {
+		t.Fatalf("packetizeEncoderRTPSingleNAL invalid payload packets=%v err=%v, want nil packets and ErrInvalidData", packets, err)
+	}
+	if packets, err := packetizeEncoderRTPMode1(nals, 2, 0, false); !errors.Is(err, ErrInvalidData) || packets != nil {
+		t.Fatalf("packetizeEncoderRTPMode1 invalid payload packets=%v err=%v, want nil packets and ErrInvalidData", packets, err)
+	}
+}
+
 func TestPacketizeEncoderRTPRejectsEmptyNALWithoutPackets(t *testing.T) {
 	nals := []encoderRawNAL{
 		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
