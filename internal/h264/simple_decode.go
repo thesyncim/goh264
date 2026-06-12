@@ -726,9 +726,37 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 	if mbWidth <= 0 || mbHeight <= 0 || sps.Width <= 0 || sps.Height <= 0 {
 		return nil, nil, ErrInvalidData
 	}
+	if mbWidth > h264MaxMBWidth || mbHeight > h264MaxMBHeight {
+		return nil, nil, ErrInvalidData
+	}
+	lumaStride, err := checkedMulInt(mbWidth, 16)
+	if err != nil {
+		return nil, nil, err
+	}
+	lumaHeight, err := checkedMulInt(mbHeight, 16)
+	if err != nil {
+		return nil, nil, err
+	}
+	lumaSamples, err := checkedMulInt(lumaStride, lumaHeight)
+	if err != nil {
+		return nil, nil, err
+	}
+	chromaWidth := 0
+	chromaSamples := 0
+	if chromaFormatIDC != 0 {
+		var chromaHeight int
+		chromaWidth, chromaHeight, err = h264ChromaFrameSizeChecked(mbWidth, mbHeight, chromaFormatIDC)
+		if err != nil {
+			return nil, nil, err
+		}
+		chromaSamples, err = checkedMulInt(chromaWidth, chromaHeight)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 
 	frame := &DecodedFrame{
-		LumaStride:                     mbWidth * 16,
+		LumaStride:                     lumaStride,
 		Width:                          int(sps.Width),
 		Height:                         int(sps.Height),
 		CropLeft:                       int(sps.CropLeft),
@@ -756,19 +784,18 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 	}
 	highBitDepth := sps.BitDepthLuma != 8
 	if highBitDepth {
-		frame.Y16 = make([]uint16, frame.LumaStride*mbHeight*16)
+		frame.Y16 = make([]uint16, lumaSamples)
 	} else {
-		frame.Y = make([]uint8, frame.LumaStride*mbHeight*16)
+		frame.Y = make([]uint8, lumaSamples)
 	}
 	if chromaFormatIDC != 0 {
-		chromaWidth, chromaHeight := h264ChromaFrameSize(mbWidth, mbHeight, chromaFormatIDC)
 		frame.ChromaStride = chromaWidth
 		if highBitDepth {
-			frame.Cb16 = make([]uint16, frame.ChromaStride*chromaHeight)
-			frame.Cr16 = make([]uint16, frame.ChromaStride*chromaHeight)
+			frame.Cb16 = make([]uint16, chromaSamples)
+			frame.Cr16 = make([]uint16, chromaSamples)
 		} else {
-			frame.Cb = make([]uint8, frame.ChromaStride*chromaHeight)
-			frame.Cr = make([]uint8, frame.ChromaStride*chromaHeight)
+			frame.Cb = make([]uint8, chromaSamples)
+			frame.Cr = make([]uint8, chromaSamples)
 		}
 	}
 

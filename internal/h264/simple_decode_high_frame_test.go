@@ -126,6 +126,47 @@ func TestNewSimpleDecodedFrameRejectsInvalidMBAFFPictures(t *testing.T) {
 	}
 }
 
+func TestNewSimpleDecodedFrameRejectsOversizedGeometry(t *testing.T) {
+	tests := []struct {
+		name string
+		sps  *SPS
+	}{
+		{
+			name: "wide",
+			sps: &SPS{
+				MBWidth:          h264MaxMBWidth + 1,
+				MBHeight:         1,
+				Width:            (h264MaxMBWidth + 1) * 16,
+				Height:           16,
+				ChromaFormatIDC:  1,
+				BitDepthLuma:     8,
+				BitDepthChroma:   8,
+				FrameMBSOnlyFlag: 1,
+			},
+		},
+		{
+			name: "tall",
+			sps: &SPS{
+				MBWidth:          1,
+				MBHeight:         h264MaxMBHeight + 1,
+				Width:            16,
+				Height:           (h264MaxMBHeight + 1) * 16,
+				ChromaFormatIDC:  1,
+				BitDepthLuma:     10,
+				BitDepthChroma:   10,
+				FrameMBSOnlyFlag: 1,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, _, err := newSimpleDecodedFrame(tt.sps); err != ErrInvalidData {
+				t.Fatalf("new frame error = %v, want ErrInvalidData", err)
+			}
+		})
+	}
+}
+
 func TestNewSimpleDecodedFrameHighChromaGeometry(t *testing.T) {
 	for _, tt := range []struct {
 		name            string
