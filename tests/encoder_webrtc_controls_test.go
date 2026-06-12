@@ -6300,6 +6300,19 @@ func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 		t.Fatalf("invalid dimension output = %+v, want empty output", out)
 	}
 	bad = frame
+	bad.PTS = int64(^uint32(0)) + 1
+	if out, err := enc.Encode(bad); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Encode overflowed PTS error = %v, want ErrInvalidData", err)
+	} else if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+		t.Fatalf("invalid PTS output = %+v, want empty output", out)
+	}
+	bad.PTS = -1
+	if out, err := enc.Encode(bad); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Encode negative PTS error = %v, want ErrInvalidData", err)
+	} else if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+		t.Fatalf("negative PTS output = %+v, want empty output", out)
+	}
+	bad = frame
 	bad.PTS = int64(cfg.RTPTimestampIncrement)
 	bad.Duration = int64(^uint32(0)) + 1
 	if out, err := enc.Encode(bad); !errors.Is(err, goh264.ErrInvalidData) {
