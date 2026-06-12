@@ -245,6 +245,13 @@ func TestAppendAVCPackagingRejectsOverflowedDestination(t *testing.T) {
 	if got, err := AppendAVCDecoderConfigurationRecord(dst, 66, 0xc0, 30, 4, [][]byte{spsRaw}, [][]byte{ppsRaw}); !errors.Is(err, ErrInvalidData) || len(got) != len(dst) {
 		t.Fatalf("AppendAVCDecoderConfigurationRecord overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
 	}
+	nearFull := fakeRBSPBytesLen(maxInt - 6)
+	if _, err := avcDecoderConfigurationRecordCapacity(len(nearFull), [][]byte{spsRaw}, [][]byte{ppsRaw}); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("avcDecoderConfigurationRecordCapacity near-full error = %v, want ErrInvalidData", err)
+	}
+	if got, err := AppendAVCDecoderConfigurationRecord(nearFull, 66, 0xc0, 30, 4, [][]byte{spsRaw}, [][]byte{ppsRaw}); !errors.Is(err, ErrInvalidData) || len(got) != len(nearFull) {
+		t.Fatalf("AppendAVCDecoderConfigurationRecord near-full overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
 	if got, err := appendAVCConfigRawNAL(dst, spsRaw, NALSPS); !errors.Is(err, ErrInvalidData) || len(got) != len(dst) {
 		t.Fatalf("appendAVCConfigRawNAL overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
 	}

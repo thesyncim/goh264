@@ -223,7 +223,7 @@ func AppendAVCDecoderConfigurationRecord(dst []byte, profileIDC uint8, profileCo
 	if nalLengthSize < 1 || nalLengthSize > 4 || len(spsNALs) == 0 || len(spsNALs) > 31 || len(ppsNALs) == 0 || len(ppsNALs) > 255 {
 		return dst, ErrInvalidData
 	}
-	if _, err := checkedAddInt(len(dst), 6); err != nil {
+	if _, err := avcDecoderConfigurationRecordCapacity(len(dst), spsNALs, ppsNALs); err != nil {
 		return dst, ErrInvalidData
 	}
 	start := len(dst)
@@ -256,8 +256,46 @@ func AppendAVCDecoderConfigurationRecord(dst []byte, profileIDC uint8, profileCo
 	return dst, nil
 }
 
+func avcDecoderConfigurationRecordCapacity(base int, spsNALs [][]byte, ppsNALs [][]byte) (int, error) {
+	n, err := checkedAddInt(base, 6)
+	if err != nil {
+		return 0, err
+	}
+	for _, raw := range spsNALs {
+		if err := validateAVCConfigRawNAL(raw, NALSPS); err != nil {
+			return 0, err
+		}
+		n, err = checkedAddInt(n, 2)
+		if err != nil {
+			return 0, err
+		}
+		n, err = checkedAddInt(n, len(raw))
+		if err != nil {
+			return 0, err
+		}
+	}
+	n, err = checkedAddInt(n, 1)
+	if err != nil {
+		return 0, err
+	}
+	for _, raw := range ppsNALs {
+		if err := validateAVCConfigRawNAL(raw, NALPPS); err != nil {
+			return 0, err
+		}
+		n, err = checkedAddInt(n, 2)
+		if err != nil {
+			return 0, err
+		}
+		n, err = checkedAddInt(n, len(raw))
+		if err != nil {
+			return 0, err
+		}
+	}
+	return n, nil
+}
+
 func appendAVCConfigRawNAL(dst []byte, raw []byte, wantType NALUnitType) ([]byte, error) {
-	if len(raw) == 0 || len(raw) > 0xffff || raw[0]&0x80 != 0 || NALUnitType(raw[0]&0x1f) != wantType {
+	if err := validateAVCConfigRawNAL(raw, wantType); err != nil {
 		return dst, ErrInvalidData
 	}
 	n, err := checkedAddInt(len(dst), 2)
@@ -270,4 +308,11 @@ func appendAVCConfigRawNAL(dst []byte, raw []byte, wantType NALUnitType) ([]byte
 	dst = append(dst, byte(len(raw)>>8), byte(len(raw)))
 	dst = append(dst, raw...)
 	return dst, nil
+}
+
+func validateAVCConfigRawNAL(raw []byte, wantType NALUnitType) error {
+	if len(raw) == 0 || len(raw) > 0xffff || raw[0]&0x80 != 0 || NALUnitType(raw[0]&0x1f) != wantType {
+		return ErrInvalidData
+	}
+	return nil
 }
