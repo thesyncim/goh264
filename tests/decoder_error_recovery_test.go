@@ -144,6 +144,7 @@ func TestDecodeAVCFramesWithConfigurationRecordDoesNotAliasCallerBuffer(t *testi
 	for i := range firstSample {
 		firstSample[i] = 0xff
 	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
 	frames, err = dec.DecodeConfiguredAVCFrames(samples[1])
 	if err != nil {
@@ -174,6 +175,7 @@ func TestDecodeAVCWithConfigurationRecordDoesNotAliasCallerBuffer(t *testing.T) 
 	for i := range firstSample {
 		firstSample[i] = 0xff
 	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
 	frames, err := dec.DecodeConfiguredAVCFrames(samples[1])
 	if err != nil {
