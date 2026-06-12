@@ -95,10 +95,29 @@ func AppendSEIRBSP(dst []byte, payloadType uint32, payload []byte) []byte {
 	if uint64(len(payload)) > uint64(^uint32(0)) {
 		return nil
 	}
+	n, err := checkedAddInt(len(dst), encoderSEIHeaderValueSize(payloadType))
+	if err != nil {
+		return nil
+	}
+	n, err = checkedAddInt(n, encoderSEIHeaderValueSize(uint32(len(payload))))
+	if err != nil {
+		return nil
+	}
+	n, err = checkedAddInt(n, len(payload))
+	if err != nil {
+		return nil
+	}
+	if _, err := checkedAddInt(n, 1); err != nil {
+		return nil
+	}
 	dst = appendEncoderSEIHeaderValue(dst, payloadType)
 	dst = appendEncoderSEIHeaderValue(dst, uint32(len(payload)))
 	dst = append(dst, payload...)
 	return append(dst, 0x80)
+}
+
+func encoderSEIHeaderValueSize(value uint32) int {
+	return int(value/255) + 1
 }
 
 func appendEncoderSEIHeaderValue(dst []byte, value uint32) []byte {

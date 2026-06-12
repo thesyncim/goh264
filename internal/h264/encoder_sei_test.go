@@ -125,6 +125,12 @@ func TestAppendSEIRBSPWritesExtendedHeaders(t *testing.T) {
 	if !bytes.Equal(rbsp[5:5+len(payload)], payload) || rbsp[len(rbsp)-1] != 0x80 {
 		t.Fatalf("extended SEI payload/trailing bits corrupted")
 	}
+	if got := encoderSEIHeaderValueSize(511); got != 3 {
+		t.Fatalf("extended SEI type header size = %d, want 3", got)
+	}
+	if got := encoderSEIHeaderValueSize(uint32(len(payload))); got != 2 {
+		t.Fatalf("extended SEI payload-size header size = %d, want 2", got)
+	}
 }
 
 func TestAppendSEIRBSPRejectsOverflowedPayloadSize(t *testing.T) {
@@ -133,6 +139,13 @@ func TestAppendSEIRBSPRejectsOverflowedPayloadSize(t *testing.T) {
 	}
 	if got := AppendSEIRBSP(nil, seiTypeRecoveryPoint, fakeEncoderSEIPayloadLen(uint64(^uint32(0))+1)); got != nil {
 		t.Fatalf("overflowed SEI RBSP payload produced len %d, want nil", len(got))
+	}
+}
+
+func TestAppendSEIRBSPRejectsOverflowedDestinationSize(t *testing.T) {
+	dst := fakeEncoderSEIPayloadLen(uint64(maxInt))
+	if got := AppendSEIRBSP(dst, seiTypeRecoveryPoint, []byte{0x80}); got != nil {
+		t.Fatalf("overflowed SEI RBSP destination produced len %d, want nil", len(got))
 	}
 }
 
