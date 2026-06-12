@@ -54,6 +54,60 @@ func TestEncoderEncodeIntoOverflowedP16PlanningDoesNotCommitScratch(t *testing.T
 	}
 }
 
+func TestEncoderEncodeIntoDroppedP16PlanningDoesNotCommitScratch(t *testing.T) {
+	cfg := DefaultEncoderConfig(144, 144)
+	cfg.OutputFormat = EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = EncoderDeblockDisabled
+	cfg.FrameDrop = EncoderFrameDropToBitrate
+	cfg.MaxFrameSize = 1 << 20
+	enc, err := NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := testPatternedI420EncoderFrame(cfg, 0)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR {
+		t.Fatalf("first frame idr=%v, want IDR", first.IDR)
+	}
+	if len(enc.p16MVs) != 0 || len(enc.p16MVDs) != 0 {
+		t.Fatalf("first IDR committed P16 scratch: mvs=%d mvds=%d", len(enc.p16MVs), len(enc.p16MVDs))
+	}
+	if err := enc.SetMaxFrameSize(16); err != nil {
+		t.Fatalf("SetMaxFrameSize drop budget: %v", err)
+	}
+
+	pFrame := testIntegerMotionI420EncoderFrame(cfg, firstFrame, 2, 0, int64(cfg.RTPTimestampIncrement))
+	out, err := enc.EncodeInto(make([]byte, 0, 4096), pFrame)
+	if err != nil {
+		t.Fatalf("dropped P16 EncodeInto error = %v, want nil", err)
+	}
+	if !out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+		t.Fatalf("dropped P16 EncodeInto output = %+v, want empty dropped output", out)
+	}
+	if len(enc.p16MVs) != 0 || len(enc.p16MVDs) != 0 {
+		t.Fatalf("dropped P16 EncodeInto committed scratch: mvs=%d mvds=%d", len(enc.p16MVs), len(enc.p16MVDs))
+	}
+
+	if err := enc.SetMaxFrameSize(1 << 20); err != nil {
+		t.Fatalf("SetMaxFrameSize restore budget: %v", err)
+	}
+	recovered, err := enc.EncodeInto(make([]byte, 0, 4096), pFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto after dropped P16 planning: %v", err)
+	}
+	if recovered.IDR || recovered.Dropped {
+		t.Fatalf("post-drop P16 output idr=%v dropped=%v, want delivered P frame", recovered.IDR, recovered.Dropped)
+	}
+	if len(enc.p16MVs) < 81 || len(enc.p16MVDs) < 81 {
+		t.Fatalf("successful P16 EncodeInto scratch = mvs %d mvds %d, want committed reusable scratch", len(enc.p16MVs), len(enc.p16MVDs))
+	}
+}
+
 func testPatternedI420EncoderFrame(cfg EncoderConfig, pts int64) EncoderFrame {
 	frame := cfg.I420Frame(
 		make([]byte, cfg.StrideY*cfg.Height),
