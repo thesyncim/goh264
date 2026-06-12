@@ -6003,6 +6003,7 @@ func TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets(t *testing.T) {
 	}
 
 	annexB := annexBFromEncoderRTPPackets(t, out.RTPPackets)
+	assertEncoderVCLFrameNums(t, annexB, []uint8{5}, []uint32{0})
 	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
 	if err != nil {
 		t.Fatalf("DecodeAnnexBFrames reassembled STAP-A RTP: %v", err)
@@ -6110,6 +6111,10 @@ func TestEncoderEncodeRTPMode1STAPADoesNotAggregateChangedPRecoverySEI(t *testin
 			t.Fatalf("changed STAP-A P callback meta[%d] = %+v, want single-NAL type %d", i, meta, wantType)
 		}
 	}
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 
 	dec := goh264.NewDecoder()
 	decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
