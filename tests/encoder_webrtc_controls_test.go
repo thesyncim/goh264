@@ -6154,12 +6154,12 @@ func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingState(t *testin
 			if _, err := enc.Encode(frame); !errors.Is(err, goh264.ErrInvalidData) {
 				t.Fatalf("oversize SliceMaxBytes encode error = %v, want ErrInvalidData", err)
 			}
-			if err := enc.Reconfigure(goh264.EncoderReconfigure{SliceMaxBytes: 4096}); err != nil {
-				t.Fatalf("raise SliceMaxBytes: %v", err)
+			if err := enc.SetSliceMaxBytes(0); err != nil {
+				t.Fatalf("disable SliceMaxBytes: %v", err)
 			}
 			out, err := enc.Encode(frame)
 			if err != nil {
-				t.Fatalf("Encode after rejected SliceMaxBytes frame: %v", err)
+				t.Fatalf("Encode after disabled SliceMaxBytes budget: %v", err)
 			}
 			assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
 			assertEncoderVCLFrameNums(t, annexBFromEncodedFrame(t, out, cfg.OutputFormat), []uint8{5}, []uint32{0})

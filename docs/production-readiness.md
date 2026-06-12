@@ -290,8 +290,8 @@ proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses and VBV-backed `MaxBitrate` bucket
 misses, including credit consumption/refill across transmitted IDR/P-skip,
 dropped changed-P frames, queued forced-IDR preservation across frame-size and
-slice-size drops, max-frame-size hard-error recovery after `SetMaxFrameSize(0)`
-disablement, caller-buffer `EncodeInto` budget drops with empty returned output,
+slice-size drops, max-frame-size and slice-byte hard-error recovery after
+zero-valued setter disablement, caller-buffer `EncodeInto` budget drops with empty returned output,
 no callbacks, stable reference/frame/packet state, and P-skip recovery,
 checked rejection of overflowed bitrate budget derivation, runtime frame-drop mode switches that toggle the derived bitrate
 budget before the next frame, runtime max-bitrate/VBV lowering that resets stale

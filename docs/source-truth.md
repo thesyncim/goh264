@@ -189,8 +189,8 @@ valid P-skip,
 `MaxFrameSize`/`SliceMaxBytes` hard-error and `FrameDropToBitrate`
 dropped-frame budget behavior including VBV-backed `MaxBitrate` bucket misses,
 deterministic max-bitrate credit consumption/refill across transmitted and
-dropped frames, max-frame-size hard-error recovery after `SetMaxFrameSize(0)`
-disablement, caller-buffer `EncodeInto` budget drops with empty returned output,
+dropped frames, max-frame-size and slice-byte hard-error recovery after
+zero-valued setter disablement, caller-buffer `EncodeInto` budget drops with empty returned output,
 paused callbacks, preserved reference/frame/packet state, overflowed
 `EncodeInto` destination growth hard-error rollback with queued-IDR preservation
 and P-frame reference/frame-number preservation across Annex B/AVC/RTP,
