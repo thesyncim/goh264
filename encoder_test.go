@@ -697,4 +697,17 @@ func TestEncoderBitrateFrameBudgetBytes(t *testing.T) {
 	if got := encoderVBVBufferBudgetBytes(cfg); got != 9 {
 		t.Fatalf("65-bit VBV budget = %d, want 9", got)
 	}
+
+	cfg.VBVBufferSize = 0
+	if got := encoderVBVBufferBudgetBytes(cfg); got != 0 {
+		t.Fatalf("zero VBV budget = %d, want 0", got)
+	}
+	cfg.VBVBufferSize = -1
+	if got := encoderVBVBufferBudgetBytes(cfg); got != 0 {
+		t.Fatalf("negative VBV budget = %d, want 0", got)
+	}
+	cfg.VBVBufferSize = maxInt
+	if got := encoderVBVBufferBudgetBytes(cfg); got != maxInt/8+1 {
+		t.Fatalf("max-int VBV budget = %d, want %d", got, maxInt/8+1)
+	}
 }
