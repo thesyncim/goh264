@@ -1630,7 +1630,23 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView, dst []encoderP16
 		}
 		dst = append(dst, encoderP16x16MotionVector{x: int32(dx * 4), y: int32(dy * 4)})
 	}
+	if e.cfg.DeblockMode != EncoderDeblockDisabled && !encoderP16x16MotionVectorsUniform(dst) {
+		return nil, false
+	}
 	return dst, true
+}
+
+func encoderP16x16MotionVectorsUniform(mvs []encoderP16x16MotionVector) bool {
+	if len(mvs) <= 1 {
+		return true
+	}
+	first := mvs[0]
+	for _, mv := range mvs[1:] {
+		if mv != first {
+			return false
+		}
+	}
+	return true
 }
 
 func encoderI420FindFrameP16x16NoResidualMotion(ref *encoderReferenceFrame, view encoderFrameView, constantChromaKnown *bool, constantChroma *bool) (int, int, bool) {

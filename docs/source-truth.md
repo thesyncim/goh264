@@ -143,7 +143,8 @@ bounded exact macroblock-aligned P16x16 no-residual prediction with
 odd-pixel luma motion only when both 4:2:0 chroma planes are constant,
 Annex B/configured AVC/RTP plus mode-0
 packetization proof for both admitted constant-chroma motion and patterned-chroma
-P IntraPCM fallback, and single-macroblock enabled/slice-boundary deblock proof,
+P IntraPCM fallback, and enabled/slice-boundary deblock proof including
+multi-macroblock uniform motion plus guarded mixed per-macroblock fallback,
 changed-frame P IntraPCM
 recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 runtime resolution reset that rejects stale-size frames without consuming the

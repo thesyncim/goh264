@@ -279,7 +279,8 @@ in one access unit.
    slices. Done for identical-reference P-skip, exact macroblock-aligned P16x16
    no-residual prediction for frame-wide and per-macroblock integer-pel shifts
    up to 8 pixels, including odd-pixel luma motion only with constant chroma,
-   with enabled/slice-boundary deblock proof including multi-macroblock Annex B,
+   with enabled/slice-boundary deblock proof including multi-macroblock
+   uniform-motion Annex B and mixed per-macroblock fallback,
    and changed-frame P
    IntraPCM across disabled, enabled, and
    slice-boundary deblock controls, configured multi-slice ranges,
