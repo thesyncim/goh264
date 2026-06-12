@@ -3771,6 +3771,57 @@ func TestEncoderFrameDropToBitrateDropsChangedOversizeSliceWithoutAdvancingRefer
 	if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
 		t.Fatalf("post-slice-drop callbacks = %d, want %d", callbackCalls, firstPacketCount+len(recovered.RTPPackets))
 	}
+
+	recoveredPacketCount := len(recovered.RTPPackets)
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{SliceMaxBytes: 1}); err != nil {
+		t.Fatalf("lower SliceMaxBytes before forced IDR drop: %v", err)
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before slice-budget drop did not queue IDR")
+	}
+	forcedDropFrame := firstFrame
+	forcedDropFrame.PTS = 0
+	forcedDropFrame.Y[0] ^= 0x20
+	forcedDrop, err := enc.Encode(forcedDropFrame)
+	if err != nil {
+		t.Fatalf("Encode forced IDR slice-budget drop: %v", err)
+	}
+	if !forcedDrop.Dropped || len(forcedDrop.Data) != 0 || len(forcedDrop.NALUnits) != 0 || len(forcedDrop.RTPPackets) != 0 {
+		t.Fatalf("forced IDR slice-budget drop = %+v, want dropped metadata without output", forcedDrop)
+	}
+	if forcedDrop.RTPTime != recovered.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("forced IDR slice-budget drop RTP time = %d, want %d", forcedDrop.RTPTime, recovered.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("forced IDR slice-budget drop cleared pending IDR before an IDR was transmitted")
+	}
+	if callbackCalls != firstPacketCount+recoveredPacketCount {
+		t.Fatalf("forced IDR slice-budget drop callbacks = %d, want still %d", callbackCalls, firstPacketCount+recoveredPacketCount)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{SliceMaxBytes: 4096}); err != nil {
+		t.Fatalf("raise SliceMaxBytes before forced IDR recovery: %v", err)
+	}
+	forcedRecoverFrame := firstFrame
+	forcedRecoverFrame.PTS = 0
+	forcedRecover, err := enc.Encode(forcedRecoverFrame)
+	if err != nil {
+		t.Fatalf("Encode after forced IDR slice-budget drop: %v", err)
+	}
+	if forcedRecover.Dropped || !forcedRecover.IDR || enc.PendingIDR() {
+		t.Fatalf("post-forced-slice-drop frame dropped=%v idr=%v pending=%v, want transmitted IDR and cleared pending state",
+			forcedRecover.Dropped, forcedRecover.IDR, enc.PendingIDR())
+	}
+	if forcedRecover.RTPTime != forcedDrop.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("post-forced-slice-drop RTP time = %d, want %d", forcedRecover.RTPTime, forcedDrop.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, forcedRecover.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, forcedRecover.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount+recoveredPacketCount))
+	if callbackCalls != firstPacketCount+recoveredPacketCount+len(forcedRecover.RTPPackets) {
+		t.Fatalf("post-forced-slice-drop callbacks = %d, want %d",
+			callbackCalls, firstPacketCount+recoveredPacketCount+len(forcedRecover.RTPPackets))
+	}
 }
 
 func TestEncoderFrameDropToBitrateDropsMaxBitrateBudgetWithoutAdvancingState(t *testing.T) {
