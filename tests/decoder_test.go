@@ -502,6 +502,34 @@ func TestDecodeAutoConfiguredLength4SwitchesToAnnexB(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeFramesConfigurationRecordDoesNotAliasCallerBuffer(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	config = append([]byte(nil), config...)
+
+	dec := NewDecoder()
+	frames, err := dec.DecodeFrames(config)
+	if err != nil {
+		t.Fatalf("DecodeFrames config: %v", err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("config frames = %d, want 0", len(frames))
+	}
+
+	for i := range config {
+		config[i] = 0xff
+	}
+
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after config mutation: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodePacketFramesNewExtradataAVC(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	config, packet := annexBToAVCConfigAndPacket(t, data, 4)
