@@ -595,6 +595,10 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 		{name: "idr interval beyond gop", mutate: func(c *goh264.EncoderConfig) { c.IDRInterval = c.GOPSize + 1 }, want: goh264.ErrInvalidData},
 		{name: "intra refresh not admitted yet", mutate: func(c *goh264.EncoderConfig) { c.IntraRefresh = true }, want: goh264.ErrUnsupported},
 		{name: "rtp payload too small", mutate: func(c *goh264.EncoderConfig) { c.RTPMaxPayloadSize = 2 }, want: goh264.ErrInvalidData},
+		{name: "rtp mode 0 payload too small", mutate: func(c *goh264.EncoderConfig) {
+			c.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+			c.RTPMaxPayloadSize = 1
+		}, want: goh264.ErrInvalidData},
 		{name: "rtp payload type too large", mutate: func(c *goh264.EncoderConfig) { c.RTPPayloadType = 128 }, want: goh264.ErrInvalidData},
 		{name: "stap-a requires packetization mode 1", mutate: func(c *goh264.EncoderConfig) {
 			c.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
@@ -1874,6 +1878,7 @@ func TestEncoderValidOutputReconfigurePreservesPendingIDR(t *testing.T) {
 func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 	mode0 := goh264.EncoderRTPPacketizationSingleNAL
 	stapa := true
+	mode0PayloadTooSmall := 1
 	badPayloadType := uint8(128)
 	negativeMaxFrameSize := -1
 	negativeSliceMaxBytes := -1
@@ -1901,6 +1906,10 @@ func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 			RTPPacketizationMode: &mode0,
 			STAPA:                &stapa,
 		}, wantErr: goh264.ErrUnsupported},
+		{name: "mode-0 payload too small", update: goh264.EncoderReconfigure{
+			RTPPacketizationMode: &mode0,
+			RTPMaxPayloadSize:    mode0PayloadTooSmall,
+		}, wantErr: goh264.ErrInvalidData},
 		{name: "bad RTP payload type", update: goh264.EncoderReconfigure{RTPPayloadType: &badPayloadType}, wantErr: goh264.ErrInvalidData},
 		{name: "timestamp increment with bad RTP payload type", update: goh264.EncoderReconfigure{
 			RTPTimestampIncrement: 1234,
@@ -11106,6 +11115,55 @@ func TestEncoderEncodeRTPMode0EmitsSingleNALPackets(t *testing.T) {
 		t.Fatalf("DecodeAnnexBFrames reassembled mode 0 RTP: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, frame))
+}
+
+func TestEncoderRTPMode0RejectsTooSmallPayloadAtConfigBoundaries(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1
+	if err := cfg.Validate(); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Validate mode 0 payload too small error = %v, want ErrInvalidData", err)
+	}
+	if _, err := cfg.Normalize(); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("Normalize mode 0 payload too small error = %v, want ErrInvalidData", err)
+	}
+	if _, err := goh264.NewEncoder(cfg); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("NewEncoder mode 0 payload too small error = %v, want ErrInvalidData", err)
+	}
+
+	cfg.RTPMaxPayloadSize = 1200
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder valid mode 0: %v", err)
+	}
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode valid mode 0 IDR: %v", err)
+	}
+	before := enc.Config()
+	if err := enc.SetRTPMaxPayloadSize(1); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("SetRTPMaxPayloadSize mode 0 payload too small error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("invalid mode 0 SetRTPMaxPayloadSize mutated config = %+v, want %+v", got, before)
+	}
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode after invalid mode 0 payload setter: %v", err)
+	}
+	if second.Dropped || second.IDR || second.KeyFrame || enc.PendingIDR() {
+		t.Fatalf("post-invalid-setter output dropped=%v idr=%v key=%v pending=%v, want clean P-skip",
+			second.Dropped, second.IDR, second.KeyFrame, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertEncoderRTPMode0RawNALPackets(t, second, before.RTPMaxPayloadSize)
+	assertRTPPacketMetadata(t, second.RTPPackets, before.RTPPayloadType, before.RTPSSRC, uint16(len(first.RTPPackets)))
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 }
 
 func TestEncoderEncodeRTPMode0EmitsPFrameSingleNALPackets(t *testing.T) {

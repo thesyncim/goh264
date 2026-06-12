@@ -3406,8 +3406,8 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		}
 		switch cfg.RTPPacketizationMode {
 		case EncoderRTPPacketizationSingleNAL:
-			if cfg.RTPMaxPayloadSize < 1 {
-				return cfg, encoderInvalid("RTP max payload size must fit a NAL header")
+			if cfg.RTPMaxPayloadSize < 2 {
+				return cfg, encoderInvalid("RTP packetization-mode 0 max payload size must fit a NAL header and payload byte")
 			}
 			if cfg.STAPA {
 				return cfg, encoderUnsupported("STAP-A aggregation requires RTP packetization-mode 1")
