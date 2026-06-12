@@ -214,6 +214,9 @@ func TestBitWriterRejectsOverflowedBitPosition(t *testing.T) {
 func TestAppendNALRejectsOverflowedEscapedSize(t *testing.T) {
 	rbsp := fakeRBSPBytesLen(maxInt)
 	prefix := []byte{0xaa}
+	if got := AppendEBSP(prefix, rbsp); got != nil {
+		t.Fatalf("AppendEBSP overflow got len=%d, want nil", len(got))
+	}
 	if got, err := AppendNAL(prefix, 3, NALSEI, rbsp); !errors.Is(err, ErrInvalidData) || !bytes.Equal(got, prefix) {
 		t.Fatalf("AppendNAL overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
 	}

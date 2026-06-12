@@ -124,6 +124,9 @@ func (bw *BitWriter) WriteRBSPTrailingBits() {
 const maxBitWriterByteLen = int(^uint32(0) / 8)
 
 func AppendEBSP(dst []byte, rbsp []byte) []byte {
+	if _, err := nalAppendCapacity(len(dst), 0, len(rbsp)); err != nil {
+		return nil
+	}
 	zeros := 0
 	for _, b := range rbsp {
 		if zeros >= 2 && b <= 0x03 {
