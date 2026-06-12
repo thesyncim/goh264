@@ -1063,6 +1063,15 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	if err != nil {
 		return EncodedFrame{}, err
 	}
+	oldP16MVs := e.p16MVs
+	oldP16MVDs := e.p16MVDs
+	p16ScratchCommitted := false
+	defer func() {
+		if !p16ScratchCommitted {
+			e.p16MVs = oldP16MVs
+			e.p16MVDs = oldP16MVDs
+		}
+	}()
 	idr := e.shouldEncodeIDR(view, frame)
 	lateStart := encoderLateDropStart(e.cfg)
 	var nalsBuf [4]encoderRawNAL
@@ -1259,6 +1268,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	if err != nil {
 		return EncodedFrame{}, err
 	}
+	p16ScratchCommitted = true
 	if e.cfg.OutputFormat == EncoderOutputRTP {
 		e.stampRTPPackets(packets)
 		e.notifyRTPPacketCallback(packets, frame, rtpTime, idr, idr)
