@@ -228,6 +228,50 @@ func TestFrameRawOutputClassifiesInvalidMetadata(t *testing.T) {
 	}
 }
 
+func TestFrameRawYUVSizeRejectsNonpositiveDimensions(t *testing.T) {
+	tests := []struct {
+		name  string
+		frame Frame
+	}{
+		{
+			name: "zero-width-8-bit",
+			frame: Frame{
+				Width: 0, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: 8,
+			},
+		},
+		{
+			name: "negative-height-8-bit",
+			frame: Frame{
+				Width: 2, Height: -1, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: 8,
+			},
+		},
+		{
+			name: "zero-width-high-bit-depth",
+			frame: Frame{
+				Width: 0, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 10, BitDepthChroma: 10,
+			},
+		},
+		{
+			name: "negative-height-high-bit-depth",
+			frame: Frame{
+				Width: 2, Height: -1, ChromaFormatIDC: 1,
+				BitDepthLuma: 10, BitDepthChroma: 10,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.frame.RawYUVSize()
+			if got != 0 || !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("RawYUVSize = (%d, %v), want (0, ErrInvalidData)", got, err)
+			}
+		})
+	}
+}
+
 func TestFrameAppendRawYUV16AndBytesLEPreserveSamplesAndCrop(t *testing.T) {
 	frame := Frame{
 		Width:           4,
