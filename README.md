@@ -289,6 +289,8 @@ func main() {
 
 `RawYUVBytesLE` returns a caller-owned rawvideo byte buffer for one frame.
 `RawYUV16` returns a caller-owned uint16 sample buffer for high-bit-depth frames.
+`Frame.Clone` returns a deep-owned decoded-frame snapshot, including planes and
+side data.
 `AppendRawYUV` is available for 8-bit output. `AppendRawYUVBytesLE` handles both
 8-bit and high-bit-depth output, using little-endian samples for 9-bit and
 higher formats. `AppendRawYUV16` is the caller-buffer form for high-bit-depth

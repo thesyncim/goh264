@@ -8,11 +8,13 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/bits"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -315,6 +317,122 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 				t.Fatalf("%s nil decoder error = %v, want ErrInvalidData", tt.name, err)
 			}
 		})
+	}
+}
+
+func TestFrameCloneRejectsNilFrame(t *testing.T) {
+	var frame *Frame
+	if got, err := frame.Clone(); got != nil || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("Frame.Clone nil = %+v/%v, want nil ErrInvalidData", got, err)
+	}
+}
+
+func TestFrameCloneDeepCopiesPlanesAndSideData(t *testing.T) {
+	frame := &Frame{
+		Width:           2,
+		Height:          2,
+		ChromaFormatIDC: 1,
+		BitDepthLuma:    10,
+		BitDepthChroma:  10,
+		YStride:         2,
+		CStride:         1,
+		Y:               []byte{1, 2, 3, 4},
+		Cb:              []byte{5},
+		Cr:              []byte{6},
+		Y16:             []uint16{100, 101, 102, 103},
+		Cb16:            []uint16{500},
+		Cr16:            []uint16{800},
+		SideData: FrameSideData{
+			UserDataUnregistered: [][]byte{{1, 2, 3}},
+			A53ClosedCaptions:    []byte{4, 5},
+			S12MTimecodes:        []uint32{6, 7},
+			PictureTiming:        &PictureTiming{PicStruct: 1, Timecode: []Timecode{{Full: true, Frame: 12}}},
+			RecoveryPoint:        &RecoveryPoint{RecoveryFrameCount: 2},
+			BufferingPeriod:      &BufferingPeriod{InitialCPBRemovalDelay: [32]int32{0: 3}},
+			GreenMetadata:        &GreenMetadata{GreenMetadataType: 4},
+			ActiveFormat:         &ActiveFormat{Description: 5},
+			FramePacking:         &FramePackingArrangement{ArrangementID: 6},
+			Stereo3D:             &Stereo3D{Type: Stereo3DTypeSideBySide, StereoMode: "left_right"},
+			Spherical:            &SphericalMapping{Projection: SphericalProjectionEquirectangular, Yaw: 7},
+			DisplayOrientation:   &DisplayOrientation{AnticlockwiseRotation: 8},
+			AlternativeTransfer:  &AlternativeTransfer{PreferredTransferCharacteristics: 9},
+			AmbientViewing:       &AmbientViewingEnvironment{AmbientIlluminance: 10},
+			FilmGrain:            &FilmGrainCharacteristics{ModelID: 11, CompModelPresentFlag: [3]bool{true}},
+			MasteringDisplay:     &MasteringDisplay{MaxLuminance: 12},
+			ContentLight:         &ContentLight{MaxContentLightLevel: 13},
+			ICCProfile:           []byte{14, 15},
+			DynamicHDR10Plus:     []byte{16},
+			LCEVC:                []byte{17},
+			ReferenceDisplays:    &ReferenceDisplaysInfo{Displays: []ReferenceDisplay{{LeftViewID: 18, RightViewID: 19}}},
+		},
+	}
+	clone, err := frame.Clone()
+	if err != nil {
+		t.Fatalf("Frame.Clone: %v", err)
+	}
+	if clone == frame {
+		t.Fatal("Frame.Clone returned the source pointer")
+	}
+	if !reflect.DeepEqual(clone, frame) {
+		t.Fatalf("Frame.Clone = %+v, want %+v", clone, frame)
+	}
+	if len(clone.Y) != 0 && &clone.Y[0] == &frame.Y[0] {
+		t.Fatal("clone Y aliases source")
+	}
+	if len(clone.Cb) != 0 && &clone.Cb[0] == &frame.Cb[0] {
+		t.Fatal("clone Cb aliases source")
+	}
+	if len(clone.Cr) != 0 && &clone.Cr[0] == &frame.Cr[0] {
+		t.Fatal("clone Cr aliases source")
+	}
+	if len(clone.Y16) != 0 && &clone.Y16[0] == &frame.Y16[0] {
+		t.Fatal("clone Y16 aliases source")
+	}
+	if len(clone.Cb16) != 0 && &clone.Cb16[0] == &frame.Cb16[0] {
+		t.Fatal("clone Cb16 aliases source")
+	}
+	if len(clone.Cr16) != 0 && &clone.Cr16[0] == &frame.Cr16[0] {
+		t.Fatal("clone Cr16 aliases source")
+	}
+	if &clone.SideData.UserDataUnregistered[0][0] == &frame.SideData.UserDataUnregistered[0][0] ||
+		&clone.SideData.A53ClosedCaptions[0] == &frame.SideData.A53ClosedCaptions[0] ||
+		&clone.SideData.S12MTimecodes[0] == &frame.SideData.S12MTimecodes[0] ||
+		&clone.SideData.PictureTiming.Timecode[0] == &frame.SideData.PictureTiming.Timecode[0] ||
+		&clone.SideData.ICCProfile[0] == &frame.SideData.ICCProfile[0] ||
+		&clone.SideData.DynamicHDR10Plus[0] == &frame.SideData.DynamicHDR10Plus[0] ||
+		&clone.SideData.LCEVC[0] == &frame.SideData.LCEVC[0] ||
+		&clone.SideData.ReferenceDisplays.Displays[0] == &frame.SideData.ReferenceDisplays.Displays[0] {
+		t.Fatal("clone side-data slices alias source")
+	}
+	if clone.SideData.PictureTiming == frame.SideData.PictureTiming ||
+		clone.SideData.RecoveryPoint == frame.SideData.RecoveryPoint ||
+		clone.SideData.BufferingPeriod == frame.SideData.BufferingPeriod ||
+		clone.SideData.GreenMetadata == frame.SideData.GreenMetadata ||
+		clone.SideData.ActiveFormat == frame.SideData.ActiveFormat ||
+		clone.SideData.FramePacking == frame.SideData.FramePacking ||
+		clone.SideData.Stereo3D == frame.SideData.Stereo3D ||
+		clone.SideData.Spherical == frame.SideData.Spherical ||
+		clone.SideData.DisplayOrientation == frame.SideData.DisplayOrientation ||
+		clone.SideData.AlternativeTransfer == frame.SideData.AlternativeTransfer ||
+		clone.SideData.AmbientViewing == frame.SideData.AmbientViewing ||
+		clone.SideData.FilmGrain == frame.SideData.FilmGrain ||
+		clone.SideData.MasteringDisplay == frame.SideData.MasteringDisplay ||
+		clone.SideData.ContentLight == frame.SideData.ContentLight ||
+		clone.SideData.ReferenceDisplays == frame.SideData.ReferenceDisplays {
+		t.Fatal("clone side-data pointers alias source")
+	}
+
+	frame.Y[0] ^= 0xff
+	frame.Y16[0] ^= 0x1ff
+	frame.SideData.UserDataUnregistered[0][0] ^= 0xff
+	frame.SideData.PictureTiming.Timecode[0].Frame++
+	frame.SideData.ReferenceDisplays.Displays[0].LeftViewID++
+	if clone.Y[0] == frame.Y[0] ||
+		clone.Y16[0] == frame.Y16[0] ||
+		clone.SideData.UserDataUnregistered[0][0] == frame.SideData.UserDataUnregistered[0][0] ||
+		clone.SideData.PictureTiming.Timecode[0].Frame == frame.SideData.PictureTiming.Timecode[0].Frame ||
+		clone.SideData.ReferenceDisplays.Displays[0].LeftViewID == frame.SideData.ReferenceDisplays.Displays[0].LeftViewID {
+		t.Fatal("mutating source changed clone")
 	}
 }
 

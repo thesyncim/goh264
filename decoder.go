@@ -362,6 +362,77 @@ type Frame struct {
 	SideData                       FrameSideData
 }
 
+// Clone returns a deep-owned copy of the decoded frame.
+//
+// Plane slices and side-data slices in the clone are independent from f and can
+// be retained or mutated without affecting the source frame.
+func (f *Frame) Clone() (*Frame, error) {
+	if f == nil {
+		return nil, ErrInvalidData
+	}
+	clone := *f
+	clone.Y = cloneByteSlice(f.Y)
+	clone.Cb = cloneByteSlice(f.Cb)
+	clone.Cr = cloneByteSlice(f.Cr)
+	clone.Y16 = cloneUint16Slice(f.Y16)
+	clone.Cb16 = cloneUint16Slice(f.Cb16)
+	clone.Cr16 = cloneUint16Slice(f.Cr16)
+	clone.SideData = cloneFrameSideData(f.SideData)
+	return &clone, nil
+}
+
+func cloneFrameSideData(src FrameSideData) FrameSideData {
+	out := src
+	out.UserDataUnregistered = cloneByteSlices(src.UserDataUnregistered)
+	out.A53ClosedCaptions = cloneByteSlice(src.A53ClosedCaptions)
+	out.S12MTimecodes = cloneUint32Slice(src.S12MTimecodes)
+	out.PictureTiming = clonePictureTiming(src.PictureTiming)
+	out.RecoveryPoint = cloneStructPtr(src.RecoveryPoint)
+	out.BufferingPeriod = cloneStructPtr(src.BufferingPeriod)
+	out.GreenMetadata = cloneStructPtr(src.GreenMetadata)
+	out.ActiveFormat = cloneStructPtr(src.ActiveFormat)
+	out.FramePacking = cloneStructPtr(src.FramePacking)
+	out.Stereo3D = cloneStructPtr(src.Stereo3D)
+	out.Spherical = cloneStructPtr(src.Spherical)
+	out.DisplayOrientation = cloneStructPtr(src.DisplayOrientation)
+	out.AlternativeTransfer = cloneStructPtr(src.AlternativeTransfer)
+	out.AmbientViewing = cloneStructPtr(src.AmbientViewing)
+	out.FilmGrain = cloneStructPtr(src.FilmGrain)
+	out.MasteringDisplay = cloneStructPtr(src.MasteringDisplay)
+	out.ContentLight = cloneStructPtr(src.ContentLight)
+	out.ICCProfile = cloneByteSlice(src.ICCProfile)
+	out.DynamicHDR10Plus = cloneByteSlice(src.DynamicHDR10Plus)
+	out.LCEVC = cloneByteSlice(src.LCEVC)
+	out.ReferenceDisplays = cloneReferenceDisplaysInfo(src.ReferenceDisplays)
+	return out
+}
+
+func clonePictureTiming(src *PictureTiming) *PictureTiming {
+	if src == nil {
+		return nil
+	}
+	out := *src
+	out.Timecode = append([]Timecode(nil), src.Timecode...)
+	return &out
+}
+
+func cloneReferenceDisplaysInfo(src *ReferenceDisplaysInfo) *ReferenceDisplaysInfo {
+	if src == nil {
+		return nil
+	}
+	out := *src
+	out.Displays = append([]ReferenceDisplay(nil), src.Displays...)
+	return &out
+}
+
+func cloneStructPtr[T any](src *T) *T {
+	if src == nil {
+		return nil
+	}
+	out := *src
+	return &out
+}
+
 // NewDecoder returns a stateful decoder.
 func NewDecoder() *Decoder {
 	return &Decoder{}
