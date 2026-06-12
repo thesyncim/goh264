@@ -571,6 +571,31 @@ func TestDecodeFramesRejectAVCConfigurationRecordPreservesStoredConfiguration(t 
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeRejectAVCConfigurationRecordPreservesStoredConfiguration(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if frame, err := dec.Decode(config); err != ErrUnsupported || frame != nil {
+		t.Fatalf("config frame=%+v err=%v, want nil/%v", frame, err, ErrUnsupported)
+	}
+
+	damagedConfig := append([]byte(nil), config...)
+	damagedConfig = damagedConfig[:len(damagedConfig)-1]
+	if frame, err := dec.Decode(damagedConfig); err == nil || frame != nil {
+		t.Fatalf("damaged avcC Decode frame=%+v err=%v, want nil/error", frame, err)
+	}
+
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("decode after damaged avcC Decode: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeAVCFramesWithConfigurationRecordRejectPreservesStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
