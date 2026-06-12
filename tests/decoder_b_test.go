@@ -311,6 +311,16 @@ func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesOnEmptyPacket(t *te
 				if len(out) != 0 {
 					t.Fatalf("nalLengthSize=%d second empty configuration-record AVC packet frames = %d, want 0", nalLengthSize, len(out))
 				}
+				for i := range config {
+					config[i] = 0xff
+				}
+				out, err = dec.DecodeConfiguredAVCFrames(samples[0])
+				if err != nil {
+					t.Fatalf("nalLengthSize=%d decode after empty configuration-record caller mutation: %v", nalLengthSize, err)
+				}
+				if len(out) != 1 {
+					t.Fatalf("nalLengthSize=%d decode after empty configuration-record caller mutation frames = %d, want 1", nalLengthSize, len(out))
+				}
 			}
 		})
 	}
