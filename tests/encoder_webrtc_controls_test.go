@@ -5323,23 +5323,52 @@ func TestEncoderSetFrameRateResetsFrameBudgetAndRTPIncrement(t *testing.T) {
 }
 
 func TestEncoderFrameDropDisabledDoesNotApplyDerivedBitrateBudget(t *testing.T) {
-	cfg := goh264.DefaultEncoderConfig(16, 16)
-	cfg.DeblockMode = goh264.EncoderDeblockDisabled
-	cfg.TargetBitrate = 1_000
-	cfg.MaxBitrate = 1_000
-	cfg.VBVBufferSize = 64
-	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.OutputFormat = format.fmt
+			if format.fmt != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			cfg.TargetBitrate = 1_000
+			cfg.MaxBitrate = 1_000
+			cfg.VBVBufferSize = 64
+			cfg.FrameDrop = goh264.EncoderFrameDropDisabled
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
 
-	out, err := enc.Encode(patternedI420EncoderFrame(16, 16))
-	if err != nil {
-		t.Fatalf("Encode with disabled frame drop and low MaxBitrate: %v", err)
-	}
-	if out.Dropped || !out.IDR || len(out.Data) == 0 {
-		t.Fatalf("disabled-drop output dropped=%v idr=%v data=%d, want transmitted IDR", out.Dropped, out.IDR, len(out.Data))
+			var callbackCalls int
+			enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+				callbackCalls++
+			})
+			out, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode with disabled frame drop and low MaxBitrate: %v", err)
+			}
+			if out.Dropped || !out.IDR || len(out.Data) == 0 {
+				t.Fatalf("disabled-drop output dropped=%v idr=%v data=%d, want transmitted IDR", out.Dropped, out.IDR, len(out.Data))
+			}
+			assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+			assertEncoderVCLFrameNums(t, annexBFromEncodedFrame(t, out, cfg.OutputFormat), []uint8{5}, []uint32{0})
+			if format.fmt == goh264.EncoderOutputRTP {
+				assertRTPPacketMetadata(t, out.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+				if callbackCalls != len(out.RTPPackets) {
+					t.Fatalf("disabled-drop callbacks = %d, want packet count %d", callbackCalls, len(out.RTPPackets))
+				}
+			} else if len(out.RTPPackets) != 0 || callbackCalls != 0 {
+				t.Fatalf("non-RTP disabled-drop packets/callbacks = %d/%d, want none", len(out.RTPPackets), callbackCalls)
+			}
+		})
 	}
 }
 
