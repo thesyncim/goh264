@@ -2625,8 +2625,12 @@ func TestEncoderRecoveryPointSEIRejectsInvalidFrameCount(t *testing.T) {
 		t.Fatal("ForceIDR before invalid RecoveryPointSEI did not queue IDR")
 	}
 	before := enc.Config()
-	if _, err := enc.RecoveryPointSEI(1 << 16); !errors.Is(err, goh264.ErrInvalidData) {
+	sei, err := enc.RecoveryPointSEI(1 << 16)
+	if !errors.Is(err, goh264.ErrInvalidData) {
 		t.Fatalf("RecoveryPointSEI invalid error = %v, want ErrInvalidData", err)
+	}
+	if len(sei.NAL) != 0 || len(sei.AnnexB) != 0 || len(sei.AVC) != 0 {
+		t.Fatalf("invalid RecoveryPointSEI returned surfaces = %+v, want empty", sei)
 	}
 	if got := enc.Config(); got != before {
 		t.Fatalf("invalid RecoveryPointSEI mutated config = %+v, want %+v", got, before)
