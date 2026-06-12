@@ -2799,64 +2799,110 @@ func TestEncoderParameterSetsReturnCallerOwnedSurfaces(t *testing.T) {
 }
 
 func TestEncoderHeaderHelpersPreservePendingIDR(t *testing.T) {
-	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
-	if err != nil {
-		t.Fatalf("Encode first IDR: %v", err)
-	}
-	if !first.IDR || enc.PendingIDR() {
-		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
-	}
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = format.fmt
+			if format.fmt == goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 32
+			} else {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			var callbackCalls int
+			enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+				callbackCalls++
+			})
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			firstFrame.PTS = 0
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if first.Dropped || !first.IDR || first.RTPTime != 0 || enc.PendingIDR() {
+				t.Fatalf("first frame dropped/idr/time/pending=%v/%v/%d/%v, want completed IDR time 0",
+					first.Dropped, first.IDR, first.RTPTime, enc.PendingIDR())
+			}
+			firstPacketCount := len(first.RTPPackets)
+			if format.fmt == goh264.EncoderOutputRTP {
+				if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+					t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+						firstPacketCount, callbackCalls)
+				}
+			} else if firstPacketCount != 0 || callbackCalls != 0 {
+				t.Fatalf("non-RTP first packets/callbacks = %d/%d, want none", firstPacketCount, callbackCalls)
+			}
 
-	enc.ForceIDR()
-	if !enc.PendingIDR() {
-		t.Fatal("ForceIDR before header helpers did not queue IDR")
-	}
-	before := enc.Config()
-	for i := 0; i < 3; i++ {
-		headers, err := enc.ParameterSets()
-		if err != nil {
-			t.Fatalf("ParameterSets[%d]: %v", i, err)
-		}
-		if len(headers.SPS) == 0 || len(headers.PPS) == 0 ||
-			len(headers.AnnexB) == 0 || len(headers.AVCDecoderConfigurationRecord) == 0 {
-			t.Fatalf("ParameterSets[%d] returned empty surfaces: %+v", i, headers)
-		}
-		sei, err := enc.RecoveryPointSEI(uint32(i))
-		if err != nil {
-			t.Fatalf("RecoveryPointSEI[%d]: %v", i, err)
-		}
-		if len(sei.NAL) == 0 || len(sei.AnnexB) == 0 || len(sei.AVC) == 0 {
-			t.Fatalf("RecoveryPointSEI[%d] returned empty surfaces: %+v", i, sei)
-		}
-		if got := enc.Config(); got != before {
-			t.Fatalf("header helper[%d] mutated config = %+v, want %+v", i, got, before)
-		}
-		if !enc.PendingIDR() {
-			t.Fatalf("header helper[%d] cleared pending IDR", i)
-		}
-	}
+			enc.ForceIDR()
+			if !enc.PendingIDR() {
+				t.Fatal("ForceIDR before header helpers did not queue IDR")
+			}
+			before := enc.Config()
+			for i := 0; i < 3; i++ {
+				headers, err := enc.ParameterSets()
+				if err != nil {
+					t.Fatalf("ParameterSets[%d]: %v", i, err)
+				}
+				if len(headers.SPS) == 0 || len(headers.PPS) == 0 ||
+					len(headers.AnnexB) == 0 || len(headers.AVCDecoderConfigurationRecord) == 0 {
+					t.Fatalf("ParameterSets[%d] returned empty surfaces: %+v", i, headers)
+				}
+				sei, err := enc.RecoveryPointSEI(uint32(i))
+				if err != nil {
+					t.Fatalf("RecoveryPointSEI[%d]: %v", i, err)
+				}
+				if len(sei.NAL) == 0 || len(sei.AnnexB) == 0 || len(sei.AVC) == 0 {
+					t.Fatalf("RecoveryPointSEI[%d] returned empty surfaces: %+v", i, sei)
+				}
+				if got := enc.Config(); got != before {
+					t.Fatalf("header helper[%d] mutated config = %+v, want %+v", i, got, before)
+				}
+				if !enc.PendingIDR() {
+					t.Fatalf("header helper[%d] cleared pending IDR", i)
+				}
+				if callbackCalls != firstPacketCount {
+					t.Fatalf("header helper[%d] callbacks = %d, want still %d",
+						i, callbackCalls, firstPacketCount)
+				}
+			}
 
-	secondFrame := patternedI420EncoderFrame(16, 16)
-	secondFrame.Y = append([]byte(nil), secondFrame.Y...)
-	secondFrame.Y[0] ^= 0x44
-	second, err := enc.Encode(secondFrame)
-	if err != nil {
-		t.Fatalf("Encode after header helpers: %v", err)
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
+			secondFrame.Y = append([]byte(nil), secondFrame.Y...)
+			secondFrame.Y[0] ^= 0x44
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode after header helpers: %v", err)
+			}
+			if second.Dropped || !second.IDR || second.RTPTime != before.RTPTimestampIncrement || enc.PendingIDR() {
+				t.Fatalf("post-helper frame dropped/idr/time/pending=%v/%v/%d/%v, want delivered IDR time %d",
+					second.Dropped, second.IDR, second.RTPTime, enc.PendingIDR(), before.RTPTimestampIncrement)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+			stream := annexBFromEncodedFrame(t, first, before.OutputFormat)
+			stream = append(stream, annexBFromEncodedFrame(t, second, before.OutputFormat)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
+			if format.fmt == goh264.EncoderOutputRTP {
+				assertRTPPacketMetadata(t, second.RTPPackets, before.RTPPayloadType, before.RTPSSRC, uint16(firstPacketCount))
+			} else if len(second.RTPPackets) != 0 {
+				t.Fatalf("non-RTP second packets = %d, want none", len(second.RTPPackets))
+			}
+			if callbackCalls != firstPacketCount+len(second.RTPPackets) {
+				t.Fatalf("post-helper callbacks = %d, want %d",
+					callbackCalls, firstPacketCount+len(second.RTPPackets))
+			}
+		})
 	}
-	if !second.IDR || enc.PendingIDR() {
-		t.Fatalf("post-helper frame idr=%v pending=%v, want delivered IDR",
-			second.IDR, enc.PendingIDR())
-	}
-	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
-	assertEncoderVCLFrameNums(t,
-		append(append([]byte(nil), first.Data...), second.Data...),
-		[]uint8{5, 5},
-		[]uint32{0, 1},
-	)
 }
 
 func TestEncoderParameterSetsExposeWebRTCCrop(t *testing.T) {
