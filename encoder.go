@@ -572,10 +572,8 @@ func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 			Dropped:      true,
 		}, nil
 	}
-	if len(frame.NALUnits) != 0 {
-		if _, err := frame.AccessUnitData(); err != nil {
-			return EncodedFrame{}, err
-		}
+	if _, err := frame.AccessUnitData(); err != nil {
+		return EncodedFrame{}, err
 	}
 	for i := range frame.RTPPackets {
 		if _, err := frame.RTPPacketData(i); err != nil {

@@ -11920,6 +11920,20 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 		frame goh264.EncodedFrame
 	}{
 		{
+			name:  "empty non-dropped frame",
+			frame: goh264.EncodedFrame{},
+		},
+		{
+			name: "rtp packets without access-unit metadata",
+			frame: goh264.EncodedFrame{
+				OutputFormat: goh264.EncoderOutputRTP,
+				RTPPackets: []goh264.EncoderRTPPacket{{
+					Data:    validPacket,
+					Payload: validPacket[12:],
+				}},
+			},
+		},
+		{
 			name: "bad nal metadata",
 			frame: goh264.EncodedFrame{
 				Data:     []byte{0, 0, 0, 1, 0x65},
