@@ -2465,9 +2465,21 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
+		{name: "chroma dc position without coefficients", run: func() error {
+			next := valid
+			next.ChromaDCCoeffPos = 1
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
 		{name: "bad chroma dc position count", run: func() error {
 			next := valid
 			next.Width = 32
+			next.ChromaDCCoeffPositions = []int{1}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "per-macroblock chroma dc position without coefficients", run: func() error {
+			next := valid
 			next.ChromaDCCoeffPositions = []int{1}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
@@ -2617,9 +2629,21 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
+		{name: "chroma ac position without coefficients", run: func() error {
+			next := valid
+			next.ChromaACCoeffPos = 1
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
 		{name: "bad chroma ac position count", run: func() error {
 			next := valid
 			next.Width = 32
+			next.ChromaACCoeffPositions = []int{1}
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "per-macroblock chroma ac position without coefficients", run: func() error {
+			next := valid
 			next.ChromaACCoeffPositions = []int{1}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
