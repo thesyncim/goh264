@@ -2166,14 +2166,23 @@ func (e *Encoder) notifyRTPPacketCallback(packets []EncoderRTPPacket, frame Enco
 }
 
 func cloneEncoderRTPPacket(pkt EncoderRTPPacket) EncoderRTPPacket {
+	if len(pkt.Data) > maxInt/2 || len(pkt.Payload) > maxInt/2 {
+		pkt.Data = nil
+		pkt.Payload = nil
+		return pkt
+	}
 	if len(pkt.Data) == 12+len(pkt.Payload) && bytes.Equal(pkt.Data[12:], pkt.Payload) {
-		pkt.Data = append([]byte(nil), pkt.Data...)
+		pkt.Data = cloneByteSlice(pkt.Data)
+		if len(pkt.Data) < 12 {
+			pkt.Payload = nil
+			return pkt
+		}
 		pkt.Data = pkt.Data[:len(pkt.Data):len(pkt.Data)]
 		pkt.Payload = pkt.Data[12:len(pkt.Data):len(pkt.Data)]
 		return pkt
 	}
-	pkt.Data = append([]byte(nil), pkt.Data...)
-	pkt.Payload = append([]byte(nil), pkt.Payload...)
+	pkt.Data = cloneByteSlice(pkt.Data)
+	pkt.Payload = cloneByteSlice(pkt.Payload)
 	return pkt
 }
 

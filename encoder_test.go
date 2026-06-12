@@ -298,6 +298,60 @@ func TestFrameSideDataFromH264RejectsOverflowedBytePayloads(t *testing.T) {
 	}
 }
 
+func TestCloneEncoderRTPPacketClonesSharedPayloadStorage(t *testing.T) {
+	data := []byte{0x80, 0x60, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0x65, 0xaa}
+	pkt := EncoderRTPPacket{Data: data, Payload: data[12:]}
+
+	got := cloneEncoderRTPPacket(pkt)
+	if len(got.Data) != len(data) || len(got.Payload) != 2 || got.Payload[0] != 0x65 || got.Payload[1] != 0xaa {
+		t.Fatalf("cloned shared RTP packet = data %x payload %x", got.Data, got.Payload)
+	}
+	data[12], data[13] = 0xff, 0xff
+	if got.Payload[0] != 0x65 || got.Payload[1] != 0xaa || got.Data[12] != 0x65 || got.Data[13] != 0xaa {
+		t.Fatalf("cloned shared RTP packet aliases source = data %x payload %x", got.Data, got.Payload)
+	}
+	if len(got.Data) > 0 && cap(got.Data) != len(got.Data) {
+		t.Fatalf("cloned RTP data cap = %d, want len %d", cap(got.Data), len(got.Data))
+	}
+	if len(got.Payload) > 0 && cap(got.Payload) != len(got.Payload) {
+		t.Fatalf("cloned RTP payload cap = %d, want len %d", cap(got.Payload), len(got.Payload))
+	}
+}
+
+func TestCloneEncoderRTPPacketClonesSplitPayloadStorage(t *testing.T) {
+	data := []byte{0x80, 0x60}
+	payload := []byte{0x41, 0xbb}
+	pkt := EncoderRTPPacket{Data: data, Payload: payload}
+
+	got := cloneEncoderRTPPacket(pkt)
+	if len(got.Data) != 2 || got.Data[0] != 0x80 || len(got.Payload) != 2 || got.Payload[0] != 0x41 {
+		t.Fatalf("cloned split RTP packet = data %x payload %x", got.Data, got.Payload)
+	}
+	data[0], payload[0] = 0xff, 0xff
+	if got.Data[0] != 0x80 || got.Payload[0] != 0x41 {
+		t.Fatalf("cloned split RTP packet aliases source = data %x payload %x", got.Data, got.Payload)
+	}
+}
+
+func TestCloneEncoderRTPPacketRejectsOverflowedByteClones(t *testing.T) {
+	got := cloneEncoderRTPPacket(EncoderRTPPacket{
+		Data:    fakeEncoderBytesLen(maxInt/2 + 1),
+		Payload: fakeEncoderBytesLen(maxInt/2 + 1),
+	})
+	if got.Data != nil || got.Payload != nil {
+		t.Fatalf("overflowed split RTP clone = data len %d payload len %d, want nil/nil", len(got.Data), len(got.Payload))
+	}
+
+	shared := fakeEncoderBytesLen(maxInt/2 + 1)
+	got = cloneEncoderRTPPacket(EncoderRTPPacket{
+		Data:    shared,
+		Payload: shared[12:],
+	})
+	if got.Data != nil || got.Payload != nil {
+		t.Fatalf("overflowed shared RTP clone = data len %d payload len %d, want nil/nil", len(got.Data), len(got.Payload))
+	}
+}
+
 func fakeEncoderBytesLen(n int) []byte {
 	if n <= 0 {
 		return nil
