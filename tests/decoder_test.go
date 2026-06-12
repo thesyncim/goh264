@@ -358,6 +358,14 @@ func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 		clone.ReferenceDisplays == side.ReferenceDisplays {
 		t.Fatal("FrameSideData.Clone aliases source pointers")
 	}
+	clone.UserDataUnregistered[0][1] ^= 0xff
+	clone.PictureTiming.Timecode[0].Seconds++
+	clone.ReferenceDisplays.Displays[0].RightViewID++
+	if clone.UserDataUnregistered[0][1] == side.UserDataUnregistered[0][1] ||
+		clone.PictureTiming.Timecode[0].Seconds == side.PictureTiming.Timecode[0].Seconds ||
+		clone.ReferenceDisplays.Displays[0].RightViewID == side.ReferenceDisplays.Displays[0].RightViewID {
+		t.Fatal("mutating cloned side data changed source")
+	}
 	side.UserDataUnregistered[0][0] ^= 0xff
 	side.PictureTiming.Timecode[0].Frame++
 	side.ReferenceDisplays.Displays[0].LeftViewID++
@@ -461,6 +469,19 @@ func TestFrameCloneDeepCopiesPlanesAndSideData(t *testing.T) {
 		clone.SideData.ContentLight == frame.SideData.ContentLight ||
 		clone.SideData.ReferenceDisplays == frame.SideData.ReferenceDisplays {
 		t.Fatal("clone side-data pointers alias source")
+	}
+
+	clone.Y[1] ^= 0xff
+	clone.Y16[1] ^= 0x1ff
+	clone.SideData.UserDataUnregistered[0][1] ^= 0xff
+	clone.SideData.PictureTiming.Timecode[0].Seconds++
+	clone.SideData.ReferenceDisplays.Displays[0].RightViewID++
+	if clone.Y[1] == frame.Y[1] ||
+		clone.Y16[1] == frame.Y16[1] ||
+		clone.SideData.UserDataUnregistered[0][1] == frame.SideData.UserDataUnregistered[0][1] ||
+		clone.SideData.PictureTiming.Timecode[0].Seconds == frame.SideData.PictureTiming.Timecode[0].Seconds ||
+		clone.SideData.ReferenceDisplays.Displays[0].RightViewID == frame.SideData.ReferenceDisplays.Displays[0].RightViewID {
+		t.Fatal("mutating clone changed source")
 	}
 
 	frame.Y[0] ^= 0xff

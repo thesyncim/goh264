@@ -355,6 +355,10 @@ func TestPacketSideDataCloneDeepCopiesPayload(t *testing.T) {
 	if bytes.Equal(clone.Data, side.Data) {
 		t.Fatal("mutating source side-data changed clone")
 	}
+	clone.Data[1] ^= 0xff
+	if clone.Data[1] == side.Data[1] {
+		t.Fatal("mutating cloned side-data changed source")
+	}
 }
 
 func TestPacketClonePreservesZeroValue(t *testing.T) {
@@ -398,6 +402,14 @@ func TestPacketCloneDeepCopiesDataAndSideData(t *testing.T) {
 		t.Fatalf("DecodePacket cloned packet: %v", err)
 	}
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	clone.Data[1] ^= 0xff
+	clone.SideData[0].Data[1] ^= 0xff
+	clone.SideData[1].Data[1] ^= 0xff
+	if clone.Data[1] == packet.Data[1] ||
+		clone.SideData[0].Data[1] == packet.SideData[0].Data[1] ||
+		clone.SideData[1].Data[1] == packet.SideData[1].Data[1] {
+		t.Fatal("mutating cloned packet changed source")
+	}
 }
 
 func TestParseAVCDecoderConfigurationRecordRejectPreservesStoredConfiguration(t *testing.T) {
