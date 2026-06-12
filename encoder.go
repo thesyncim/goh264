@@ -389,6 +389,9 @@ func (frame EncodedFrame) NALData(index int) ([]byte, error) {
 	if err != nil || end > len(frame.Data) {
 		return nil, ErrInvalidData
 	}
+	if unit.Type != 0 && unit.Type != frame.Data[unit.Offset]&0x1f {
+		return nil, ErrInvalidData
+	}
 	return frame.Data[unit.Offset:end:end], nil
 }
 
@@ -417,6 +420,9 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 		}
 		unitEnd, err := checkedAddInt(unit.Offset, unit.Size)
 		if err != nil || unitEnd > len(frame.Data) {
+			return nil, ErrInvalidData
+		}
+		if unit.Type != 0 && unit.Type != frame.Data[unit.Offset]&0x1f {
 			return nil, ErrInvalidData
 		}
 		prefixStart := unit.Offset - 4
