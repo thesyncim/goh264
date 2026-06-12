@@ -145,6 +145,8 @@ invalid frame-rate helper/reconfigure plus invalid runtime rate,
 latency/slice, output/header/preset, RTP re-entry payload-size, and
 packetization updates that leave config, queued-IDR state, RTP cadence, packets,
 and callbacks intact,
+accepted bitrate, frame-rate, and RTP payload-size setter updates preserving a
+queued IDR until an IDR is emitted,
 `SetRTPMaxPayloadSize` live RTP FU-A retargeting before the next P-frame with
 sequence/decode continuity and invalid-update rollback,
 runtime `RecoveryPointSEI` toggles that add, suppress, and restore changed-P

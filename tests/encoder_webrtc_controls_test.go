@@ -443,6 +443,61 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderValidSetterPreservesPendingIDR(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(*goh264.Encoder) error
+	}{
+		{name: "SetBitrate", call: func(enc *goh264.Encoder) error {
+			return enc.SetBitrate(800_000, 900_000)
+		}},
+		{name: "SetFrameRate", call: func(enc *goh264.Encoder) error {
+			return enc.SetFrameRate(60, 1)
+		}},
+		{name: "SetRTPMaxPayloadSize", call: func(enc *goh264.Encoder) error {
+			return enc.SetRTPMaxPayloadSize(1000)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+			}
+
+			enc.ForceIDR()
+			if !enc.PendingIDR() {
+				t.Fatalf("%s ForceIDR did not queue IDR", tt.name)
+			}
+			if err := tt.call(enc); err != nil {
+				t.Fatalf("%s valid update: %v", tt.name, err)
+			}
+			if !enc.PendingIDR() {
+				t.Fatalf("%s valid update cleared pending IDR", tt.name)
+			}
+
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.Y[0] ^= 0x31
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("%s Encode after valid setter: %v", tt.name, err)
+			}
+			if !second.IDR || enc.PendingIDR() {
+				t.Fatalf("%s post-valid-setter frame idr=%v pending=%v, want delivered IDR",
+					tt.name, second.IDR, enc.PendingIDR())
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+		})
+	}
+}
+
 func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 	tests := []struct {
 		name   string
