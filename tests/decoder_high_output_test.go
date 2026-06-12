@@ -775,6 +775,62 @@ func TestFrameAppendRawYUVHighErrorPreservesCallerBuffer(t *testing.T) {
 	}
 }
 
+func TestFrameAppendRawYUVMetadataErrorsPreserveCallerBuffer(t *testing.T) {
+	tests := []struct {
+		name  string
+		frame Frame
+		want  error
+	}{
+		{
+			name: "invalid-chroma-format",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 4,
+				BitDepthLuma: 8, BitDepthChroma: 8,
+			},
+			want: ErrInvalidData,
+		},
+		{
+			name: "unsupported-luma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 11, BitDepthChroma: 11,
+			},
+			want: ErrUnsupported,
+		},
+		{
+			name: "mismatched-chroma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: 10,
+			},
+			want: ErrUnsupported,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			byteDst, byteBefore := decoderPrefilledByteBuffer()
+			byteOut, err := tt.frame.AppendRawYUVBytesLE(byteDst)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("AppendRawYUVBytesLE error = %v, want %v", err, tt.want)
+			}
+			if len(byteOut) != len(byteDst) {
+				t.Fatalf("AppendRawYUVBytesLE output len = %d, want original len %d", len(byteOut), len(byteDst))
+			}
+			assertDecoderByteBufferUnchanged(t, byteDst, byteBefore)
+
+			sampleDst, sampleBefore := decoderPrefilledUint16Buffer()
+			sampleOut, err := tt.frame.AppendRawYUV16(sampleDst)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("AppendRawYUV16 error = %v, want %v", err, tt.want)
+			}
+			if len(sampleOut) != len(sampleDst) {
+				t.Fatalf("AppendRawYUV16 output len = %d, want original len %d", len(sampleOut), len(sampleDst))
+			}
+			assertDecoderUint16BufferUnchanged(t, sampleDst, sampleBefore)
+		})
+	}
+}
+
 func decoderPrefilledByteBuffer() ([]byte, []byte) {
 	backing := bytes.Repeat([]byte{0xcc}, 128)
 	prefix := []byte{0xde, 0xad, 0xbe, 0xef}

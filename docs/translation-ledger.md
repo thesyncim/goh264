@@ -61,7 +61,7 @@ metadata parses, keeping `ParseHeaders*` bounded to stored SPS/PPS metadata.
 Public raw-frame output now also has an external-package nil-frame contract
 covering `BytesPerSample`, `RawPixelFormat`, `RawYUVSize`, `AppendRawYUV`,
 `AppendRawYUVBytesLE`, and `AppendRawYUV16`: each rejects the nil receiver with
-`ErrInvalidData`, classifies invalid chroma and bit-depth metadata as `ErrInvalidData` versus unsupported depth combinations as `ErrUnsupported`, preserves caller buffers, and does not panic.
+`ErrInvalidData`, classifies invalid chroma and bit-depth metadata as `ErrInvalidData` versus unsupported depth combinations as `ErrUnsupported`, preserves caller buffers on those metadata errors, and does not panic.
 `DecodeAVCFramesWithConfigurationRecord` now has direct recovery evidence that a
 malformed replacement avcC record is rejected before it overwrites the last good
 stored configured-AVC state.
