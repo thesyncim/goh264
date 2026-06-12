@@ -220,8 +220,11 @@ Configured AVC and Annex B delayed-output guards also overwrite caller-owned
 compressed packet buffers after each decode call before flushing delayed frames,
 proving delayed output does not retain input packet storage.
 
-Encoder readiness evidence currently covers controls, parameter-set headers,
-recovery-point SEI packaging, and the first IDR frame writer:
+Encoder readiness evidence currently covers the admitted realtime/WebRTC subset:
+runtime controls, parameter-set headers, recovery-point SEI packaging, IDR
+IntraPCM, identical-reference P-skip, bounded exact P16x16 no-residual
+prediction, changed-frame P IntraPCM recovery pictures, Annex B/AVC output, and
+RTP packetization modes 0 and 1:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 guards public input/result/callback surfaces for integration-facing encoder
 structs, including `EncoderConfig.Normalize`, `EncoderConfig.I420Frame`,

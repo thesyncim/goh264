@@ -9,16 +9,17 @@ parameter-set and recovery-point SEI writers follow FFmpeg `n8.0.1`
 `libavcodec/cbs_h264_syntax_template.c` syntax order; recovery-point SEI
 defaults mirror the FFmpeg VAAPI/Vulkan encoder shape for I-picture recovery
 points (`recovery_frame_cnt=0`, exact-match set, broken-link only when B-frame
-chains exist). The first encoder frame bitstream path is an 8-bit I420
-Constrained Baseline IDR IntraPCM slice writer following FFmpeg CBS H.264 slice
-header and reference-marking syntax order; the first P path is guarded CAVLC
-P-skip for identical frames after a reference when deblocking is disabled.
-RTP packet header emission follows FFmpeg `libavformat/rtpenc.c`
-`ff_rtp_send_data()` field order and H.264 RTP payload boundaries follow
-`libavformat/rtpenc_h264_hevc.c`; changed-frame P prediction, rate-control, and
-production encoder claims do not exist yet. Encoder work must land behind its
-own controls, oracles, and release evidence while the decoder production bar
-stays green.
+chains exist). The admitted encoder bitstream path is still a narrow 8-bit I420
+Constrained Baseline subset: IDR IntraPCM, identical-reference CAVLC P-skip,
+bounded exact P16x16 no-residual prediction, changed-frame P IntraPCM recovery
+pictures, Annex B/AVC access-unit output, configured multi-slice output, and
+RTP packetization modes 0 and 1. Slice headers and reference-marking syntax
+follow FFmpeg CBS H.264 ordering; RTP packet header emission follows FFmpeg
+`libavformat/rtpenc.c` `ff_rtp_send_data()` field order and H.264 RTP payload
+boundaries follow `libavformat/rtpenc_h264_hevc.c`. General residual P coding,
+broader motion search, adaptive rate-control feedback, and production encoder
+parity claims remain pending. Encoder work must land behind its own controls,
+oracles, and release evidence while the decoder production bar stays green.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
