@@ -193,6 +193,38 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 	}
 }
 
+func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
+	readmeData, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	scriptData, err := os.ReadFile("scripts/h264-encoder-release-evidence.sh")
+	if err != nil {
+		t.Fatalf("read encoder release evidence script: %v", err)
+	}
+	readme := string(readmeData)
+	script := string(scriptData)
+	for _, phrase := range []string{
+		"API-surface",
+		"residual-boundary",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md encoder release evidence text missing %q", phrase)
+		}
+	}
+	for _, phrase := range []string{
+		"encoder-api-surfaces",
+		"TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData",
+		"TestEncoderReconfigureZeroScalarFieldsAreNoOps",
+		"TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata",
+		"TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata",
+	} {
+		if !strings.Contains(script, phrase) {
+			t.Fatalf("encoder release evidence script missing API-surface gate phrase %q", phrase)
+		}
+	}
+}
+
 func TestREADMEEncoderRTPDataSurfaceDocumentsPacketBytes(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {

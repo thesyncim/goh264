@@ -704,8 +704,8 @@ No tag should be treated as production until a release-evidence pass proves:
 - `scripts/h264-performance-evidence.sh` creates the local performance bundle
   with JSON benchmark output plus CPU/heap profiles.
 - `scripts/h264-encoder-release-evidence.sh` is green for the admitted
-  realtime/WebRTC encoder vet, contract, writer, allocation, and benchmark
-  gates.
+  realtime/WebRTC encoder vet, contract, API-surface, residual-boundary,
+  writer, allocation, and benchmark gates.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until
