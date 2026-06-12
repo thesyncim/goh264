@@ -681,23 +681,46 @@ func TestPacketGlobalSideDataRejectsNonExactRationals(t *testing.T) {
 }
 
 func TestPacketReferenceDisplaysRejectsInvalidNativeLayout(t *testing.T) {
-	frame, err := NewDecoder().DecodePacket(Packet{
-		Data: decodeHexFixture(t, black16AnnexBHex),
-		SideData: []PacketSideData{{
-			Type: PacketSideData3DReferenceDisplays,
-			Data: []byte{
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "offset beyond payload",
+			data: []byte{
 				12, 1, 9, 1,
 				0, 0, 0, 0,
 				0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 				12, 0, 0, 0, 0, 0, 0, 0,
 			},
-		}},
-	})
-	if err != nil {
-		t.Fatal(err)
+		},
+		{
+			name: "entry extent overflow",
+			data: func() []byte {
+				out := make([]byte, 36)
+				out[0], out[1], out[2], out[3] = 12, 1, 9, 2
+				binary.LittleEndian.PutUint64(out[8:16], 24)
+				binary.LittleEndian.PutUint64(out[16:24], ^uint64(0)/2+1)
+				return out
+			}(),
+		},
 	}
-	if frame.SideData.ReferenceDisplays != nil {
-		t.Fatalf("reference displays with invalid native offset accepted: %+v", frame.SideData.ReferenceDisplays)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			frame, err := NewDecoder().DecodePacket(Packet{
+				Data: decodeHexFixture(t, black16AnnexBHex),
+				SideData: []PacketSideData{{
+					Type: PacketSideData3DReferenceDisplays,
+					Data: tt.data,
+				}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if frame.SideData.ReferenceDisplays != nil {
+				t.Fatalf("reference displays with invalid native layout accepted: %+v", frame.SideData.ReferenceDisplays)
+			}
+		})
 	}
 }
 

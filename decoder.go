@@ -1013,8 +1013,11 @@ func referenceDisplaysFromPacketSideData(data []byte) (h264.AV3DReferenceDisplay
 		entrySize < referenceDisplayEntrySize {
 		return h264.AV3DReferenceDisplaysInfo{}, false
 	}
+	if entrySize > (^uint64(0)-entriesOffset)/uint64(count) {
+		return h264.AV3DReferenceDisplaysInfo{}, false
+	}
 	entriesEnd := entriesOffset + uint64(count)*entrySize
-	if entriesEnd < entriesOffset || entriesEnd > uint64(len(data)) {
+	if entriesEnd > uint64(len(data)) {
 		return h264.AV3DReferenceDisplaysInfo{}, false
 	}
 	out := h264.AV3DReferenceDisplaysInfo{
