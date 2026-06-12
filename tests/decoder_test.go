@@ -564,6 +564,7 @@ func TestDecodeAVCFramesWithConfigurationRecordEmptyPacketStoresConfiguration(t 
 	if len(samples) != 2 {
 		t.Fatalf("samples = %d, want 2", len(samples))
 	}
+	config = append([]byte(nil), config...)
 
 	dec := NewDecoder()
 	frames, err := dec.DecodeAVCFramesWithConfigurationRecord(config, nil)
@@ -573,10 +574,13 @@ func TestDecodeAVCFramesWithConfigurationRecordEmptyPacketStoresConfiguration(t 
 	if len(frames) != 0 {
 		t.Fatalf("empty configuration-record AVC packet frames = %d, want 0", len(frames))
 	}
+	for i := range config {
+		config[i] = 0xff
+	}
 
 	frames, err = dec.DecodeConfiguredAVCFrames(samples[0])
 	if err != nil {
-		t.Fatalf("DecodeConfiguredAVCFrames after empty configuration-record AVC packet: %v", err)
+		t.Fatalf("DecodeConfiguredAVCFrames after empty configuration-record AVC packet mutation: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
@@ -587,6 +591,7 @@ func TestDecodeAVCWithConfigurationRecordEmptyPacketStoresConfiguration(t *testi
 	if len(samples) != 2 {
 		t.Fatalf("samples = %d, want 2", len(samples))
 	}
+	config = append([]byte(nil), config...)
 
 	dec := NewDecoder()
 	frame, err := dec.DecodeAVCWithConfigurationRecord(config, nil)
@@ -596,10 +601,13 @@ func TestDecodeAVCWithConfigurationRecordEmptyPacketStoresConfiguration(t *testi
 	if frame != nil {
 		t.Fatalf("single-frame empty configuration-record AVC packet frame = %+v, want nil", frame)
 	}
+	for i := range config {
+		config[i] = 0xff
+	}
 
 	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
 	if err != nil {
-		t.Fatalf("DecodeConfiguredAVCFrames after single-frame empty configuration-record AVC packet: %v", err)
+		t.Fatalf("DecodeConfiguredAVCFrames after single-frame empty configuration-record AVC packet mutation: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
