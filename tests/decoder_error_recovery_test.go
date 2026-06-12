@@ -468,6 +468,56 @@ func TestParseHeadersAnnexBPreservesAVCLengthState(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestParseHeadersRejectPreservesAVCLengthState(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	headersAnnexB, _ := annexBParameterSetsAndPacket(t, data)
+	headersAVC := annexBToAVC(t, headersAnnexB, 2)
+	_, samples := annexBToAVCConfigAndSamples(t, data, 2)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	for _, tt := range []struct {
+		name  string
+		parse func(*Decoder) error
+	}{
+		{
+			name: "annexb",
+			parse: func(dec *Decoder) error {
+				damagedHeaders := firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS)
+				damagedHeaders = appendAnnexBNAL(damagedHeaders, []byte{0x60 | byte(h264.NALPPS)})
+				_, err := dec.ParseHeadersAnnexB(damagedHeaders)
+				return err
+			},
+		},
+		{
+			name: "avc",
+			parse: func(dec *Decoder) error {
+				damagedHeaders := annexBToAVC(t, firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS), 4)
+				damagedHeaders = appendAVCNALUnit(t, damagedHeaders, []byte{0x60 | byte(h264.NALPPS)}, 4)
+				_, err := dec.ParseHeadersAVC(damagedHeaders, 4)
+				return err
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			if _, err := dec.ParseHeadersAVC(headersAVC, 2); err != nil {
+				t.Fatalf("ParseHeadersAVC: %v", err)
+			}
+			if err := tt.parse(dec); err == nil {
+				t.Fatalf("damaged %s headers returned nil error", tt.name)
+			}
+
+			frames, err := dec.DecodeFrames(samples[0])
+			if err != nil {
+				t.Fatalf("DecodeFrames after damaged %s headers: %v", tt.name, err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+		})
+	}
+}
+
 func TestDecodeFramesRejectAVCConfigurationRecordPreservesStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
