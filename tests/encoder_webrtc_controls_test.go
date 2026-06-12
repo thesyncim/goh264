@@ -6180,6 +6180,13 @@ func TestEncoderRTPMode0OversizeRejectPreservesLiveState(t *testing.T) {
 					tt.name, recovered.RTPTime, nextFrame.PTS)
 			}
 			assertEncoderNALTypes(t, recovered.NALUnits, tt.wantNALs)
+			stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, recovered.RTPPackets)...)
+			if tt.wantIDR {
+				assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
+			} else {
+				assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+			}
 			assertEncoderRTPMode0RawNALPackets(t, recovered, 1200)
 			assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
 			if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
