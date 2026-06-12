@@ -21,8 +21,9 @@ const (
 // EncoderProfile selects H.264 profile syntax.
 //
 // NewEncoder currently admits EncoderProfileConstrainedBaseline and
-// EncoderProfileBaseline. Main and High are exported compatibility values for a
-// future wider encoder surface and currently validate as unsupported.
+// EncoderProfileBaseline. Main and High are exported control values for the
+// broader API surface, and NewEncoder returns ErrUnsupported for them until
+// those profiles are admitted.
 type EncoderProfile uint8
 
 const (
@@ -34,9 +35,9 @@ const (
 
 // EncoderEntropyMode selects entropy coding syntax.
 //
-// NewEncoder currently admits EncoderEntropyCAVLC. CABAC is exported as a
-// compatibility value for future wider profiles and currently validates as
-// unsupported.
+// NewEncoder currently admits EncoderEntropyCAVLC. CABAC is an exported control
+// value for the broader API surface, and NewEncoder returns ErrUnsupported for
+// it until that entropy mode is admitted.
 type EncoderEntropyMode uint8
 
 const (
@@ -73,8 +74,8 @@ const (
 // EncoderPreset selects speed/quality tradeoff policy.
 //
 // NewEncoder currently admits EncoderPresetRealtime only. Balanced and Quality
-// are exported compatibility values for future mode-decision work and currently
-// validate as unsupported.
+// are exported control values for the broader API surface, and NewEncoder
+// returns ErrUnsupported for them until they drive mode-decision work.
 type EncoderPreset uint8
 
 const maxEncoderRawNALListLen = maxInt / 64
@@ -750,12 +751,12 @@ func (sei EncoderSEI) Clone() EncoderSEI {
 
 // EncoderReconfigure contains optional runtime encoder updates.
 //
-// Non-zero scalar fields replace the matching EncoderConfig field. Pointer
-// fields update when non-nil, including explicit false or zero values where
-// valid. Limits is the preferred zero-capable grouped budget update. The
-// MaxFrameSizeLimit, MaxEncodeTimeUSLimit, and SliceMaxBytesLimit fields remain
-// compatibility zero-capable forms for the MaxFrameSize, MaxEncodeTimeUS, and
-// SliceMaxBytes scalar fields. Reconfigure validates the resulting
+// Scalar fields update when non-zero. Paired scalar fields, including
+// FrameRateNum/FrameRateDen and Width/Height, must be supplied together.
+// Pointer fields update when non-nil, including explicit false or zero values
+// where valid. Limits is the preferred zero-capable grouped budget update and
+// is applied after MaxFrameSize, MaxEncodeTimeUS, SliceMaxBytes, and their
+// pointer compatibility forms. Reconfigure validates the resulting
 // configuration before changing encoder state; invalid updates leave the
 // encoder unchanged. ForceIDR queues an IDR request even when no config field
 // changes.

@@ -189,6 +189,8 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 		"admitted control, budget",
 		"Zero scalar fields in `EncoderReconfigure` mean unchanged",
 		"pointer fields, grouped `Limits`, or dedicated setters",
+		"`FrameRateNum`/`FrameRateDen` and `Width`/`Height` must be supplied",
+		"When `Limits` is non-nil, it is applied after the individual budget",
 	} {
 		if !strings.Contains(readme, required) {
 			t.Fatalf("README.md encoder sample missing checked-control phrase %q", required)
@@ -425,6 +427,7 @@ func TestPublicCommentsDocumentStateLifecycleBoundaries(t *testing.T) {
 		"ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,\n// resets decoder picture state",
 		"ConfigureAVCC parses an avcC record, stores it for configured-AVC decode\n// calls, resets decoder picture state",
 		"ConfigureAVCC is the preferred short avcC API",
+		"InspectAVCC is the preferred short stateless avcC name",
 	} {
 		if !strings.Contains(decoder, phrase) {
 			t.Fatalf("decoder public comments missing lifecycle phrase %q", phrase)
@@ -469,7 +472,8 @@ func TestREADMEDecoderAVCCPreferredNamesTable(t *testing.T) {
 		"`DecodeConfiguredAVCFrames`",
 		"Update avcC, decode one packet, then drain delayed output",
 		"`DecodeAVCCFrames`",
-		"Compatibility aliases",
+		"Equivalent or compatibility names",
+		"Single-frame helper",
 		"decoder `ParseAVCC`",
 		"package `ParseAVCC`",
 	} {

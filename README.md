@@ -240,22 +240,23 @@ Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are transactional:
 partially parsed SPS/PPS state is not committed over a previous valid
 configuration, and delayed configured-AVC B-frame output remains available for
 flush after the rejected parse.
-Decoder `ConfigureAVCDecoderConfigurationRecord` and `ConfigureAVCC` store the
-configuration for later configured-AVC decode; decoder
-`ParseAVCDecoderConfigurationRecord` and `ParseAVCC` remain compatibility
-aliases. Package-level `InspectAVCC` and `InspectAVCDecoderConfigurationRecord`
-are the preferred stateless names; package-level `ParseAVCC` and
-`ParseAVCDecoderConfigurationRecord` remain compatibility aliases that parse the
-same metadata without mutating decoder state.
+Decoder `ConfigureAVCC` stores the configuration for later configured-AVC
+decode; `ConfigureAVCDecoderConfigurationRecord` is the equivalent long-form
+name, and decoder `ParseAVCDecoderConfigurationRecord` and `ParseAVCC` remain
+compatibility aliases. Package-level `InspectAVCC` is the preferred stateless
+name; `InspectAVCDecoderConfigurationRecord` is the equivalent long-form name,
+and package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` remain
+compatibility aliases that parse the same metadata without mutating decoder
+state.
 
 Preferred avcC names:
 
-| Need | Preferred | Compatibility aliases |
-| --- | --- | --- |
-| Stateless avcC metadata inspection | `InspectAVCC` | `InspectAVCDecoderConfigurationRecord`, package `ParseAVCC`, package `ParseAVCDecoderConfigurationRecord` |
-| Store avcC for configured-AVC streaming | `ConfigureAVCC` | decoder `ConfigureAVCDecoderConfigurationRecord`, decoder `ParseAVCC`, decoder `ParseAVCDecoderConfigurationRecord` |
-| Decode with already stored avcC | `DecodeConfiguredAVCFrames` | `DecodeConfiguredAVC` for exactly one output frame |
-| Update avcC, decode one packet, then drain delayed output | `DecodeAVCCFrames` | `DecodeAVCFramesWithConfigurationRecord`, `DecodeAVCC` for exactly one output frame |
+| Need | Preferred | Equivalent or compatibility names | Single-frame helper |
+| --- | --- | --- | --- |
+| Stateless avcC metadata inspection | `InspectAVCC` | `InspectAVCDecoderConfigurationRecord`, package `ParseAVCC`, package `ParseAVCDecoderConfigurationRecord` | n/a |
+| Store avcC for configured-AVC streaming | `ConfigureAVCC` | decoder `ConfigureAVCDecoderConfigurationRecord`, decoder `ParseAVCC`, decoder `ParseAVCDecoderConfigurationRecord` | n/a |
+| Decode with already stored avcC | `DecodeConfiguredAVCFrames` | n/a | `DecodeConfiguredAVC` |
+| Update avcC, decode one packet, then drain delayed output | `DecodeAVCCFrames` | `DecodeAVCFramesWithConfigurationRecord` | `DecodeAVCC` |
 
 Packet side-data support mirrors FFmpeg-facing surfaces used by the port:
 
@@ -480,7 +481,9 @@ that are currently intended to be stable enough for integration work:
   bundled multi-field changes, grouped `Limits`, and explicit force-IDR
   requests. Zero scalar fields in `EncoderReconfigure` mean unchanged; use
   pointer fields, grouped `Limits`, or dedicated setters when zero is the value
-  to apply.
+  to apply. `FrameRateNum`/`FrameRateDen` and `Width`/`Height` must be supplied
+  as pairs. When `Limits` is non-nil, it is applied after the individual budget
+  fields and their pointer compatibility forms.
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
