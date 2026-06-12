@@ -232,18 +232,35 @@ func TestEncoderSTAPASizeRejectsMalformedParameterSets(t *testing.T) {
 }
 
 func TestAppendEncoderSTAPARejectsMalformedParameterSetWithoutMutation(t *testing.T) {
-	dst := []byte{0xaa, 0xbb}
-	before := append([]byte(nil), dst...)
-	nals := []encoderRawNAL{
-		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
-		{parameterSet: true},
-	}
-	got, count, err := appendEncoderSTAPA(dst, nals, 1200)
-	if !errors.Is(err, ErrInvalidData) || count != 0 || len(got) != len(dst) {
-		t.Fatalf("appendEncoderSTAPA malformed got len=%d count=%d err=%v, want original buffer, count 0, ErrInvalidData", len(got), count, err)
-	}
-	if !bytes.Equal(dst, before) {
-		t.Fatalf("appendEncoderSTAPA malformed mutated caller buffer: got %x want %x", dst, before)
+	for _, tt := range []struct {
+		name string
+		nals []encoderRawNAL
+	}{
+		{
+			name: "empty",
+			nals: []encoderRawNAL{
+				{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
+				{parameterSet: true},
+			},
+		},
+		{
+			name: "oversized",
+			nals: []encoderRawNAL{
+				{raw: fakeEncoderBytesLen(0x10000), parameterSet: true},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dst := []byte{0xaa, 0xbb}
+			before := append([]byte(nil), dst...)
+			got, count, err := appendEncoderSTAPA(dst, tt.nals, 0x10010)
+			if !errors.Is(err, ErrInvalidData) || count != 0 || len(got) != len(dst) {
+				t.Fatalf("appendEncoderSTAPA malformed got len=%d count=%d err=%v, want original buffer, count 0, ErrInvalidData", len(got), count, err)
+			}
+			if !bytes.Equal(dst, before) {
+				t.Fatalf("appendEncoderSTAPA malformed mutated caller buffer: got %x want %x", dst, before)
+			}
+		})
 	}
 }
 
