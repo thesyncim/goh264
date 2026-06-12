@@ -267,9 +267,11 @@ err = enc.SetResolution(640, 480)
 err = enc.SetDeblockMode(goh264.EncoderDeblockDisabled)
 err = enc.SetRTPMaxPayloadSize(1200)
 err = enc.SetMaxFrameSize(0)    // disable the access-unit byte budget
+err = enc.SetSliceCount(2)
 err = enc.SetSliceMaxBytes(0)   // disable the per-slice byte budget
 err = enc.SetMaxEncodeTimeUS(0) // disable the late-frame time budget
 err = enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand)
+err = enc.SetSPSPPSBeforeIDR(false)
 err = enc.SetRecoveryPointSEI(true)
 err = enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false)
 err = enc.SetRTPMetadata(110, 0x11223344)
@@ -314,7 +316,8 @@ that are currently intended to be stable enough for integration work:
   the corresponding budget.
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
   `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
-  `SetDeblockMode`, `SetSPSPPSMode`, `SetRecoveryPointSEI`,
+  `SetDeblockMode`, `SetSliceCount`, `SetSPSPPSMode`,
+  `SetSPSPPSBeforeIDR`, `SetRecoveryPointSEI`,
   `SetOutputFormat`, `SetRTPPacketizationMode`, and `SetRTPMetadata` cover
   common quality, budget, geometry, output, cadence, packetization, and RTP
   header changes without constructing an `EncoderReconfigure` value. `SetQP`,

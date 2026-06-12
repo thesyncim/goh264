@@ -1363,6 +1363,13 @@ func (e *Encoder) SetMaxEncodeTimeUS(us int) error {
 	return nil
 }
 
+// SetSliceCount updates the number of VCL slices emitted per frame.
+//
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetSliceCount(count int) error {
+	return e.Reconfigure(EncoderReconfigure{SliceCount: count})
+}
+
 // SetDeblockMode updates the runtime deblocking mode.
 //
 // Invalid updates leave the encoder configuration and coding state unchanged.
@@ -1375,6 +1382,13 @@ func (e *Encoder) SetDeblockMode(mode EncoderDeblockMode) error {
 // Invalid updates leave the encoder configuration and coding state unchanged.
 func (e *Encoder) SetSPSPPSMode(mode EncoderSPSPPSMode) error {
 	return e.Reconfigure(EncoderReconfigure{SPSPPSMode: mode})
+}
+
+// SetSPSPPSBeforeIDR enables or disables SPS/PPS emission before IDR pictures.
+//
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetSPSPPSBeforeIDR(enabled bool) error {
+	return e.Reconfigure(EncoderReconfigure{SPSPPSBeforeIDR: &enabled})
 }
 
 // SetRecoveryPointSEI enables or disables recovery-point SEI emission for

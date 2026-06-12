@@ -461,11 +461,17 @@ func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 		{name: "SetMaxEncodeTimeUS", call: func() error {
 			return enc.SetMaxEncodeTimeUS(0)
 		}},
+		{name: "SetSliceCount", call: func() error {
+			return enc.SetSliceCount(1)
+		}},
 		{name: "SetDeblockMode", call: func() error {
 			return enc.SetDeblockMode(goh264.EncoderDeblockDisabled)
 		}},
 		{name: "SetSPSPPSMode", call: func() error {
 			return enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand)
+		}},
+		{name: "SetSPSPPSBeforeIDR", call: func() error {
+			return enc.SetSPSPPSBeforeIDR(false)
 		}},
 		{name: "SetRecoveryPointSEI", call: func() error {
 			return enc.SetRecoveryPointSEI(false)
@@ -843,8 +849,14 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		t.Fatalf("disabled runtime limits = frame %d slice %d time %d, want zeroes",
 			got.MaxFrameSize, got.SliceMaxBytes, got.MaxEncodeTimeUS)
 	}
+	if err := enc.SetSliceCount(2); err != nil {
+		t.Fatalf("SetSliceCount valid: %v", err)
+	}
 	if err := enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand); err != nil {
 		t.Fatalf("SetSPSPPSMode valid: %v", err)
+	}
+	if err := enc.SetSPSPPSBeforeIDR(false); err != nil {
+		t.Fatalf("SetSPSPPSBeforeIDR valid: %v", err)
 	}
 	if err := enc.SetRecoveryPointSEI(false); err != nil {
 		t.Fatalf("SetRecoveryPointSEI valid: %v", err)
@@ -855,14 +867,16 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 	if err := enc.SetRTPMetadata(110, 0x11223344); err != nil {
 		t.Fatalf("SetRTPMetadata valid: %v", err)
 	}
-	if got := enc.Config(); got.SPSPPSMode != goh264.EncoderSPSPPSOutOfBand ||
+	if got := enc.Config(); got.SliceCount != 2 ||
+		got.SPSPPSMode != goh264.EncoderSPSPPSOutOfBand ||
+		got.SPSPPSBeforeIDR ||
 		got.RecoveryPointSEI ||
 		got.RTPPacketizationMode != goh264.EncoderRTPPacketizationSingleNAL ||
 		got.STAPA ||
 		got.RTPPayloadType != 110 ||
 		got.RTPSSRC != 0x11223344 {
-		t.Fatalf("explicit runtime controls = spspps %v recovery %v packetization %v stapa %v payload %d ssrc %#x, want out-of-band/false/mode0/false/110/0x11223344",
-			got.SPSPPSMode, got.RecoveryPointSEI, got.RTPPacketizationMode, got.STAPA, got.RTPPayloadType, got.RTPSSRC)
+		t.Fatalf("explicit runtime controls = slices %d spspps %v before-idr %v recovery %v packetization %v stapa %v payload %d ssrc %#x, want 2/out-of-band/false/false/mode0/false/110/0x11223344",
+			got.SliceCount, got.SPSPPSMode, got.SPSPPSBeforeIDR, got.RecoveryPointSEI, got.RTPPacketizationMode, got.STAPA, got.RTPPayloadType, got.RTPSSRC)
 	}
 	enc.ForceIDR()
 	if !enc.PendingIDR() {
@@ -970,6 +984,9 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 		}},
 		{name: "SetMaxEncodeTimeUS", call: func(enc *goh264.Encoder) error {
 			return enc.SetMaxEncodeTimeUS(-1)
+		}},
+		{name: "SetSliceCount", call: func(enc *goh264.Encoder) error {
+			return enc.SetSliceCount(-1)
 		}},
 		{name: "SetSPSPPSMode", call: func(enc *goh264.Encoder) error {
 			return enc.SetSPSPPSMode(goh264.EncoderSPSPPSMode(99))
@@ -13137,7 +13154,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 		"SetFrameDropMode", "SetQP", "SetFrameRate", "SetRTPTimestampIncrement",
 		"SetGOP", "SetResolution", "SetDeblockMode", "SetRTPMaxPayloadSize",
 		"SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
-		"SetSPSPPSMode", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
+		"SetSliceCount", "SetSPSPPSMode", "SetSPSPPSBeforeIDR", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
 		"SetRTPMetadata", "SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
