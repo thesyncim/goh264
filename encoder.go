@@ -58,6 +58,8 @@ const (
 
 type EncoderPreset uint8
 
+const maxEncoderRawNALListLen = maxInt / 64
+
 const (
 	EncoderPresetRealtime EncoderPreset = iota + 1
 	EncoderPresetBalanced
@@ -1709,6 +1711,9 @@ func validateEncoderPlaneGeometry(width int, height int, strideY int, strideCb i
 }
 
 func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []encoderRawNAL) ([]byte, []EncoderNALUnit, error) {
+	if len(nals) > maxEncoderRawNALListLen {
+		return dst, nil, encoderInvalid("encoder NAL count overflows")
+	}
 	units := make([]EncoderNALUnit, 0, len(nals))
 	for _, nal := range nals {
 		if len(nal.raw) == 0 {
@@ -1749,6 +1754,9 @@ func appendEncoderAccessUnit(dst []byte, format EncoderOutputFormat, nals []enco
 }
 
 func encoderAccessUnitOutputSize(format EncoderOutputFormat, nals []encoderRawNAL) (int, error) {
+	if len(nals) > maxEncoderRawNALListLen {
+		return 0, encoderInvalid("encoder NAL count overflows")
+	}
 	var size int
 	for _, nal := range nals {
 		if len(nal.raw) == 0 {
@@ -2035,6 +2043,9 @@ func packetizeEncoderRTPMode1(nals []encoderRawNAL, maxPayloadSize int, timestam
 }
 
 func encoderRawNALPayloadStorageSize(nals []encoderRawNAL) (int, error) {
+	if len(nals) > maxEncoderRawNALListLen {
+		return 0, encoderInvalid("encoder NAL count overflows")
+	}
 	size := 0
 	for _, nal := range nals {
 		next, err := checkedAddInt(size, len(nal.raw))
@@ -2047,6 +2058,9 @@ func encoderRawNALPayloadStorageSize(nals []encoderRawNAL) (int, error) {
 }
 
 func encoderRTPMode1StoragePlan(nals []encoderRawNAL, maxPayloadSize int, stapa bool) (int, int, error) {
+	if len(nals) > maxEncoderRawNALListLen {
+		return 0, 0, encoderInvalid("encoder NAL count overflows")
+	}
 	packetCount := 0
 	payloadSize := 0
 	for i := 0; i < len(nals); {

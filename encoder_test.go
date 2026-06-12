@@ -95,12 +95,35 @@ func TestEncoderAccessUnitOutputSizeRejectsOverflow(t *testing.T) {
 	}
 }
 
+func TestEncoderAccessUnitHelpersRejectOverflowedNALCount(t *testing.T) {
+	nals := fakeEncoderRawNALLen(maxEncoderRawNALListLen + 1)
+	if _, _, err := appendEncoderAccessUnit(nil, EncoderOutputAnnexB, nals); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("appendEncoderAccessUnit NAL-count overflow error = %v, want ErrInvalidData", err)
+	}
+	if _, err := encoderAccessUnitOutputSize(EncoderOutputAnnexB, nals); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("encoderAccessUnitOutputSize NAL-count overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestEncoderRTPMode1StoragePlanRejectsOverflow(t *testing.T) {
 	nals := []encoderRawNAL{
 		{raw: fakeEncoderBytesLen(maxInt - 1)},
 	}
 	if _, _, err := encoderRTPMode1StoragePlan(nals, 3, false); !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("encoderRTPMode1StoragePlan overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestEncoderRTPStorageHelpersRejectOverflowedNALCount(t *testing.T) {
+	nals := fakeEncoderRawNALLen(maxEncoderRawNALListLen + 1)
+	if _, err := encoderRawNALPayloadStorageSize(nals); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("encoderRawNALPayloadStorageSize NAL-count overflow error = %v, want ErrInvalidData", err)
+	}
+	if _, _, err := encoderRTPMode1StoragePlan(nals, 3, false); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("encoderRTPMode1StoragePlan NAL-count overflow error = %v, want ErrInvalidData", err)
+	}
+	if _, err := packetizeEncoderRTPSingleNAL(nals, 1, 0); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("packetizeEncoderRTPSingleNAL NAL-count overflow error = %v, want ErrInvalidData", err)
 	}
 }
 
@@ -436,6 +459,18 @@ func fakeEncoderBytesLen(n int) []byte {
 	var b byte
 	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(&b)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeEncoderRawNALLen(n int) []encoderRawNAL {
+	if n <= 0 {
+		return nil
+	}
+	raw := encoderRawNAL{raw: []byte{1}}
+	return *(*[]encoderRawNAL)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&raw)),
 		Len:  n,
 		Cap:  n,
 	}))
