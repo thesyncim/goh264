@@ -3421,6 +3421,7 @@ func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionWithConstantChroma(t *t
 			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
 
 			stream := append(append([]byte(nil), first.Data...), second.Data...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 			wantStream := appendI420FrameBytes(nil, firstFrame)
 			wantStream = appendI420FrameBytes(wantStream, secondFrame)
 			assertFFmpegRawVideoOracle(t, stream, wantStream)
@@ -3467,14 +3468,15 @@ func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP(t *testing
 			}
 			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
 
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
 			dec := goh264.NewDecoder()
 			var decodedFirst, decodedSecond []*goh264.Frame
+			stream := append([]byte(nil), headers.AnnexB...)
 			switch tt.format {
 			case goh264.EncoderOutputAVC:
-				headers, err := enc.ParameterSets()
-				if err != nil {
-					t.Fatalf("ParameterSets: %v", err)
-				}
 				if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
 					t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
 				}
@@ -3486,6 +3488,8 @@ func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP(t *testing
 				if err != nil {
 					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
 				}
+				stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
+				stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
 			case goh264.EncoderOutputRTP:
 				decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
 				if err != nil {
@@ -3495,6 +3499,8 @@ func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP(t *testing
 				if err != nil {
 					t.Fatalf("DecodeFrames second RTP: %v", err)
 				}
+				stream = append(stream, annexBFromEncoderRTPPackets(t, first.RTPPackets)...)
+				stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
 			default:
 				t.Fatalf("unexpected format %v", tt.format)
 			}
@@ -3504,6 +3510,7 @@ func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP(t *testing
 				t.Fatalf("decoded odd-pixel exact-motion P frame key=%v recovery=%+v, want predictive non-recovery frame",
 					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
 			}
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 		})
 	}
 }
@@ -3548,8 +3555,13 @@ func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
 			}
 			assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
 
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
 			dec := goh264.NewDecoder()
 			var decodedFirst, decodedSecond []*goh264.Frame
+			var stream []byte
 			switch tt.format {
 			case goh264.EncoderOutputAnnexB:
 				decodedFirst, err = dec.DecodeFrames(first.Data)
@@ -3560,11 +3572,8 @@ func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Decode odd-pixel patterned-chroma fallback: %v", err)
 				}
+				stream = append(append([]byte(nil), first.Data...), second.Data...)
 			case goh264.EncoderOutputAVC:
-				headers, err := enc.ParameterSets()
-				if err != nil {
-					t.Fatalf("ParameterSets: %v", err)
-				}
 				if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
 					t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
 				}
@@ -3576,6 +3585,9 @@ func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
 				if err != nil {
 					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
 				}
+				stream = append([]byte(nil), headers.AnnexB...)
+				stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
+				stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
 			case goh264.EncoderOutputRTP:
 				decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
 				if err != nil {
@@ -3585,6 +3597,9 @@ func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
 				if err != nil {
 					t.Fatalf("DecodeFrames second RTP: %v", err)
 				}
+				stream = append([]byte(nil), headers.AnnexB...)
+				stream = append(stream, annexBFromEncoderRTPPackets(t, first.RTPPackets)...)
+				stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
 			default:
 				t.Fatalf("unexpected format %v", tt.format)
 			}
@@ -3596,9 +3611,9 @@ func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
 				t.Fatalf("decoded odd-pixel fallback key=%v recovery=%+v, want immediate recovery point",
 					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
 			}
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 
 			if tt.ffmpeg {
-				stream := append(append([]byte(nil), first.Data...), second.Data...)
 				wantStream := appendI420FrameBytes(nil, firstFrame)
 				wantStream = appendI420FrameBytes(wantStream, secondFrame)
 				assertFFmpegRawVideoOracle(t, stream, wantStream)
@@ -3847,14 +3862,15 @@ func TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP(t *testing.T)
 			}
 			assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
 
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
 			dec := goh264.NewDecoder()
 			var decodedFirst, decodedSecond []*goh264.Frame
+			stream := append([]byte(nil), headers.AnnexB...)
 			switch tt.format {
 			case goh264.EncoderOutputAVC:
-				headers, err := enc.ParameterSets()
-				if err != nil {
-					t.Fatalf("ParameterSets: %v", err)
-				}
 				if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
 					t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
 				}
@@ -3866,6 +3882,8 @@ func TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP(t *testing.T)
 				if err != nil {
 					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
 				}
+				stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
+				stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
 			case goh264.EncoderOutputRTP:
 				if len(second.RTPPackets) < 2 || second.RTPPackets[0].Payload[0]&0x1f != 6 || second.RTPPackets[0].Marker {
 					t.Fatalf("second RTP packets do not lead with non-marker SEI: %+v", second.RTPPackets)
@@ -3878,6 +3896,8 @@ func TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP(t *testing.T)
 				if err != nil {
 					t.Fatalf("DecodeFrames reassembled second RTP: %v", err)
 				}
+				stream = append(stream, annexBFromEncoderRTPPackets(t, first.RTPPackets)...)
+				stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
 			default:
 				t.Fatalf("unexpected format %v", tt.format)
 			}
@@ -3889,6 +3909,7 @@ func TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP(t *testing.T)
 				t.Fatalf("decoded recovery side data key=%v recovery=%+v, want immediate recovery point",
 					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
 			}
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 		})
 	}
 }
