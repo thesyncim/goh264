@@ -439,6 +439,9 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 					tt.name, second.IDR, enc.PendingIDR())
 			}
 			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+			stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 		})
 	}
 }
@@ -494,6 +497,9 @@ func TestEncoderValidSetterPreservesPendingIDR(t *testing.T) {
 					tt.name, second.IDR, enc.PendingIDR())
 			}
 			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+			stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 		})
 	}
 }
@@ -567,6 +573,9 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 					tt.name, second.IDR, enc.PendingIDR())
 			}
 			assertEncoderNALTypes(t, second.NALUnits, tt.wantNALs)
+			stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 			if tt.wantRTPIncrement != 0 {
 				thirdFrame := secondFrame
 				thirdFrame.PTS = 0
@@ -741,6 +750,9 @@ func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 					tt.name, second.IDR, enc.PendingIDR())
 			}
 			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+			stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 		})
 	}
 }
