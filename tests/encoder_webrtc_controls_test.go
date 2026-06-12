@@ -4742,6 +4742,51 @@ func TestEncoderFrameDropLateDropsOverBudgetFrameWithoutAdvancingReferenceOrPack
 	if callbackCalls != firstPacketCount+len(pskip.RTPPackets) {
 		t.Fatalf("post-late-drop matching callbacks = %d, want %d", callbackCalls, firstPacketCount+len(pskip.RTPPackets))
 	}
+
+	callbacksAfterPSkip := callbackCalls
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxEncodeTimeUS: 1}); err != nil {
+		t.Fatalf("lower MaxEncodeTimeUS for forced IDR: %v", err)
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before late drop did not queue IDR")
+	}
+	forcedDropped, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode late-drop forced IDR: %v", err)
+	}
+	if !forcedDropped.Dropped || len(forcedDropped.Data) != 0 || len(forcedDropped.NALUnits) != 0 || len(forcedDropped.RTPPackets) != 0 {
+		t.Fatalf("late dropped forced IDR = %+v, want dropped metadata without output", forcedDropped)
+	}
+	if forcedDropped.RTPTime != pskip.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("late dropped forced IDR RTP time = %d, want %d", forcedDropped.RTPTime, pskip.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("late dropped forced IDR consumed pending IDR")
+	}
+	if callbackCalls != callbacksAfterPSkip {
+		t.Fatalf("late dropped forced IDR callbacks = %d, want still %d", callbackCalls, callbacksAfterPSkip)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxEncodeTimeUS: 10_000_000}); err != nil {
+		t.Fatalf("raise MaxEncodeTimeUS for forced IDR: %v", err)
+	}
+	forced, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode after late dropped forced IDR: %v", err)
+	}
+	if forced.Dropped || !forced.IDR || enc.PendingIDR() {
+		t.Fatalf("post-late-drop forced output dropped=%v idr=%v pending=%v, want transmitted IDR",
+			forced.Dropped, forced.IDR, enc.PendingIDR())
+	}
+	if forced.RTPTime != forcedDropped.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("post-late-drop forced RTP time = %d, want %d", forced.RTPTime, forcedDropped.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, forced.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, forced.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(callbacksAfterPSkip))
+	if callbackCalls != callbacksAfterPSkip+len(forced.RTPPackets) {
+		t.Fatalf("post-late-drop forced callbacks = %d, want %d", callbackCalls, callbacksAfterPSkip+len(forced.RTPPackets))
+	}
 }
 
 func TestEncoderEncodeRecoveryPointSEICanBeDisabled(t *testing.T) {
