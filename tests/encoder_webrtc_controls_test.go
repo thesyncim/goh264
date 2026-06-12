@@ -6365,6 +6365,10 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 			t.Fatalf("post-STAP-A-fallback callback meta[%d] = %+v, want single-NAL P-slice", i, meta)
 		}
 	}
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, fallback.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, recovered.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1}, []uint32{0, 1, 2})
 }
 
 func TestEncoderEncodeIntoLateDropPreservesCallerBuffer(t *testing.T) {
