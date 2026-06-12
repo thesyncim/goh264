@@ -228,6 +228,28 @@ func TestAppendNALRejectsOverflowedEscapedSize(t *testing.T) {
 	}
 }
 
+func TestAppendAVCPackagingRejectsOverflowedDestination(t *testing.T) {
+	dst := fakeRBSPBytesLen(maxInt)
+	if got, err := AppendAVCNAL(dst, 4, 3, NALSEI, nil); !errors.Is(err, ErrInvalidData) || len(got) != len(dst) {
+		t.Fatalf("AppendAVCNAL overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+
+	spsRaw, err := AppendNAL(nil, 3, NALSPS, testEncoderBaselineSPSRBSP(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ppsRaw, err := AppendNAL(nil, 3, NALPPS, testEncoderBaselinePPSRBSP(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := AppendAVCDecoderConfigurationRecord(dst, 66, 0xc0, 30, 4, [][]byte{spsRaw}, [][]byte{ppsRaw}); !errors.Is(err, ErrInvalidData) || len(got) != len(dst) {
+		t.Fatalf("AppendAVCDecoderConfigurationRecord overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+	if got, err := appendAVCConfigRawNAL(dst, spsRaw, NALSPS); !errors.Is(err, ErrInvalidData) || len(got) != len(dst) {
+		t.Fatalf("appendAVCConfigRawNAL overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+}
+
 func fakeRBSPBytesLen(n int) []byte {
 	if n <= 0 {
 		return nil

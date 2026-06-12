@@ -196,6 +196,9 @@ func AppendAVCNAL(dst []byte, nalLengthSize int, refIDC uint8, typ NALUnitType, 
 	if nalLengthSize < 1 || nalLengthSize > 4 {
 		return dst, ErrInvalidData
 	}
+	if _, err := checkedAddInt(len(dst), nalLengthSize); err != nil {
+		return dst, ErrInvalidData
+	}
 	start := len(dst)
 	for i := 0; i < nalLengthSize; i++ {
 		dst = append(dst, 0)
@@ -220,6 +223,9 @@ func AppendAVCDecoderConfigurationRecord(dst []byte, profileIDC uint8, profileCo
 	if nalLengthSize < 1 || nalLengthSize > 4 || len(spsNALs) == 0 || len(spsNALs) > 31 || len(ppsNALs) == 0 || len(ppsNALs) > 255 {
 		return dst, ErrInvalidData
 	}
+	if _, err := checkedAddInt(len(dst), 6); err != nil {
+		return dst, ErrInvalidData
+	}
 	start := len(dst)
 	dst = append(dst,
 		0x01,
@@ -236,6 +242,9 @@ func AppendAVCDecoderConfigurationRecord(dst []byte, profileIDC uint8, profileCo
 		}
 		dst = next
 	}
+	if _, err := checkedAddInt(len(dst), 1); err != nil {
+		return dst[:start], ErrInvalidData
+	}
 	dst = append(dst, byte(len(ppsNALs)))
 	for _, raw := range ppsNALs {
 		next, err := appendAVCConfigRawNAL(dst, raw, NALPPS)
@@ -249,6 +258,13 @@ func AppendAVCDecoderConfigurationRecord(dst []byte, profileIDC uint8, profileCo
 
 func appendAVCConfigRawNAL(dst []byte, raw []byte, wantType NALUnitType) ([]byte, error) {
 	if len(raw) == 0 || len(raw) > 0xffff || raw[0]&0x80 != 0 || NALUnitType(raw[0]&0x1f) != wantType {
+		return dst, ErrInvalidData
+	}
+	n, err := checkedAddInt(len(dst), 2)
+	if err != nil {
+		return dst, ErrInvalidData
+	}
+	if _, err := checkedAddInt(n, len(raw)); err != nil {
 		return dst, ErrInvalidData
 	}
 	dst = append(dst, byte(len(raw)>>8), byte(len(raw)))
