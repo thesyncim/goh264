@@ -230,7 +230,8 @@ proves encoded input-frame planes are not retained after `Encode` returns by
 mutating caller-owned first-frame storage before a matching second frame across
 Annex B, AVC, and RTP output,
 proves returned `Encode` results remain stable after later encodes across
-access-unit bytes, NAL metadata, and RTP packets,
+access-unit bytes, NAL metadata, and RTP packets, and proves returned RTP
+packets do not alias caller-backed `EncodeInto` access-unit data,
 verifies frame-shape validation returns
 empty output and leaves RTP sequence, callback, frame-number, timestamp, and
 reference state untouched before the next valid P-skip or queued IDR, proves

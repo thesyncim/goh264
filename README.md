@@ -103,7 +103,8 @@ including FU-A fragmentation and STAP-A parameter-set aggregation with callback
 metadata and packet isolation,
 payload-type/SSRC/sequence metadata, full RTP packet headers, marker-bit
 boundaries, clipped per-packet RTP payload views over packet data, RTP packet
-storage isolated from `EncodedFrame.Data`, oversize
+storage mutation-guarded as isolated from `EncodedFrame.Data`, including
+caller-backed `EncodeInto` output buffers, oversize
 mode-0 rejection, and optional RTP packet callbacks with
 packet index/count, frame timing, mode 0/1 IDR/P-frame single-NAL payload form,
 NAL type/count, FU-A start/end, parameter-set metadata, and callback packet

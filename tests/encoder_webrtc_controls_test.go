@@ -7776,6 +7776,49 @@ func TestEncoderEncodeIntoAppendsAndIndexesAfterPrefix(t *testing.T) {
 	}
 }
 
+func TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputRTP
+	cfg.RTPMaxPayloadSize = 32
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	dst := make([]byte, 0, 4096)
+	out, err := enc.EncodeInto(dst, patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("EncodeInto RTP: %v", err)
+	}
+	if len(out.Data) == 0 || len(out.RTPPackets) == 0 {
+		t.Fatalf("RTP output data/packets = %d/%d, want nonzero", len(out.Data), len(out.RTPPackets))
+	}
+	packetsBefore := cloneEncoderRTPPackets(out.RTPPackets)
+	for i := range out.Data {
+		out.Data[i] ^= 0xff
+	}
+	for i := range out.RTPPackets {
+		if !bytes.Equal(out.RTPPackets[i].Data, packetsBefore[i].Data) ||
+			!bytes.Equal(out.RTPPackets[i].Payload, packetsBefore[i].Payload) {
+			t.Fatalf("RTP packet[%d] aliases access-unit Data after Data mutation", i)
+		}
+	}
+
+	dataAfterMutation := append([]byte(nil), out.Data...)
+	for i := range out.RTPPackets {
+		if len(out.RTPPackets[i].Data) != 0 {
+			out.RTPPackets[i].Data[0] ^= 0xff
+		}
+		if len(out.RTPPackets[i].Payload) != 0 {
+			out.RTPPackets[i].Payload[0] ^= 0xff
+		}
+	}
+	if !bytes.Equal(out.Data, dataAfterMutation) {
+		t.Fatal("access-unit Data aliases returned RTP packet storage after packet mutation")
+	}
+}
+
 func TestEncoderDoesNotRetainInputFramePlanes(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
