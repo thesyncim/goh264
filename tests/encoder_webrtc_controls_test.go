@@ -1850,7 +1850,8 @@ func TestEncoderReconfigureDeblockModeControlsPFrameAdmission(t *testing.T) {
 	}
 
 	frame := patternedI420EncoderFrame(16, 16)
-	if _, err := enc.Encode(frame); err != nil {
+	first, err := enc.Encode(frame)
+	if err != nil {
 		t.Fatalf("Encode first IDR: %v", err)
 	}
 	secondFrame := frame
@@ -1892,6 +1893,11 @@ func TestEncoderReconfigureDeblockModeControlsPFrameAdmission(t *testing.T) {
 		t.Fatalf("slice-boundary frame idr=%v, want admitted P-skip", fourth.IDR)
 	}
 	assertEncoderNALTypes(t, fourth.NALUnits, []uint8{1})
+	stream := append([]byte(nil), first.Data...)
+	stream = append(stream, second.Data...)
+	stream = append(stream, third.Data...)
+	stream = append(stream, fourth.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 1, 1}, []uint32{0, 1, 2, 3})
 }
 
 func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *testing.T) {
@@ -2138,6 +2144,10 @@ func TestEncoderSPSPPSCadenceModesControlIDRHeaders(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewEncoder: %v", err)
 			}
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
 
 			frame := patternedI420EncoderFrame(16, 16)
 			first, err := enc.Encode(frame)
@@ -2159,6 +2169,10 @@ func TestEncoderSPSPPSCadenceModesControlIDRHeaders(t *testing.T) {
 				t.Fatalf("forced frame IDR/key = %v/%v, want IDR keyframe", forced.IDR, forced.KeyFrame)
 			}
 			assertEncoderNALTypes(t, forced.NALUnits, tt.wantIDRNAL)
+			stream := append([]byte(nil), headers.AnnexB...)
+			stream = append(stream, first.Data...)
+			stream = append(stream, forced.Data...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 		})
 	}
 }
