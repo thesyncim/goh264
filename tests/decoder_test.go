@@ -576,6 +576,35 @@ func TestDecodePacketFramesEmptyPacketIgnoresNewExtradata(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketEmptyPacketIgnoresNewExtradataWithoutDelayedFrame(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config4, samples4 := annexBToAVCConfigAndSamples(t, data, 4)
+	config3, _ := annexBToAVCConfigAndSamples(t, data, 3)
+	if len(samples4) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples4))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config4); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	}
+	frame, err := dec.DecodePacket(Packet{
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config3}},
+	})
+	if err != ErrUnsupported {
+		t.Fatalf("single-frame empty packet flush with NEW_EXTRADATA error = %v, want ErrUnsupported", err)
+	}
+	if frame != nil {
+		t.Fatalf("single-frame empty packet flush frame = %+v, want nil", frame)
+	}
+
+	frames, err := dec.DecodeConfiguredAVCFrames(samples4[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after single-frame empty packet NEW_EXTRADATA: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodePacketFramesNewExtradataDoesNotAliasCallerBuffers(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
