@@ -234,6 +234,17 @@ func TestEncoderReconfigureRejectsBitrateBudgetOverflowWithoutMutation(t *testin
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before overflow reconfigure did not queue IDR")
+	}
 	before := enc.Config()
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
 		TargetBitrate: maxIntForTest,
@@ -246,6 +257,24 @@ func TestEncoderReconfigureRejectsBitrateBudgetOverflowWithoutMutation(t *testin
 	if got := enc.Config(); got != before {
 		t.Fatalf("overflow bitrate-budget Reconfigure mutated config = %+v, want %+v", got, before)
 	}
+	if !enc.PendingIDR() {
+		t.Fatal("overflow bitrate-budget Reconfigure cleared pending IDR")
+	}
+
+	second, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode after overflow Reconfigure: %v", err)
+	}
+	if !second.IDR || enc.PendingIDR() {
+		t.Fatalf("post-overflow-Reconfigure frame idr=%v pending=%v, want delivered IDR",
+			second.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLFrameNums(t,
+		append(append([]byte(nil), first.Data...), second.Data...),
+		[]uint8{5, 5},
+		[]uint32{0, 1},
+	)
 }
 
 func TestEncoderSetFrameRateRejectsTimestampOverflowWithoutMutation(t *testing.T) {
