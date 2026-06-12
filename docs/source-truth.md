@@ -156,9 +156,9 @@ latency/slice, output/header/preset, RTP re-entry payload-size, and
 packetization updates that leave config, queued-IDR state, RTP cadence, packets,
 callbacks, and rejected bundled ForceIDR requests intact,
 accepted bitrate, frame-rate, RTP payload-size, max-frame-size, slice-byte,
-encode-time, and deblock setter or reconfigure updates, including SPS/PPS
-cadence and recovery-point toggles, preserving a queued IDR until an IDR is
-emitted,
+encode-time, output/cadence, RTP packetization, RTP metadata, and deblock
+setter or reconfigure updates, including SPS/PPS cadence and recovery-point
+toggles, preserving a queued IDR until an IDR is emitted,
 public `Encoder.Reset` preserving configuration and RTP callback while clearing
 reference, pending-IDR, frame-budget, RTP timestamp, and RTP sequence state
 before fresh-IDR reuse,

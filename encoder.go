@@ -1339,6 +1339,18 @@ func (e *Encoder) SetRTPPacketizationMode(mode EncoderRTPPacketizationMode, stap
 	})
 }
 
+// SetRTPMetadata updates the RTP payload type and SSRC metadata.
+//
+// A zero payload type keeps the EncoderConfig normalization rule and restores
+// the dynamic default payload type. Invalid updates leave the encoder
+// configuration and coding state unchanged.
+func (e *Encoder) SetRTPMetadata(payloadType uint8, ssrc uint32) error {
+	return e.Reconfigure(EncoderReconfigure{
+		RTPPayloadType: &payloadType,
+		RTPSSRC:        &ssrc,
+	})
+}
+
 // SetRTPPacketCallback installs an optional synchronous callback for emitted RTP
 // packets.
 //

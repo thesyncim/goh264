@@ -261,6 +261,7 @@ err = enc.SetMaxEncodeTimeUS(0) // disable the late-frame time budget
 err = enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand)
 err = enc.SetRecoveryPointSEI(true)
 err = enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false)
+err = enc.SetRTPMetadata(110, 0x11223344)
 err = enc.SetOutputFormat(goh264.EncoderOutputAVC) // queues an IDR boundary
 enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
 	// Optional per-packet WebRTC metadata hook.
@@ -300,13 +301,14 @@ that are currently intended to be stable enough for integration work:
 - `SetMaxFrameSize`, `SetSliceMaxBytes`, and `SetMaxEncodeTimeUS` provide
   explicit runtime setters for size and latency budgets; passing zero disables
   the corresponding budget.
-- `SetSPSPPSMode`, `SetRecoveryPointSEI`, `SetOutputFormat`, and
-  `SetRTPPacketizationMode` cover common output/cadence changes without
-  constructing an `EncoderReconfigure` value. `SetOutputFormat` queues an IDR
-  boundary after a valid update.
+- `SetSPSPPSMode`, `SetRecoveryPointSEI`, `SetOutputFormat`,
+  `SetRTPPacketizationMode`, and `SetRTPMetadata` cover common output,
+  cadence, packetization, and RTP header changes without constructing an
+  `EncoderReconfigure` value. `SetOutputFormat` queues an IDR boundary after a
+  valid update.
 - `EncoderReconfigure` remains the grouped low-level update surface for
-  resolution, QP, GOP, deblock, RTP header fields, and bundled force-IDR
-  changes.
+  resolution, QP, GOP, deblock, RTP timestamp increments, and bundled
+  force-IDR changes.
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP

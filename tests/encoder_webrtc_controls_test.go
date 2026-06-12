@@ -764,12 +764,17 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 	if err := enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false); err != nil {
 		t.Fatalf("SetRTPPacketizationMode valid: %v", err)
 	}
+	if err := enc.SetRTPMetadata(110, 0x11223344); err != nil {
+		t.Fatalf("SetRTPMetadata valid: %v", err)
+	}
 	if got := enc.Config(); got.SPSPPSMode != goh264.EncoderSPSPPSOutOfBand ||
 		got.RecoveryPointSEI ||
 		got.RTPPacketizationMode != goh264.EncoderRTPPacketizationSingleNAL ||
-		got.STAPA {
-		t.Fatalf("explicit runtime controls = spspps %v recovery %v packetization %v stapa %v, want out-of-band/false/mode0/false",
-			got.SPSPPSMode, got.RecoveryPointSEI, got.RTPPacketizationMode, got.STAPA)
+		got.STAPA ||
+		got.RTPPayloadType != 110 ||
+		got.RTPSSRC != 0x11223344 {
+		t.Fatalf("explicit runtime controls = spspps %v recovery %v packetization %v stapa %v payload %d ssrc %#x, want out-of-band/false/mode0/false/110/0x11223344",
+			got.SPSPPSMode, got.RecoveryPointSEI, got.RTPPacketizationMode, got.STAPA, got.RTPPayloadType, got.RTPSSRC)
 	}
 	enc.ForceIDR()
 	if !enc.PendingIDR() {
@@ -862,6 +867,9 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 		}},
 		{name: "SetRTPPacketizationMode", call: func(enc *goh264.Encoder) error {
 			return enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationMode(99), false)
+		}},
+		{name: "SetRTPMetadata", call: func(enc *goh264.Encoder) error {
+			return enc.SetRTPMetadata(128, 0x10203040)
 		}},
 	}
 	for _, tt := range tests {
@@ -1276,23 +1284,20 @@ func TestEncoderValidOutputReconfigurePreservesPendingIDR(t *testing.T) {
 		ssrc := uint32(0x10293847)
 		enc.ForceIDR()
 		if !enc.PendingIDR() {
-			t.Fatal("ForceIDR did not queue IDR before RTP metadata reconfigure")
+			t.Fatal("ForceIDR did not queue IDR before SetRTPMetadata")
 		}
-		if err := enc.Reconfigure(goh264.EncoderReconfigure{
-			RTPPayloadType: &payloadType,
-			RTPSSRC:        &ssrc,
-		}); err != nil {
-			t.Fatalf("Reconfigure RTP metadata: %v", err)
+		if err := enc.SetRTPMetadata(payloadType, ssrc); err != nil {
+			t.Fatalf("SetRTPMetadata: %v", err)
 		}
 		if !enc.PendingIDR() {
-			t.Fatal("RTP metadata reconfigure cleared pending IDR")
+			t.Fatal("SetRTPMetadata cleared pending IDR")
 		}
 
 		frame := patternedI420EncoderFrame(16, 16)
 		frame.Y[0] ^= 0x37
 		second, err := enc.Encode(frame)
 		if err != nil {
-			t.Fatalf("Encode after RTP metadata reconfigure: %v", err)
+			t.Fatalf("Encode after SetRTPMetadata: %v", err)
 		}
 		if second.Dropped || !second.IDR || enc.PendingIDR() {
 			t.Fatalf("RTP metadata frame dropped=%v idr=%v pending=%v, want delivered IDR",
@@ -13019,7 +13024,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize",
 		"SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
 		"SetSPSPPSMode", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
-		"SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",
+		"SetRTPMetadata", "SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
 			t.Fatalf("Encoder missing runtime control method %s", method)
