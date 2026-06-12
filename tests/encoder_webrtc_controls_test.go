@@ -11804,6 +11804,16 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 			},
 		},
 		{
+			name: "noncontiguous nal metadata",
+			frame: goh264.EncodedFrame{
+				Data: []byte{0, 0, 0, 1, 0x67, 0x42, 0x99, 0, 0, 0, 1, 0x68},
+				NALUnits: []goh264.EncoderNALUnit{
+					{Offset: 4, Size: 2},
+					{Offset: 11, Size: 1},
+				},
+			},
+		},
+		{
 			name: "short rtp packet",
 			frame: goh264.EncodedFrame{
 				RTPPackets: []goh264.EncoderRTPPacket{{Data: validPacket[:11], Payload: validPacket[12:]}},

@@ -504,8 +504,8 @@ func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 			Dropped:  true,
 		}, nil
 	}
-	for i := range frame.NALUnits {
-		if _, err := frame.NALData(i); err != nil {
+	if len(frame.NALUnits) != 0 {
+		if _, err := frame.AccessUnitData(); err != nil {
 			return EncodedFrame{}, err
 		}
 	}
