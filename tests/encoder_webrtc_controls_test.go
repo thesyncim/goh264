@@ -6146,6 +6146,7 @@ func TestEncoderEncodeRTPMode0EmitsSingleNALPackets(t *testing.T) {
 	assertEncoderRTPMode0RawNALPackets(t, out, cfg.RTPMaxPayloadSize)
 
 	annexB := annexBFromEncoderRTPPackets(t, out.RTPPackets)
+	assertEncoderVCLFrameNums(t, annexB, []uint8{5}, []uint32{0})
 	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(annexB)
 	if err != nil {
 		t.Fatalf("DecodeAnnexBFrames reassembled mode 0 RTP: %v", err)
@@ -6236,6 +6237,10 @@ func TestEncoderEncodeRTPMode0EmitsPFrameSingleNALPackets(t *testing.T) {
 			}
 			assertEncoderNALTypes(t, second.NALUnits, tt.wantNALs)
 			assertEncoderRTPMode0RawNALPackets(t, second, cfg.RTPMaxPayloadSize)
+
+			stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 
 			dec := goh264.NewDecoder()
 			decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
