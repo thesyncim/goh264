@@ -5906,9 +5906,9 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 	if err != nil {
 		t.Fatalf("NewEncoder STAP-A: %v", err)
 	}
-	var callbackCalls int
-	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
-		callbackCalls++
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	enc.SetRTPPacketCallback(func(_ goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackMetadata = append(callbackMetadata, meta)
 	})
 
 	frame := patternedI420EncoderFrame(16, 16)
@@ -5920,9 +5920,9 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 	if !first.IDR || enc.PendingIDR() {
 		t.Fatalf("first STAP-A frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
 	}
-	if len(first.RTPPackets) < 2 || callbackCalls != len(first.RTPPackets) {
+	if len(first.RTPPackets) < 2 || len(callbackMetadata) != len(first.RTPPackets) {
 		t.Fatalf("first STAP-A packets/callbacks = %d/%d, want multiple matching packets",
-			len(first.RTPPackets), callbackCalls)
+			len(first.RTPPackets), len(callbackMetadata))
 	}
 	if first.RTPPackets[0].Payload[0]&0x1f != 24 {
 		t.Fatalf("first STAP-A payload type = %d, want STAP-A", first.RTPPackets[0].Payload[0]&0x1f)
@@ -5962,8 +5962,29 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 		}
 	}
 	assertRTPPacketMetadata(t, fallback.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
-	if callbackCalls != firstPacketCount+len(fallback.RTPPackets) {
-		t.Fatalf("STAP-A fallback callbacks = %d, want %d", callbackCalls, firstPacketCount+len(fallback.RTPPackets))
+	if len(callbackMetadata) != firstPacketCount+len(fallback.RTPPackets) {
+		t.Fatalf("STAP-A fallback callbacks = %d, want %d", len(callbackMetadata), firstPacketCount+len(fallback.RTPPackets))
+	}
+	fallbackMetadata := callbackMetadata[firstPacketCount:]
+	for i, meta := range fallbackMetadata {
+		if meta.PacketIndex != i || meta.PacketCount != len(fallback.RTPPackets) ||
+			meta.FramePTS != nextFrame.PTS || meta.FrameDTS != nextFrame.PTS ||
+			meta.RTPTime != fallback.RTPTime || !meta.KeyFrame || !meta.IDR {
+			t.Fatalf("STAP-A fallback callback meta[%d] = %+v, want IDR packet timing/index fields", i, meta)
+		}
+		if meta.PayloadFormat == goh264.EncoderRTPPayloadSTAPA {
+			t.Fatalf("STAP-A fallback callback meta[%d] reported STAP-A: %+v", i, meta)
+		}
+		if meta.PayloadFormat != goh264.EncoderRTPPayloadSingleNAL &&
+			meta.PayloadFormat != goh264.EncoderRTPPayloadFUA {
+			t.Fatalf("STAP-A fallback callback meta[%d] payload format = %v, want single-NAL or FU-A", i, meta.PayloadFormat)
+		}
+		if meta.PayloadFormat == goh264.EncoderRTPPayloadFUA &&
+			meta.NALUnitType != 7 &&
+			meta.NALUnitType != 8 &&
+			meta.NALUnitType != 5 {
+			t.Fatalf("STAP-A fallback FU-A meta[%d] NAL type = %d, want SPS/PPS/IDR", i, meta.NALUnitType)
+		}
 	}
 	dec := goh264.NewDecoder()
 	decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
@@ -5995,9 +6016,9 @@ func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing
 	}
 	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
 	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount+len(fallback.RTPPackets)))
-	if callbackCalls != firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets) {
+	if len(callbackMetadata) != firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets) {
 		t.Fatalf("post-STAP-A-fallback callbacks = %d, want %d",
-			callbackCalls, firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets))
+			len(callbackMetadata), firstPacketCount+len(fallback.RTPPackets)+len(recovered.RTPPackets))
 	}
 }
 

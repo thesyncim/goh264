@@ -75,7 +75,7 @@ header and clipped-slice metadata guards, public NAL-unit metadata index guards
 for Annex B/AVC/RTP access-unit bytes including non-empty caller-buffer prefixes,
 caller-buffer preservation on RTP mode-0 rejection, mode-0 oversize queued-IDR
 and P-frame packetization rollback, small-payload STAP-A fallback to
-non-aggregated mode-1 packets, and Annex B/AVC/RTP bitrate-drop and
+non-aggregated mode-1 packets with callback payload metadata, and Annex B/AVC/RTP bitrate-drop and
 late-drop non-output paths, input-frame plane ownership guards after `Encode` returns,
 returned `Encode` result lifetime guards, `EncodeInto` RTP packet isolation from caller-backed output buffers, invalid frame-level keyframe requests rejected during preflight without mutating caller buffers or leaking into the next valid P-skip, overflowed caller-owned `EncodeInto` destination growth rejected after packet planning across Annex B/AVC/RTP without consuming queued IDR state or advancing RTP/callback state and with P-frame reference/frame-number preservation, queued IDR requests surviving public header/SEI helper calls, accepted bitrate/frame-rate/RTP-payload-size/deblock/SPS-PPS/recovery-point setter or reconfigure updates, invalid frame preflight, bitrate-drop, late-drop, invalid setter/reconfigure, and invalid recovery-point helper paths until a real IDR is emitted, invalid runtime-control, RTP packetization, and payload-type updates with bundled keyframe requests leaving both config and pending-IDR state unchanged, checked access-unit and RTP packet storage-size overflow rejection, and RTP packetization-mode 0 surfaces, including
 per-macroblock exact P16x16. The
