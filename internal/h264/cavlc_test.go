@@ -236,6 +236,93 @@ func TestCAVLCWriteResidualSyntaxPrimitivesRejectInvalid(t *testing.T) {
 	}
 }
 
+func TestCAVLCWriteResidualTrailingOnesRoundTripsThroughDecoder(t *testing.T) {
+	scan := cavlcIdentityScan()
+	for _, tt := range []struct {
+		name         string
+		block        [16]int32
+		predictedNnz int
+		wantCoeff    int
+	}{
+		{name: "empty"},
+		{
+			name:      "single positive",
+			block:     [16]int32{0: 1},
+			wantCoeff: 1,
+		},
+		{
+			name:         "sparse signs",
+			block:        [16]int32{0: -1, 2: 1},
+			predictedNnz: 2,
+			wantCoeff:    2,
+		},
+		{
+			name:         "three trailing ones",
+			block:        [16]int32{1: 1, 2: -1, 5: 1},
+			predictedNnz: 4,
+			wantCoeff:    3,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			totalCoeff, err := writeCAVLCResidualTrailingOnes(&bw, tt.block[:], 0, scan[:], 16, tt.predictedNnz)
+			if err != nil {
+				t.Fatalf("write residual: %v", err)
+			}
+			if totalCoeff != tt.wantCoeff {
+				t.Fatalf("totalCoeff = %d, want %d", totalCoeff, tt.wantCoeff)
+			}
+
+			gb := newBitReader(bw.Bytes())
+			var got [16]int32
+			decodedCoeff, err := decodeCAVLCResidual(&gb, got[:], 0, scan[:], nil, 16, tt.predictedNnz)
+			if err != nil {
+				t.Fatalf("decode written residual: %v", err)
+			}
+			if decodedCoeff != tt.wantCoeff {
+				t.Fatalf("decoded totalCoeff = %d, want %d", decodedCoeff, tt.wantCoeff)
+			}
+			if got != tt.block {
+				t.Fatalf("decoded block = %v, want %v", got, tt.block)
+			}
+		})
+	}
+}
+
+func TestCAVLCWriteResidualTrailingOnesRejectsUnsupportedBlocks(t *testing.T) {
+	scan := cavlcIdentityScan()
+	for _, tt := range []struct {
+		name  string
+		block [16]int32
+	}{
+		{name: "level larger than one", block: [16]int32{0: 2}},
+		{name: "negative level smaller than minus one", block: [16]int32{0: -2}},
+		{name: "too many coefficients", block: [16]int32{0: 1, 1: -1, 2: 1, 3: -1}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			if _, err := writeCAVLCResidualTrailingOnes(&bw, tt.block[:], 0, scan[:], 16, 0); err != ErrInvalidData {
+				t.Fatalf("write residual error = %v, want ErrInvalidData", err)
+			}
+		})
+	}
+
+	var bw BitWriter
+	block := [16]int32{0: 1}
+	if _, err := writeCAVLCResidualTrailingOnes(nil, block[:], 0, scan[:], 16, 0); err != ErrInvalidData {
+		t.Fatalf("nil writer error = %v, want ErrInvalidData", err)
+	}
+	if _, err := writeCAVLCResidualTrailingOnes(&bw, block[:], 0, scan[:4], 16, 0); err != ErrInvalidData {
+		t.Fatalf("short scan error = %v, want ErrInvalidData", err)
+	}
+	if _, err := writeCAVLCResidualTrailingOnes(&bw, block[:], 0, scan[:], 17, 0); err != ErrInvalidData {
+		t.Fatalf("bad maxCoeff error = %v, want ErrInvalidData", err)
+	}
+	if _, err := writeCAVLCResidualTrailingOnes(&bw, block[:], 1, scan[:], 16, 0); err != ErrInvalidData {
+		t.Fatalf("block offset overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestCAVLCLevelTableMatchesFFmpegSpots(t *testing.T) {
 	cases := []struct {
 		suffix int

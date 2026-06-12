@@ -349,8 +349,9 @@ per-macroblock exact P16x16, odd-pixel patterned-chroma fallback, and 8-pixel
 exact-P16 edge search with `-benchmem`.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, CAVLC coeff-token/total-zeros/run-before
-VLC writer table round-trips through the existing decoder tables, Annex B/AVC
-NAL packaging, AVC decoder configuration records, baseline SPS/PPS,
+VLC writer table round-trips through the existing decoder tables, bounded CAVLC
+trailing-ones residual block writer round-trips through `decodeCAVLCResidual`,
+Annex B/AVC NAL packaging, AVC decoder configuration records, baseline SPS/PPS,
 recovery-point SEI syntax, and Baseline IDR, P-skip, and P16x16 no-residual
 slice syntax including
 per-macroblock MVD emission, with the P16x16 writer and public exact-motion
