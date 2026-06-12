@@ -388,7 +388,8 @@ enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRT
 headers, err := enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 avcc := headers.AVCC()
 sei, err := enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
-out, err := enc.Encode(frame)       // admitted path: IDR/P-skip/P16x16/P IntraPCM
+frame := enc.I420Frame(y, cb, cr, pts)
+out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
 if out.Dropped {
 	// Realtime budget drop: no bytes or RTP packets were emitted.
 }

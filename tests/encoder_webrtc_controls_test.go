@@ -58,6 +58,60 @@ func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
 	}
 }
 
+func TestEncoderI420FrameHelpersPopulateConfigFields(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.StrideY = 20
+	cfg.StrideCb = 10
+	cfg.StrideCr = 10
+	cfg.RTPTimestampIncrement = 1234
+	cfg.Color.FullRange = true
+	cfg.Color.ColorPrimaries = 1
+	cfg.Color.ColorTransfer = 1
+	cfg.Color.ColorMatrix = 1
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	y := make([]byte, cfg.StrideY*cfg.Height)
+	cb := make([]byte, cfg.StrideCb*(cfg.Height/2))
+	cr := make([]byte, cfg.StrideCr*(cfg.Height/2))
+	for i := range y {
+		y[i] = byte(i)
+	}
+	for i := range cb {
+		cb[i] = 0x80
+		cr[i] = 0x40
+	}
+
+	frame := cfg.I420Frame(y, cb, cr, 9000)
+	if frame.Width != cfg.Width || frame.Height != cfg.Height ||
+		frame.StrideY != cfg.StrideY || frame.StrideCb != cfg.StrideCb || frame.StrideCr != cfg.StrideCr ||
+		frame.PTS != 9000 || frame.Duration != int64(cfg.RTPTimestampIncrement) ||
+		frame.Color != cfg.Color ||
+		!bytes.Equal(frame.Y, y) || !bytes.Equal(frame.Cb, cb) || !bytes.Equal(frame.Cr, cr) {
+		t.Fatalf("config I420Frame = %+v, want config-derived frame", frame)
+	}
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	encoded, err := enc.Encode(enc.I420Frame(y, cb, cr, 9000))
+	if err != nil {
+		t.Fatalf("Encode I420Frame helper: %v", err)
+	}
+	if !encoded.IDR || encoded.PTS != 9000 || encoded.RTPTime != 9000 {
+		t.Fatalf("encoded helper frame = %+v, want IDR with input timing", encoded)
+	}
+	assertEncoderNALTypes(t, encoded.NALUnits, []uint8{7, 8, 5})
+
+	var nilEnc *goh264.Encoder
+	nilFrame := nilEnc.I420Frame(y, cb, cr, 7)
+	if nilFrame.Width != 0 || nilFrame.Height != 0 || nilFrame.PTS != 7 ||
+		!bytes.Equal(nilFrame.Y, y) || !bytes.Equal(nilFrame.Cb, cb) || !bytes.Equal(nilFrame.Cr, cr) {
+		t.Fatalf("nil encoder I420Frame = %+v, want planes and PTS only", nilFrame)
+	}
+}
+
 func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 	var enc *goh264.Encoder
 	if got := enc.Config(); got != (goh264.EncoderConfig{}) {
@@ -11315,11 +11369,14 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	for _, method := range []string{
 		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
 		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize",
-		"SetRTPPacketCallback", "Reconfigure",
+		"SetRTPPacketCallback", "Reconfigure", "I420Frame",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {
 			t.Fatalf("Encoder missing runtime control method %s", method)
 		}
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderConfig{}).MethodByName("I420Frame"); !ok {
+		t.Fatal("EncoderConfig missing I420Frame convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCC"); !ok {
 		t.Fatal("EncoderParameterSets missing AVCC convenience method")

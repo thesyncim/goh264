@@ -189,6 +189,24 @@ type EncoderFrame struct {
 	Color    EncoderColorConfig
 }
 
+// I420Frame returns an EncoderFrame populated from cfg dimensions, strides,
+// timing defaults, and color metadata.
+func (cfg EncoderConfig) I420Frame(y, cb, cr []byte, pts int64) EncoderFrame {
+	return EncoderFrame{
+		Y:        y,
+		Cb:       cb,
+		Cr:       cr,
+		StrideY:  cfg.StrideY,
+		StrideCb: cfg.StrideCb,
+		StrideCr: cfg.StrideCr,
+		Width:    cfg.Width,
+		Height:   cfg.Height,
+		PTS:      pts,
+		Duration: int64(cfg.RTPTimestampIncrement),
+		Color:    cfg.Color,
+	}
+}
+
 // EncoderNALUnit describes one H.264 NAL unit inside EncodedFrame.Data.
 //
 // Offset points at the NAL header byte, not at the Annex B start code or AVC
@@ -442,6 +460,15 @@ func (e *Encoder) Config() EncoderConfig {
 		return EncoderConfig{}
 	}
 	return e.cfg
+}
+
+// I420Frame returns an EncoderFrame populated from the current encoder
+// configuration.
+func (e *Encoder) I420Frame(y, cb, cr []byte, pts int64) EncoderFrame {
+	if e == nil {
+		return EncoderFrame{Y: y, Cb: cb, Cr: cr, PTS: pts}
+	}
+	return e.cfg.I420Frame(y, cb, cr, pts)
 }
 
 // ParameterSets returns SPS/PPS headers for the current encoder configuration.
