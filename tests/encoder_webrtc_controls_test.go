@@ -696,6 +696,10 @@ func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 			STAPA:                &stapa,
 		}, wantErr: goh264.ErrUnsupported},
 		{name: "bad RTP payload type", update: goh264.EncoderReconfigure{RTPPayloadType: &badPayloadType}, wantErr: goh264.ErrInvalidData},
+		{name: "timestamp increment with bad RTP payload type", update: goh264.EncoderReconfigure{
+			RTPTimestampIncrement: 1234,
+			RTPPayloadType:        &badPayloadType,
+		}, wantErr: goh264.ErrInvalidData},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
