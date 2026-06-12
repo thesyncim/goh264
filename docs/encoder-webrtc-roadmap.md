@@ -59,8 +59,10 @@ cadence, deblock mode, SPS/PPS cadence, RTP output format, packetization-mode
 0/1, STAP-A, payload type, SSRC, timestamp increment, PLI/FIR, force-IDR, and
 partial reconfiguration controls are tested, including rejected runtime
 frame-rate/rate-control, latency/slice, output/header/preset,
-RTP re-entry payload-size, and packetization updates that leave the prior config
-and queued-IDR state intact.
+RTP re-entry payload-size, RTP metadata, and packetization updates that leave
+the prior config, queued-IDR state, callbacks, packet metadata, RTP cadence, and
+VCL frame-number continuity intact across Annex B, AVC, and RTP where the
+controls apply.
 Runtime resolution reset rejects stale-size frames without consuming the queued
 IDR, then emits/decodes a new-size IDR and resumes P-skip references at the new
 dimensions.
@@ -108,12 +110,16 @@ sequence, and timestamp semantics.
 `ParameterSets`
 generates caller-owned SPS/PPS NALs, crop metadata, Annex B sequence headers,
 and avcC records accepted by the decoder parsers. IDR header cadence is explicit
-for in-band keyframes, out-of-band headers, and every-IDR emission.
+for in-band keyframes, suppressed in-band headers, out-of-band headers, and
+every-IDR emission across Annex B, AVC, and RTP.
 `RecoveryPointSEI` generates caller-owned Annex B and AVC recovery-point
 SEI NAL surfaces, and caller mutation/append isolation is proved across repeated
-header and SEI helper calls. SEI side data is also proved by injecting the
+header and SEI helper calls. Valid and invalid header/SEI helper calls preserve
+queued IDR, config, RTP packet/callback state, and frame-number continuity across
+Annex B, AVC, and RTP. SEI side data is also proved by injecting the
 encoder output before a P-frame and checking the public decoder recovery side
-data. `Encode` and `EncodeInto`
+data. Force-IDR, PLI, FIR, and per-frame keyframe requests all bypass P-skip
+references and deliver IDR output across Annex B, AVC, and RTP. `Encode` and `EncodeInto`
 now validate frame shape before bitstream work, returning empty output for
 invalid frames without advancing RTP sequence, callback, frame-number,
 timestamp, or reference state. Overflowed caller-owned `EncodeInto` destination

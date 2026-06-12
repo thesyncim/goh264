@@ -191,8 +191,9 @@ structs, rejects invalid or not-yet-admitted realtime controls, validates runtim
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
 partial reconfiguration paths, proves invalid frame-rate helper/reconfigure,
 runtime rate, latency/slice, output/header/preset, RTP re-entry payload-size,
-and packetization updates leave config, queued-IDR state, RTP cadence, packets,
-and callbacks intact,
+RTP metadata, and packetization updates leave config, queued-IDR state, RTP
+cadence, packets, and callbacks intact across Annex B, AVC, and RTP output
+surfaces where the controls apply,
 proves accepted bitrate, frame-rate, RTP payload-size, and deblock setter or
 reconfigure updates, including SPS/PPS cadence and recovery-point toggles,
 preserve a queued IDR until the next successful IDR encode,
@@ -214,9 +215,14 @@ payload metadata, and decodes the RTP IDR/P-skip sequence, proves
 `ParameterSets` emits SPS/PPS NALs,
 Annex B headers, and avcC records accepted by the public decoder parsers,
 with caller mutation/append isolation proved across repeated helper calls,
-proves in-band keyframe, out-of-band, and every-IDR header modes, proves
+proves in-band keyframe, suppressed in-band, out-of-band, and every-IDR header
+modes across Annex B, AVC, and RTP, proves force-IDR, PLI, FIR, and per-frame
+keyframe requests deliver IDR output across those surfaces, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL
-surfaces accepted by public decode paths with the same mutation/append isolation,
+surfaces accepted by public decode paths with the same mutation/append
+isolation, and proves valid and invalid header/SEI helper calls preserve queued
+IDR, config, callback, RTP packet metadata, and frame-number state across Annex
+B, AVC, and RTP,
 proves encoded input-frame planes are not retained after `Encode` returns by
 mutating caller-owned first-frame storage before a matching second frame across
 Annex B, AVC, and RTP output,
