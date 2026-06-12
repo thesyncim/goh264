@@ -5,7 +5,9 @@ package h264
 import (
 	"bytes"
 	"math/bits"
+	"reflect"
 	"testing"
+	"unsafe"
 )
 
 func TestH264SEIContextResetInitializesX264BuildLikeFFmpeg(t *testing.T) {
@@ -305,6 +307,73 @@ func TestDecodedFrameSideDataFromSEICopiesUserData(t *testing.T) {
 	if got, want := side.LCEVC, []uint8{0x7e, 0x00, 0x00, 0x03, 0x01}; !bytes.Equal(got, want) {
 		t.Fatalf("side lcevc = %x, want %x", got, want)
 	}
+}
+
+func TestDecodedFrameSideDataFromSEIRejectsOverflowedByteClones(t *testing.T) {
+	ctx := &H264SEIContext{}
+	ctx.Reset()
+	ctx.Common.Unregistered.Data = fakeByteSlicesLen(maxInt/32 + 1)
+	ctx.Common.A53Caption.Data = fakeBytesLen(maxInt/2 + 1)
+	ctx.Common.LCEVC.Data = fakeBytesLen(maxInt/2 + 1)
+
+	side := decodedFrameSideDataFromSEI(ctx)
+	if side.UserDataUnregistered != nil || side.A53ClosedCaptions != nil || side.LCEVC != nil {
+		t.Fatalf("overflowed SEI side data = user %d a53 %d lcevc %d",
+			len(side.UserDataUnregistered), len(side.A53ClosedCaptions), len(side.LCEVC))
+	}
+}
+
+func TestMergePacketSideDataIntoDecodedFrameRejectsOverflowedClones(t *testing.T) {
+	var dst DecodedFrameSideData
+	mergePacketSideDataIntoDecodedFrame(&dst, DecodedFrameSideData{
+		A53ClosedCaptions: fakeBytesLen(maxInt/2 + 1),
+		S12MTimecodes:     fakeUint32sLen(maxInt/4 + 1),
+		ICCProfile:        fakeBytesLen(maxInt/2 + 1),
+		DynamicHDR10Plus:  fakeBytesLen(maxInt/2 + 1),
+		LCEVC:             fakeBytesLen(maxInt/2 + 1),
+	})
+
+	if dst.A53ClosedCaptions != nil || dst.S12MTimecodes != nil ||
+		dst.ICCProfile != nil || dst.DynamicHDR10Plus != nil || dst.LCEVC != nil {
+		t.Fatalf("overflowed packet side data = a53 %d s12m %d icc %d hdr %d lcevc %d",
+			len(dst.A53ClosedCaptions), len(dst.S12MTimecodes), len(dst.ICCProfile), len(dst.DynamicHDR10Plus), len(dst.LCEVC))
+	}
+}
+
+func fakeBytesLen(n int) []uint8 {
+	if n <= 0 {
+		return nil
+	}
+	var v uint8
+	return *(*[]uint8)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&v)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeByteSlicesLen(n int) [][]uint8 {
+	if n <= 0 {
+		return nil
+	}
+	var v []uint8
+	return *(*[][]uint8)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&v)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeUint32sLen(n int) []uint32 {
+	if n <= 0 {
+		return nil
+	}
+	var v uint32
+	return *(*[]uint32)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&v)),
+		Len:  n,
+		Cap:  n,
+	}))
 }
 
 type seiTestMessage struct {

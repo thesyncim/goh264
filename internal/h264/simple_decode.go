@@ -555,7 +555,7 @@ func decodedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
 	}
 	return DecodedFrameSideData{
 		UserDataUnregistered: cloneByteSlices(sei.Common.Unregistered.Data),
-		A53ClosedCaptions:    append([]uint8(nil), sei.Common.A53Caption.Data...),
+		A53ClosedCaptions:    cloneByteSlice(sei.Common.A53Caption.Data),
 		X264Build:            sei.Common.Unregistered.X264Build,
 		PictureTiming:        sei.PictureTiming,
 		RecoveryPoint:        sei.RecoveryPoint,
@@ -569,7 +569,7 @@ func decodedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
 		FilmGrain:            sei.Common.FilmGrain,
 		MasteringDisplay:     sei.Common.MasteringDisplay,
 		ContentLight:         sei.Common.ContentLight,
-		LCEVC:                append([]uint8(nil), sei.Common.LCEVC.Data...),
+		LCEVC:                cloneByteSlice(sei.Common.LCEVC.Data),
 	}
 }
 
@@ -578,13 +578,13 @@ func mergePacketSideDataIntoDecodedFrame(dst *DecodedFrameSideData, src DecodedF
 		return
 	}
 	if len(src.A53ClosedCaptions) != 0 {
-		dst.A53ClosedCaptions = append([]uint8(nil), src.A53ClosedCaptions...)
+		dst.A53ClosedCaptions = cloneByteSlice(src.A53ClosedCaptions)
 	}
 	if src.AFD.Present != 0 {
 		dst.AFD = src.AFD
 	}
 	if len(src.S12MTimecodes) != 0 && dst.PictureTiming.TimecodeCount == 0 {
-		dst.S12MTimecodes = append([]uint32(nil), src.S12MTimecodes...)
+		dst.S12MTimecodes = cloneUint32Slice(src.S12MTimecodes)
 	}
 	if src.Stereo3D.Present != 0 {
 		dst.Stereo3D = src.Stereo3D
@@ -605,13 +605,13 @@ func mergePacketSideDataIntoDecodedFrame(dst *DecodedFrameSideData, src DecodedF
 		dst.ContentLight = src.ContentLight
 	}
 	if len(src.ICCProfile) != 0 && len(dst.ICCProfile) == 0 {
-		dst.ICCProfile = append([]uint8(nil), src.ICCProfile...)
+		dst.ICCProfile = cloneByteSlice(src.ICCProfile)
 	}
 	if len(src.DynamicHDR10Plus) != 0 && len(dst.DynamicHDR10Plus) == 0 {
-		dst.DynamicHDR10Plus = append([]uint8(nil), src.DynamicHDR10Plus...)
+		dst.DynamicHDR10Plus = cloneByteSlice(src.DynamicHDR10Plus)
 	}
 	if len(src.LCEVC) != 0 && len(dst.LCEVC) == 0 {
-		dst.LCEVC = append([]uint8(nil), src.LCEVC...)
+		dst.LCEVC = cloneByteSlice(src.LCEVC)
 	}
 	if src.ReferenceDisplays.Present != 0 && dst.ReferenceDisplays.Present == 0 {
 		dst.ReferenceDisplays = cloneReferenceDisplays(src.ReferenceDisplays)
@@ -640,14 +640,28 @@ func consumeFrameSideDataFromSEI(sei *H264SEIContext) {
 }
 
 func cloneByteSlices(src [][]uint8) [][]uint8 {
-	if len(src) == 0 {
+	if len(src) == 0 || len(src) > maxInt/32 {
 		return nil
 	}
 	out := make([][]uint8, len(src))
 	for i := range src {
-		out[i] = append([]uint8(nil), src[i]...)
+		out[i] = cloneByteSlice(src[i])
 	}
 	return out
+}
+
+func cloneByteSlice(src []uint8) []uint8 {
+	if len(src) == 0 || len(src) > maxInt/2 {
+		return nil
+	}
+	return append([]uint8(nil), src...)
+}
+
+func cloneUint32Slice(src []uint32) []uint32 {
+	if len(src) == 0 || len(src) > maxInt/4 {
+		return nil
+	}
+	return append([]uint32(nil), src...)
 }
 
 // applySimpleFrameTimingProps mirrors FFmpeg n8.0.1 h264_export_frame_props
