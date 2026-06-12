@@ -499,6 +499,86 @@ func TestCAVLCWriteResidualSingleLevelTrailingOnesRejectsUnsupportedBlocks(t *te
 	}
 }
 
+func TestCAVLCWriteResidualBoundedChromaContextsRoundTrip(t *testing.T) {
+	scan := cavlcIdentityScan()
+	for _, tt := range []struct {
+		name      string
+		maxCoeff  int
+		block     [16]int32
+		write     func(*BitWriter, []int32, int, []uint8, int, int) (int, error)
+		wantCoeff int
+	}{
+		{
+			name:      "chroma-dc trailing ones",
+			maxCoeff:  4,
+			block:     [16]int32{0: 1, 2: -1},
+			write:     writeCAVLCResidualTrailingOnes,
+			wantCoeff: 2,
+		},
+		{
+			name:      "chroma422-dc trailing ones",
+			maxCoeff:  8,
+			block:     [16]int32{1: -1, 6: 1},
+			write:     writeCAVLCResidualTrailingOnes,
+			wantCoeff: 2,
+		},
+		{
+			name:      "chroma-dc single level",
+			maxCoeff:  4,
+			block:     [16]int32{3: -3},
+			write:     writeCAVLCResidualSingleLevel,
+			wantCoeff: 1,
+		},
+		{
+			name:      "chroma422-dc single level",
+			maxCoeff:  8,
+			block:     [16]int32{6: 4},
+			write:     writeCAVLCResidualSingleLevel,
+			wantCoeff: 1,
+		},
+		{
+			name:      "chroma-dc single level trailing one",
+			maxCoeff:  4,
+			block:     [16]int32{0: 2, 3: -1},
+			write:     writeCAVLCResidualSingleLevelTrailingOnes,
+			wantCoeff: 2,
+		},
+		{
+			name:      "chroma422-dc single level two trailing signs",
+			maxCoeff:  8,
+			block:     [16]int32{1: -2, 3: 1, 7: -1},
+			write:     writeCAVLCResidualSingleLevelTrailingOnes,
+			wantCoeff: 3,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			totalCoeff, err := tt.write(&bw, tt.block[:], 0, scan[:], tt.maxCoeff, 0)
+			if err != nil {
+				t.Fatalf("write residual: %v", err)
+			}
+			if totalCoeff != tt.wantCoeff {
+				t.Fatalf("totalCoeff = %d, want %d", totalCoeff, tt.wantCoeff)
+			}
+
+			gb := newBitReader(bw.Bytes())
+			var got [16]int32
+			decodedCoeff, err := decodeCAVLCResidual(&gb, got[:], 0, scan[:], nil, tt.maxCoeff, 0)
+			if err != nil {
+				t.Fatalf("decode written residual: %v", err)
+			}
+			if decodedCoeff != tt.wantCoeff {
+				t.Fatalf("decoded totalCoeff = %d, want %d", decodedCoeff, tt.wantCoeff)
+			}
+			for i := 0; i < tt.maxCoeff; i++ {
+				if got[i] != tt.block[i] {
+					t.Fatalf("decoded block[%d] = %d, want %d; block=%v", i, got[i], tt.block[i], got)
+				}
+			}
+		})
+	}
+}
+
 func TestCAVLCLevelTableMatchesFFmpegSpots(t *testing.T) {
 	cases := []struct {
 		suffix int
