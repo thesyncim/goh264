@@ -3106,6 +3106,81 @@ func TestEncoderHeaderHelpersPreservePendingIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderHeaderHelpersPreserveStoredReference(t *testing.T) {
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = format.fmt
+			cfg.GOPSize = 10000
+			cfg.IDRInterval = 10000
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if format.fmt == goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 32
+			} else {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if first.Dropped || !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first frame dropped/idr/pending=%v/%v/%v, want completed IDR",
+					first.Dropped, first.IDR, enc.PendingIDR())
+			}
+			firstPacketCount := len(first.RTPPackets)
+			before := enc.Config()
+
+			for i := 0; i < 3; i++ {
+				if _, err := enc.ParameterSets(); err != nil {
+					t.Fatalf("ParameterSets[%d]: %v", i, err)
+				}
+				if _, err := enc.RecoveryPointSEI(uint32(i)); err != nil {
+					t.Fatalf("RecoveryPointSEI[%d]: %v", i, err)
+				}
+				if got := enc.Config(); got != before {
+					t.Fatalf("header helper[%d] mutated config = %+v, want %+v", i, got, before)
+				}
+				if enc.PendingIDR() {
+					t.Fatalf("header helper[%d] queued unexpected IDR", i)
+				}
+			}
+
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.PTS = int64(before.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode after header helpers: %v", err)
+			}
+			if second.Dropped || second.IDR || second.RTPTime != before.RTPTimestampIncrement {
+				t.Fatalf("post-helper frame dropped/idr/time=%v/%v/%d, want P-skip time %d",
+					second.Dropped, second.IDR, second.RTPTime, before.RTPTimestampIncrement)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			stream := annexBFromEncodedFrame(t, first, before.OutputFormat)
+			stream = append(stream, annexBFromEncodedFrame(t, second, before.OutputFormat)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+			if format.fmt == goh264.EncoderOutputRTP {
+				assertRTPPacketMetadata(t, second.RTPPackets, before.RTPPayloadType, before.RTPSSRC, uint16(firstPacketCount))
+			} else if len(second.RTPPackets) != 0 {
+				t.Fatalf("non-RTP second packets = %d, want none", len(second.RTPPackets))
+			}
+		})
+	}
+}
+
 func TestEncoderParameterSetsExposeWebRTCCrop(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(640, 480)
 	cfg.Crop = goh264.EncoderCrop{Left: 2, Right: 4, Top: 6, Bottom: 8}
