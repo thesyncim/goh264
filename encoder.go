@@ -1667,6 +1667,9 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 		((update.Width != 0 || update.Height != 0) && (update.Width == 0 || update.Height == 0)) {
 		return encoderInvalid("runtime resolution update requires positive width and height")
 	}
+	if (update.FrameRateNum != 0 || update.FrameRateDen != 0) && (update.FrameRateNum == 0 || update.FrameRateDen == 0) {
+		return encoderInvalid("runtime frame-rate update requires positive numerator and denominator")
+	}
 	if update.GOPSize < 0 || update.IDRInterval < 0 {
 		return encoderInvalid("GOP size and IDR interval cannot be negative")
 	}

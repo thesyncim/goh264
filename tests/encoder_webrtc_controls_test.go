@@ -2134,6 +2134,12 @@ func TestEncoderFrameRateInvalidUpdatesPreserveLiveState(t *testing.T) {
 			if got := enc.Config(); got != before {
 				t.Fatalf("invalid frame-rate Reconfigure mutated config = %+v, want %+v", got, before)
 			}
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{FrameRateNum: 60}); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Reconfigure zero frame-rate denominator error = %v, want ErrInvalidData", err)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("invalid denominator-only frame-rate Reconfigure mutated config = %+v, want %+v", got, before)
+			}
 			if err := enc.Reconfigure(goh264.EncoderReconfigure{
 				FrameRateNum: 0,
 				FrameRateDen: 1,
@@ -2143,6 +2149,15 @@ func TestEncoderFrameRateInvalidUpdatesPreserveLiveState(t *testing.T) {
 			}
 			if got := enc.Config(); got != before {
 				t.Fatalf("invalid frame-rate ForceIDR Reconfigure mutated config = %+v, want %+v", got, before)
+			}
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{
+				FrameRateNum: 60,
+				ForceIDR:     true,
+			}); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Reconfigure zero frame-rate denominator with ForceIDR error = %v, want ErrInvalidData", err)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("invalid denominator-only frame-rate ForceIDR Reconfigure mutated config = %+v, want %+v", got, before)
 			}
 			if enc.PendingIDR() {
 				t.Fatal("invalid frame-rate updates queued unexpected IDR")
@@ -8034,10 +8049,26 @@ func TestEncoderReconfigureLimitsGroupUpdatesBudgetsAtomically(t *testing.T) {
 		t.Fatalf("post-Reconfigure grouped limits config = %+v, want 4096/2048/10000", got)
 	}
 
-	zeroLimits := goh264.EncoderLimits{}
 	compatMaxFrameSize := 8192
 	compatSliceMaxBytes := 8192
 	compatMaxEncodeTimeUS := 20_000
+	precedenceLimits := goh264.EncoderLimits{MaxFrameSize: 512, SliceMaxBytes: 256, MaxEncodeTimeUS: 5_000}
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		MaxFrameSize:         1024,
+		SliceMaxBytes:        1024,
+		MaxEncodeTimeUS:      15_000,
+		MaxFrameSizeLimit:    &compatMaxFrameSize,
+		SliceMaxBytesLimit:   &compatSliceMaxBytes,
+		MaxEncodeTimeUSLimit: &compatMaxEncodeTimeUS,
+		Limits:               &precedenceLimits,
+	}); err != nil {
+		t.Fatalf("Reconfigure grouped limit precedence: %v", err)
+	}
+	if got := enc.Config(); got.MaxFrameSize != 512 || got.SliceMaxBytes != 256 || got.MaxEncodeTimeUS != 5_000 {
+		t.Fatalf("post-Reconfigure grouped limit precedence config = %+v, want 512/256/5000", got)
+	}
+
+	zeroLimits := goh264.EncoderLimits{}
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
 		MaxFrameSize:         8192,
 		SliceMaxBytes:        8192,
