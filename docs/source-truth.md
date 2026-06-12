@@ -211,7 +211,7 @@ RTP header bytes with clipped packet payload views over packet data and packet
 storage isolated from `EncodedFrame.Data` including caller-backed `EncodeInto`
 output buffers, shared packet metadata guards for
 header fields and clipped packet slices, optional
-RTP callback metadata including mode 0/1 IDR/P-frame single-NAL packets with
+RTP callback metadata including malformed STAP-A/FU-A payload classification and mode 0/1 IDR/P-frame single-NAL packets with
 multi-slice IDR, P-skip, exact P16x16, odd-pixel constant chroma, and P IntraPCM fallback rows
 and callback packet storage isolated from returned RTP packets while preserving
 the clipped payload-over-packet-data shape, initial

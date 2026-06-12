@@ -490,6 +490,90 @@ func TestCloneEncoderRTPPacketRejectsOverflowedByteClones(t *testing.T) {
 	}
 }
 
+func TestEncoderRTPPacketMetadataClassifiesMalformedPayloads(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		payload      []byte
+		wantFormat   EncoderRTPPayloadFormat
+		wantNALType  uint8
+		wantCount    int
+		wantStart    bool
+		wantEnd      bool
+		wantParamSet bool
+	}{
+		{
+			name:        "truncated-stapa-length",
+			payload:     []byte{24, 0},
+			wantFormat:  EncoderRTPPayloadSTAPA,
+			wantNALType: 24,
+		},
+		{
+			name:        "zero-size-stapa-nal",
+			payload:     []byte{24, 0, 0},
+			wantFormat:  EncoderRTPPayloadSTAPA,
+			wantNALType: 24,
+		},
+		{
+			name:        "oversize-stapa-nal",
+			payload:     []byte{24, 0, 3, 0x67},
+			wantFormat:  EncoderRTPPayloadSTAPA,
+			wantNALType: 24,
+		},
+		{
+			name:         "valid-parameter-set-stapa",
+			payload:      []byte{24, 0, 1, 0x67, 0, 1, 0x68},
+			wantFormat:   EncoderRTPPayloadSTAPA,
+			wantNALType:  24,
+			wantCount:    2,
+			wantParamSet: true,
+		},
+		{
+			name:        "valid-mixed-stapa",
+			payload:     []byte{24, 0, 1, 0x67, 0, 1, 0x65},
+			wantFormat:  EncoderRTPPayloadSTAPA,
+			wantNALType: 24,
+			wantCount:   2,
+		},
+		{
+			name:       "truncated-fua",
+			payload:    []byte{28},
+			wantFormat: EncoderRTPPayloadFUA,
+			wantCount:  1,
+		},
+		{
+			name:        "fua-start-idr",
+			payload:     []byte{28, 0x80 | 5},
+			wantFormat:  EncoderRTPPayloadFUA,
+			wantNALType: 5,
+			wantCount:   1,
+			wantStart:   true,
+		},
+		{
+			name:         "single-nal-sps",
+			payload:      []byte{0x67},
+			wantFormat:   EncoderRTPPayloadSingleNAL,
+			wantNALType:  7,
+			wantCount:    1,
+			wantStart:    true,
+			wantEnd:      true,
+			wantParamSet: true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := encoderRTPPacketMetadataFromPayload(tt.payload)
+			if got.PayloadFormat != tt.wantFormat ||
+				got.NALUnitType != tt.wantNALType ||
+				got.NALUnitCount != tt.wantCount ||
+				got.StartOfNAL != tt.wantStart ||
+				got.EndOfNAL != tt.wantEnd ||
+				got.ParameterSet != tt.wantParamSet {
+				t.Fatalf("metadata = %+v, want format=%v nal=%d count=%d start=%v end=%v parameterSet=%v",
+					got, tt.wantFormat, tt.wantNALType, tt.wantCount, tt.wantStart, tt.wantEnd, tt.wantParamSet)
+			}
+		})
+	}
+}
+
 func fakeEncoderBytesLen(n int) []byte {
 	if n <= 0 {
 		return nil
