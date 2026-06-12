@@ -57,7 +57,11 @@ func BuildEncoderRecoveryPointSEINAL(cfg EncoderRecoveryPointSEIConfig) ([]byte,
 		return nil, err
 	}
 	rbsp := AppendSEIRBSP(make([]byte, 0, 2+len(payload)+1), seiTypeRecoveryPoint, payload)
-	return AppendNAL(make([]byte, 0, 1+len(rbsp)+len(rbsp)/2), 0, NALSEI, rbsp)
+	dst, err := makeNALBuffer(rbsp)
+	if err != nil {
+		return nil, err
+	}
+	return AppendNAL(dst, 0, NALSEI, rbsp)
 }
 
 func EncodeRecoveryPointSEIPayload(cfg EncoderRecoveryPointSEIConfig) ([]byte, error) {

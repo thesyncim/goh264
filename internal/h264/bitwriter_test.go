@@ -5,7 +5,9 @@ package h264
 import (
 	"bytes"
 	"errors"
+	"reflect"
 	"testing"
+	"unsafe"
 )
 
 func TestBitWriterExpGolombRoundTripsThroughReader(t *testing.T) {
@@ -180,6 +182,32 @@ func TestBitWriterRejectsOutOfRangeSyntax(t *testing.T) {
 	if _, err := AppendAVCDecoderConfigurationRecord(nil, 66, 0, 30, 4, nil, nil); !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("AppendAVCDecoderConfigurationRecord err = %v, want ErrInvalidData", err)
 	}
+}
+
+func TestAppendNALRejectsOverflowedEscapedSize(t *testing.T) {
+	rbsp := fakeRBSPBytesLen(maxInt)
+	prefix := []byte{0xaa}
+	if got, err := AppendNAL(prefix, 3, NALSEI, rbsp); !errors.Is(err, ErrInvalidData) || !bytes.Equal(got, prefix) {
+		t.Fatalf("AppendNAL overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+	if got, err := AppendAnnexBNAL(prefix, 3, NALSEI, rbsp); !errors.Is(err, ErrInvalidData) || !bytes.Equal(got, prefix) {
+		t.Fatalf("AppendAnnexBNAL overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+	if _, err := makeNALBuffer(rbsp); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("makeNALBuffer overflow err = %v, want ErrInvalidData", err)
+	}
+}
+
+func fakeRBSPBytesLen(n int) []byte {
+	if n <= 0 {
+		return nil
+	}
+	var b byte
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&b)),
+		Len:  n,
+		Cap:  n,
+	}))
 }
 
 func testEncoderBaselineSPSRBSP(t *testing.T) []byte {

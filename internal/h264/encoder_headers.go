@@ -58,15 +58,30 @@ func BuildEncoderParameterSets(cfg EncoderParameterSetConfig) (EncoderParameterS
 	if err != nil {
 		return EncoderParameterSets{}, err
 	}
-	sps, err := AppendNAL(make([]byte, 0, 1+len(spsRBSP)+len(spsRBSP)/2), 3, NALSPS, spsRBSP)
+	spsBuf, err := makeNALBuffer(spsRBSP)
 	if err != nil {
 		return EncoderParameterSets{}, err
 	}
-	pps, err := AppendNAL(make([]byte, 0, 1+len(ppsRBSP)+len(ppsRBSP)/2), 3, NALPPS, ppsRBSP)
+	sps, err := AppendNAL(spsBuf, 3, NALSPS, spsRBSP)
 	if err != nil {
 		return EncoderParameterSets{}, err
 	}
-	annexBCap := 4 + 1 + len(spsRBSP) + len(spsRBSP)/2 + 4 + 1 + len(ppsRBSP) + len(ppsRBSP)/2
+	ppsBuf, err := makeNALBuffer(ppsRBSP)
+	if err != nil {
+		return EncoderParameterSets{}, err
+	}
+	pps, err := AppendNAL(ppsBuf, 3, NALPPS, ppsRBSP)
+	if err != nil {
+		return EncoderParameterSets{}, err
+	}
+	annexBCap, err := nalAppendCapacity(0, 5, len(spsRBSP))
+	if err != nil {
+		return EncoderParameterSets{}, err
+	}
+	annexBCap, err = nalAppendCapacity(annexBCap, 5, len(ppsRBSP))
+	if err != nil {
+		return EncoderParameterSets{}, err
+	}
 	annexB, err := AppendAnnexBNAL(make([]byte, 0, annexBCap), 3, NALSPS, spsRBSP)
 	if err != nil {
 		return EncoderParameterSets{}, err
@@ -93,11 +108,19 @@ func BuildEncoderParameterSetNALs(cfg EncoderParameterSetConfig) (EncoderParamet
 	if err != nil {
 		return EncoderParameterSetNALs{}, err
 	}
-	sps, err := AppendNAL(make([]byte, 0, 1+len(spsRBSP)+len(spsRBSP)/2), 3, NALSPS, spsRBSP)
+	spsBuf, err := makeNALBuffer(spsRBSP)
 	if err != nil {
 		return EncoderParameterSetNALs{}, err
 	}
-	pps, err := AppendNAL(make([]byte, 0, 1+len(ppsRBSP)+len(ppsRBSP)/2), 3, NALPPS, ppsRBSP)
+	sps, err := AppendNAL(spsBuf, 3, NALSPS, spsRBSP)
+	if err != nil {
+		return EncoderParameterSetNALs{}, err
+	}
+	ppsBuf, err := makeNALBuffer(ppsRBSP)
+	if err != nil {
+		return EncoderParameterSetNALs{}, err
+	}
+	pps, err := AppendNAL(ppsBuf, 3, NALPPS, ppsRBSP)
 	if err != nil {
 		return EncoderParameterSetNALs{}, err
 	}

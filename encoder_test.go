@@ -156,6 +156,12 @@ func TestEncoderReferencePlaneSizesRejectOverflow(t *testing.T) {
 	}
 }
 
+func TestEncoderNALBufferRejectsOverflow(t *testing.T) {
+	if _, err := encoderNALBuffer(fakeEncoderBytesLen(maxInt)); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("encoderNALBuffer overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
 func fakeEncoderBytesLen(n int) []byte {
 	if n <= 0 {
 		return nil

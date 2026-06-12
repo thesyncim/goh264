@@ -1016,7 +1016,11 @@ func buildEncoderI420IntraPCMIDRNAL(cfg h264.EncoderI420IntraPCMIDRConfig) ([]by
 	if err != nil {
 		return nil, err
 	}
-	return h264.AppendNAL(make([]byte, 0, 1+len(rbsp)+len(rbsp)/2), 3, h264.NALIDRSlice, rbsp)
+	dst, err := encoderNALBuffer(rbsp)
+	if err != nil {
+		return nil, err
+	}
+	return h264.AppendNAL(dst, 3, h264.NALIDRSlice, rbsp)
 }
 
 func buildEncoderI420PSkipNAL(cfg h264.EncoderI420PSkipConfig) ([]byte, error) {
@@ -1032,7 +1036,11 @@ func buildEncoderI420P16x16NoResidualNAL(cfg h264.EncoderI420P16x16NoResidualCon
 	if err != nil {
 		return nil, err
 	}
-	return h264.AppendNAL(make([]byte, 0, 1+len(rbsp)+len(rbsp)/2), 2, h264.NALSlice, rbsp)
+	dst, err := encoderNALBuffer(rbsp)
+	if err != nil {
+		return nil, err
+	}
+	return h264.AppendNAL(dst, 2, h264.NALSlice, rbsp)
 }
 
 func buildEncoderI420IntraPCMPNAL(cfg h264.EncoderI420IntraPCMPConfig) ([]byte, error) {
@@ -1040,7 +1048,11 @@ func buildEncoderI420IntraPCMPNAL(cfg h264.EncoderI420IntraPCMPConfig) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	return h264.AppendNAL(make([]byte, 0, 1+len(rbsp)+len(rbsp)/2), 2, h264.NALSlice, rbsp)
+	dst, err := encoderNALBuffer(rbsp)
+	if err != nil {
+		return nil, err
+	}
+	return h264.AppendNAL(dst, 2, h264.NALSlice, rbsp)
 }
 
 func (e *Encoder) validateFrame(frame EncoderFrame) error {
@@ -1572,6 +1584,18 @@ func resizeEncoderReferencePlane(buf []byte, size int) []byte {
 		return make([]byte, size)
 	}
 	return buf[:size]
+}
+
+func encoderNALBuffer(rbsp []byte) ([]byte, error) {
+	n, err := checkedAddInt(1, len(rbsp))
+	if err != nil {
+		return nil, err
+	}
+	n, err = checkedAddInt(n, len(rbsp)/2)
+	if err != nil {
+		return nil, err
+	}
+	return make([]byte, 0, n), nil
 }
 
 func resizeEncoderP16x16MVs(buf []encoderP16x16MotionVector, size int) []encoderP16x16MotionVector {

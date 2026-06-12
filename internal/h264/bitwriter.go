@@ -126,12 +126,18 @@ func AppendNAL(dst []byte, refIDC uint8, typ NALUnitType, rbsp []byte) ([]byte, 
 	if refIDC > 3 || typ > 31 {
 		return dst, ErrInvalidData
 	}
+	if _, err := nalAppendCapacity(len(dst), 1, len(rbsp)); err != nil {
+		return dst, err
+	}
 	dst = append(dst, (refIDC<<5)|uint8(typ))
 	dst = AppendEBSP(dst, rbsp)
 	return dst, nil
 }
 
 func AppendAnnexBNAL(dst []byte, refIDC uint8, typ NALUnitType, rbsp []byte) ([]byte, error) {
+	if _, err := nalAppendCapacity(len(dst), 5, len(rbsp)); err != nil {
+		return dst, err
+	}
 	start := len(dst)
 	dst = append(dst, 0x00, 0x00, 0x00, 0x01)
 	dst, err := AppendNAL(dst, refIDC, typ, rbsp)
@@ -139,6 +145,30 @@ func AppendAnnexBNAL(dst []byte, refIDC uint8, typ NALUnitType, rbsp []byte) ([]
 		return dst[:start], err
 	}
 	return dst, nil
+}
+
+func nalAppendCapacity(base int, prefix int, rbspLen int) (int, error) {
+	if base < 0 || prefix < 0 || rbspLen < 0 {
+		return 0, ErrInvalidData
+	}
+	insertions := rbspLen / 2
+	n, err := checkedAddInt(base, prefix)
+	if err != nil {
+		return 0, err
+	}
+	n, err = checkedAddInt(n, rbspLen)
+	if err != nil {
+		return 0, err
+	}
+	return checkedAddInt(n, insertions)
+}
+
+func makeNALBuffer(rbsp []byte) ([]byte, error) {
+	n, err := nalAppendCapacity(0, 1, len(rbsp))
+	if err != nil {
+		return nil, err
+	}
+	return make([]byte, 0, n), nil
 }
 
 func AppendAVCNAL(dst []byte, nalLengthSize int, refIDC uint8, typ NALUnitType, rbsp []byte) ([]byte, error) {
