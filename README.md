@@ -9,12 +9,13 @@ side of the project: public Annex B, AVC, avcC, packet, raw-output, side-data,
 and delayed-output surfaces are covered by unit, corpus, FATE, and FFmpeg-oracle
 tests.
 
-The encoder is intentionally narrower. It exposes a tested realtime/WebRTC API
-and admits a guarded Constrained Baseline I420 subset today: IDR IntraPCM,
+The encoder is intentionally narrower. It has a tested realtime/WebRTC-facing
+API and admits a guarded Constrained Baseline I420 subset today: IDR IntraPCM,
 identical-reference P-skip, bounded exact P16x16 no-residual prediction, changed
 P IntraPCM recovery frames, AVC/Annex B output, configured multi-slice output,
-and RTP packetization modes 0 and 1. Broader motion search, residual coding,
-rate-control behavior, and production performance evidence are still in flight.
+and RTP packetization modes 0 and 1. The API is usable for integration testing,
+but broader motion search, residual coding, rate-control behavior, and
+production performance evidence are still in flight.
 
 ## What Works Today
 
@@ -26,8 +27,9 @@ rate-control behavior, and production performance evidence are still in flight.
   side-data cloning.
 - **State:** streaming decode keeps references and delayed B-frame output across
   calls; empty decode calls flush delayed output.
-- **Encoder:** usable as an experimental realtime/WebRTC surface for the
-  admitted Baseline paths listed above.
+- **Encoder:** usable as an experimental realtime/WebRTC integration surface for
+  the admitted Baseline paths listed above. It is not a general-purpose H.264
+  encoder yet.
 - **Verification:** the selected public-vector decoder matrix is green with no
   known-red rows.
 
@@ -281,7 +283,8 @@ owned, err := out.Clone()   // deep-owned snapshot for async retention
 err = enc.Reset()           // clear encoder coding state, keep config/callback
 ```
 
-The admitted encoder contract is deliberately narrow:
+The admitted encoder contract is deliberately narrow, and these are the pieces
+that are currently intended to be stable enough for integration work:
 
 - `EncoderConfig.Normalize` exposes the exact validated configuration stored by
   `NewEncoder`.
@@ -307,8 +310,9 @@ changed-frame P IntraPCM. Output can be split into configured multi-slice VCL
 NALs. Exact P16x16 is admitted for disabled-deblock frames and for
 chroma-aligned uniform-motion enabled/slice-boundary deblock frames, including
 multi-macroblock frames. Guarded mixed-vector and odd-pixel deblock cases fall
-back to P IntraPCM recovery. Changed-frame P IntraPCM recovery pictures carry
-recovery-point SEI when enabled.
+back to P IntraPCM recovery across Annex B, configured AVC, RTP reassembly, and
+RTP packetization-mode 0 single-NAL output. Changed-frame P IntraPCM recovery
+pictures carry recovery-point SEI when enabled.
 
 RTP output currently covers:
 

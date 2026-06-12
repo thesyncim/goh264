@@ -78,7 +78,8 @@ stored configured-AVC state.
 Current encoder evidence addendum: the odd-pixel P16x16 guard now has separate
 disabled-deblock constant-chroma admission and patterned-chroma or deblock
 P IntraPCM fallback coverage plus direct VCL frame-number continuity across
-Annex B, configured AVC, and RTP;
+Annex B, configured AVC, RTP reassembly, and RTP packetization-mode 0
+single-NAL output;
 changed-P IntraPCM recovery over AVC/RTP also has direct VCL frame-number proof.
 Annex B P IntraPCM fallback and changed-frame recovery now have direct VCL
 frame-number proof across disabled, default, and slice-boundary deblock controls.

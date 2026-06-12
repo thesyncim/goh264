@@ -4934,6 +4934,125 @@ func TestEncoderEncodePerMacroblockExactP16x16FallsBackWithDeblockControlsForAVC
 	}
 }
 
+func TestEncoderEncodeP16x16DeblockFallbacksForRTPMode0(t *testing.T) {
+	mode0 := goh264.EncoderRTPPacketizationSingleNAL
+	for _, tt := range []struct {
+		name           string
+		firstFrame     func() goh264.EncoderFrame
+		secondFrame    func(goh264.EncoderFrame) goh264.EncoderFrame
+		sliceCount     int
+		wantFirstNALs  []uint8
+		wantSecondNALs []uint8
+		wantFrameTypes []uint8
+		wantFrameNums  []uint32
+	}{
+		{
+			name: "odd-pixel",
+			firstFrame: func() goh264.EncoderFrame {
+				frame := patternedI420EncoderFrame(32, 32)
+				setConstantI420Chroma(&frame, 128, 64)
+				return frame
+			},
+			secondFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return integerMotionI420EncoderFrame(first, 1, 0)
+			},
+			sliceCount:     1,
+			wantFirstNALs:  []uint8{7, 8, 5},
+			wantSecondNALs: []uint8{6, 1},
+			wantFrameTypes: []uint8{5, 1},
+			wantFrameNums:  []uint32{0, 1},
+		},
+		{
+			name: "mixed-per-macroblock",
+			firstFrame: func() goh264.EncoderFrame {
+				return patternedI420EncoderFrame(32, 32)
+			},
+			secondFrame: func(first goh264.EncoderFrame) goh264.EncoderFrame {
+				return perMacroblockMotionI420EncoderFrame(first, []encoderTestMotion{
+					{dx: 2, dy: 0},
+					{dx: -2, dy: 0},
+					{dx: 0, dy: 2},
+					{dx: 0, dy: -2},
+				})
+			},
+			sliceCount:     2,
+			wantFirstNALs:  []uint8{7, 8, 5, 5},
+			wantSecondNALs: []uint8{6, 1, 1},
+			wantFrameTypes: []uint8{5, 5, 1, 1},
+			wantFrameNums:  []uint32{0, 0, 1, 1},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(32, 32)
+			cfg.OutputFormat = goh264.EncoderOutputRTP
+			cfg.RTPPacketizationMode = mode0
+			cfg.RTPMaxPayloadSize = 4096
+			cfg.DeblockMode = goh264.EncoderDeblockEnabled
+			cfg.SliceCount = tt.sliceCount
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
+
+			firstFrame := tt.firstFrame()
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, tt.wantFirstNALs)
+
+			secondFrame := tt.secondFrame(firstFrame)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode guarded P16x16 fallback: %v", err)
+			}
+			if second.KeyFrame || second.IDR {
+				t.Fatalf("guarded P16x16 fallback key=%v idr=%v, want recovery P frame", second.KeyFrame, second.IDR)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, tt.wantSecondNALs)
+			if len(second.RTPPackets) != len(tt.wantSecondNALs) {
+				t.Fatalf("mode-0 fallback RTP packets = %d, want one per NAL %d", len(second.RTPPackets), len(tt.wantSecondNALs))
+			}
+			for i, pkt := range second.RTPPackets {
+				if len(pkt.Payload) == 0 || pkt.Payload[0]&0x1f != tt.wantSecondNALs[i] {
+					t.Fatalf("mode-0 fallback packet[%d] payload type = %x, want NAL type %d", i, pkt.Payload, tt.wantSecondNALs[i])
+				}
+				if pkt.Marker != (i == len(second.RTPPackets)-1) {
+					t.Fatalf("mode-0 fallback packet[%d] marker = %v, want final-only marker", i, pkt.Marker)
+				}
+			}
+
+			dec := goh264.NewDecoder()
+			decodedFirst, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+			if err != nil {
+				t.Fatalf("Decode first RTP: %v", err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			decodedSecond, err := dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+			if err != nil {
+				t.Fatalf("Decode guarded P16x16 fallback RTP: %v", err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			if !decodedSecond[0].KeyFrame ||
+				decodedSecond[0].SideData.RecoveryPoint == nil ||
+				decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+				t.Fatalf("decoded guarded P16x16 fallback key=%v recovery=%+v, want immediate recovery frame",
+					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+			}
+
+			stream := append([]byte(nil), headers.AnnexB...)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, first.RTPPackets)...)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			assertEncoderVCLFrameNums(t, stream, tt.wantFrameTypes, tt.wantFrameNums)
+		})
+	}
+}
+
 func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionWithConstantChroma(t *testing.T) {
 	for _, tt := range []struct {
 		name string

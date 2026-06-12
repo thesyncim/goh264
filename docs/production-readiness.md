@@ -9,11 +9,11 @@ CAVLC P-skip, bounded exact macroblock-aligned P16x16 no-residual prediction
 for frame-wide and per-macroblock integer-pel shifts up to 8 pixels, including
 enabled and slice-boundary deblock on multi-macroblock frames, with odd-pixel
 luma motion admitted only with disabled deblock and constant 4:2:0 chroma
-planes, plus guarded odd-pixel deblock fallback across Annex B, configured AVC,
-and RTP, and changed-frame
-P IntraPCM across disabled, enabled, and slice-boundary deblock controls.
-Encoder
-production gates live in `docs/encoder-webrtc-roadmap.md` until broader
+planes, plus guarded odd-pixel and mixed-vector deblock fallback across Annex B,
+configured AVC, RTP reassembly, and RTP packetization-mode 0 single-NAL output,
+and changed-frame P IntraPCM across disabled, enabled, and slice-boundary
+deblock controls. Encoder production gates live in
+`docs/encoder-webrtc-roadmap.md` until broader
 P prediction, residual coding, rate control, remaining packetizer breadth,
 allocation budgets, and oracle evidence land.
 The encoder bitstream-writer residual work is still deliberately bounded, but
@@ -339,8 +339,7 @@ emit predictive P16x16 no-residual slices through stateful local decode, FFmpeg
 rawvideo decode, configured AVC decode, RTP reassembly decode, and
 enabled/slice-boundary deblock syntax including multi-macroblock uniform-motion
 Annex B proof plus mixed per-macroblock fallback proof across Annex B,
-configured AVC, and RTP,
-configured AVC/RTP decode, and RTP mode-0 single-NAL packetization, while
+configured AVC, RTP reassembly, and RTP mode-0 single-NAL packetization, while
 patterned chroma is proved to fall back to P IntraPCM across Annex B,
 configured AVC, RTP reassembly, and RTP mode-0 single-NAL output,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
