@@ -166,9 +166,10 @@ writing, RBSP trailing bits, EBSP escaping, Annex B/AVC NAL packaging, AVC
 configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR, P-skip, P16x16 no-residual, and P IntraPCM slice payloads.
 Internal P16x16 residual slice proofs now cover bounded per-macroblock
-luma CAVLC coefficient positions, multi-coefficient luma blocks, chroma-DC,
-chroma-AC including multi-coefficient AC blocks, and combined chroma-DC+AC
-CAVLC coefficients, plus bounded chroma-DC and chroma-AC coefficient
+luma CAVLC coefficient positions, multi-coefficient luma blocks, chroma-DC
+including multi-coefficient DC blocks, chroma-AC including multi-coefficient
+AC blocks, and combined chroma-DC+AC CAVLC coefficients, plus bounded
+chroma-DC and chroma-AC coefficient
 positions, through syntax decode and frame macroblock table writeback,
 including nonzero `first_mb_in_slice` range isolation, per-macroblock QP
 deltas, and stateful residual nonzero-count context across consecutive
