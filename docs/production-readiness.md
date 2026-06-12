@@ -350,10 +350,10 @@ exact-P16 edge search with `-benchmem`.
 Internal encoder writer evidence now covers raw bit/Exp-Golomb writing, RBSP
 trailing bits, EBSP emulation-prevention, CAVLC coeff-token/total-zeros/run-before
 VLC writer table round-trips through the existing decoder tables, bounded CAVLC
-trailing-ones and single-level residual block writer round-trips through
-`decodeCAVLCResidual`, Annex B/AVC NAL packaging, AVC decoder configuration
-records, baseline SPS/PPS, recovery-point SEI syntax, and Baseline IDR, P-skip,
-and P16x16 no-residual slice syntax including
+trailing-ones, single-level, and single-level-plus-trailing-ones residual block
+writer round-trips through `decodeCAVLCResidual`, Annex B/AVC NAL packaging,
+AVC decoder configuration records, baseline SPS/PPS, recovery-point SEI syntax,
+and Baseline IDR, P-skip, and P16x16 no-residual slice syntax including
 per-macroblock MVD emission, with the P16x16 writer and public exact-motion
 encoder path proved through local Annex B decode, FFmpeg rawvideo decode, and
 mixed per-macroblock Annex B/AVC/RTP decode after an IDR reference frame.

@@ -549,6 +549,73 @@ func writeCAVLCResidualSingleLevel(bw *BitWriter, block []int32, n int, scantabl
 	return 1, nil
 }
 
+func writeCAVLCResidualSingleLevelTrailingOnes(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
+	if bw == nil || maxCoeff <= 0 || maxCoeff > 16 || len(scantable) < maxCoeff {
+		return 0, ErrInvalidData
+	}
+	var scanIndex [3]int
+	var level [3]int32
+	totalCoeff := 0
+	for i := 0; i < maxCoeff; i++ {
+		pos := int(scantable[i])
+		if pos < 0 || n+pos < 0 || n+pos >= len(block) {
+			return 0, ErrInvalidData
+		}
+		v := block[n+pos]
+		if v == 0 {
+			continue
+		}
+		if totalCoeff == len(scanIndex) {
+			return 0, ErrInvalidData
+		}
+		scanIndex[totalCoeff] = i
+		level[totalCoeff] = v
+		totalCoeff++
+	}
+
+	trailingOnes := 0
+	for i := totalCoeff - 1; i >= 0 && trailingOnes < 3; i-- {
+		if level[i] != 1 && level[i] != -1 {
+			break
+		}
+		trailingOnes++
+	}
+	if totalCoeff == 0 || trailingOnes == 0 || trailingOnes == totalCoeff || totalCoeff-trailingOnes != 1 {
+		return 0, ErrInvalidData
+	}
+	firstLevel := level[totalCoeff-trailingOnes-1]
+	if firstLevel == 1 || firstLevel == -1 {
+		return 0, ErrInvalidData
+	}
+
+	if err := writeCAVLCCoeffToken(bw, totalCoeff, trailingOnes, predictedNnz, maxCoeff); err != nil {
+		return 0, err
+	}
+	for i := totalCoeff - 1; i >= totalCoeff-trailingOnes; i-- {
+		if level[i] < 0 {
+			bw.WriteBit(1)
+		} else {
+			bw.WriteBit(0)
+		}
+	}
+	if err := writeCAVLCFirstLevel(bw, firstLevel); err != nil {
+		return 0, err
+	}
+	totalZeros := scanIndex[totalCoeff-1] + 1 - totalCoeff
+	if err := writeCAVLCTotalZeros(bw, totalZeros, totalCoeff, maxCoeff); err != nil {
+		return 0, err
+	}
+	zerosLeft := totalZeros
+	for i := totalCoeff - 2; i >= 0 && zerosLeft > 0; i-- {
+		runBefore := scanIndex[i+1] - scanIndex[i] - 1
+		if err := writeCAVLCRunBefore(bw, runBefore, zerosLeft); err != nil {
+			return 0, err
+		}
+		zerosLeft -= runBefore
+	}
+	return totalCoeff, nil
+}
+
 func writeCAVLCFirstLevel(bw *BitWriter, level int32) error {
 	if bw == nil || level == 0 || level == 1 || level == -1 {
 		return ErrInvalidData
