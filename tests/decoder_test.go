@@ -208,6 +208,16 @@ ccb3a1e31e9c180f08fe1835891d369c18261e698f3edb857dae08f7e17cd8b746b6546637ad5cec
 16ce16dad84c715edf368d1cad2
 `
 
+func TestParseHeadersRejectsNilDecoder(t *testing.T) {
+	var dec *Decoder
+	if _, err := dec.ParseHeadersAnnexB([]byte{0, 0, 1, 0x67}); err != ErrInvalidData {
+		t.Fatalf("ParseHeadersAnnexB nil decoder error = %v, want ErrInvalidData", err)
+	}
+	if _, err := dec.ParseHeadersAVC([]byte{0, 0, 0, 1, 0x67}, 4); err != ErrInvalidData {
+		t.Fatalf("ParseHeadersAVC nil decoder error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	dec := NewDecoder()

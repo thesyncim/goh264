@@ -599,6 +599,9 @@ func framesFromH264(frames []*h264.DecodedFrame) []*Frame {
 
 // ParseHeadersAnnexB parses Annex B parameter sets and returns stream metadata.
 func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
+	if d == nil {
+		return StreamInfo{}, ErrInvalidData
+	}
 	nals, err := h264.SplitAnnexB(data)
 	if err != nil {
 		return StreamInfo{}, err
@@ -608,6 +611,9 @@ func (d *Decoder) ParseHeadersAnnexB(data []byte) (StreamInfo, error) {
 
 // ParseHeadersAVC parses AVC parameter sets and returns stream metadata.
 func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, error) {
+	if d == nil {
+		return StreamInfo{}, ErrInvalidData
+	}
 	nals, err := h264.SplitAVCC(data, nalLengthSize)
 	if err != nil {
 		return StreamInfo{}, err
