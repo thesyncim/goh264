@@ -56,6 +56,84 @@ func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
 	if !got.RecoveryPointSEI {
 		t.Fatal("default WebRTC encoder config should emit recovery-point SEI on recovery pictures")
 	}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize default: %v", err)
+	}
+	if normalized != got {
+		t.Fatalf("Normalize default = %+v, want encoder config %+v", normalized, got)
+	}
+}
+
+func TestEncoderConfigNormalizeAppliesDerivedDefaults(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(64, 32)
+	cfg.StrideY = 0
+	cfg.StrideCb = 0
+	cfg.StrideCr = 0
+	cfg.TimeBaseNum = 0
+	cfg.TimeBaseDen = 0
+	cfg.Profile = 0
+	cfg.LevelIDC = 0
+	cfg.EntropyMode = 0
+	cfg.DeblockMode = 0
+	cfg.MaxReferenceFrames = 0
+	cfg.SPSPPSMode = 0
+	cfg.MaxBitrate = 0
+	cfg.InitialQP = 0
+	cfg.MinQP = 0
+	cfg.MaxQP = 0
+	cfg.Preset = 0
+	cfg.FrameDrop = 0
+	cfg.SliceCount = 0
+	cfg.Workers = 0
+	cfg.GOPSize = 0
+	cfg.IDRInterval = 0
+	cfg.OutputFormat = 0
+	cfg.RTPMaxPayloadSize = 0
+	cfg.RTPPayloadType = 0
+	cfg.RTPTimestampIncrement = 0
+
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if normalized.Width != 64 || normalized.Height != 32 ||
+		normalized.StrideY != 64 || normalized.StrideCb != 32 || normalized.StrideCr != 32 {
+		t.Fatalf("normalized geometry = %+v, want 64x32 with 64/32/32 strides", normalized)
+	}
+	if normalized.TimeBaseNum != 1 || normalized.TimeBaseDen != 90000 ||
+		normalized.Profile != goh264.EncoderProfileConstrainedBaseline ||
+		normalized.LevelIDC != 31 ||
+		normalized.EntropyMode != goh264.EncoderEntropyCAVLC ||
+		normalized.DeblockMode != goh264.EncoderDeblockEnabled ||
+		normalized.MaxReferenceFrames != 1 ||
+		normalized.SPSPPSMode != goh264.EncoderSPSPPSInBandKeyframes {
+		t.Fatalf("normalized syntax defaults = %+v", normalized)
+	}
+	if normalized.MaxBitrate != normalized.TargetBitrate ||
+		normalized.InitialQP != 26 || normalized.MinQP != 10 || normalized.MaxQP != 42 ||
+		normalized.Preset != goh264.EncoderPresetRealtime ||
+		normalized.FrameDrop != goh264.EncoderFrameDropToBitrate {
+		t.Fatalf("normalized rate/quality defaults = %+v", normalized)
+	}
+	if normalized.SliceCount != 1 || normalized.Workers != 1 ||
+		normalized.GOPSize != 60 || normalized.IDRInterval != 60 ||
+		normalized.OutputFormat != goh264.EncoderOutputRTP ||
+		normalized.RTPMaxPayloadSize != 1200 ||
+		normalized.RTPPayloadType != 96 ||
+		normalized.RTPTimestampIncrement != 3000 {
+		t.Fatalf("normalized runtime/RTP defaults = %+v", normalized)
+	}
+	if cfg.StrideY != 0 || cfg.OutputFormat != 0 || cfg.RTPTimestampIncrement != 0 {
+		t.Fatalf("Normalize mutated source config: %+v", cfg)
+	}
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder normalized config: %v", err)
+	}
+	if got := enc.Config(); got != normalized {
+		t.Fatalf("NewEncoder config = %+v, want Normalize result %+v", got, normalized)
+	}
 }
 
 func TestEncoderI420FrameHelpersPopulateConfigFields(t *testing.T) {
@@ -362,6 +440,9 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 			tt.mutate(&cfg)
 			if err := cfg.Validate(); !errors.Is(err, tt.want) {
 				t.Fatalf("Validate error = %v, want %v", err, tt.want)
+			}
+			if _, err := cfg.Normalize(); !errors.Is(err, tt.want) {
+				t.Fatalf("Normalize error = %v, want %v", err, tt.want)
 			}
 			if _, err := goh264.NewEncoder(cfg); !errors.Is(err, tt.want) {
 				t.Fatalf("NewEncoder error = %v, want %v", err, tt.want)
@@ -11692,6 +11773,9 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderConfig{}).MethodByName("I420Frame"); !ok {
 		t.Fatal("EncoderConfig missing I420Frame convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderConfig{}).MethodByName("Normalize"); !ok {
+		t.Fatal("EncoderConfig missing Normalize convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCC"); !ok {
 		t.Fatal("EncoderParameterSets missing AVCC convenience method")

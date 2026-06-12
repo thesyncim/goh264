@@ -81,8 +81,8 @@ and is checked by the freshness/matrix gates when populated.
 contract that keeps the inventory, manifest, exclusions, and failure ledger in
 lockstep.
 
-Encoder status: `DefaultEncoderConfig`, `NewEncoder`, `ParameterSets`,
-`RecoveryPointSEI`, `Encode`/`EncodeInto`, PLI/FIR/force-IDR,
+Encoder status: `DefaultEncoderConfig`, `EncoderConfig.Normalize`,
+`NewEncoder`, `ParameterSets`, `RecoveryPointSEI`, `Encode`/`EncodeInto`, PLI/FIR/force-IDR,
 bitrate/framerate/payload/slice reconfiguration, runtime rate-control, QP,
 frame-drop, GOP/IDR, deblock, SPS/PPS cadence modes, runtime output-format and
 RTP packetization reconfiguration, including RTP-to-configured-AVC forced

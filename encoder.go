@@ -595,6 +595,14 @@ func (cfg EncoderConfig) Validate() error {
 	return err
 }
 
+// Normalize returns the validated configuration after applying derived defaults.
+//
+// The returned value matches the configuration NewEncoder would store. cfg is
+// not modified.
+func (cfg EncoderConfig) Normalize() (EncoderConfig, error) {
+	return normalizeEncoderConfig(cfg)
+}
+
 // Reset clears encoder coding state while preserving configuration and callback.
 //
 // After Reset, the next successfully encoded frame starts a fresh sequence for

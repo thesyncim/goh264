@@ -218,7 +218,7 @@ Encoder readiness evidence currently covers controls, parameter-set headers,
 recovery-point SEI packaging, and the first IDR frame writer:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 guards public input/result/callback surfaces for integration-facing encoder
-structs, including `EncoderConfig.I420Frame`, `Encoder.I420Frame`,
+structs, including `EncoderConfig.Normalize`, `EncoderConfig.I420Frame`, `Encoder.I420Frame`,
 `EncodedFrame.NALData`, and `EncodedFrame.AccessUnitData`, rejects invalid or
 not-yet-admitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
