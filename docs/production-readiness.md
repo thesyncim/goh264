@@ -157,6 +157,8 @@ single-frame decode helpers and delayed B-frame prefix output from
 configuration-record one-shot decode. Packet `NEW_EXTRADATA` recovery also guards
 malformed AVC and Annex B extradata as non-fatal side data: the current valid
 packet still decodes against the last good configuration and reference state.
+Valid packet `NEW_EXTRADATA` admission also proves the stored configured-AVC
+state does not retain caller-owned side-data or packet buffers after return.
 Malformed standalone AVC decoder configuration records are also guarded: failed
 `ParseAVCDecoderConfigurationRecord` and auto-detected `DecodeFrames` config
 updates leave the last stored configuration usable for configured AVC decode.

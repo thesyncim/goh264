@@ -519,6 +519,39 @@ func TestDecodePacketFramesNewExtradataAVC(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketFramesNewExtradataDoesNotAliasCallerBuffers(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	config = append([]byte(nil), config...)
+	firstSample := append([]byte(nil), samples[0]...)
+
+	dec := NewDecoder()
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data:     firstSample,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames first sample: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	for i := range config {
+		config[i] = 0xff
+	}
+	for i := range firstSample {
+		firstSample[i] = 0xff
+	}
+
+	frames, err = dec.DecodePacketFrames(Packet{Data: samples[1]})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames after caller mutation: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodePacketFramesRepeatedNewExtradataDoesNotResetDPB(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
