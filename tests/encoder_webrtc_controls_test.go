@@ -1577,21 +1577,29 @@ func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutatio
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
 		RTPPacketizationMode: &mode0,
 		STAPA:                &stapa,
+		ForceIDR:             true,
 	}); !errors.Is(err, goh264.ErrUnsupported) {
 		t.Fatalf("Reconfigure mode-0 STAP-A error = %v, want ErrUnsupported", err)
 	}
 	if got := enc.Config(); got != before {
 		t.Fatalf("invalid packetization reconfigure mutated config = %+v, want %+v", got, before)
 	}
+	if enc.PendingIDR() {
+		t.Fatal("invalid packetization reconfigure queued an IDR")
+	}
 
 	badPayloadType := uint8(128)
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
 		RTPPayloadType: &badPayloadType,
+		ForceIDR:      true,
 	}); !errors.Is(err, goh264.ErrInvalidData) {
 		t.Fatalf("Reconfigure bad payload type error = %v, want ErrInvalidData", err)
 	}
 	if got := enc.Config(); got != before {
 		t.Fatalf("invalid payload type reconfigure mutated config = %+v, want %+v", got, before)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("invalid payload type reconfigure queued an IDR")
 	}
 }
 
