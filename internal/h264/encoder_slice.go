@@ -534,11 +534,23 @@ func validateEncoderI420IntraPCMSamples(cfg encoderI420IntraPCMSamples) error {
 	if cfg.StrideY < cfg.Width || cfg.StrideCb < cfg.Width/2 || cfg.StrideCr < cfg.Width/2 {
 		return ErrInvalidData
 	}
-	if len(cfg.Y) < cfg.StrideY*cfg.Height {
+	lumaSamples, err := checkedMulInt(cfg.StrideY, cfg.Height)
+	if err != nil {
 		return ErrInvalidData
 	}
 	chromaHeight := cfg.Height >> 1
-	if len(cfg.Cb) < cfg.StrideCb*chromaHeight || len(cfg.Cr) < cfg.StrideCr*chromaHeight {
+	cbSamples, err := checkedMulInt(cfg.StrideCb, chromaHeight)
+	if err != nil {
+		return ErrInvalidData
+	}
+	crSamples, err := checkedMulInt(cfg.StrideCr, chromaHeight)
+	if err != nil {
+		return ErrInvalidData
+	}
+	if len(cfg.Y) < lumaSamples {
+		return ErrInvalidData
+	}
+	if len(cfg.Cb) < cbSamples || len(cfg.Cr) < crSamples {
 		return ErrInvalidData
 	}
 	return nil
@@ -581,8 +593,8 @@ func validateEncoderI420PSkipConfig(cfg EncoderI420PSkipConfig) error {
 }
 
 func validateEncoderI420SliceRange(width int, height int, firstMBAddr uint32, macroblockCount uint32) error {
-	total := encoderI420MacroblockCount(width, height)
-	if total <= 0 {
+	total, err := encoderI420MacroblockCountChecked(width, height)
+	if err != nil || total <= 0 {
 		return ErrInvalidData
 	}
 	if uint64(firstMBAddr) >= uint64(total) {
@@ -599,7 +611,7 @@ func validateEncoderI420SliceRange(width int, height int, firstMBAddr uint32, ma
 }
 
 func encoderI420SliceRange(width int, height int, firstMBAddr uint32, macroblockCount uint32) (int, int) {
-	total := encoderI420MacroblockCount(width, height)
+	total, _ := encoderI420MacroblockCountChecked(width, height)
 	first := int(firstMBAddr)
 	count := int(macroblockCount)
 	if count == 0 {
@@ -609,7 +621,55 @@ func encoderI420SliceRange(width int, height int, firstMBAddr uint32, macroblock
 }
 
 func encoderI420MacroblockCount(width int, height int) int {
-	return ((width + 15) >> 4) * ((height + 15) >> 4)
+	total, err := encoderI420MacroblockCountChecked(width, height)
+	if err != nil {
+		return 0
+	}
+	return total
+}
+
+func encoderI420MacroblockCountChecked(width int, height int) (int, error) {
+	mbWidthInput, err := checkedAddInt(width, 15)
+	if err != nil {
+		return 0, ErrInvalidData
+	}
+	mbHeightInput, err := checkedAddInt(height, 15)
+	if err != nil {
+		return 0, ErrInvalidData
+	}
+	total, err := checkedMulInt(mbWidthInput>>4, mbHeightInput>>4)
+	if err != nil {
+		return 0, ErrInvalidData
+	}
+	if uint64(total) > uint64(^uint32(0)) {
+		return 0, ErrInvalidData
+	}
+	return total, nil
+}
+
+const maxInt = int(^uint(0) >> 1)
+
+func checkedAddInt(a int, b int) (int, error) {
+	if b > 0 && a > maxInt-b {
+		return 0, ErrInvalidData
+	}
+	if b < 0 && a < -maxInt-1-b {
+		return 0, ErrInvalidData
+	}
+	return a + b, nil
+}
+
+func checkedMulInt(a int, b int) (int, error) {
+	if a == 0 || b == 0 {
+		return 0, nil
+	}
+	if a < 0 || b < 0 {
+		return 0, ErrInvalidData
+	}
+	if a > maxInt/b {
+		return 0, ErrInvalidData
+	}
+	return a * b, nil
 }
 
 func clampEncoderCoord(v int, limit int) int {

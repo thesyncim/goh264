@@ -532,6 +532,10 @@ func TestBuildEncoderI420PSkipSliceRejectsInvalidConfig(t *testing.T) {
 		{name: "bad deblock idc", mutate: func(c *EncoderI420PSkipConfig) { c.DisableDeblockingFilterIDC = 3 }},
 		{name: "bad qp", mutate: func(c *EncoderI420PSkipConfig) { c.InitialQP = 52 }},
 		{name: "bad first mb", mutate: func(c *EncoderI420PSkipConfig) { c.FirstMBAddr = 1 }},
+		{name: "macroblock count overflow", mutate: func(c *EncoderI420PSkipConfig) {
+			c.Width = maxInt - 15
+			c.Height = 32
+		}},
 		{name: "bad macroblock count", mutate: func(c *EncoderI420PSkipConfig) { c.MacroblockCount = 2 }},
 		{name: "bad nal length", mutate: func(c *EncoderI420PSkipConfig) { c.NALLengthSize = 5 }},
 	} {
@@ -563,6 +567,10 @@ func TestBuildEncoderI420P16x16NoResidualSliceRejectsInvalidConfig(t *testing.T)
 		{name: "bad deblock idc", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.DisableDeblockingFilterIDC = 3 }},
 		{name: "bad qp", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.InitialQP = 52 }},
 		{name: "bad first mb", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.FirstMBAddr = 1 }},
+		{name: "macroblock count overflow", mutate: func(c *EncoderI420P16x16NoResidualConfig) {
+			c.Width = maxInt - 15
+			c.Height = 32
+		}},
 		{name: "bad macroblock count", mutate: func(c *EncoderI420P16x16NoResidualConfig) { c.MacroblockCount = 2 }},
 		{name: "bad mvd count", mutate: func(c *EncoderI420P16x16NoResidualConfig) {
 			c.MVDs = []EncoderMotionVectorDelta{{}, {}}
@@ -599,6 +607,16 @@ func TestBuildEncoderI420IntraPCMPSliceRejectsInvalidConfig(t *testing.T) {
 	}{
 		{name: "odd width", mutate: func(c *EncoderI420IntraPCMPConfig) { c.Width = 15 }},
 		{name: "small luma", mutate: func(c *EncoderI420IntraPCMPConfig) { c.Y = c.Y[:len(c.Y)-1] }},
+		{name: "luma size overflow", mutate: func(c *EncoderI420IntraPCMPConfig) {
+			c.Width = maxInt - 15
+			c.Height = 32
+			c.StrideY = c.Width
+			c.StrideCb = c.Width / 2
+			c.StrideCr = c.Width / 2
+			c.Y = nil
+			c.Cb = nil
+			c.Cr = nil
+		}},
 		{name: "bad frame num", mutate: func(c *EncoderI420IntraPCMPConfig) { c.FrameNum = 256 }},
 		{name: "bad deblock idc", mutate: func(c *EncoderI420IntraPCMPConfig) { c.DisableDeblockingFilterIDC = 3 }},
 		{name: "bad qp", mutate: func(c *EncoderI420IntraPCMPConfig) { c.InitialQP = 52 }},
@@ -636,6 +654,16 @@ func TestBuildEncoderI420IntraPCMIDRSliceRejectsInvalidConfig(t *testing.T) {
 	}{
 		{name: "odd width", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.Width = 15 }},
 		{name: "small luma", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.Y = c.Y[:len(c.Y)-1] }},
+		{name: "luma size overflow", mutate: func(c *EncoderI420IntraPCMIDRConfig) {
+			c.Width = maxInt - 15
+			c.Height = 32
+			c.StrideY = c.Width
+			c.StrideCb = c.Width / 2
+			c.StrideCr = c.Width / 2
+			c.Y = nil
+			c.Cb = nil
+			c.Cr = nil
+		}},
 		{name: "bad frame num", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.FrameNum = 256 }},
 		{name: "bad idr pic id", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.IDRPicID = 65536 }},
 		{name: "bad deblock idc", mutate: func(c *EncoderI420IntraPCMIDRConfig) { c.DisableDeblockingFilterIDC = 3 }},
