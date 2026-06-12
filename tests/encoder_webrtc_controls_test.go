@@ -5648,6 +5648,18 @@ func TestEncoderEncodeForceIDRBypassesPSkipReference(t *testing.T) {
 				t.Fatal("ForceIDR did not queue an IDR")
 			}
 		}},
+		{name: "pli", request: func(enc *goh264.Encoder, frame *goh264.EncoderFrame) {
+			enc.HandlePLI()
+			if !enc.PendingIDR() {
+				t.Fatal("HandlePLI did not queue an IDR")
+			}
+		}},
+		{name: "fir", request: func(enc *goh264.Encoder, frame *goh264.EncoderFrame) {
+			enc.HandleFIR()
+			if !enc.PendingIDR() {
+				t.Fatal("HandleFIR did not queue an IDR")
+			}
+		}},
 		{name: "frame flag", request: func(_ *goh264.Encoder, frame *goh264.EncoderFrame) {
 			frame.ForceIDR = true
 		}},
