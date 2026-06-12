@@ -1479,6 +1479,12 @@ func TestEncoderReconfigureResolutionResetsReferenceAndQueuesIDR(t *testing.T) {
 		t.Fatalf("Decode resized P-skip: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decodedResizedPSkip, appendI420FrameBytes(nil, resizedPSkipFrame))
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, resized.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, resizedPSkip.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 5, 1}, []uint32{0, 1, 2, 3})
 }
 
 func TestEncoderRealtimeControlLoopStressPreservesPacketAndReferenceState(t *testing.T) {
