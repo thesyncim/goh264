@@ -5453,6 +5453,11 @@ func TestEncoderFrameDropLateDropsOverBudgetFrameWithoutAdvancingReferenceOrPack
 		t.Fatalf("post-late-drop forced RTP time = %d, want %d", forced.RTPTime, forcedDropped.RTPTime+cfg.RTPTimestampIncrement)
 	}
 	assertEncoderNALTypes(t, forced.NALUnits, []uint8{7, 8, 5})
+	assertEncoderVCLFrameNums(t,
+		append(append(append([]byte(nil), out.Data...), pskip.Data...), forced.Data...),
+		[]uint8{5, 1, 5},
+		[]uint32{0, 1, 2},
+	)
 	assertRTPPacketMetadata(t, forced.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(callbacksAfterPSkip))
 	if callbackCalls != callbacksAfterPSkip+len(forced.RTPPackets) {
 		t.Fatalf("post-late-drop forced callbacks = %d, want %d", callbackCalls, callbacksAfterPSkip+len(forced.RTPPackets))
