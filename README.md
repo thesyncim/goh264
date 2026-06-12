@@ -311,6 +311,7 @@ frames, err := dec.DecodeConfiguredAVCFrames(nil)      // delayed configured-AVC
 frames, err := dec.DecodeAVCCFrames(avcc, packet)
 frames, err := dec.DecodeAVCCFrames(avcc, nil) // delayed avcC output
 frames, err := dec.FlushDelayedFrames()                // delayed B-frame output
+cfg, err := dec.AVCConfig()                            // current configured-AVC metadata
 ```
 
 Single-frame helpers (`Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`,

@@ -31,6 +31,7 @@ type (
 	Decoder                   = goh264.Decoder
 	StreamInfo                = goh264.StreamInfo
 	AVCDecoderConfiguration   = goh264.AVCDecoderConfiguration
+	AVCConfig                 = goh264.AVCConfig
 	PacketSideDataType        = goh264.PacketSideDataType
 	PacketSideData            = goh264.PacketSideData
 	Packet                    = goh264.Packet

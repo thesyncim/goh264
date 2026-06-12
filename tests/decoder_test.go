@@ -292,6 +292,10 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 			_, err := dec.ParseAVCC([]byte{1})
 			return err
 		}},
+		{name: "AVCConfig", call: func() error {
+			_, err := dec.AVCConfig()
+			return err
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -668,6 +672,65 @@ func TestAVCCConvenienceAPIsMatchConfigurationRecordBehavior(t *testing.T) {
 		t.Fatalf("DecodeConfiguredAVCFrames after DecodeAVCC: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecoderAVCConfigReportsStoredConfiguration(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config4, samples4 := annexBToAVCConfigAndSamples(t, data, 4)
+	config3, samples3 := annexBToAVCConfigAndSamples(t, data, 3)
+	if len(samples4) != 2 || len(samples3) != 2 {
+		t.Fatalf("samples length = %d/%d, want 2/2", len(samples4), len(samples3))
+	}
+
+	dec := NewDecoder()
+	if cfg, err := dec.AVCConfig(); err != ErrInvalidData || cfg != (AVCConfig{}) {
+		t.Fatalf("initial AVCConfig = %+v, %v; want zero config and ErrInvalidData", cfg, err)
+	}
+
+	parsed, err := dec.ParseAVCC(config4)
+	if err != nil {
+		t.Fatalf("ParseAVCC: %v", err)
+	}
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after ParseAVCC: %v", err)
+	}
+	if got != parsed || got.NALLengthSize != 4 || got.StreamInfo.Width != 16 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after ParseAVCC = %+v, want %+v", got, parsed)
+	}
+
+	if _, err := dec.DecodeAVCCFrames(config3, samples3[0]); err != nil {
+		t.Fatalf("DecodeAVCCFrames length-size 3: %v", err)
+	}
+	got, err = dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after DecodeAVCCFrames: %v", err)
+	}
+	if got.NALLengthSize != 3 || got.StreamInfo.Width != 16 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after DecodeAVCCFrames = %+v, want length-size 3 black16 config", got)
+	}
+
+	dec = NewDecoder()
+	if frames, err := dec.DecodeFrames(config4); err != nil || len(frames) != 0 {
+		t.Fatalf("DecodeFrames config frames=%d err=%v", len(frames), err)
+	}
+	got, err = dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after auto config packet: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.Width != 16 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after auto config packet = %+v, want length-size 4 black16 config", got)
+	}
+
+	if _, err := dec.DecodePacketFrames(Packet{
+		Data:     data,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: data}},
+	}); err != nil {
+		t.Fatalf("DecodePacketFrames with Annex B new extradata: %v", err)
+	}
+	if cfg, err := dec.AVCConfig(); err != ErrInvalidData || cfg != (AVCConfig{}) {
+		t.Fatalf("AVCConfig after Annex B new extradata reset = %+v, %v; want zero config and ErrInvalidData", cfg, err)
+	}
 }
 
 func TestDecodePacketFramesNewExtradataAVC(t *testing.T) {

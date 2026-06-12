@@ -669,6 +669,22 @@ func (d *Decoder) ParseAVCC(data []byte) (AVCConfig, error) {
 	return d.ParseAVCDecoderConfigurationRecord(data)
 }
 
+// AVCConfig returns the currently stored avcC/configured-AVC metadata.
+func (d *Decoder) AVCConfig() (AVCConfig, error) {
+	if d == nil || d.avcNALLengthSize == 0 {
+		return AVCConfig{}, ErrInvalidData
+	}
+	for _, sps := range d.sps {
+		if sps != nil {
+			return AVCConfig{
+				NALLengthSize: d.avcNALLengthSize,
+				StreamInfo:    streamInfoFromSPS(sps),
+			}, nil
+		}
+	}
+	return AVCConfig{}, ErrInvalidData
+}
+
 func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 	if d == nil {
 		return StreamInfo{}, ErrInvalidData
