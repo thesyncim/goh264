@@ -1352,6 +1352,9 @@ func TestEncoderInvalidReconfigureWithForceIDRDoesNotQueueIDR(t *testing.T) {
 	}{
 		{name: "bad bitrate", update: goh264.EncoderReconfigure{MaxBitrate: 1, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
 		{name: "bad payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 2, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+		{name: "negative max frame size", update: goh264.EncoderReconfigure{MaxFrameSize: -1, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+		{name: "negative slice max bytes", update: goh264.EncoderReconfigure{SliceMaxBytes: -1, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+		{name: "negative max encode time", update: goh264.EncoderReconfigure{MaxEncodeTimeUS: -1, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
 		{name: "bad output format", update: goh264.EncoderReconfigure{OutputFormat: goh264.EncoderOutputFormat(99), ForceIDR: true}, wantErr: goh264.ErrInvalidData},
 		{name: "mode-0 STAP-A", update: goh264.EncoderReconfigure{
 			RTPPacketizationMode: &mode0,
@@ -1632,6 +1635,10 @@ func TestEncoderReconfigureInvalidLatencyUpdatesPreserveLiveState(t *testing.T) 
 				name   string
 				update goh264.EncoderReconfigure
 			}{
+				{name: "negative max frame size", update: goh264.EncoderReconfigure{
+					MaxFrameSize: -1,
+					ForceIDR:     true,
+				}},
 				{name: "negative encode-time budget", update: goh264.EncoderReconfigure{
 					MaxEncodeTimeUS: -1,
 					ForceIDR:        true,
