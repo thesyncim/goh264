@@ -954,6 +954,77 @@ func TestEncoderFrameRateInvalidUpdatesPreserveLiveState(t *testing.T) {
 	}
 }
 
+func TestEncoderInvalidBundledRTPMetadataUpdatePreservesLiveState(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 32
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 0
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR || first.RTPTime != 0 {
+		t.Fatalf("first output dropped/id/time = %v/%v/%d, want IDR time 0",
+			first.Dropped, first.IDR, first.RTPTime)
+	}
+	firstPacketCount := len(first.RTPPackets)
+	if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+			firstPacketCount, callbackCalls)
+	}
+	before := enc.Config()
+
+	badPayloadType := uint8(128)
+	nextSSRC := uint32(0x8899aabb)
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		RTPPayloadType:        &badPayloadType,
+		RTPSSRC:               &nextSSRC,
+		RTPTimestampIncrement: before.RTPTimestampIncrement + 1234,
+		ForceIDR:              true,
+	}); !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("invalid bundled RTP metadata reconfigure error = %v, want ErrInvalidData", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("invalid bundled RTP metadata reconfigure mutated config = %+v, want %+v", got, before)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("invalid bundled RTP metadata reconfigure queued unexpected IDR")
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("invalid bundled RTP metadata reconfigure callbacks = %d, want still %d",
+			callbackCalls, firstPacketCount)
+	}
+
+	second, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode after invalid bundled RTP metadata reconfigure: %v", err)
+	}
+	if second.Dropped || second.IDR || second.RTPTime != before.RTPTimestampIncrement {
+		t.Fatalf("post-invalid output dropped/id/time = %v/%v/%d, want P-skip time %d",
+			second.Dropped, second.IDR, second.RTPTime, before.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertRTPPacketMetadata(t, second.RTPPackets, before.RTPPayloadType, before.RTPSSRC, uint16(firstPacketCount))
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+	if callbackCalls != firstPacketCount+len(second.RTPPackets) {
+		t.Fatalf("post-invalid callbacks = %d, want %d",
+			callbackCalls, firstPacketCount+len(second.RTPPackets))
+	}
+}
+
 func TestEncoderReconfigureInvalidLatencyUpdatesPreserveLiveState(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
