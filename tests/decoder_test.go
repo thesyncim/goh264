@@ -1932,6 +1932,45 @@ func TestDecodeFrameS12MTimecodeFromPictureTimingSEI(t *testing.T) {
 	}
 }
 
+func TestDecodeFramePictureTimingSlicesAreCallerOwned(t *testing.T) {
+	base := replaceAnnexBSPS(t, decodeHexFixture(t, black16AnnexBHex), decoderSPSNALWithPicStructVUI())
+	data := prependAnnexBNAL(base, decoderTestSEINAL(decoderSEITestMessage{
+		typ:     decoderSEITypePicTiming,
+		payload: decoderSEIPictureTimingTimecodePayload(),
+	}))
+
+	frame, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side := frame.SideData
+	if len(side.S12MTimecodes) != 1 || side.PictureTiming == nil ||
+		len(side.PictureTiming.Timecode) != 1 {
+		t.Fatalf("picture timing before mutation = %+v", side)
+	}
+
+	side.S12MTimecodes[0] = 0
+	side.PictureTiming.Timecode[0] = Timecode{}
+
+	frame, err = NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side = frame.SideData
+	if got, want := side.S12MTimecodes, []uint32{0x40345607}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("s12m after caller mutation = %08x, want %08x", got, want)
+	}
+	pt := side.PictureTiming
+	if pt == nil || len(pt.Timecode) != 1 {
+		t.Fatalf("picture timing after caller mutation = %+v", pt)
+	}
+	tc := pt.Timecode[0]
+	if !tc.Full || !tc.DropFrame || tc.Frame != 0 || tc.Seconds != 34 ||
+		tc.Minutes != 56 || tc.Hours != 7 {
+		t.Fatalf("picture timing timecode after caller mutation = %+v", tc)
+	}
+}
+
 func decodePictureTimingS12M(t *testing.T, numUnitsInTick uint32, timeScale uint32, drop bool, frameNum uint32) uint32 {
 	t.Helper()
 
