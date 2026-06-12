@@ -1658,6 +1658,81 @@ func TestDecodeFrameSideDataByteSlicesAreCallerOwned(t *testing.T) {
 	}
 }
 
+func TestDecodeFrameSEIStructuredSideDataIsCallerOwned(t *testing.T) {
+	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeRecoveryPoint, payload: decoderSEIRecoveryPointPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeGreenMetadata, payload: []byte{0, 2, 0x01, 0x23, 1, 2, 3, 4}},
+		decoderSEITestMessage{typ: decoderSEITypeDisplayOrientation, payload: decoderSEIDisplayOrientationPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeFramePackingArrangement, payload: decoderSEIFramePackingPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeAlternativeTransfer, payload: []byte{16}},
+		decoderSEITestMessage{typ: decoderSEITypeAmbientViewingEnvironment, payload: decoderSEIAmbientViewingPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeFilmGrainCharacteristics, payload: decoderSEIFilmGrainPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeMasteringDisplayColourVolume, payload: decoderSEIMasteringDisplayPayload()},
+		decoderSEITestMessage{typ: decoderSEITypeContentLightLevelInfo, payload: []byte{0x03, 0xe8, 0x00, 0xfa}},
+	))
+
+	frame, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side := frame.SideData
+	if side.RecoveryPoint == nil || side.GreenMetadata == nil || side.DisplayOrientation == nil ||
+		side.FramePacking == nil || side.Stereo3D == nil || side.AlternativeTransfer == nil ||
+		side.AmbientViewing == nil || side.FilmGrain == nil || side.MasteringDisplay == nil ||
+		side.ContentLight == nil {
+		t.Fatalf("structured SEI side data missing before mutation: %+v", side)
+	}
+
+	side.RecoveryPoint.RecoveryFrameCount = 0
+	side.GreenMetadata.NumSeconds = 0
+	side.DisplayOrientation.Matrix[0] = 0
+	side.FramePacking.ArrangementID = 0
+	side.Stereo3D.StereoMode = ""
+	side.AlternativeTransfer.PreferredTransferCharacteristics = 0
+	side.AmbientViewing.AmbientIlluminance = 0
+	side.FilmGrain.RepetitionPeriod = 0
+	side.MasteringDisplay.MaxLuminance = 0
+	side.ContentLight.MaxContentLightLevel = 0
+
+	frame, err = NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side = frame.SideData
+	if side.RecoveryPoint == nil || side.RecoveryPoint.RecoveryFrameCount != 4 {
+		t.Fatalf("recovery point after caller mutation = %+v", side.RecoveryPoint)
+	}
+	if side.GreenMetadata == nil || side.GreenMetadata.NumSeconds != 0x0123 ||
+		side.GreenMetadata.PercentIntraCodedMacroblocks != 2 {
+		t.Fatalf("green metadata after caller mutation = %+v", side.GreenMetadata)
+	}
+	if side.DisplayOrientation == nil ||
+		side.DisplayOrientation.Matrix != [9]int32{0, 65536, 0, 65536, 0, 0, 0, 0, 1 << 30} {
+		t.Fatalf("display orientation after caller mutation = %+v", side.DisplayOrientation)
+	}
+	if side.FramePacking == nil || side.FramePacking.ArrangementID != 2 {
+		t.Fatalf("frame packing after caller mutation = %+v", side.FramePacking)
+	}
+	if side.Stereo3D == nil || side.Stereo3D.StereoMode != "right_left" {
+		t.Fatalf("stereo 3d after caller mutation = %+v", side.Stereo3D)
+	}
+	if side.AlternativeTransfer == nil || side.AlternativeTransfer.PreferredTransferCharacteristics != 16 {
+		t.Fatalf("alternative transfer after caller mutation = %+v", side.AlternativeTransfer)
+	}
+	if side.AmbientViewing == nil || side.AmbientViewing.AmbientIlluminance != 12345 {
+		t.Fatalf("ambient viewing after caller mutation = %+v", side.AmbientViewing)
+	}
+	if side.FilmGrain == nil || side.FilmGrain.RepetitionPeriod != 4 {
+		t.Fatalf("film grain after caller mutation = %+v", side.FilmGrain)
+	}
+	if side.MasteringDisplay == nil || side.MasteringDisplay.MaxLuminance != 10000000 {
+		t.Fatalf("mastering display after caller mutation = %+v", side.MasteringDisplay)
+	}
+	if side.ContentLight == nil || side.ContentLight.MaxContentLightLevel != 1000 {
+		t.Fatalf("content light after caller mutation = %+v", side.ContentLight)
+	}
+}
+
 func TestDecodeFrameSideDataSkipsNoopDisplayMatrixAndInvalidStereo3D(t *testing.T) {
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
 		decoderSEITestMessage{typ: decoderSEITypeDisplayOrientation, payload: decoderSEIDisplayOrientationPayloadWith(0, false, false)},
