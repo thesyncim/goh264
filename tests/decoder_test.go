@@ -864,6 +864,29 @@ func TestDecodePacketFramesStructuredPacketSideDataFirstEntryWins(t *testing.T) 
 	}
 }
 
+func TestDecodePacketFramesBytePacketSideDataFirstEntryWins(t *testing.T) {
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{
+			{Type: PacketSideDataICCProfile, Data: nil},
+			{Type: PacketSideDataICCProfile, Data: []byte{0x00, 0x00, 0x02, 0x10, 'a', 'c', 's', 'p'}},
+			{Type: PacketSideDataDynamicHDR10Plus, Data: nil},
+			{Type: PacketSideDataDynamicHDR10Plus, Data: []byte{0x4c, 0x01, 0x02, 0x03, 0x80}},
+			{Type: PacketSideDataLCEVC, Data: nil},
+			{Type: PacketSideDataLCEVC, Data: []byte{0x7e, 0x01, 0x00, 0x03, 0x02, 0x7f}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if len(frame.SideData.ICCProfile) != 0 ||
+		len(frame.SideData.DynamicHDR10Plus) != 0 ||
+		len(frame.SideData.LCEVC) != 0 {
+		t.Fatalf("later duplicate byte packet side data overrode empty first entry: %+v", frame.SideData)
+	}
+}
+
 func TestDecodePacketFramesPacketDisplayAndStereoWinPublicFirstSideData(t *testing.T) {
 	matrix := [9]int32{0, 65536, 0, -65536, 0, 0, 0, 0, 1 << 30}
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(

@@ -115,6 +115,8 @@ foreign SPS is followed by malformed PPS,
 malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,
 packet side-data byte-slice ownership across delayed B-frame output,
+first-entry duplicate packet side-data semantics for structured layouts and
+ICC/HDR10+/LCEVC byte payloads, including empty first entries,
 raw-output caller-buffer preservation on invalid 8-bit chroma geometry and
 high-bit-depth luma/chroma sample errors, `RawYUVSize` overflow rejection, and
 raw-output appender no-panic rejection for overflowed caller-constructed frame
