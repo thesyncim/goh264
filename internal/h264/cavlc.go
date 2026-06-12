@@ -587,14 +587,14 @@ func writeCAVLCResidualNonTrailingLevels(bw *BitWriter, block []int32, n int, sc
 		return 0, err
 	}
 	firstLevel := level[totalCoeff-1]
-	firstCode, err := cavlcFirstLevelCode(firstLevel)
+	initialSuffixLength := 0
+	if totalCoeff > 10 {
+		initialSuffixLength = 1
+	}
+	suffixLength, err := writeCAVLCFirstLevelWithSuffix(bw, firstLevel, initialSuffixLength)
 	if err != nil {
 		return 0, err
 	}
-	if err := writeCAVLCLevelCode(bw, firstCode); err != nil {
-		return 0, err
-	}
-	suffixLength := cavlcSuffixLengthAfterFirstLevel(firstLevel, firstCode)
 	for i := totalCoeff - 2; i >= 0; i-- {
 		if err := writeCAVLCSubsequentLevel(bw, level[i], suffixLength); err != nil {
 			return 0, err
@@ -647,6 +647,10 @@ func writeCAVLCResidualNineNonTrailingLevels(bw *BitWriter, block []int32, n int
 
 func writeCAVLCResidualTenNonTrailingLevels(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
 	return writeCAVLCResidualNonTrailingLevels(bw, block, n, scantable, maxCoeff, predictedNnz, 10, 10)
+}
+
+func writeCAVLCResidualElevenNonTrailingLevels(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
+	return writeCAVLCResidualNonTrailingLevels(bw, block, n, scantable, maxCoeff, predictedNnz, 11, 11)
 }
 
 func writeCAVLCResidualSingleLevelTrailingOnes(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
@@ -720,11 +724,32 @@ func writeCAVLCFirstLevel(bw *BitWriter, level int32) error {
 	if bw == nil || level == 0 || level == 1 || level == -1 {
 		return ErrInvalidData
 	}
+	_, err := writeCAVLCFirstLevelWithSuffix(bw, level, 0)
+	return err
+}
+
+func writeCAVLCFirstLevelWithSuffix(bw *BitWriter, level int32, suffixLength int) (int, error) {
+	if bw == nil || level == 0 || level == 1 || level == -1 || suffixLength < 0 || suffixLength > 1 {
+		return 0, ErrInvalidData
+	}
 	code, err := cavlcFirstLevelCode(level)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return writeCAVLCLevelCode(bw, code)
+	if suffixLength == 0 {
+		if err := writeCAVLCLevelCode(bw, code); err != nil {
+			return 0, err
+		}
+		return cavlcSuffixLengthAfterFirstLevel(level, code), nil
+	}
+	adjusted := level - 1
+	if level < 0 {
+		adjusted = level + 1
+	}
+	if err := writeCAVLCSubsequentLevel(bw, adjusted, suffixLength); err != nil {
+		return 0, err
+	}
+	return cavlcSuffixLengthAfterFirstLevel(level, code), nil
 }
 
 func cavlcFirstLevelCode(level int32) (int64, error) {

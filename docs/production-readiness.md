@@ -19,8 +19,8 @@ allocation budgets, and oracle evidence land.
 The encoder bitstream-writer residual work is still deliberately bounded, but
 the CAVLC single-level and single-level-plus-trailing-ones residual writers now
 round-trip both short and decoder-supported prefix-14/prefix-15 first-level
-codes, and two-, three-, four-, five-, six-, seven-, eight-, nine-, and ten-non-trailing-level writers now round-trip subsequent
-suffix-length transitions, before broader residual macroblock admission.
+codes, and two-, three-, four-, five-, six-, seven-, eight-, nine-, ten-, and eleven-non-trailing-level writers now round-trip subsequent
+suffix-length transitions plus the totalCoeff>10 first-level suffix transition, before broader residual macroblock admission.
 
 Harness-first status:
 
