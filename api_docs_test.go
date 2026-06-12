@@ -250,6 +250,8 @@ func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
 		"IDR-bound stream switches",
 		"unrelated stream where old references must not be visible",
 		"call `Reset` before storing the new avcC",
+		"PacketSideDataNewExtradata",
+		"uses the same stateful update rule",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md decoder avcC state guidance missing %q", phrase)

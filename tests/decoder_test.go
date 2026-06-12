@@ -1245,6 +1245,50 @@ func TestDecodePacketFramesNewExtradataAVC(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration(t *testing.T) {
+	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) != 2 || len(samples32) != 2 {
+		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
+	}
+
+	dec := NewDecoder()
+	out, err := dec.DecodePacketFrames(Packet{
+		Data:     samples16[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+	out, err = dec.DecodePacketFrames(Packet{Data: samples16[1]})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     samples32[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config32}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 32x16 NEW_EXTRADATA IDR after 16x16 stream: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after packet side-data 32x16 switch: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.Width != 32 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after packet side-data 32x16 switch = %+v, want 32x16 length-size 4", got)
+	}
+	out, err = dec.DecodePacketFrames(Packet{Data: samples32[1]})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 32x16 P-skip after switch: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[1]))
+}
+
 func TestDecodePacketFramesEmptyPacketIgnoresNewExtradata(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config4, samples4 := annexBToAVCConfigAndSamples(t, data, 4)
