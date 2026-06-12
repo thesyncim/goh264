@@ -2021,6 +2021,190 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesCombinedMultiPlaneResidual(t *t
 	}
 }
 
+func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedCombinedMultiPlaneResidual(t *testing.T) {
+	pps, sps := encoderResidualSliceTestPPS(20)
+	wantMVDs := []EncoderMotionVectorDelta{
+		{X: 2, Y: -1},
+		{X: -3, Y: 4},
+	}
+	wantLuma := [][]encoderResidualCoefficient{
+		{
+			{Pos: int(h264ZigzagScanCAVLC[0]), Value: 2},
+			{Pos: int(h264ZigzagScanCAVLC[1]), Value: -1},
+		},
+		{
+			{Pos: int(h264ZigzagScanCAVLC[0]), Value: -2},
+			{Pos: int(h264ZigzagScanCAVLC[3]), Value: 1},
+			{Pos: int(h264ZigzagScanCAVLC[4]), Value: -1},
+		},
+	}
+	wantChromaDC := []encoderChromaResidualCoefficients{
+		{
+			Cb: []encoderResidualCoefficient{{Pos: 0, Value: 2}, {Pos: 1, Value: -1}},
+			Cr: []encoderResidualCoefficient{{Pos: 0, Value: -2}, {Pos: 2, Value: 1}},
+		},
+		{
+			Cb: []encoderResidualCoefficient{{Pos: 0, Value: -3}, {Pos: 3, Value: 1}},
+			Cr: []encoderResidualCoefficient{{Pos: 0, Value: 3}, {Pos: 1, Value: -1}},
+		},
+	}
+	wantChromaAC := []encoderChromaResidualCoefficients{
+		{
+			Cb: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 2}, {Pos: int(h264ZigzagScanCAVLC[2]), Value: -1}},
+			Cr: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -2}, {Pos: int(h264ZigzagScanCAVLC[3]), Value: 1}},
+		},
+		{
+			Cb: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -3}, {Pos: int(h264ZigzagScanCAVLC[4]), Value: 1}},
+			Cr: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 3}, {Pos: int(h264ZigzagScanCAVLC[5]), Value: -1}},
+		},
+	}
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+		Width:                      48,
+		Height:                     16,
+		FrameNum:                   24,
+		InitialQP:                  20,
+		NextQP:                     23,
+		DisableDeblockingFilterIDC: 1,
+		FirstMBAddr:                1,
+		MacroblockCount:            2,
+		MVDs:                       wantMVDs,
+		LumaCoefficients:           wantLuma,
+		ChromaDCCoefficients:       wantChromaDC,
+		ChromaACCoefficients:       wantChromaAC,
+	}, pps, sps)
+	if err != nil {
+		t.Fatalf("encode ranged combined multi-plane residual slice rbsp: %v", err)
+	}
+
+	var ppsList [maxPPSCount]*PPS
+	ppsList[0] = pps
+	sh, payload, err := parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("parse ranged combined multi-plane residual P slice header: %v", err)
+	}
+	if sh.FirstMBAddr != 1 || sh.SliceTypeNoS != PictureTypeP || sh.FrameNum != 24 ||
+		sh.RefCount[0] != 1 || sh.QScale != 20 || sh.DeblockingFilter != 0 {
+		t.Fatalf("ranged combined multi-plane slice header = %+v", sh)
+	}
+	syntaxTables, err := newMacroblockTables(3, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qscale := int(sh.QScale)
+	for i := range wantMVDs {
+		mbXY := i + 1
+		skipRun, err := payload.readUEGolombLong()
+		if err != nil {
+			t.Fatalf("read ranged combined multi-plane residual skip run[%d]: %v", i, err)
+		}
+		if skipRun != 0 {
+			t.Fatalf("skip run[%d] = %d, want 0", i, skipRun)
+		}
+		var decoded cavlcResidualContext
+		neighbors, err := syntaxTables.fillDecodeNeighborsFrame(mbXY, 28, MBType16x16|MBTypeP0L0)
+		if err != nil {
+			t.Fatalf("fill ranged combined multi-plane residual syntax neighbors[%d]: %v", i, err)
+		}
+		if _, err := syntaxTables.fillResidualDecodeCaches(&decoded, neighbors.residualNeighbors(MBType16x16|MBTypeP0L0, false)); err != nil {
+			t.Fatalf("fill ranged combined multi-plane residual syntax caches[%d]: %v", i, err)
+		}
+		got, err := decoded.decodeCAVLCInterPMacroblock(&payload, pps, sps, qscale, [2]uint32{1, 0}, false)
+		if err != nil {
+			t.Fatalf("decode ranged combined multi-plane residual macroblock[%d]: %v", i, err)
+		}
+		wantCBPTable := len(wantLuma[i])<<12 | 0x21
+		if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 0x21 ||
+			got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != wantCBPTable {
+			t.Fatalf("decoded ranged combined multi-plane mb[%d] type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x, want cbpTable %#x",
+				i, got.MBType, got.CBP, got.QScale, got.ChromaQP, got.CBPTable, wantCBPTable)
+		}
+		if got.MVD[0][0] != ([2]int32{wantMVDs[i].X, wantMVDs[i].Y}) {
+			t.Fatalf("decoded ranged combined multi-plane mb[%d] motion = %v, want %d/%d",
+				i, got.MVD[0][0], wantMVDs[i].X, wantMVDs[i].Y)
+		}
+		for _, coeff := range wantLuma[i] {
+			if decoded.MB[coeff.Pos] != coeff.Value {
+				t.Fatalf("decoded ranged combined multi-plane mb[%d] luma[%d] = %d, want %d",
+					i, coeff.Pos, decoded.MB[coeff.Pos], coeff.Value)
+			}
+		}
+		for _, coeff := range wantChromaDC[i].Cb {
+			pos := int(h264ChromaDCScan[coeff.Pos])
+			if decoded.MB[256+pos] != coeff.Value {
+				t.Fatalf("decoded ranged combined multi-plane mb[%d] dc cb[%d] = %d, want %d",
+					i, pos, decoded.MB[256+pos], coeff.Value)
+			}
+		}
+		for _, coeff := range wantChromaDC[i].Cr {
+			pos := int(h264ChromaDCScan[coeff.Pos])
+			if decoded.MB[512+pos] != coeff.Value {
+				t.Fatalf("decoded ranged combined multi-plane mb[%d] dc cr[%d] = %d, want %d",
+					i, pos, decoded.MB[512+pos], coeff.Value)
+			}
+		}
+		for _, coeff := range wantChromaAC[i].Cb {
+			if decoded.MB[256+coeff.Pos] != coeff.Value {
+				t.Fatalf("decoded ranged combined multi-plane mb[%d] ac cb[%d] = %d, want %d",
+					i, coeff.Pos, decoded.MB[256+coeff.Pos], coeff.Value)
+			}
+		}
+		for _, coeff := range wantChromaAC[i].Cr {
+			if decoded.MB[512+coeff.Pos] != coeff.Value {
+				t.Fatalf("decoded ranged combined multi-plane mb[%d] ac cr[%d] = %d, want %d",
+					i, coeff.Pos, decoded.MB[512+coeff.Pos], coeff.Value)
+			}
+		}
+		if err := syntaxTables.writeBackMacroblockTables(mbXY, got.MBType, got.CBPTable, got.QScale, 28); err != nil {
+			t.Fatalf("write back ranged combined multi-plane syntax tables[%d]: %v", i, err)
+		}
+		if err := syntaxTables.writeBackNonZeroCount(mbXY, &decoded.NonZeroCountCache); err != nil {
+			t.Fatalf("write back ranged combined multi-plane syntax nnz[%d]: %v", i, err)
+		}
+		qscale = got.QScale
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("ranged combined multi-plane residual payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+
+	sh, payload, err = parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("reparse ranged combined multi-plane residual P slice header: %v", err)
+	}
+	m, err := newMacroblockTables(3, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	for mbXY := 1; mbXY <= 2; mbXY++ {
+		got, err := m.decodeCAVLCFrameSliceMacroblock(&payload, sh, &state, mbXY, 28)
+		if err != nil {
+			t.Fatalf("decode ranged combined multi-plane residual frame macroblock[%d]: %v", mbXY, err)
+		}
+		i := mbXY - 1
+		wantCBPTable := len(wantLuma[i])<<12 | 0x21
+		if got.CBP != 0x21 || got.CBPTable != wantCBPTable || got.QScale != 23 ||
+			m.CBPTable[mbXY] != wantCBPTable || m.QScaleTable[mbXY] != 23 || m.SliceTable[mbXY] != 28 {
+			t.Fatalf("frame ranged combined multi-plane mb[%d] result/table cbp/cbpTable/q = %#x/%#x/%d table %#x/%d/%d, want cbpTable %#x",
+				mbXY, got.CBP, got.CBPTable, got.QScale,
+				m.CBPTable[mbXY], m.QScaleTable[mbXY], m.SliceTable[mbXY], wantCBPTable)
+		}
+		if m.NonZeroCount[mbXY][0] != uint8(len(wantLuma[i])) ||
+			m.NonZeroCount[mbXY][16] != uint8(len(wantChromaAC[i].Cb)) ||
+			m.NonZeroCount[mbXY][32] != uint8(len(wantChromaAC[i].Cr)) {
+			t.Fatalf("frame ranged combined multi-plane mb[%d] nnz luma/cb/cr = %d/%d/%d, want %d/%d/%d",
+				mbXY, m.NonZeroCount[mbXY][0], m.NonZeroCount[mbXY][16], m.NonZeroCount[mbXY][32],
+				len(wantLuma[i]), len(wantChromaAC[i].Cb), len(wantChromaAC[i].Cr))
+		}
+	}
+	if m.MacroblockTyp[0] != 0 || m.CBPTable[0] != 0 || m.QScaleTable[0] != 0 || m.SliceTable[0] != ^uint16(0) {
+		t.Fatalf("untouched ranged combined multi-plane mb0 tables type/cbp/q/slice = %#x/%#x/%d/%d",
+			m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("ranged combined multi-plane frame residual payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+}
+
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedChromaResidualFramePath(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 	chromaACPos := int(h264ZigzagScanCAVLC[1])

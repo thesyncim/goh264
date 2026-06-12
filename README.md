@@ -169,8 +169,9 @@ Internal P16x16 residual slice proofs now cover bounded per-macroblock
 luma CAVLC coefficient positions, multi-coefficient luma blocks, chroma-DC
 including multi-coefficient DC blocks, chroma-AC including multi-coefficient
 AC blocks, combined chroma-DC+AC CAVLC coefficients, and combined multi-plane
-residual slices, plus bounded chroma-DC and chroma-AC coefficient
-positions, through syntax decode and frame macroblock table writeback,
+residual slices including nonzero-range partial slices, plus bounded chroma-DC
+and chroma-AC coefficient positions, through syntax decode and frame macroblock
+table writeback,
 including nonzero `first_mb_in_slice` range isolation, per-macroblock QP
 deltas, and stateful residual nonzero-count context across consecutive
 macroblocks.
