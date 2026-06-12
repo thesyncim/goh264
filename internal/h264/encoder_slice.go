@@ -422,11 +422,10 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 			chromaACCb, chromaACCr = cfg.ChromaACCoeffs[i][0], cfg.ChromaACCoeffs[i][1]
 		}
 		cbp := 1
-		if chromaDCCb != 0 || chromaDCCr != 0 {
-			cbp |= 0x10
-		}
 		if chromaACCb != 0 || chromaACCr != 0 {
 			cbp |= 0x20
+		} else if chromaDCCb != 0 || chromaDCCr != 0 {
+			cbp |= 0x10
 		}
 		if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
 			return nil, err
