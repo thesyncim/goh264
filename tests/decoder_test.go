@@ -774,6 +774,33 @@ func TestDecodePacketFramesIgnoresMalformedStructuredPacketSideData(t *testing.T
 	}
 }
 
+func TestDecodePacketFramesStructuredPacketSideDataFirstEntryWins(t *testing.T) {
+	matrix := [9]int32{65536, 0, 0, 0, 65536, 0, 0, 0, 1 << 30}
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{
+			{Type: PacketSideDataDisplayMatrix, Data: []byte{0x01}},
+			{Type: PacketSideDataDisplayMatrix, Data: decoderPacketDisplayMatrixSideData(matrix)},
+			{Type: PacketSideDataStereo3D, Data: []byte{0x02}},
+			{Type: PacketSideDataStereo3D, Data: decoderPacketStereo3DSideData(
+				int32(Stereo3DTypeTopBottom), 0, int32(Stereo3DViewLeft), int32(Stereo3DPrimaryEyeRight), 1,
+				Rational{Num: 0, Den: 1}, Rational{Num: 90, Den: 1},
+			)},
+			{Type: PacketSideDataContentLightLevel, Data: []byte{0x03}},
+			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(1000, 250)},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if frame.SideData.DisplayOrientation != nil ||
+		frame.SideData.Stereo3D != nil ||
+		frame.SideData.ContentLight != nil {
+		t.Fatalf("later duplicate structured packet side data overrode malformed first entry: %+v", frame.SideData)
+	}
+}
+
 func TestDecodePacketFramesPacketDisplayAndStereoWinPublicFirstSideData(t *testing.T) {
 	matrix := [9]int32{0, 65536, 0, -65536, 0, 0, 0, 0, 1 << 30}
 	data := prependAnnexBNAL(decodeHexFixture(t, black16AnnexBHex), decoderTestSEINAL(
