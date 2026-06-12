@@ -141,7 +141,9 @@ including the single-frame helper when the empty packet releases exactly one
 frame. AVC-with-configuration-record decode follows the same empty-packet
 delayed flush rule after updating parameter sets, with fixture-matrix coverage
 for 2/3/4-byte AVC length sizes. Packet decode with repeated valid
-`NEW_EXTRADATA` also preserves B-frame reorder state through delayed flush.
+`NEW_EXTRADATA` also preserves B-frame reorder state through delayed flush, and
+empty-packet flush ignores malformed replacement `NEW_EXTRADATA` without
+blocking delayed output or replacing stored AVC configuration.
 Successful and malformed Annex B/AVC header parses preserve delayed
 configured-AVC B-frame flush state.
 
