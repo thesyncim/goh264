@@ -286,7 +286,10 @@ func h264EdgeScratchHigh(s *h264MotionCompScratchHigh, stride int, blockW int, b
 		return nil, 0, ErrInvalidData
 	}
 	edgeStride := h264EdgeStride(stride, blockW)
-	needed := h264EdgeScratchSize(stride, blockW, blockH)
+	needed, ok := checkedH264EdgeScratchSize(stride, blockW, blockH)
+	if !ok {
+		return nil, 0, ErrInvalidData
+	}
 	if len(s.Edge) < needed {
 		return nil, 0, ErrInvalidData
 	}

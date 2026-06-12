@@ -62,6 +62,18 @@ func TestH264EmulatedEdgeMCHighRejectsOverflowedGeometry(t *testing.T) {
 	}
 }
 
+func TestH264EdgeScratchRejectsOverflowedGeometry(t *testing.T) {
+	if _, _, err := h264EdgeScratch(&h264MotionCompScratch{Edge: make([]uint8, 1)}, maxInt/8+1, 9, 9); err != ErrInvalidData {
+		t.Fatalf("overflowed edge scratch error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestH264EdgeScratchHighRejectsOverflowedGeometry(t *testing.T) {
+	if _, _, err := h264EdgeScratchHigh(&h264MotionCompScratchHigh{Edge: make([]uint16, 1)}, maxInt/8+1, 9, 9); err != ErrInvalidData {
+		t.Fatalf("overflowed high edge scratch error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestH264HLMotionFrameList1OnlyUsesPut(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
 	ref1 := makeH264MotionCompPicture(1, 99)
