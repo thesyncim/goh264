@@ -1108,6 +1108,69 @@ func TestEncoderSetIntraRefreshEnableIsUnsupportedAndPreservesState(t *testing.T
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 }
 
+func TestEncoderSetIntraRefreshDisablePreservesLiveReference(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RTPMaxPayloadSize = 0
+	cfg.GOPSize = 10000
+	cfg.IDRInterval = 10000
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	frame := validI420EncoderFrame(16, 16)
+	frame.PTS = 3000
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+	before := enc.Config()
+	if err := enc.SetIntraRefresh(false); err != nil {
+		t.Fatalf("SetIntraRefresh false: %v", err)
+	}
+	if got := enc.Config(); got != before || got.IntraRefresh {
+		t.Fatalf("SetIntraRefresh false config = %+v, want unchanged admitted config %+v", got, before)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetIntraRefresh false queued unexpected IDR")
+	}
+
+	secondFrame := cloneI420EncoderFrame(frame)
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode post-SetIntraRefresh P-skip: %v", err)
+	}
+	if second.Dropped || second.IDR || second.KeyFrame || enc.PendingIDR() {
+		t.Fatalf("post-SetIntraRefresh frame dropped=%v idr=%v key=%v pending=%v, want delivered P-skip",
+			second.Dropped, second.IDR, second.KeyFrame, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+
+	dec := goh264.NewDecoder()
+	decodedFirst, err := dec.DecodeFrames(first.Data)
+	if err != nil {
+		t.Fatalf("Decode first IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, frame))
+	decodedSecond, err := dec.DecodeFrames(second.Data)
+	if err != nil {
+		t.Fatalf("Decode post-SetIntraRefresh P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+
+	stream := append([]byte(nil), first.Data...)
+	stream = append(stream, second.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+}
+
 func TestEncoderDroppedFramePreservesPendingIDR(t *testing.T) {
 	budgets := []struct {
 		name    string
