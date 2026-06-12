@@ -326,7 +326,8 @@ in one access unit.
    active, including changed-P frame-size and slice-size drops without reference
    or packet-state advancement; low VBV-backed `MaxBitrate` budgets now use the
    same dropped-frame state path, including proof of credit consumption/refill
-   across transmitted and dropped frames plus stale-credit reset after runtime max-bitrate/VBV lowering,
+   across transmitted and dropped frames, queued forced-IDR preservation across
+   frame-size and slice-size drops, plus stale-credit reset after runtime max-bitrate/VBV lowering,
    while runtime frame-drop mode switches toggle the derived budget before the
    next frame, `SetBitrate` and `SetFrameRate` also reset stale frame-budget
    credit, and `SetFrameRate` applies the updated RTP cadence across

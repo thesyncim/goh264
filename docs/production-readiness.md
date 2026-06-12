@@ -255,10 +255,11 @@ before the next P-skip, rejects overflowed configured and per-frame input-plane
 geometry without wrapped sizes or panics, and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses and VBV-backed `MaxBitrate` bucket
-misses, including credit consumption/refill across transmitted IDR/P-skip and
-dropped changed-P frames, caller-buffer `EncodeInto` budget drops with empty
-returned output, no callbacks, stable reference/frame/packet state, and P-skip
-recovery, checked rejection of overflowed bitrate budget derivation, runtime frame-drop mode switches that toggle the derived bitrate
+misses, including credit consumption/refill across transmitted IDR/P-skip,
+dropped changed-P frames, queued forced-IDR preservation across frame-size and
+slice-size drops, caller-buffer `EncodeInto` budget drops with empty returned
+output, no callbacks, stable reference/frame/packet state, and P-skip recovery,
+checked rejection of overflowed bitrate budget derivation, runtime frame-drop mode switches that toggle the derived bitrate
 budget before the next frame, runtime max-bitrate/VBV lowering that resets stale
 credit before the next frame, `SetBitrate` lowering that
 resets stale frame-budget credit before the next frame, `SetFrameRate` changes
