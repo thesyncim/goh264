@@ -1338,6 +1338,69 @@ func TestEncoderInvalidReconfigurePreservesPendingIDR(t *testing.T) {
 	}
 }
 
+func TestEncoderInvalidReconfigureWithForceIDRDoesNotQueueIDR(t *testing.T) {
+	mode0 := goh264.EncoderRTPPacketizationSingleNAL
+	stapa := true
+	badPayloadType := uint8(128)
+	tests := []struct {
+		name    string
+		update  goh264.EncoderReconfigure
+		wantErr error
+	}{
+		{name: "bad bitrate", update: goh264.EncoderReconfigure{MaxBitrate: 1, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+		{name: "bad payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 2, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+		{name: "bad output format", update: goh264.EncoderReconfigure{OutputFormat: goh264.EncoderOutputFormat(99), ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+		{name: "mode-0 STAP-A", update: goh264.EncoderReconfigure{
+			RTPPacketizationMode: &mode0,
+			STAPA:                &stapa,
+			ForceIDR:             true,
+		}, wantErr: goh264.ErrUnsupported},
+		{name: "bad RTP payload type", update: goh264.EncoderReconfigure{RTPPayloadType: &badPayloadType, ForceIDR: true}, wantErr: goh264.ErrInvalidData},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+			}
+
+			before := enc.Config()
+			if err := enc.Reconfigure(tt.update); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("%s invalid ForceIDR reconfigure error = %v, want %v", tt.name, err, tt.wantErr)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("%s invalid ForceIDR reconfigure mutated config = %+v, want %+v", tt.name, got, before)
+			}
+			if enc.PendingIDR() {
+				t.Fatalf("%s invalid ForceIDR reconfigure queued IDR", tt.name)
+			}
+
+			secondFrame := firstFrame
+			secondFrame.PTS = firstFrame.PTS + int64(before.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("%s Encode after invalid ForceIDR reconfigure: %v", tt.name, err)
+			}
+			if second.IDR || second.KeyFrame || enc.PendingIDR() {
+				t.Fatalf("%s post-invalid-ForceIDR frame idr=%v key=%v pending=%v, want P-skip",
+					tt.name, second.IDR, second.KeyFrame, enc.PendingIDR())
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+		})
+	}
+}
+
 func TestEncoderFrameRateInvalidUpdatesPreserveLiveState(t *testing.T) {
 	for _, format := range []struct {
 		name string

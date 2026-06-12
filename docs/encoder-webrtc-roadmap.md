@@ -62,7 +62,7 @@ frame-rate/rate-control, latency/slice, output/header/preset,
 RTP re-entry payload-size, RTP metadata, and packetization updates that leave
 the prior config, queued-IDR state, callbacks, packet metadata, RTP cadence, and
 VCL frame-number continuity intact across Annex B, AVC, and RTP where the
-controls apply.
+controls apply, including rejected updates bundled with ForceIDR requests.
 Runtime resolution reset rejects stale-size frames without consuming the queued
 IDR, then emits/decodes a new-size IDR and resumes P-skip references at the new
 dimensions.

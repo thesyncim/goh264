@@ -234,8 +234,8 @@ bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
 partial reconfiguration paths, proves invalid frame-rate helper/reconfigure,
 runtime rate, latency/slice, output/header/preset, RTP re-entry payload-size,
 RTP metadata, and packetization updates leave config, queued-IDR state, RTP
-cadence, packets, and callbacks intact across Annex B, AVC, and RTP output
-surfaces where the controls apply,
+cadence, packets, callbacks, and rejected bundled ForceIDR requests intact
+across Annex B, AVC, and RTP output surfaces where the controls apply,
 proves accepted bitrate, frame-rate, RTP payload-size, and deblock setter or
 reconfigure updates, including SPS/PPS cadence and recovery-point toggles,
 preserve a queued IDR until the next successful IDR encode,

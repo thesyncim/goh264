@@ -154,7 +154,7 @@ references at the new dimensions,
 public encoder frame preflight, invalid frame-rate helper/reconfigure plus invalid runtime rate,
 latency/slice, output/header/preset, RTP re-entry payload-size, and
 packetization updates that leave config, queued-IDR state, RTP cadence, packets,
-and callbacks intact,
+callbacks, and rejected bundled ForceIDR requests intact,
 accepted bitrate, frame-rate, RTP payload-size, and deblock setter or
 reconfigure updates, including SPS/PPS cadence and recovery-point toggles,
 preserving a queued IDR until an IDR is emitted,
