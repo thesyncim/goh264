@@ -1387,6 +1387,7 @@ func TestEncoderValidSetterPreservesPendingIDR(t *testing.T) {
 func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 	spsPPSBeforeIDR := false
 	recoveryPointSEI := false
+	limits := goh264.EncoderLimits{MaxFrameSize: 4096, SliceMaxBytes: 2048, MaxEncodeTimeUS: 10_000}
 	tests := []struct {
 		name             string
 		update           goh264.EncoderReconfigure
@@ -1399,6 +1400,7 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 		{name: "max frame size", update: goh264.EncoderReconfigure{MaxFrameSize: 4096}, wantNALs: []uint8{7, 8, 5}},
 		{name: "slice max bytes", update: goh264.EncoderReconfigure{SliceMaxBytes: 4096}, wantNALs: []uint8{7, 8, 5}},
 		{name: "max encode time", update: goh264.EncoderReconfigure{MaxEncodeTimeUS: 10_000_000}, wantNALs: []uint8{7, 8, 5}},
+		{name: "grouped limits", update: goh264.EncoderReconfigure{Limits: &limits}, wantNALs: []uint8{7, 8, 5}},
 		{name: "timestamp increment", update: goh264.EncoderReconfigure{RTPTimestampIncrement: 1234}, wantNALs: []uint8{7, 8, 5}, wantRTPIncrement: 1234},
 		{name: "deblock", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockDisabled}, wantNALs: []uint8{7, 8, 5}},
 		{name: "sps pps cadence", update: goh264.EncoderReconfigure{
