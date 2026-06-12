@@ -1457,6 +1457,83 @@ func TestCAVLCWriteResidualFifteenNonTrailingLevelsRejectsUnsupportedBlocks(t *t
 	}
 }
 
+func TestCAVLCWriteResidualSixteenNonTrailingLevelsRoundTripsThroughDecoder(t *testing.T) {
+	scan := cavlcIdentityScan()
+	for _, tt := range []struct {
+		name         string
+		block        [16]int32
+		predictedNnz int
+	}{
+		{name: "full positive levels", block: [16]int32{0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 15, 14: 8, 15: 2}},
+		{name: "full negative levels", block: [16]int32{0: -2, 1: -3, 2: -4, 3: -5, 4: -6, 5: -7, 6: -8, 7: -9, 8: -10, 9: -11, 10: -12, 11: -13, 12: -14, 13: -15, 14: -8, 15: -2}},
+		{name: "full mixed levels", block: [16]int32{0: 3, 1: -4, 2: 5, 3: -6, 4: 7, 5: -8, 6: 9, 7: -10, 8: 11, 9: -12, 10: 13, 11: -14, 12: 15, 13: -8, 14: 9, 15: 2}, predictedNnz: 2},
+		{name: "suffix one first level then growth", block: [16]int32{0: 7, 1: -8, 2: 9, 3: -10, 4: 11, 5: -9, 6: 10, 7: -8, 8: 9, 9: -7, 10: 8, 11: -9, 12: 10, 13: -8, 14: 9, 15: 3}, predictedNnz: 4},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			totalCoeff, err := writeCAVLCResidualSixteenNonTrailingLevels(&bw, tt.block[:], 0, scan[:], 16, tt.predictedNnz)
+			if err != nil {
+				t.Fatalf("write residual: %v", err)
+			}
+			if totalCoeff != 16 {
+				t.Fatalf("totalCoeff = %d, want 16", totalCoeff)
+			}
+
+			gb := newBitReader(bw.Bytes())
+			var got [16]int32
+			decodedCoeff, err := decodeCAVLCResidual(&gb, got[:], 0, scan[:], nil, 16, tt.predictedNnz)
+			if err != nil {
+				t.Fatalf("decode written residual: %v", err)
+			}
+			if decodedCoeff != 16 {
+				t.Fatalf("decoded totalCoeff = %d, want 16", decodedCoeff)
+			}
+			if got != tt.block {
+				t.Fatalf("decoded block = %v, want %v", got, tt.block)
+			}
+			if gb.bitPos != uint32(bw.BitLen()) {
+				t.Fatalf("decoded consumed %d bits, want writer bit length %d", gb.bitPos, bw.BitLen())
+			}
+		})
+	}
+}
+
+func TestCAVLCWriteResidualSixteenNonTrailingLevelsRejectsUnsupportedBlocks(t *testing.T) {
+	scan := cavlcIdentityScan()
+	for _, tt := range []struct {
+		name  string
+		block [16]int32
+	}{
+		{name: "empty", block: [16]int32{}},
+		{name: "fifteen levels", block: [16]int32{0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 15, 14: 2}},
+		{name: "trailing-one positive", block: [16]int32{0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 15, 14: 16, 15: 1}},
+		{name: "trailing-one negative", block: [16]int32{0: -1, 1: -2, 2: -3, 3: -4, 4: -5, 5: -6, 6: -7, 7: -8, 8: -9, 9: -10, 10: -11, 11: -12, 12: -13, 13: -14, 14: -15, 15: -16}},
+		{name: "subsequent level beyond bounded prefix", block: [16]int32{0: 3000, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 15, 14: 16, 15: 2}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			if _, err := writeCAVLCResidualSixteenNonTrailingLevels(&bw, tt.block[:], 0, scan[:], 16, 0); err != ErrInvalidData {
+				t.Fatalf("write residual error = %v, want ErrInvalidData", err)
+			}
+		})
+	}
+
+	var bw BitWriter
+	block := [16]int32{0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 15, 14: 16, 15: 2}
+	if _, err := writeCAVLCResidualSixteenNonTrailingLevels(nil, block[:], 0, scan[:], 16, 0); err != ErrInvalidData {
+		t.Fatalf("nil writer error = %v, want ErrInvalidData", err)
+	}
+	if _, err := writeCAVLCResidualSixteenNonTrailingLevels(&bw, block[:], 0, scan[:4], 16, 0); err != ErrInvalidData {
+		t.Fatalf("short scan error = %v, want ErrInvalidData", err)
+	}
+	if _, err := writeCAVLCResidualSixteenNonTrailingLevels(&bw, block[:], 0, scan[:], 17, 0); err != ErrInvalidData {
+		t.Fatalf("bad maxCoeff error = %v, want ErrInvalidData", err)
+	}
+	if _, err := writeCAVLCResidualSixteenNonTrailingLevels(&bw, block[:], 1, scan[:], 16, 0); err != ErrInvalidData {
+		t.Fatalf("block offset overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestCAVLCWriteResidualSingleLevelTrailingOnesRoundTripsThroughDecoder(t *testing.T) {
 	scan := cavlcIdentityScan()
 	for _, tt := range []struct {
