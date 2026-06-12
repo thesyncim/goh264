@@ -9364,6 +9364,7 @@ func assertEncoderEncodeIntoPerMacroblockExactP16x16AllocationCanary(t *testing.
 }
 
 func TestEncoderEncodeIntoAllocationCanary(t *testing.T) {
+	skipAllocationCanaryUnderRace(t)
 	t.Run("annexb forced idr", func(t *testing.T) {
 		cfg := goh264.DefaultEncoderConfig(16, 16)
 		cfg.OutputFormat = goh264.EncoderOutputAnnexB

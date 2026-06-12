@@ -123,9 +123,9 @@ checked-in reviewed profile artifacts, larger performance corpus, and
 in-process libavcodec baseline.
 `scripts/h264-release-evidence.sh` is the top-level release gate. It requires a
 clean worktree by default, writes summary/log output under
-`.artifacts/h264-full-release-evidence/`, and runs the decoder release-evidence
-runner and the admitted encoder release-evidence runner into separate child
-directories.
+`.artifacts/h264-full-release-evidence/`, runs `go test -race ./...`, and runs
+the decoder release-evidence runner and the admitted encoder release-evidence
+runner into separate child directories.
 `scripts/h264-decoder-release-evidence.sh` runs the decoder release checklist
 as one gate and writes per-command logs plus the local performance bundle under
 `.artifacts/h264-release-evidence/`. It includes the repo-wide `go vet ./...`

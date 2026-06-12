@@ -598,6 +598,7 @@ No tag should be treated as production until a release-evidence pass proves:
 - `scripts/h264-decoder-release-evidence.sh` is green.
 - `go vet ./...` is green.
 - `go test ./...` is green.
+- `go test -race ./...` is green.
 - `scripts/h264-real-vector-strict.sh` is green.
 - `GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v` is green.
 - `scripts/h264-real-vector-upstream-audit.sh` still represents all pinned

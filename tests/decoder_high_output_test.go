@@ -389,6 +389,7 @@ func TestFrameAppendRawYUVExpands8BitMonochromeWithoutChromaDepth(t *testing.T) 
 }
 
 func TestFrameAppendRawYUVUsesCallerBufferWithoutAllocation(t *testing.T) {
+	skipAllocationCanaryUnderRace(t)
 	frame := Frame{
 		Width:           2,
 		Height:          2,
@@ -431,6 +432,7 @@ func TestFrameAppendRawYUVUsesCallerBufferWithoutAllocation(t *testing.T) {
 }
 
 func TestFrameAppendRawYUVBytesLEUsesCallerBufferWithoutAllocation(t *testing.T) {
+	skipAllocationCanaryUnderRace(t)
 	tests := []struct {
 		name  string
 		frame Frame
@@ -507,6 +509,7 @@ func TestFrameAppendRawYUVBytesLEUsesCallerBufferWithoutAllocation(t *testing.T)
 }
 
 func TestFrameAppendRawYUV16UsesCallerBufferWithoutAllocation(t *testing.T) {
+	skipAllocationCanaryUnderRace(t)
 	frame := Frame{
 		Width:           4,
 		Height:          4,
@@ -1013,6 +1016,13 @@ func fakeDecoderRawSliceLen[T any](ptr *T, n int) []T {
 		Cap:  n,
 	}
 	return *(*[]T)(unsafe.Pointer(&h))
+}
+
+func skipAllocationCanaryUnderRace(t *testing.T) {
+	t.Helper()
+	if goh264RaceEnabled {
+		t.Skip("allocation canary is not stable under race instrumentation")
+	}
 }
 
 func assertDecoderByteBufferUnchanged(t *testing.T, dst []byte, before []byte) {

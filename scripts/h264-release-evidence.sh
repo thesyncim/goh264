@@ -57,6 +57,8 @@ else
 fi
 printf '\nworktree-clean: pass\n' | tee -a "$summary"
 
+run_gate go-test-race go test -race ./...
+
 run_env_gate decoder-release-evidence \
     GOH264_RELEASE_EVIDENCE_DIR="$out_dir/decoder" \
     GOH264_RELEASE_EVIDENCE_TIMESTAMP="$timestamp" \
