@@ -1103,6 +1103,104 @@ func TestDecodePacketFramesAnnexBMultiSPSNewExtradataUsesPacketActiveSPSForDPBRe
 	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
 }
 
+func TestDecoderAVCConfigUsesAVCCFirstSPSForMultiSPSConfiguration(t *testing.T) {
+	first := decoderParameterSetNALs(t, 32, 16, 1, 1)
+	second := decoderParameterSetNALs(t, 16, 16, 0, 0)
+	config, err := h264.AppendAVCDecoderConfigurationRecord(nil, 66, 0xc0, 31, 4,
+		[][]byte{first.SPS, second.SPS},
+		[][]byte{first.PPS, second.PPS},
+	)
+	if err != nil {
+		t.Fatalf("AppendAVCDecoderConfigurationRecord reversed multi-SPS config: %v", err)
+	}
+
+	dec := NewDecoder()
+	cfg, err := dec.ConfigureAVCC(config)
+	if err != nil {
+		t.Fatalf("ConfigureAVCC reversed multi-SPS config: %v", err)
+	}
+	if cfg.NALLengthSize != 4 || cfg.StreamInfo.SPSID != 1 || cfg.StreamInfo.Width != 32 || cfg.StreamInfo.Height != 16 {
+		t.Fatalf("ConfigureAVCC reversed multi-SPS config = %+v, want SPS1 32x16", cfg)
+	}
+
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after reversed multi-SPS ConfigureAVCC: %v", err)
+	}
+	if got != cfg {
+		t.Fatalf("AVCConfig after reversed multi-SPS ConfigureAVCC = %+v, want %+v", got, cfg)
+	}
+
+	dec = NewDecoder()
+	frames, err := dec.DecodeFrames(config)
+	if err != nil {
+		t.Fatalf("DecodeFrames reversed multi-SPS avcC config: %v", err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("DecodeFrames reversed multi-SPS avcC config frames = %d, want 0", len(frames))
+	}
+	got, err = dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after auto-detected reversed multi-SPS avcC: %v", err)
+	}
+	if got != cfg {
+		t.Fatalf("AVCConfig after auto-detected reversed multi-SPS avcC = %+v, want %+v", got, cfg)
+	}
+}
+
+func TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration(t *testing.T) {
+	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
+	multiConfig, _ := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
+	pps1PSkip := decoderPSkipAVCSampleWithPPSID(t, 32, 16, 1, 1)
+
+	dec := NewDecoder()
+	out, err := dec.DecodeAVCCFrames(config16, samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames 16x16 IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	out, err = dec.DecodeAVCCFrames(multiConfig, pps1PSkip)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("DecodeAVCCFrames multi-SPS PPS1 P-skip frames=%d err=%v, want no output/error", len(out), err)
+	}
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after multi-SPS PPS1 P-skip: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.SPSID != 1 || got.StreamInfo.Width != 32 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after multi-SPS PPS1 P-skip = %+v, want active SPS1 32x16", got)
+	}
+
+	dec = NewDecoder()
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     samples16[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 packet IDR output frames = %d, want 1", len(out))
+	}
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     pps1PSkip,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: multiConfig}},
+	})
+	if err != nil || len(out) != 0 {
+		t.Fatalf("DecodePacketFrames multi-SPS PPS1 P-skip frames=%d err=%v, want no output/error", len(out), err)
+	}
+	got, err = dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after packet multi-SPS PPS1 P-skip: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.SPSID != 1 || got.StreamInfo.Width != 32 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after packet multi-SPS PPS1 P-skip = %+v, want active SPS1 32x16", got)
+	}
+}
+
 func encodeDecoderAVCTestStream(t *testing.T, width int, height int) ([]byte, [][]byte, []goh264.EncoderFrame) {
 	t.Helper()
 	cfg := goh264.DefaultEncoderConfig(width, height)

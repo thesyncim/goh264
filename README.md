@@ -221,7 +221,9 @@ same stateful update rule when it carries avcC or Annex B parameter-set data:
 compatible updates retain references; incompatible active SPS changes reset
 picture state before decoding. When an update carries multiple SPS/PPS entries,
 the reset decision follows the packet's slice-selected PPS/SPS when that packet
-can be parsed.
+can be parsed. `AVCConfig` reports the packet-active SPS after a successful
+configured-AVC packet identifies one; before that it reports the first SPS from
+the stored avcC record.
 
 Configure or inspect headers without decoding full frames. The decoder methods
 are stateful: `ParseHeadersAnnexB` stores SPS/PPS state, and `ParseHeadersAVC`

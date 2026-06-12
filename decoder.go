@@ -20,6 +20,8 @@ type Decoder struct {
 	pps              [256]*h264.PPS
 	activeSPSID      uint32
 	activeSPS        *h264.SPS
+	avcFirstSPSID    uint32
+	avcFirstSPSValid bool
 	slices           []h264.SliceHeader
 	avcNALLengthSize int
 	simple           h264.SimpleDecoder
@@ -817,6 +819,9 @@ func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, e
 		return StreamInfo{}, err
 	}
 	d.avcNALLengthSize = nalLengthSize
+	d.avcFirstSPSID = info.SPSID
+	d.avcFirstSPSValid = true
+	d.clearActiveSPS()
 	return info, nil
 }
 
@@ -882,15 +887,32 @@ func (d *Decoder) AVCConfig() (AVCConfig, error) {
 	if d == nil || d.avcNALLengthSize == 0 {
 		return AVCConfig{}, ErrInvalidData
 	}
+	sps := d.avcConfigSPS()
+	if sps == nil {
+		return AVCConfig{}, ErrInvalidData
+	}
+	return AVCConfig{
+		NALLengthSize: d.avcNALLengthSize,
+		StreamInfo:    streamInfoFromSPS(sps),
+	}, nil
+}
+
+func (d *Decoder) avcConfigSPS() *h264.SPS {
+	if d == nil {
+		return nil
+	}
+	if d.activeSPS != nil {
+		return d.activeSPS
+	}
+	if d.avcFirstSPSValid && d.avcFirstSPSID < uint32(len(d.sps)) && d.sps[d.avcFirstSPSID] != nil {
+		return d.sps[d.avcFirstSPSID]
+	}
 	for _, sps := range d.sps {
 		if sps != nil {
-			return AVCConfig{
-				NALLengthSize: d.avcNALLengthSize,
-				StreamInfo:    streamInfoFromSPS(sps),
-			}, nil
+			return sps
 		}
 	}
-	return AVCConfig{}, ErrInvalidData
+	return nil
 }
 
 func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
@@ -946,6 +968,8 @@ func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 func (d *Decoder) storeAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationRecord) {
 	d.sps = cfg.SPS
 	d.pps = cfg.PPS
+	d.avcFirstSPSID = cfg.FirstSPSID
+	d.avcFirstSPSValid = true
 	d.avcNALLengthSize = cfg.NALLengthSize
 	d.clearActiveSPS()
 	_ = d.simple.StoreAVCDecoderConfiguration(cfg)
@@ -964,12 +988,15 @@ func (d *Decoder) updateAVCDecoderConfigurationForActiveSPS(cfg h264.AVCDecoderC
 	resetDPB := d.parameterSetUpdateNeedsDPBResetForActiveSPS(cfg.SPS, cfg.PPS, activeSPS)
 	d.sps = cfg.SPS
 	d.pps = cfg.PPS
+	d.avcFirstSPSID = cfg.FirstSPSID
+	d.avcFirstSPSValid = true
 	d.avcNALLengthSize = cfg.NALLengthSize
 	if resetDPB {
 		d.clearActiveSPS()
 		_ = d.simple.StoreAVCDecoderConfiguration(cfg)
 		return
 	}
+	d.refreshActiveSPSFromStoredParamSets()
 	_ = d.simple.UpdateParamSets(d.sps, d.pps)
 }
 
@@ -1036,6 +1063,17 @@ func (d *Decoder) clearActiveSPS() {
 	}
 	d.activeSPSID = 0
 	d.activeSPS = nil
+}
+
+func (d *Decoder) refreshActiveSPSFromStoredParamSets() {
+	if d == nil || d.activeSPS == nil {
+		return
+	}
+	if d.activeSPSID < uint32(len(d.sps)) && d.sps[d.activeSPSID] != nil {
+		d.activeSPS = d.sps[d.activeSPSID]
+		return
+	}
+	d.clearActiveSPS()
 }
 
 func activeSPSOrFallback(active decoderActiveSPS, sps [32]*h264.SPS, pps [256]*h264.PPS) (uint32, *h264.SPS, bool) {
@@ -1190,6 +1228,8 @@ func (d *Decoder) storeAnnexBParameterSetsForPacket(nals []h264.NALUnit, packetD
 	d.sps = spsList
 	d.pps = ppsList
 	d.avcNALLengthSize = 0
+	d.avcFirstSPSID = 0
+	d.avcFirstSPSValid = false
 	if resetDPB {
 		d.clearActiveSPS()
 		return d.simple.StoreParamSets(d.sps, d.pps)

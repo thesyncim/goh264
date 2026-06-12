@@ -200,6 +200,9 @@ PPS.
 Multi-SPS/PPS avcC and Annex B `NEW_EXTRADATA` updates are guarded as well: the
 DPB reset decision follows the packet's slice-selected PPS/SPS when available,
 so a non-first active SPS cannot reuse references from the previous stream.
+Stored `AVCConfig` metadata follows the avcC first SPS until a successful packet
+identifies a packet-active SPS, covering non-array-order multi-SPS records and
+packet-active SPS switches.
 Direct avcC parse, configuration-record decode, valid packet AVC and Annex B
 `NEW_EXTRADATA`, and auto-detected avcC admission also prove the stored decoder
 configuration state does not retain caller-owned side-data, configuration, or
