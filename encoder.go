@@ -564,7 +564,7 @@ type EncoderParameterSets struct {
 
 // AVCC returns the AVC decoder configuration record form of the parameter sets.
 func (sets EncoderParameterSets) AVCC() []byte {
-	return sets.AVCDecoderConfigurationRecord
+	return sets.AVCDecoderConfigurationRecord[:len(sets.AVCDecoderConfigurationRecord):len(sets.AVCDecoderConfigurationRecord)]
 }
 
 // AppendSPS appends a caller-owned copy of the SPS NAL to dst.
