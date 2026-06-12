@@ -1027,6 +1027,108 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDCAC(t *test
 	}
 }
 
+func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedChromaResidualFramePath(t *testing.T) {
+	pps, sps := encoderResidualSliceTestPPS(20)
+	chromaACPos := int(h264ZigzagScanCAVLC[1])
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+		Width:                      32,
+		Height:                     16,
+		FrameNum:                   15,
+		InitialQP:                  20,
+		NextQP:                     23,
+		DisableDeblockingFilterIDC: 1,
+		FirstMBAddr:                1,
+		MacroblockCount:            1,
+		MVDX:                       2,
+		MVDY:                       -1,
+		Coeff:                      1,
+		ChromaDCCoeffCb:            1,
+		ChromaDCCoeffCr:            -1,
+		ChromaACCoeffCb:            1,
+		ChromaACCoeffCr:            -1,
+	}, pps, sps)
+	if err != nil {
+		t.Fatalf("encode ranged residual chroma slice rbsp: %v", err)
+	}
+
+	var ppsList [maxPPSCount]*PPS
+	ppsList[0] = pps
+	sh, payload, err := parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("parse ranged residual chroma P slice header: %v", err)
+	}
+	if sh.FirstMBAddr != 1 || sh.SliceTypeNoS != PictureTypeP || sh.FrameNum != 15 ||
+		sh.RefCount[0] != 1 || sh.QScale != 20 || sh.DeblockingFilter != 0 {
+		t.Fatalf("ranged residual slice header = %+v", sh)
+	}
+	skipRun, err := payload.readUEGolombLong()
+	if err != nil {
+		t.Fatalf("read ranged residual skip run: %v", err)
+	}
+	if skipRun != 0 {
+		t.Fatalf("ranged residual skip run = %d, want 0", skipRun)
+	}
+	var decoded cavlcResidualContext
+	mb, err := decoded.decodeCAVLCInterPMacroblock(&payload, pps, sps, int(sh.QScale), [2]uint32{1, 0}, false)
+	if err != nil {
+		t.Fatalf("decode ranged residual chroma P macroblock: %v", err)
+	}
+	if mb.MBType != (MBType16x16|MBTypeP0L0) || mb.CBP != 0x21 ||
+		mb.QScale != 23 || mb.ChromaQP != ([2]uint8{23, 23}) || mb.CBPTable != 0x1021 {
+		t.Fatalf("ranged mb type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x",
+			mb.MBType, mb.CBP, mb.QScale, mb.ChromaQP, mb.CBPTable)
+	}
+	if mb.MVD[0][0] != ([2]int32{2, -1}) ||
+		decoded.MB[0] != 1 || decoded.MB[256] != 1 || decoded.MB[512] != -1 ||
+		decoded.MB[256+chromaACPos] != 1 || decoded.MB[512+chromaACPos] != -1 {
+		t.Fatalf("ranged macroblock motion/residual = %v/%d/%d/%d/%d/%d",
+			mb.MVD[0][0], decoded.MB[0], decoded.MB[256], decoded.MB[512],
+			decoded.MB[256+chromaACPos], decoded.MB[512+chromaACPos])
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("ranged residual chroma payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+
+	sh, payload, err = parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("reparse ranged residual chroma P slice header: %v", err)
+	}
+	m, err := newMacroblockTables(2, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := newCAVLCFrameSliceState(int(sh.QScale))
+	got, err := m.decodeCAVLCFrameSliceMacroblock(&payload, sh, &state, 1, 18)
+	if err != nil {
+		t.Fatalf("decode ranged residual chroma P frame macroblock: %v", err)
+	}
+	if got.Skipped || !got.IsInter || got.MBType != (MBType16x16|MBTypeP0L0) ||
+		got.CBP != 0x21 || got.CBPTable != 0x1021 || got.QScale != 23 ||
+		got.ChromaQP != ([2]uint8{23, 23}) {
+		t.Fatalf("ranged frame mb skip/inter/type/cbp/cbpTable/q/chroma = %v/%v/%#x/%#x/%#x/%d/%v",
+			got.Skipped, got.IsInter, got.MBType, got.CBP, got.CBPTable, got.QScale, got.ChromaQP)
+	}
+	if got.Inter.MVD[0][0] != ([2]int32{2, -1}) {
+		t.Fatalf("ranged frame mvd = %v, want [2 -1]", got.Inter.MVD[0][0])
+	}
+	if m.MacroblockTyp[0] != 0 || m.CBPTable[0] != 0 || m.QScaleTable[0] != 0 || m.SliceTable[0] != ^uint16(0) {
+		t.Fatalf("untouched mb0 tables type/cbp/q/slice = %#x/%#x/%d/%d",
+			m.MacroblockTyp[0], m.CBPTable[0], m.QScaleTable[0], m.SliceTable[0])
+	}
+	if m.MacroblockTyp[1] != (MBType16x16|MBTypeP0L0) || m.CBPTable[1] != 0x1021 ||
+		m.QScaleTable[1] != 23 || m.SliceTable[1] != 18 {
+		t.Fatalf("ranged mb1 tables type/cbp/q/slice = %#x/%#x/%d/%d",
+			m.MacroblockTyp[1], m.CBPTable[1], m.QScaleTable[1], m.SliceTable[1])
+	}
+	if m.NonZeroCount[1][0] != 1 || m.NonZeroCount[1][16] != 1 || m.NonZeroCount[1][32] != 1 {
+		t.Fatalf("ranged mb1 nnz luma/cb/cr = %d/%d/%d, want 1/1/1",
+			m.NonZeroCount[1][0], m.NonZeroCount[1][16], m.NonZeroCount[1][32])
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("ranged frame residual chroma payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+}
+
 func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 	valid := encoderI420P16x16ResidualConfig{

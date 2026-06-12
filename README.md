@@ -167,7 +167,8 @@ configuration records, baseline SPS/PPS, recovery-point SEI syntax, and the
 first Baseline IDR, P-skip, P16x16 no-residual, and P IntraPCM slice payloads.
 Internal P16x16 residual slice proofs now cover bounded per-macroblock
 luma, chroma-DC, chroma-AC, and combined chroma-DC+AC CAVLC coefficients
-through syntax decode and frame macroblock table writeback.
+through syntax decode and frame macroblock table writeback, including
+nonzero `first_mb_in_slice` range isolation.
 Motion-search P prediction, residual CAVLC coding, rate-control feedback, and
 broader realtime allocation/performance evidence remain pending beyond the
 admitted IDR/P-frame Annex B/AVC/RTP canaries, which now include odd-pixel
