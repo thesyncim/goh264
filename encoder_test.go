@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"testing"
 	"unsafe"
+
+	"github.com/thesyncim/goh264/internal/h264"
 )
 
 func TestAppendEncoderP16x16NoResidualMVDsUsesSliceLocalPrediction(t *testing.T) {
@@ -162,6 +164,26 @@ func TestEncoderNALBufferRejectsOverflow(t *testing.T) {
 	}
 }
 
+func TestFrameSideDataFromH264ClonesS12MTimecodes(t *testing.T) {
+	src := h264.DecodedFrameSideData{S12MTimecodes: []uint32{0x11223344, 0x55667788}}
+	got := frameSideDataFromH264(src, 0, 0)
+	if len(got.S12MTimecodes) != 2 || got.S12MTimecodes[0] != src.S12MTimecodes[0] || got.S12MTimecodes[1] != src.S12MTimecodes[1] {
+		t.Fatalf("s12m timecodes = %08x, want %08x", got.S12MTimecodes, src.S12MTimecodes)
+	}
+	src.S12MTimecodes[0] = 0
+	if got.S12MTimecodes[0] != 0x11223344 {
+		t.Fatalf("s12m timecode aliases source: %08x", got.S12MTimecodes)
+	}
+}
+
+func TestFrameSideDataFromH264RejectsOverflowedS12MTimecodeClone(t *testing.T) {
+	src := h264.DecodedFrameSideData{S12MTimecodes: fakeUint32SliceLen(maxInt/4 + 1)}
+	got := frameSideDataFromH264(src, 0, 0)
+	if got.S12MTimecodes != nil {
+		t.Fatalf("overflowed s12m timecodes = len %d, want nil", len(got.S12MTimecodes))
+	}
+}
+
 func fakeEncoderBytesLen(n int) []byte {
 	if n <= 0 {
 		return nil
@@ -169,6 +191,18 @@ func fakeEncoderBytesLen(n int) []byte {
 	var b byte
 	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(&b)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeUint32SliceLen(n int) []uint32 {
+	if n <= 0 {
+		return nil
+	}
+	var v uint32
+	return *(*[]uint32)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&v)),
 		Len:  n,
 		Cap:  n,
 	}))

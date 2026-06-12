@@ -1575,7 +1575,7 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 		UserDataUnregistered: cloneByteSlices(src.UserDataUnregistered),
 		A53ClosedCaptions:    append([]byte(nil), src.A53ClosedCaptions...),
 		X264Build:            int(src.X264Build),
-		S12MTimecodes:        append([]uint32(nil), src.S12MTimecodes...),
+		S12MTimecodes:        cloneUint32Slice(src.S12MTimecodes),
 	}
 	if src.PictureTiming.Present != 0 {
 		pt := PictureTiming{
@@ -2122,6 +2122,13 @@ func cloneByteSlices(src [][]byte) [][]byte {
 		out[i] = append([]byte(nil), src[i]...)
 	}
 	return out
+}
+
+func cloneUint32Slice(src []uint32) []uint32 {
+	if len(src) == 0 || len(src) > maxInt/4 {
+		return nil
+	}
+	return append([]uint32(nil), src...)
 }
 
 func frameChromaSize(width int, height int, chromaFormatIDC uint32) (int, int, error) {
