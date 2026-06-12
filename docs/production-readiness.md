@@ -89,7 +89,8 @@ decoded unregistered-user-data, A53, and LCEVC slices and re-decoding the same
 input bytes.
 Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are guarded as
 transactional: a partially valid foreign SPS followed by malformed PPS returns
-an error without replacing the previous configured-AVC state.
+an error without replacing the previous configured-AVC state or draining
+delayed B-frame output.
 `cmd/goh264bench`
 records Go benchmark allocation totals and reports `alloc_bytes_per_iter`,
 `allocs_per_iter`, `alloc_bytes_per_frame`, and `allocs_per_frame` for each
@@ -141,6 +142,8 @@ frame. AVC-with-configuration-record decode follows the same empty-packet
 delayed flush rule after updating parameter sets, with fixture-matrix coverage
 for 2/3/4-byte AVC length sizes. Packet decode with repeated valid
 `NEW_EXTRADATA` also preserves B-frame reorder state through delayed flush.
+Successful and malformed Annex B/AVC header parses preserve delayed
+configured-AVC B-frame flush state.
 
 Malformed-input safety evidence now includes deterministic public-surface
 corruption rows plus `FuzzDecodePublicSurfacesNoPanic`, a bounded fuzz target

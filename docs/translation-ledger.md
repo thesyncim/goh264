@@ -60,7 +60,8 @@ slice headers but no longer retains them in decoder state across repeated
 metadata parses, keeping `ParseHeaders*` bounded to stored SPS/PPS metadata.
 Successful Annex B and AVC 2/3/4-byte header parses now also have delayed
 configured-AVC flush-state preservation coverage across caller header-buffer
-mutation, plus
+mutation, malformed Annex B/AVC header parses prove delayed configured-AVC
+B-frame output remains flushable after rejection, plus
 AVC 2/3/4-byte length-size state preservation into the next auto-detected and
 explicit configured-AVC VCL packet,
 including across a later Annex B header parse and failed Annex B/AVC header

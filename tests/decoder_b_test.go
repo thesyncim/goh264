@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/thesyncim/goh264/internal/h264"
 )
 
 const testsrc32CAVLCBFramesAnnexBHex = `
@@ -869,6 +871,67 @@ func TestParseHeadersPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 			out, err := dec.FlushDelayedFrames()
 			if err != nil {
 				t.Fatalf("FlushDelayedFrames after ParseHeadersAVC length %d: %v", nalLengthSize, err)
+			}
+			frames = append(frames, out...)
+			assertFrameMD5Strings(t, frames, []string{
+				"4296e3dc95829cc27071a8685a428494",
+				"aa778b981f96d21489196f6a0faa0959",
+			})
+		})
+	}
+}
+
+func TestParseHeadersRejectPreservesDelayedConfiguredAVCFlush(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+	damagedHeadersAnnexB := firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS)
+	damagedHeadersAnnexB = appendAnnexBNAL(damagedHeadersAnnexB, []byte{0x60 | byte(h264.NALPPS)})
+
+	for _, tt := range []struct {
+		name  string
+		parse func(*Decoder) error
+	}{
+		{
+			name: "annexb",
+			parse: func(dec *Decoder) error {
+				_, err := dec.ParseHeadersAnnexB(append([]byte(nil), damagedHeadersAnnexB...))
+				return err
+			},
+		},
+		{
+			name: "avc",
+			parse: func(dec *Decoder) error {
+				headers := annexBToAVC(t, damagedHeadersAnnexB, 4)
+				_, err := dec.ParseHeadersAVC(headers, 4)
+				return err
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+				t.Fatal(err)
+			}
+
+			var frames []*Frame
+			for i := 0; i < 2; i++ {
+				out, err := dec.DecodeConfiguredAVCFrames(samples[i])
+				if err != nil {
+					t.Fatalf("sample[%d]: %v", i, err)
+				}
+				frames = append(frames, out...)
+			}
+
+			if err := tt.parse(dec); err == nil {
+				t.Fatalf("damaged %s headers returned nil error", tt.name)
+			}
+
+			out, err := dec.FlushDelayedFrames()
+			if err != nil {
+				t.Fatalf("FlushDelayedFrames after damaged %s headers: %v", tt.name, err)
 			}
 			frames = append(frames, out...)
 			assertFrameMD5Strings(t, frames, []string{

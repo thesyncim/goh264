@@ -326,7 +326,8 @@ cfg, err := dec.ParseAVCDecoderConfigurationRecord(avcc)
 
 Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are transactional:
 partially parsed SPS/PPS state is not committed over a previous valid
-configuration.
+configuration, and delayed configured-AVC B-frame output remains available for
+flush after the rejected parse.
 
 Packet side-data support mirrors FFmpeg-facing surfaces used by the port:
 
