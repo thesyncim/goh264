@@ -4063,65 +4063,103 @@ func TestEncoderSliceCountFeedsRTPMode1SingleNALPackets(t *testing.T) {
 }
 
 func TestEncoderMaxFrameSizeRejectsOversizeAccessUnitWithoutAdvancingState(t *testing.T) {
-	cfg := goh264.DefaultEncoderConfig(16, 16)
-	cfg.OutputFormat = goh264.EncoderOutputAnnexB
-	cfg.DeblockMode = goh264.EncoderDeblockDisabled
-	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
-	cfg.RTPMaxPayloadSize = 0
-	cfg.MaxFrameSize = 16
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	frame := patternedI420EncoderFrame(16, 16)
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = format.fmt
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.FrameDrop = goh264.EncoderFrameDropDisabled
+			if format.fmt == goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 32
+			} else {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			cfg.MaxFrameSize = 16
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			frame := patternedI420EncoderFrame(16, 16)
 
-	if _, err := enc.Encode(frame); !errors.Is(err, goh264.ErrInvalidData) {
-		t.Fatalf("oversize MaxFrameSize encode error = %v, want ErrInvalidData", err)
-	}
-	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 4096}); err != nil {
-		t.Fatalf("raise MaxFrameSize: %v", err)
-	}
-	first, err := enc.Encode(frame)
-	if err != nil {
-		t.Fatalf("Encode after rejected MaxFrameSize frame: %v", err)
-	}
-	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
-	assertEncoderVCLFrameNums(t, first.Data, []uint8{5}, []uint32{0})
+			if _, err := enc.Encode(frame); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("oversize MaxFrameSize encode error = %v, want ErrInvalidData", err)
+			}
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 4096}); err != nil {
+				t.Fatalf("raise MaxFrameSize: %v", err)
+			}
+			first, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode after rejected MaxFrameSize frame: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+			assertEncoderVCLFrameNums(t, annexBFromEncodedFrame(t, first, cfg.OutputFormat), []uint8{5}, []uint32{0})
 
-	secondFrame := frame
-	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
-	second, err := enc.Encode(secondFrame)
-	if err != nil {
-		t.Fatalf("Encode second frame after MaxFrameSize recovery: %v", err)
+			secondFrame := frame
+			secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode second frame after MaxFrameSize recovery: %v", err)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			stream := annexBFromEncodedFrame(t, first, cfg.OutputFormat)
+			stream = append(stream, annexBFromEncodedFrame(t, second, cfg.OutputFormat)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+		})
 	}
-	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
-	assertEncoderVCLFrameNums(t, append(append([]byte(nil), first.Data...), second.Data...), []uint8{5, 1}, []uint32{0, 1})
 }
 
 func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingRTPState(t *testing.T) {
-	cfg := goh264.DefaultEncoderConfig(16, 16)
-	cfg.DeblockMode = goh264.EncoderDeblockDisabled
-	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
-	cfg.SliceMaxBytes = 1
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	frame := patternedI420EncoderFrame(16, 16)
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.OutputFormat = format.fmt
+			cfg.FrameDrop = goh264.EncoderFrameDropDisabled
+			if format.fmt == goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 32
+			} else {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			cfg.SliceMaxBytes = 1
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			frame := patternedI420EncoderFrame(16, 16)
 
-	if _, err := enc.Encode(frame); !errors.Is(err, goh264.ErrInvalidData) {
-		t.Fatalf("oversize SliceMaxBytes encode error = %v, want ErrInvalidData", err)
+			if _, err := enc.Encode(frame); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("oversize SliceMaxBytes encode error = %v, want ErrInvalidData", err)
+			}
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{SliceMaxBytes: 4096}); err != nil {
+				t.Fatalf("raise SliceMaxBytes: %v", err)
+			}
+			out, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode after rejected SliceMaxBytes frame: %v", err)
+			}
+			assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+			assertEncoderVCLFrameNums(t, annexBFromEncodedFrame(t, out, cfg.OutputFormat), []uint8{5}, []uint32{0})
+			if format.fmt == goh264.EncoderOutputRTP {
+				assertRTPPacketMetadata(t, out.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+			} else if len(out.RTPPackets) != 0 {
+				t.Fatalf("non-RTP recovered packets = %d, want none", len(out.RTPPackets))
+			}
+		})
 	}
-	if err := enc.Reconfigure(goh264.EncoderReconfigure{SliceMaxBytes: 4096}); err != nil {
-		t.Fatalf("raise SliceMaxBytes: %v", err)
-	}
-	out, err := enc.Encode(frame)
-	if err != nil {
-		t.Fatalf("Encode after rejected SliceMaxBytes frame: %v", err)
-	}
-	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
-	assertEncoderVCLFrameNums(t, out.Data, []uint8{5}, []uint32{0})
-	assertRTPPacketMetadata(t, out.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
 }
 
 func TestEncoderFrameDropToBitrateDropsOversizeFrameWithoutAdvancingReferenceOrPacketState(t *testing.T) {
