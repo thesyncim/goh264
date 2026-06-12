@@ -615,6 +615,41 @@ func TestDecodePacketFramesNewExtradataAnnexB(t *testing.T) {
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketFramesAnnexBNewExtradataDoesNotAliasCallerBuffers(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	extradata, _ := annexBParameterSetsAndPacket(t, data)
+	_, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	extradata = append([]byte(nil), extradata...)
+	firstPacket := avcSampleToAnnexB(t, samples[0], 4)
+	secondPacket := avcSampleToAnnexB(t, samples[1], 4)
+
+	dec := NewDecoder()
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data:     firstPacket,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames first Annex B packet: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	for i := range extradata {
+		extradata[i] = 0xff
+	}
+	for i := range firstPacket {
+		firstPacket[i] = 0xff
+	}
+
+	frames, err = dec.DecodePacketFrames(Packet{Data: secondPacket})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames after caller mutation: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodePacketFramesPacketSideDataMapsToFrame(t *testing.T) {
 	captions := []byte{0x01, 0x02, 0x03}
 	frame, err := NewDecoder().DecodePacket(Packet{
