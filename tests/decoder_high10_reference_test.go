@@ -47,6 +47,31 @@ func TestDecodeConfiguredAVCHigh10RetainsReferenceForResidualP(t *testing.T) {
 	assertHigh10FrameMD5Strings(t, []*Frame{second}, []string{"df16162e1c5420c45702aee7bb936b15"})
 }
 
+func TestDecoderResetClearsHigh10ConfiguredAVCReference(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16High10CAVLCReferenceBoundaryAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dec.DecodeConfiguredAVC(samples[0]); err != nil {
+		t.Fatalf("IDR sample decode before reset: %v", err)
+	}
+	if err := dec.Reset(); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("reconfigure after reset: %v", err)
+	}
+	if _, err := dec.DecodeConfiguredAVC(samples[1]); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("P sample after reset err = %v, want ErrUnsupported without retained reference", err)
+	}
+}
+
 func TestDecodeFramesAnnexBHigh10RetainsReferenceForResidualP(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16High10CAVLCReferenceBoundaryAnnexBHex)
 	parameterSets, samples := annexBParameterSetsAndAccessUnits(t, data)
@@ -72,6 +97,26 @@ func TestDecodeFramesAnnexBHigh10RetainsReferenceForResidualP(t *testing.T) {
 		t.Fatalf("P Annex B access unit with retained reference decode: %v", err)
 	}
 	assertHigh10FrameMD5Strings(t, second, []string{"df16162e1c5420c45702aee7bb936b15"})
+}
+
+func TestDecoderResetClearsHigh10AnnexBReference(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16High10CAVLCReferenceBoundaryAnnexBHex)
+	parameterSets, samples := annexBParameterSetsAndAccessUnits(t, data)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.DecodeFrames(samples[0]); err != nil {
+		t.Fatalf("IDR Annex B access unit decode before reset: %v", err)
+	}
+	if err := dec.Reset(); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+	pSampleWithParameterSets := append(append([]byte{}, parameterSets...), samples[1]...)
+	if _, err := dec.DecodeFrames(pSampleWithParameterSets); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("P Annex B access unit after reset err = %v, want ErrInvalidData without retained reference", err)
+	}
 }
 
 func annexBParameterSetsAndAccessUnits(t *testing.T, data []byte) ([]byte, [][]byte) {
