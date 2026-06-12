@@ -293,6 +293,44 @@ func TestDecodePacketFramesAnnexBRecoversAfterDamagedNewExtradata(t *testing.T) 
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketFramesAnnexBNewExtradataRejectPreservesPreviousParameterSets(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	extradata, _ := annexBParameterSetsAndPacket(t, data)
+	_, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	first := avcSampleToAnnexB(t, samples[0], 4)
+	second := avcSampleToAnnexB(t, samples[1], 4)
+
+	dec := NewDecoder()
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data:     first,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	damagedExtradata := firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS)
+	damagedExtradata = appendAnnexBNAL(damagedExtradata, []byte{0x60 | byte(h264.NALPPS)})
+	frames, err = dec.DecodePacketFrames(Packet{
+		Data:     second,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: damagedExtradata}},
+	})
+	if err != nil {
+		t.Fatalf("decode with partially valid damaged Annex B extradata side data: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	frames, err = dec.DecodePacketFrames(Packet{Data: second})
+	if err != nil {
+		t.Fatalf("decode after partially valid damaged Annex B extradata: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeFramesAnnexBRecoversAfterMalformedInBandParameterSets(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -668,6 +706,21 @@ func truncateFirstParameterSetAnnexB(t *testing.T, data []byte) []byte {
 		t.Fatal("no parameter-set NAL found")
 	}
 	return out
+}
+
+func firstParameterSetAnnexB(t *testing.T, data []byte, typ h264.NALUnitType) []byte {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, nal := range nals {
+		if nal.Type == typ {
+			return appendAnnexBNAL(nil, nal.Raw)
+		}
+	}
+	t.Fatalf("no Annex B parameter set type %d found", typ)
+	return nil
 }
 
 func malformedInBandParameterSetsAnnexB() []byte {

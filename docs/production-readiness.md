@@ -156,7 +156,9 @@ same packet alongside the damaged-slice error, including the sole valid frame on
 single-frame decode helpers and delayed B-frame prefix output from
 configuration-record one-shot decode. Packet `NEW_EXTRADATA` recovery also guards
 malformed AVC and Annex B extradata as non-fatal side data: the current valid
-packet still decodes against the last good configuration and reference state.
+packet still decodes against the last good configuration and reference state,
+including when Annex B side data stages a valid foreign SPS before a malformed
+PPS.
 Direct avcC parse, configuration-record decode, valid packet AVC and Annex B
 `NEW_EXTRADATA`, and auto-detected avcC admission also prove the stored decoder
 configuration state does not retain caller-owned side-data, configuration, or
