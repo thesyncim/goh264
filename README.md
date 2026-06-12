@@ -168,6 +168,17 @@ frames, err = dec.FlushDelayedFrames()       // end-of-stream delayed output
 err = dec.Reset()                            // clear decoder state
 ```
 
+Choose the entry point by ownership and packet shape:
+
+| Need | Use |
+| --- | --- |
+| Stateful stream packets, auto Annex B/configured AVC detection, avcC storage, delayed-output flush | `DecodeFrames` |
+| Same stream path plus packet side data such as `NEW_EXTRADATA` | `DecodePacketFrames` |
+| Complete Annex B bytestream with no streaming state needed | `DecodeAnnexBFrames` |
+| Complete length-prefixed AVC packet stream with known NAL length size | `DecodeAVCFrames` |
+| Stored avcC/configured-AVC stream packets | `ParseAVCC` then `DecodeConfiguredAVCFrames` |
+| Exactly one expected output frame | `Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`, `DecodeConfiguredAVC`, or `DecodeAVCC` |
+
 Use the format-specific helpers when the packet format is already known:
 
 ```go
@@ -240,6 +251,20 @@ The encoder surface is intentionally split into a small recommended realtime
 path and lower-level escape hatches. Prefer the explicit setters for live
 controls; use `Reconfigure` only when a grouped update needs fields that do not
 yet have a dedicated helper.
+
+Choose the encoder surface by what the caller owns:
+
+| Need | Use |
+| --- | --- |
+| Start from a supported realtime baseline | `DefaultEncoderConfig` |
+| Validate and see the exact stored setup before construction | `EncoderConfig.Normalize` or `Validate` |
+| Validate one input frame without mutating encoder state | `EncoderConfig.ValidateFrame` or `Encoder.ValidateFrame` |
+| Generate SPS/PPS or recovery SEI without a live encoder | `EncoderConfig.ParameterSets` or `RecoveryPointSEIMessage` |
+| Encode with encoder-owned access-unit storage | `Encode` |
+| Encode into caller-owned access-unit storage | `EncodeInto` |
+| Change one live control | Explicit setters such as `SetBitrate`, `SetQP`, `SetOutputFormat`, and `SetRTPMetadata` |
+| Apply a bundled low-level update | `Reconfigure` |
+| Retain input/output beyond the call | `Clone` or `Append...` helpers |
 
 ```go
 cfg := goh264.DefaultEncoderConfig(640, 480)
