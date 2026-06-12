@@ -1247,6 +1247,60 @@ func (e *Encoder) SetRTPMaxPayloadSize(size int) error {
 	return nil
 }
 
+// SetMaxFrameSize updates the encoded access-unit byte budget.
+//
+// Passing zero disables the max-frame-size budget. Invalid updates leave the
+// encoder configuration and coding state unchanged.
+func (e *Encoder) SetMaxFrameSize(size int) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	cfg := e.cfg
+	cfg.MaxFrameSize = size
+	normalized, err := normalizeEncoderConfig(cfg)
+	if err != nil {
+		return err
+	}
+	e.cfg = normalized
+	return nil
+}
+
+// SetSliceMaxBytes updates the per-slice encoded byte budget.
+//
+// Passing zero disables the slice byte budget. Invalid updates leave the
+// encoder configuration and coding state unchanged.
+func (e *Encoder) SetSliceMaxBytes(size int) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	cfg := e.cfg
+	cfg.SliceMaxBytes = size
+	normalized, err := normalizeEncoderConfig(cfg)
+	if err != nil {
+		return err
+	}
+	e.cfg = normalized
+	return nil
+}
+
+// SetMaxEncodeTimeUS updates the late-frame encode-time budget.
+//
+// Passing zero disables the late-frame time budget. Invalid updates leave the
+// encoder configuration and coding state unchanged.
+func (e *Encoder) SetMaxEncodeTimeUS(us int) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	cfg := e.cfg
+	cfg.MaxEncodeTimeUS = us
+	normalized, err := normalizeEncoderConfig(cfg)
+	if err != nil {
+		return err
+	}
+	e.cfg = normalized
+	return nil
+}
+
 // SetRTPPacketCallback installs an optional synchronous callback for emitted RTP
 // packets.
 //

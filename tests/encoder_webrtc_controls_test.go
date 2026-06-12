@@ -431,6 +431,15 @@ func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 		{name: "SetRTPMaxPayloadSize", call: func() error {
 			return enc.SetRTPMaxPayloadSize(1200)
 		}},
+		{name: "SetMaxFrameSize", call: func() error {
+			return enc.SetMaxFrameSize(0)
+		}},
+		{name: "SetSliceMaxBytes", call: func() error {
+			return enc.SetSliceMaxBytes(0)
+		}},
+		{name: "SetMaxEncodeTimeUS", call: func() error {
+			return enc.SetMaxEncodeTimeUS(0)
+		}},
 		{name: "Reconfigure", call: func() error {
 			return enc.Reconfigure(goh264.EncoderReconfigure{})
 		}},
@@ -720,6 +729,33 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		t.Fatalf("rtp max payload = %d, want 1000", got.RTPMaxPayloadSize)
 	}
 
+	if err := enc.SetMaxFrameSize(80_000); err != nil {
+		t.Fatalf("SetMaxFrameSize valid: %v", err)
+	}
+	if err := enc.SetSliceMaxBytes(700); err != nil {
+		t.Fatalf("SetSliceMaxBytes valid: %v", err)
+	}
+	if err := enc.SetMaxEncodeTimeUS(5_000); err != nil {
+		t.Fatalf("SetMaxEncodeTimeUS valid: %v", err)
+	}
+	if got := enc.Config(); got.MaxFrameSize != 80_000 || got.SliceMaxBytes != 700 || got.MaxEncodeTimeUS != 5_000 {
+		t.Fatalf("runtime limits = frame %d slice %d time %d, want 80000/700/5000",
+			got.MaxFrameSize, got.SliceMaxBytes, got.MaxEncodeTimeUS)
+	}
+	if err := enc.SetMaxFrameSize(0); err != nil {
+		t.Fatalf("SetMaxFrameSize disable: %v", err)
+	}
+	if err := enc.SetSliceMaxBytes(0); err != nil {
+		t.Fatalf("SetSliceMaxBytes disable: %v", err)
+	}
+	if err := enc.SetMaxEncodeTimeUS(0); err != nil {
+		t.Fatalf("SetMaxEncodeTimeUS disable: %v", err)
+	}
+	if got := enc.Config(); got.MaxFrameSize != 0 || got.SliceMaxBytes != 0 || got.MaxEncodeTimeUS != 0 {
+		t.Fatalf("disabled runtime limits = frame %d slice %d time %d, want zeroes",
+			got.MaxFrameSize, got.SliceMaxBytes, got.MaxEncodeTimeUS)
+	}
+
 	noParameterSetsBeforeIDR := false
 	noRecoveryPointSEI := false
 	if err := enc.Reconfigure(goh264.EncoderReconfigure{
@@ -781,6 +817,15 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 		}},
 		{name: "SetRTPMaxPayloadSize", call: func(enc *goh264.Encoder) error {
 			return enc.SetRTPMaxPayloadSize(2)
+		}},
+		{name: "SetMaxFrameSize", call: func(enc *goh264.Encoder) error {
+			return enc.SetMaxFrameSize(-1)
+		}},
+		{name: "SetSliceMaxBytes", call: func(enc *goh264.Encoder) error {
+			return enc.SetSliceMaxBytes(-1)
+		}},
+		{name: "SetMaxEncodeTimeUS", call: func(enc *goh264.Encoder) error {
+			return enc.SetMaxEncodeTimeUS(-1)
 		}},
 	}
 	for _, tt := range tests {
@@ -12796,6 +12841,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	for _, method := range []string{
 		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
 		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetFrameRate", "SetRTPMaxPayloadSize",
+		"SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
 		"SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {

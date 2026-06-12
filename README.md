@@ -251,6 +251,9 @@ if err != nil {
 }
 enc.HandlePLI() // queues the next frame as an IDR request
 err = enc.SetRTPMaxPayloadSize(1200)
+err = enc.SetMaxFrameSize(0)    // disable the access-unit byte budget
+err = enc.SetSliceMaxBytes(0)   // disable the per-slice byte budget
+err = enc.SetMaxEncodeTimeUS(0) // disable the late-frame time budget
 mode0 := goh264.EncoderRTPPacketizationSingleNAL
 stapa := false
 err = enc.Reconfigure(goh264.EncoderReconfigure{
@@ -312,6 +315,9 @@ that are currently intended to be stable enough for integration work:
   RTP sequence, callback, frame-number, timestamp, or reference state. The next
   valid input resumes as P-skip, or as the queued IDR when an IDR request was
   already pending.
+- `SetMaxFrameSize`, `SetSliceMaxBytes`, and `SetMaxEncodeTimeUS` provide
+  explicit runtime setters for size and latency budgets; passing zero disables
+  the corresponding budget.
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
   async handoff.
 - Overflowed caller-owned `EncodeInto` destination growth is rejected across
