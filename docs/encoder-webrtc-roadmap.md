@@ -235,10 +235,10 @@ single-level, and single-level-plus-trailing-ones residual block writers
 round-tripped through `decodeCAVLCResidual` across luma and chroma-DC table
 contexts. The first non-trailing residual level writer covers the short code
 path plus the decoder-supported prefix-14 and prefix-15 forms, while larger
-levels remain rejected until the next source-shaped residual slice. A bounded
-two-non-trailing-level residual writer now also round-trips the subsequent-level
-suffix-length state transition while still rejecting trailing-one, higher-count,
-and out-of-range cases outside that admitted shape.
+levels remain rejected until the next source-shaped residual slice. Bounded two-
+and three-non-trailing-level residual writers now also round-trip
+subsequent-level suffix-length state transitions while still rejecting
+trailing-one, higher-count, and out-of-range cases outside that admitted shape.
 `internal/h264/encoder_headers.go` adds baseline SPS/PPS syntax writers,
 including 4:2:0 crop-unit emission, in the same source-shaped style and
 round-trips through `DecodeSPS`, `DecodePPS`, `SplitAnnexB`, and the avcC

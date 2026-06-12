@@ -550,11 +550,18 @@ func writeCAVLCResidualSingleLevel(bw *BitWriter, block []int32, n int, scantabl
 }
 
 func writeCAVLCResidualTwoLevels(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
+	return writeCAVLCResidualNonTrailingLevels(bw, block, n, scantable, maxCoeff, predictedNnz, 2, 2)
+}
+
+func writeCAVLCResidualNonTrailingLevels(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int, minCoeff int, maxAdmittedCoeff int) (int, error) {
 	if bw == nil || maxCoeff <= 0 || maxCoeff > 16 || len(scantable) < maxCoeff {
 		return 0, ErrInvalidData
 	}
-	var scanIndex [2]int
-	var level [2]int32
+	if minCoeff <= 0 || maxAdmittedCoeff < minCoeff || maxAdmittedCoeff > 16 {
+		return 0, ErrInvalidData
+	}
+	var scanIndex [16]int
+	var level [16]int32
 	totalCoeff := 0
 	for i := 0; i < maxCoeff; i++ {
 		pos := int(scantable[i])
@@ -565,14 +572,14 @@ func writeCAVLCResidualTwoLevels(bw *BitWriter, block []int32, n int, scantable 
 		if v == 0 {
 			continue
 		}
-		if v == 1 || v == -1 || totalCoeff == len(scanIndex) {
+		if v == 1 || v == -1 || totalCoeff == maxAdmittedCoeff {
 			return 0, ErrInvalidData
 		}
 		scanIndex[totalCoeff] = i
 		level[totalCoeff] = v
 		totalCoeff++
 	}
-	if totalCoeff != 2 {
+	if totalCoeff < minCoeff || totalCoeff > maxAdmittedCoeff {
 		return 0, ErrInvalidData
 	}
 
@@ -588,8 +595,11 @@ func writeCAVLCResidualTwoLevels(bw *BitWriter, block []int32, n int, scantable 
 		return 0, err
 	}
 	suffixLength := cavlcSuffixLengthAfterFirstLevel(firstLevel, firstCode)
-	if err := writeCAVLCSubsequentLevel(bw, level[0], suffixLength); err != nil {
-		return 0, err
+	for i := totalCoeff - 2; i >= 0; i-- {
+		if err := writeCAVLCSubsequentLevel(bw, level[i], suffixLength); err != nil {
+			return 0, err
+		}
+		suffixLength = cavlcSuffixLengthAfterSubsequentLevel(level[i], suffixLength)
 	}
 
 	totalZeros := scanIndex[totalCoeff-1] + 1 - totalCoeff
@@ -605,6 +615,10 @@ func writeCAVLCResidualTwoLevels(bw *BitWriter, block []int32, n int, scantable 
 		zerosLeft -= runBefore
 	}
 	return totalCoeff, nil
+}
+
+func writeCAVLCResidualThreeNonTrailingLevels(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
+	return writeCAVLCResidualNonTrailingLevels(bw, block, n, scantable, maxCoeff, predictedNnz, 3, 3)
 }
 
 func writeCAVLCResidualSingleLevelTrailingOnes(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
@@ -710,6 +724,18 @@ func cavlcSuffixLengthAfterFirstLevel(level int32, code int64) int {
 	suffixLength := 1
 	if uint32(level)+3 > 6 {
 		suffixLength = 2
+	}
+	return suffixLength
+}
+
+func cavlcSuffixLengthAfterSubsequentLevel(level int32, suffixLength int) int {
+	suffixLimit := [7]uint32{0, 3, 6, 12, 24, 48, 1<<31 - 1}
+	if suffixLength < 0 || suffixLength >= len(suffixLimit) {
+		return suffixLength
+	}
+	limit := suffixLimit[suffixLength]
+	if uint32(level)+limit > 2*limit && suffixLength < 6 {
+		return suffixLength + 1
 	}
 	return suffixLength
 }
