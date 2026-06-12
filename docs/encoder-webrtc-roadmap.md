@@ -142,7 +142,8 @@ exact-P16 decode, recovery-point side data, multi-slice `first_mb_in_slice`
 ordering, RTP packetization-mode 0 single-NAL IDR/P-frame reassembly and
 oversize rejection, public NAL-unit metadata indexing back into encoded
 access-unit bytes for Annex B/AVC/RTP output including non-empty caller-buffer
-prefixes, caller-buffer preservation on RTP mode-0 rejection and
+prefixes, caller-buffer preservation on RTP mode-0 rejection, live-state
+rollback for mode-0 oversize queued-IDR and P-frame packetization failures, and
 Annex B/AVC/RTP bitrate-drop and late-drop non-output paths, RTP FU-A reassembly, STAP-A parameter-set aggregation,
 changed-P recovery SEI single-NAL output when STAP-A is enabled,
 payload-type, SSRC, and sequence-number packet metadata. RTP

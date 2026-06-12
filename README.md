@@ -401,7 +401,8 @@ FU-A/STAP-A output, RTP packet storage isolated from `EncodedFrame.Data`,
 optional per-packet callback metadata including mode 0/1
 IDR/P-frame single-NAL packets for P-skip, exact P16x16, odd-pixel constant
 chroma, and P IntraPCM fallback rows with callback packet storage isolated from
-the returned RTP packets, and automatic
+the returned RTP packets, mode-0 oversize rejection live-state rollback for
+queued-IDR and P-frame paths, and automatic
 timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
 separate in-band keyframe headers, out-of-band headers, and every-IDR emission,
 and runtime reconfiguration can switch output format and RTP packetization

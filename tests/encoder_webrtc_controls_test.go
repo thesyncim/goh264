@@ -5788,6 +5788,114 @@ func TestEncoderEncodeIntoRTPMode0RejectPreservesCallerBuffer(t *testing.T) {
 	assertEncoderCallerBufferUnchanged(t, dst, backingBefore)
 }
 
+func TestEncoderRTPMode0OversizeRejectPreservesLiveState(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		forceIDR bool
+		mutate   func(goh264.EncoderFrame) goh264.EncoderFrame
+		wantIDR  bool
+		wantNALs []uint8
+	}{
+		{
+			name:     "queued-idr",
+			forceIDR: true,
+			mutate: func(frame goh264.EncoderFrame) goh264.EncoderFrame {
+				return frame
+			},
+			wantIDR:  true,
+			wantNALs: []uint8{7, 8, 5},
+		},
+		{
+			name: "p-intrapcm",
+			mutate: func(frame goh264.EncoderFrame) goh264.EncoderFrame {
+				frame = cloneI420EncoderFrame(frame)
+				frame.Y[0] ^= 0x44
+				return frame
+			},
+			wantNALs: []uint8{6, 1},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+			cfg.RTPMaxPayloadSize = 1200
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder mode 0: %v", err)
+			}
+			var callbackCalls int
+			enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+				callbackCalls++
+			})
+
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			firstFrame.PTS = 0
+			first, err := enc.EncodeInto(make([]byte, 0, 4096), firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first mode-0 IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+			firstPacketCount := len(first.RTPPackets)
+			if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+				t.Fatalf("first mode-0 packets/callbacks = %d/%d, want nonzero matching count",
+					firstPacketCount, callbackCalls)
+			}
+
+			if err := enc.SetRTPMaxPayloadSize(64); err != nil {
+				t.Fatalf("lower RTP payload size: %v", err)
+			}
+			if tt.forceIDR {
+				enc.ForceIDR()
+				if !enc.PendingIDR() {
+					t.Fatal("ForceIDR did not queue IDR before mode-0 oversize rejection")
+				}
+			}
+			nextFrame := tt.mutate(firstFrame)
+			nextFrame.PTS = int64(cfg.RTPTimestampIncrement)
+			dst, backingBefore := encoderPrefilledCallerBuffer()
+			rejected, err := enc.EncodeInto(dst, nextFrame)
+			if !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("EncodeInto mode-0 oversize %s error = %v, want ErrInvalidData", tt.name, err)
+			}
+			if rejected.Dropped || len(rejected.Data) != 0 || len(rejected.NALUnits) != 0 || len(rejected.RTPPackets) != 0 {
+				t.Fatalf("mode-0 oversize %s output = %+v, want empty output", tt.name, rejected)
+			}
+			assertEncoderCallerBufferUnchanged(t, dst, backingBefore)
+			if enc.PendingIDR() != tt.forceIDR {
+				t.Fatalf("mode-0 oversize %s pending IDR = %v, want %v", tt.name, enc.PendingIDR(), tt.forceIDR)
+			}
+			if callbackCalls != firstPacketCount {
+				t.Fatalf("mode-0 oversize %s callbacks = %d, want still %d",
+					tt.name, callbackCalls, firstPacketCount)
+			}
+
+			if err := enc.SetRTPMaxPayloadSize(1200); err != nil {
+				t.Fatalf("restore RTP payload size: %v", err)
+			}
+			recovered, err := enc.EncodeInto(make([]byte, 0, 4096), nextFrame)
+			if err != nil {
+				t.Fatalf("EncodeInto after mode-0 oversize %s: %v", tt.name, err)
+			}
+			if recovered.Dropped || recovered.IDR != tt.wantIDR || enc.PendingIDR() {
+				t.Fatalf("post-mode-0-oversize %s output dropped=%v idr=%v pending=%v, want idr=%v",
+					tt.name, recovered.Dropped, recovered.IDR, enc.PendingIDR(), tt.wantIDR)
+			}
+			if recovered.RTPTime != uint32(nextFrame.PTS) {
+				t.Fatalf("post-mode-0-oversize %s RTP time = %d, want %d",
+					tt.name, recovered.RTPTime, nextFrame.PTS)
+			}
+			assertEncoderNALTypes(t, recovered.NALUnits, tt.wantNALs)
+			assertEncoderRTPMode0RawNALPackets(t, recovered, 1200)
+			assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+			if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+				t.Fatalf("post-mode-0-oversize %s callbacks = %d, want %d",
+					tt.name, callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+			}
+		})
+	}
+}
+
 func TestEncoderEncodeIntoLateDropPreservesCallerBuffer(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
