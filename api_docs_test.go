@@ -184,6 +184,8 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 		"must(enc.ValidateFrame",
 		"must(enc.Reset",
 		"admitted control, budget",
+		"Zero scalar fields in `EncoderReconfigure` mean unchanged",
+		"pointer fields, grouped `Limits`, or dedicated setters",
 	} {
 		if !strings.Contains(readme, required) {
 			t.Fatalf("README.md encoder sample missing checked-control phrase %q", required)

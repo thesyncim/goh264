@@ -452,7 +452,9 @@ that are currently intended to be stable enough for integration work:
   is admitted.
 - `EncoderReconfigure` remains the grouped low-level update surface for
   bundled multi-field changes, grouped `Limits`, and explicit force-IDR
-  requests.
+  requests. Zero scalar fields in `EncoderReconfigure` mean unchanged; use
+  pointer fields, grouped `Limits`, or dedicated setters when zero is the value
+  to apply.
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP

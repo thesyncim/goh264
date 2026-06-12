@@ -7859,6 +7859,80 @@ func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 	}
 }
 
+func TestEncoderReconfigureZeroScalarFieldsAreNoOps(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.FrameDrop = goh264.EncoderFrameDropLate
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		TargetBitrate:     800_000,
+		MaxBitrate:        900_000,
+		FrameRateNum:      24,
+		FrameRateDen:      1,
+		Width:             32,
+		Height:            16,
+		RTPMaxPayloadSize: 1200,
+		MaxFrameSize:      4096,
+		MaxEncodeTimeUS:   10_000,
+		SliceCount:        2,
+		SliceMaxBytes:     2048,
+		Preset:            goh264.EncoderPresetBalanced,
+		GOPSize:           90,
+		IDRInterval:       30,
+		OutputFormat:      goh264.EncoderOutputRTP,
+	}); err != nil {
+		t.Fatalf("seed Reconfigure: %v", err)
+	}
+	before := enc.Config()
+	if before.TargetBitrate == 0 || before.FrameRateNum == 0 || before.Width == 0 ||
+		before.RTPMaxPayloadSize == 0 || before.MaxFrameSize == 0 || before.SliceCount == 0 ||
+		before.OutputFormat == 0 {
+		t.Fatalf("seed config did not establish non-zero scalar fields: %+v", before)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{}); err != nil {
+		t.Fatalf("zero Reconfigure: %v", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("zero Reconfigure mutated config = %+v, want %+v", got, before)
+	}
+
+	falseBool := false
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		SPSPPSBeforeIDR:  &falseBool,
+		RecoveryPointSEI: &falseBool,
+	}); err != nil {
+		t.Fatalf("pointer-only Reconfigure: %v", err)
+	}
+	afterPointers := enc.Config()
+	if afterPointers.TargetBitrate != before.TargetBitrate ||
+		afterPointers.MaxBitrate != before.MaxBitrate ||
+		afterPointers.FrameRateNum != before.FrameRateNum ||
+		afterPointers.FrameRateDen != before.FrameRateDen ||
+		afterPointers.RTPTimestampIncrement != before.RTPTimestampIncrement ||
+		afterPointers.Width != before.Width ||
+		afterPointers.Height != before.Height ||
+		afterPointers.RTPMaxPayloadSize != before.RTPMaxPayloadSize ||
+		afterPointers.MaxFrameSize != before.MaxFrameSize ||
+		afterPointers.MaxEncodeTimeUS != before.MaxEncodeTimeUS ||
+		afterPointers.SliceCount != before.SliceCount ||
+		afterPointers.SliceMaxBytes != before.SliceMaxBytes ||
+		afterPointers.Preset != before.Preset ||
+		afterPointers.GOPSize != before.GOPSize ||
+		afterPointers.IDRInterval != before.IDRInterval ||
+		afterPointers.OutputFormat != before.OutputFormat {
+		t.Fatalf("pointer-only Reconfigure changed scalar fields = %+v, want scalar fields from %+v", afterPointers, before)
+	}
+	if afterPointers.SPSPPSBeforeIDR || afterPointers.RecoveryPointSEI {
+		t.Fatalf("pointer-only Reconfigure did not apply explicit false fields: %+v", afterPointers)
+	}
+}
+
 func TestEncoderReconfigureLimitsGroupUpdatesBudgetsAtomically(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
