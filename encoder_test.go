@@ -108,7 +108,7 @@ func TestEncoderAccessUnitHelpersRejectOverflowedNALCount(t *testing.T) {
 
 func TestAppendEncoderAccessUnitRejectsOverflowedDestination(t *testing.T) {
 	nals := []encoderRawNAL{{raw: []byte{byte(h264.NALSlice)}}}
-	for _, format := range []EncoderOutputFormat{EncoderOutputAnnexB, EncoderOutputAVC} {
+	for _, format := range []EncoderOutputFormat{EncoderOutputAnnexB, EncoderOutputAVC, EncoderOutputRTP} {
 		dst := fakeEncoderBytesLen(maxInt - 4)
 		got, units, err := appendEncoderAccessUnit(dst, format, nals)
 		if !errors.Is(err, ErrInvalidData) || len(got) != len(dst) || units != nil {
