@@ -39,6 +39,44 @@ func ExampleDecoder_DecodeFrames() {
 	// Output: 1 true
 }
 
+func ExampleDecoder_DecodeConfiguredAVCFrames() {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAVC
+	cfg.RTPMaxPayloadSize = 0
+
+	headers, err := cfg.ParameterSets()
+	if err != nil {
+		log.Fatal(err)
+	}
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	frame := cfg.I420Frame(
+		make([]byte, cfg.StrideY*cfg.Height),
+		make([]byte, cfg.StrideCb*(cfg.Height/2)),
+		make([]byte, cfg.StrideCr*(cfg.Height/2)),
+		0,
+	)
+	encoded, err := enc.Encode(frame)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	dec := goh264.NewDecoder()
+	avcc, err := dec.ParseAVCC(headers.AVCC())
+	if err != nil {
+		log.Fatal(err)
+	}
+	frames, err := dec.DecodeConfiguredAVCFrames(encoded.Data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(avcc.NALLengthSize, len(frames), frames[0].Width, frames[0].Height)
+	// Output: 4 1 16 16
+}
+
 func ExampleEncoder_EncodeInto() {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB
