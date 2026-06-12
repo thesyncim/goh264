@@ -431,6 +431,132 @@ func (c *cavlcResidualContext) decodeCAVLCResidualPayload(gb *bitReader, pps *PP
 	return qscale, chromaQP, cbpTable, nil
 }
 
+func (c *cavlcResidualContext) writeCAVLCInterResidualPayload(bw *BitWriter, pps *PPS, sps *SPS, mbType uint32, cbp int, qscale int, nextQScale int) (int, error) {
+	if bw == nil || pps == nil || sps == nil || c == nil || cbp < 0 || qscale < 0 || nextQScale < 0 {
+		return 0, ErrInvalidData
+	}
+	if isIntra(mbType) || is8x8DCT(mbType) || sps.ChromaFormatIDC != 1 {
+		return 0, ErrUnsupported
+	}
+	if cbp == 0 {
+		clearCAVLCResidualCaches(c)
+		return 0, nil
+	}
+
+	maxQP := int32(51 + 6*(sps.BitDepthLuma-8))
+	if err := writeCAVLCDQuantForQScale(bw, qscale, nextQScale, maxQP); err != nil {
+		return 0, err
+	}
+	if nextQScale > qpMaxNum {
+		return 0, ErrInvalidData
+	}
+	chromaQP := [2]uint8{
+		pps.ChromaQPTable[0][nextQScale],
+		pps.ChromaQPTable[1][nextQScale],
+	}
+	if !cavlcFlatQMul4x4(pps.Dequant4Buffer[3][nextQScale][:]) {
+		return 0, ErrUnsupported
+	}
+	scan, _ := h264CAVLCScansForQScale(sps, nextQScale, mbType&MBTypeInterlaced != 0)
+	ret, err := c.writeCAVLCLumaResidual(bw, scan, mbType, cbp, 0)
+	if err != nil {
+		return 0, err
+	}
+	if err := c.writeCAVLCChromaResidual(bw, pps, scan, mbType, cbp, chromaQP); err != nil {
+		return 0, err
+	}
+	return cbp | ret<<12, nil
+}
+
+func (c *cavlcResidualContext) writeCAVLCLumaResidual(bw *BitWriter, scan []uint8, mbType uint32, cbp int, p int) (int, error) {
+	if bw == nil || c == nil || p < 0 || p > 2 || isIntra16x16(mbType) || is8x8DCT(mbType) {
+		return 0, ErrInvalidData
+	}
+	newCBP := 0
+	for i8x8 := 0; i8x8 < 4; i8x8++ {
+		if cbp&(1<<i8x8) == 0 {
+			nnz := int(h264Scan8[4*i8x8+p*16])
+			c.NonZeroCountCache[nnz] = 0
+			c.NonZeroCountCache[nnz+1] = 0
+			c.NonZeroCountCache[nnz+8] = 0
+			c.NonZeroCountCache[nnz+9] = 0
+			continue
+		}
+		for i4x4 := 0; i4x4 < 4; i4x4++ {
+			index := i4x4 + 4*i8x8 + p*16
+			block := c.MB[16*index : 16*index+16]
+			totalCoeff, err := writeCAVLCResidualBounded(bw, block, 0, scan, 16, c.predNonZeroCount(cavlcResidualPredIndex(index)))
+			if err != nil {
+				return 0, err
+			}
+			c.NonZeroCountCache[h264Scan8[index]] = uint8(totalCoeff)
+			newCBP |= totalCoeff << i8x8
+		}
+	}
+	return newCBP, nil
+}
+
+func (c *cavlcResidualContext) writeCAVLCChromaResidual(bw *BitWriter, pps *PPS, scan []uint8, mbType uint32, cbp int, chromaQP [2]uint8) error {
+	if bw == nil || pps == nil || c == nil {
+		return ErrInvalidData
+	}
+	if cbp&0x30 != 0 {
+		for chromaIdx := 0; chromaIdx < 2; chromaIdx++ {
+			offset := 256 + 16*16*chromaIdx
+			totalCoeff, err := writeCAVLCResidualBounded(bw, c.MB[offset:], 0, h264ChromaDCScan[:], 4, c.predNonZeroCount(cavlcResidualPredIndex(chromaDCBlockIndex+chromaIdx)))
+			if err != nil {
+				return err
+			}
+			c.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+chromaIdx]] = uint8(totalCoeff)
+		}
+	}
+	if cbp&0x20 != 0 {
+		for chromaIdx := 0; chromaIdx < 2; chromaIdx++ {
+			qp := int(chromaQP[chromaIdx])
+			if qp > qpMaxNum {
+				return ErrInvalidData
+			}
+			if !cavlcFlatQMul4x4(pps.Dequant4Buffer[chromaIdx+4][qp][:]) {
+				return ErrUnsupported
+			}
+			mbOffset := 16 * (16 + 16*chromaIdx)
+			for i4x4 := 0; i4x4 < 4; i4x4++ {
+				index := 16 + 16*chromaIdx + i4x4
+				block := c.MB[mbOffset : mbOffset+16]
+				totalCoeff, err := writeCAVLCResidualBounded(bw, block, 0, scan[1:], 15, c.predNonZeroCount(cavlcResidualPredIndex(index)))
+				if err != nil {
+					return err
+				}
+				c.NonZeroCountCache[h264Scan8[index]] = uint8(totalCoeff)
+				mbOffset += 16
+			}
+		}
+		return nil
+	}
+	fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[16]), 4, 4, 8, 0)
+	fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[32]), 4, 4, 8, 0)
+	return nil
+}
+
+func cavlcFlatQMul4x4(qmul []uint32) bool {
+	if len(qmul) < 16 {
+		return false
+	}
+	for i := 0; i < 16; i++ {
+		if qmul[i] != 64 {
+			return false
+		}
+	}
+	return true
+}
+
+func cavlcResidualPredIndex(n int) int {
+	if n >= lumaDCBlockIndex {
+		return (n - lumaDCBlockIndex) * 16
+	}
+	return n
+}
+
 func updateCAVLCQScale(qscale int, dquant int32, maxQP int32) (int, error) {
 	q := int32(uint32(int32(qscale)) + uint32(dquant))
 	if uint32(q) > uint32(maxQP) {

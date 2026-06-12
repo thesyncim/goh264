@@ -334,6 +334,157 @@ func TestWriteCAVLCDQuantForQScaleRejectsInvalid(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCInterResidualPayloadRoundTripsLumaThroughDecoder(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+	mbType := MBType16x16 | MBTypeP0L0
+	var writer cavlcResidualContext
+	writer.MB[0] = 1
+	writer.MB[16] = -1
+	fillCAVLCNonZero(&writer.NonZeroCountCache, int(h264Scan8[4]), 4, 4, 8, 9)
+
+	var bw BitWriter
+	cbpTable, err := writer.writeCAVLCInterResidualPayload(&bw, pps, sps, mbType, 1, 20, 23)
+	if err != nil {
+		t.Fatalf("write residual payload failed: %v", err)
+	}
+	if cbpTable != 0x1001 {
+		t.Fatalf("writer cbpTable = %#x, want 0x1001", cbpTable)
+	}
+	if writer.NonZeroCountCache[h264Scan8[0]] != 1 || writer.NonZeroCountCache[h264Scan8[1]] != 1 {
+		t.Fatalf("writer luma nnz = %d/%d, want 1/1", writer.NonZeroCountCache[h264Scan8[0]], writer.NonZeroCountCache[h264Scan8[1]])
+	}
+	for _, n := range []int{4, 5, 6, 7} {
+		if writer.NonZeroCountCache[h264Scan8[n]] != 0 {
+			t.Fatalf("writer cleared block%d nnz = %d, want 0", n, writer.NonZeroCountCache[h264Scan8[n]])
+		}
+	}
+
+	var decoded cavlcResidualContext
+	fillCAVLCNonZero(&decoded.NonZeroCountCache, int(h264Scan8[4]), 4, 4, 8, 9)
+	gb := newBitReader(bw.Bytes())
+	qscale, chromaQP, gotCBPTable, err := decoded.decodeCAVLCResidualPayload(&gb, pps, sps, mbType, 1, 20)
+	if err != nil {
+		t.Fatalf("decode written residual payload failed: %v", err)
+	}
+	if qscale != 23 || chromaQP != ([2]uint8{23, 23}) || gotCBPTable != cbpTable {
+		t.Fatalf("decoded q/chroma/cbp = %d/%v/%#x, want 23/[23 23]/%#x", qscale, chromaQP, gotCBPTable, cbpTable)
+	}
+	if decoded.MB[0] != 1 || decoded.MB[16] != -1 {
+		t.Fatalf("decoded luma coeffs = %d/%d, want 1/-1", decoded.MB[0], decoded.MB[16])
+	}
+	if decoded.NonZeroCountCache != writer.NonZeroCountCache {
+		t.Fatalf("decoded nnz cache differs from writer cache")
+	}
+	if gb.bitPos != bw.BitLen() {
+		t.Fatalf("decoded consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+	}
+}
+
+func TestWriteCAVLCInterResidualPayloadRoundTripsChromaDCThroughDecoder(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+	mbType := MBType16x16 | MBTypeP0L0
+	var writer cavlcResidualContext
+	writer.MB[256] = 1
+	writer.MB[512] = -1
+
+	var bw BitWriter
+	cbpTable, err := writer.writeCAVLCInterResidualPayload(&bw, pps, sps, mbType, 0x10, 18, 18)
+	if err != nil {
+		t.Fatalf("write chroma residual payload failed: %v", err)
+	}
+	if cbpTable != 0x10 {
+		t.Fatalf("writer cbpTable = %#x, want 0x10", cbpTable)
+	}
+	if writer.NonZeroCountCache[h264Scan8[chromaDCBlockIndex]] != 1 || writer.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+1]] != 1 {
+		t.Fatalf("writer chroma dc nnz = %d/%d, want 1/1",
+			writer.NonZeroCountCache[h264Scan8[chromaDCBlockIndex]], writer.NonZeroCountCache[h264Scan8[chromaDCBlockIndex+1]])
+	}
+
+	var decoded cavlcResidualContext
+	gb := newBitReader(bw.Bytes())
+	qscale, chromaQP, gotCBPTable, err := decoded.decodeCAVLCResidualPayload(&gb, pps, sps, mbType, 0x10, 18)
+	if err != nil {
+		t.Fatalf("decode written chroma residual payload failed: %v", err)
+	}
+	if qscale != 18 || chromaQP != ([2]uint8{18, 18}) || gotCBPTable != cbpTable {
+		t.Fatalf("decoded q/chroma/cbp = %d/%v/%#x, want 18/[18 18]/%#x", qscale, chromaQP, gotCBPTable, cbpTable)
+	}
+	if decoded.MB[256] != 1 || decoded.MB[512] != -1 {
+		t.Fatalf("decoded chroma dc coeffs = %d/%d, want 1/-1", decoded.MB[256], decoded.MB[512])
+	}
+	if decoded.NonZeroCountCache != writer.NonZeroCountCache {
+		t.Fatalf("decoded nnz cache differs from writer cache")
+	}
+	if gb.bitPos != bw.BitLen() {
+		t.Fatalf("decoded consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+	}
+}
+
+func TestWriteCAVLCInterResidualPayloadRejectsInvalid(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+	var ctx cavlcResidualContext
+	var bw BitWriter
+	for _, tt := range []struct {
+		name string
+		run  func() error
+		want error
+	}{
+		{name: "nil writer", run: func() error {
+			_, err := ctx.writeCAVLCInterResidualPayload(nil, pps, sps, MBType16x16|MBTypeP0L0, 1, 20, 20)
+			return err
+		}, want: ErrInvalidData},
+		{name: "nil pps", run: func() error {
+			_, err := ctx.writeCAVLCInterResidualPayload(&bw, nil, sps, MBType16x16|MBTypeP0L0, 1, 20, 20)
+			return err
+		}, want: ErrInvalidData},
+		{name: "nil sps", run: func() error {
+			_, err := ctx.writeCAVLCInterResidualPayload(&bw, pps, nil, MBType16x16|MBTypeP0L0, 1, 20, 20)
+			return err
+		}, want: ErrInvalidData},
+		{name: "negative cbp", run: func() error {
+			_, err := ctx.writeCAVLCInterResidualPayload(&bw, pps, sps, MBType16x16|MBTypeP0L0, -1, 20, 20)
+			return err
+		}, want: ErrInvalidData},
+		{name: "intra", run: func() error {
+			_, err := ctx.writeCAVLCInterResidualPayload(&bw, pps, sps, MBTypeIntra4x4, 1, 20, 20)
+			return err
+		}, want: ErrUnsupported},
+		{name: "8x8 dct", run: func() error {
+			_, err := ctx.writeCAVLCInterResidualPayload(&bw, pps, sps, MBType16x16|MBTypeP0L0|MBType8x8DCT, 1, 20, 20)
+			return err
+		}, want: ErrUnsupported},
+		{name: "unsupported chroma", run: func() error {
+			_, err := ctx.writeCAVLCInterResidualPayload(&bw, pps, &SPS{BitDepthLuma: 8, ChromaFormatIDC: 2}, MBType16x16|MBTypeP0L0, 1, 20, 20)
+			return err
+		}, want: ErrUnsupported},
+		{name: "non-flat luma qmul", run: func() error {
+			nextPPS := cavlcFlatQMulPPS()
+			nextPPS.Dequant4Buffer[3][20][0] = 65
+			_, err := ctx.writeCAVLCInterResidualPayload(&bw, nextPPS, sps, MBType16x16|MBTypeP0L0, 1, 20, 20)
+			return err
+		}, want: ErrUnsupported},
+		{name: "non-flat chroma qmul", run: func() error {
+			nextPPS := cavlcFlatQMulPPS()
+			nextPPS.Dequant4Buffer[4][20][0] = 65
+			_, err := ctx.writeCAVLCInterResidualPayload(&bw, nextPPS, sps, MBType16x16|MBTypeP0L0, 0x20, 20, 20)
+			return err
+		}, want: ErrUnsupported},
+		{name: "bad qscale", run: func() error {
+			_, err := ctx.writeCAVLCInterResidualPayload(&bw, pps, sps, MBType16x16|MBTypeP0L0, 1, 52, 20)
+			return err
+		}, want: ErrInvalidData},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.run(); err != tt.want {
+				t.Fatalf("write residual payload error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestDecodeCAVLCIntra16x16MacroblockNoResidual(t *testing.T) {
 	pps := cavlcFlatQMulPPS()
 	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
