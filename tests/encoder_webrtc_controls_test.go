@@ -5488,6 +5488,11 @@ func TestEncoderEncodeRecoveryPointSEICanBeDisabled(t *testing.T) {
 		t.Fatalf("Encode changed P IntraPCM: %v", err)
 	}
 	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertEncoderVCLFrameNums(t,
+		append(append([]byte(nil), first.Data...), second.Data...),
+		[]uint8{5, 1},
+		[]uint32{0, 1},
+	)
 
 	dec := goh264.NewDecoder()
 	if _, err := dec.DecodeFrames(first.Data); err != nil {
