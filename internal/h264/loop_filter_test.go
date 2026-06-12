@@ -71,6 +71,15 @@ func TestFillLoopFilterCachesFrameCanonicalizesBListRefs(t *testing.T) {
 	}
 }
 
+func TestH264LoopFilterRef2FrameRejectsOverflowedLists(t *testing.T) {
+	entries := [2][]simpleRefEntry{
+		fakeSimpleRefEntrySliceLen(maxInt/32 + 1),
+	}
+	if _, err := h264LoopFilterRef2Frame(entries, map[*DecodedFrame]int8{}); err != ErrInvalidData {
+		t.Fatalf("overflowed loop-filter ref map error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestH264LoopFilterRef2FramePreservesReferenceStructure(t *testing.T) {
 	ref := &DecodedFrame{}
 	other := &DecodedFrame{}

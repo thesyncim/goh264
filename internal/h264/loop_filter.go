@@ -202,6 +202,9 @@ func h264LoopFilterRef2Frame(entries [2][]simpleRefEntry, ids map[*DecodedFrame]
 		if len(entries[list]) == 0 {
 			continue
 		}
+		if len(entries[list]) > maxInt/32 {
+			return [2][]int8{}, ErrInvalidData
+		}
 		out[list] = make([]int8, len(entries[list]))
 		for i, entry := range entries[list] {
 			id, err := h264LoopFilterRefFrameID(entry.frame, ids)
