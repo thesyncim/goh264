@@ -6606,7 +6606,7 @@ func TestEncoderFrameDropLateDropsOverBudgetFrameWithoutAdvancingReferenceOrPack
 			}
 			lateChangedFrame := patternedI420EncoderFrame(128, 128)
 			lateChangedFrame.Y[0] ^= 0x4c
-			lateChangedFrame.PTS = 0
+			lateChangedFrame.PTS = int64(out.RTPTime + cfg.RTPTimestampIncrement)
 			dropped, err = enc.Encode(lateChangedFrame)
 			if err != nil {
 				t.Fatalf("Encode late-drop changed frame: %v", err)
@@ -6616,6 +6616,10 @@ func TestEncoderFrameDropLateDropsOverBudgetFrameWithoutAdvancingReferenceOrPack
 			}
 			if dropped.RTPTime != out.RTPTime+cfg.RTPTimestampIncrement {
 				t.Fatalf("late dropped changed RTP time = %d, want %d", dropped.RTPTime, out.RTPTime+cfg.RTPTimestampIncrement)
+			}
+			if dropped.PTS != lateChangedFrame.PTS || dropped.DTS != lateChangedFrame.PTS {
+				t.Fatalf("late dropped changed timing pts=%d dts=%d, want %d/%d",
+					dropped.PTS, dropped.DTS, lateChangedFrame.PTS, lateChangedFrame.PTS)
 			}
 			if callbackCalls != firstPacketCount {
 				t.Fatalf("late dropped changed frame invoked callback count %d, want still %d", callbackCalls, firstPacketCount)
