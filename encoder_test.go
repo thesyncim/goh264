@@ -135,6 +135,19 @@ func TestAppendEncoderAccessUnitRejectsEmptyNALWithoutMutation(t *testing.T) {
 	}
 }
 
+func TestAppendEncoderAccessUnitRejectsUnknownFormatWithoutMutation(t *testing.T) {
+	nals := []encoderRawNAL{{raw: []byte{byte(h264.NALSlice)}}}
+	dst := []byte{0xcc, 0xdd}
+	before := append([]byte(nil), dst...)
+	got, units, err := appendEncoderAccessUnit(dst, EncoderOutputFormat(99), nals)
+	if !errors.Is(err, ErrInvalidData) || len(got) != len(dst) || units != nil {
+		t.Fatalf("unknown format got len=%d units=%v err=%v, want original buffer, nil units, ErrInvalidData", len(got), units, err)
+	}
+	if !bytes.Equal(dst, before) {
+		t.Fatalf("unknown format mutated caller buffer: got %x want %x", dst, before)
+	}
+}
+
 func TestEncoderRTPMode1StoragePlanRejectsOverflow(t *testing.T) {
 	nals := []encoderRawNAL{
 		{raw: fakeEncoderBytesLen(maxInt - 1)},
