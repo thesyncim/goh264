@@ -1843,12 +1843,6 @@ func TestEncoderReconfigureDeblockModeControlsPFrameAdmission(t *testing.T) {
 }
 
 func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *testing.T) {
-	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	before := enc.Config()
-
 	badVBV := -1
 	badInitialQP := 41
 	minQP := 12
@@ -1872,6 +1866,14 @@ func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *t
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = goh264.EncoderOutputAnnexB
+			cfg.RTPMaxPayloadSize = 0
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			before := enc.Config()
 			if err := enc.Reconfigure(tt.update); !errors.Is(err, goh264.ErrInvalidData) {
 				t.Fatalf("Reconfigure invalid runtime controls error = %v, want ErrInvalidData", err)
 			}
@@ -1881,28 +1883,22 @@ func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *t
 			if enc.PendingIDR() {
 				t.Fatal("invalid runtime controls queued an IDR")
 			}
+			first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode post-invalid IDR: %v", err)
+			}
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode post-invalid P-skip: %v", err)
+			}
+			assertEncoderVCLFrameNums(t, append(append([]byte(nil), first.Data...), second.Data...), []uint8{5, 1}, []uint32{0, 1})
 		})
 	}
 }
 
 func TestEncoderReconfigureRejectsInvalidOutputControlsWithoutMutation(t *testing.T) {
-	cfg := goh264.DefaultEncoderConfig(16, 16)
-	cfg.OutputFormat = goh264.EncoderOutputAVC
-	cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
-	cfg.RTPMaxPayloadSize = 0
-	cfg.DeblockMode = goh264.EncoderDeblockDisabled
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	if _, err := enc.Encode(patternedI420EncoderFrame(16, 16)); err != nil {
-		t.Fatalf("Encode first AVC frame: %v", err)
-	}
-	if enc.PendingIDR() {
-		t.Fatal("freshly encoded AVC frame left unexpected pending IDR")
-	}
-
-	before := enc.Config()
 	tests := []struct {
 		name   string
 		update goh264.EncoderReconfigure
@@ -1927,6 +1923,27 @@ func TestEncoderReconfigureRejectsInvalidOutputControlsWithoutMutation(t *testin
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = goh264.EncoderOutputAVC
+			cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
+			cfg.RTPMaxPayloadSize = 0
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
+			first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode first AVC frame: %v", err)
+			}
+			if enc.PendingIDR() {
+				t.Fatal("freshly encoded AVC frame left unexpected pending IDR")
+			}
+			before := enc.Config()
 			if err := enc.Reconfigure(tt.update); !errors.Is(err, goh264.ErrInvalidData) {
 				t.Fatalf("Reconfigure invalid output controls error = %v, want ErrInvalidData", err)
 			}
@@ -1936,6 +1953,16 @@ func TestEncoderReconfigureRejectsInvalidOutputControlsWithoutMutation(t *testin
 			if enc.PendingIDR() {
 				t.Fatal("invalid output controls queued an IDR")
 			}
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode post-invalid AVC P-skip: %v", err)
+			}
+			stream := append([]byte(nil), headers.AnnexB...)
+			stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
+			stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 		})
 	}
 }
@@ -1977,6 +2004,19 @@ func TestEncoderReconfigureRejectsInvalidWebRTCPacketizationUpdateWithoutMutatio
 	if enc.PendingIDR() {
 		t.Fatal("invalid payload type reconfigure queued an IDR")
 	}
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode post-invalid RTP IDR: %v", err)
+	}
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode post-invalid RTP P-skip: %v", err)
+	}
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
 }
 
 func TestEncoderKeyframeRequestsQueueIDR(t *testing.T) {
@@ -10254,6 +10294,20 @@ func annexBFromEncoderRTPPackets(t *testing.T, packets []goh264.EncoderRTPPacket
 	}
 	if inFU {
 		t.Fatal("unterminated FU-A sequence")
+	}
+	return out
+}
+
+func annexBFromEncoderAVCSample(t *testing.T, sample []byte) []byte {
+	t.Helper()
+	nals, err := h264.SplitAVCC(sample, 4)
+	if err != nil {
+		t.Fatalf("split AVC sample: %v", err)
+	}
+	var out []byte
+	for _, nal := range nals {
+		out = append(out, 0, 0, 0, 1)
+		out = append(out, nal.Raw...)
 	}
 	return out
 }
