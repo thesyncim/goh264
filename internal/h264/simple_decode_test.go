@@ -2,7 +2,12 @@
 
 package h264
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+)
 
 func TestApplySimpleFrameTimingPropsFromPictureTiming(t *testing.T) {
 	sps := &SPS{PicStructPresentFlag: 1}
@@ -105,4 +110,119 @@ func TestCanDropTerminalDamagedFieldSlice(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSimpleDecoderResetsPartialPictureAfterDamagedSlice(t *testing.T) {
+	data, err := os.ReadFile(simpleDecodeTestFixturePath(t, "high10_inter_cavlc_idrp.h264"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessUnits := simpleDecodeTestAccessUnits(t, data)
+	if len(accessUnits) < 2 {
+		t.Fatalf("access units = %d, want at least 2", len(accessUnits))
+	}
+
+	var dec SimpleDecoder
+	if frames, err := dec.DecodeNALUnits(accessUnits[0]); err != nil || len(frames) != 1 {
+		t.Fatalf("DecodeNALUnits first frames=%d err=%v, want one frame", len(frames), err)
+	}
+	damaged := simpleDecodeTestTruncateFirstVCL(t, accessUnits[1])
+	if frames, err := dec.DecodeNALUnits(damaged); err == nil {
+		t.Fatalf("damaged access unit decoded frames=%d, want error", len(frames))
+	}
+	if dec.st.frame != nil || dec.st.tables != nil || dec.st.motionScratch != nil || dec.st.motionScratchHigh != nil ||
+		dec.st.loopFilterSlices != nil || dec.st.loopFilterRefFrameIDs != nil || dec.st.haveSlice ||
+		dec.st.frameComplete || dec.st.fieldPairPending || dec.st.sliceNum != 0 {
+		t.Fatalf("damaged slice left partial picture state: %+v", dec.st)
+	}
+
+	if frames, err := dec.DecodeNALUnits(accessUnits[1]); err != nil || len(frames) != 1 {
+		t.Fatalf("DecodeNALUnits after damaged slice frames=%d err=%v, want one frame", len(frames), err)
+	}
+}
+
+func simpleDecodeTestAccessUnits(t *testing.T, data []byte) [][]NALUnit {
+	t.Helper()
+	nals, err := SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spsList [maxSPSCount]*SPS
+	var ppsList [maxPPSCount]*PPS
+	var accessUnits [][]NALUnit
+	var current []NALUnit
+	hasVCL := false
+	for _, nal := range nals {
+		switch nal.Type {
+		case NALSPS:
+			sps, err := DecodeSPSFromNAL(nal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spsList[sps.SPSID] = sps
+		case NALPPS:
+			pps, err := DecodePPS(nal.RBSP, &spsList)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ppsList[pps.PPSID] = pps
+		case NALSlice, NALIDRSlice:
+			sh, err := ParseSliceHeader(nal, &ppsList)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasVCL && sh.FirstMBAddr == 0 {
+				accessUnits = append(accessUnits, current)
+				current = nil
+				hasVCL = false
+			}
+			hasVCL = true
+		}
+		current = append(current, nal)
+	}
+	if len(current) != 0 {
+		accessUnits = append(accessUnits, current)
+	}
+	return accessUnits
+}
+
+func simpleDecodeTestTruncateFirstVCL(t *testing.T, nals []NALUnit) []NALUnit {
+	t.Helper()
+	var out []NALUnit
+	truncated := false
+	for _, nal := range nals {
+		if !truncated && (nal.Type == NALSlice || nal.Type == NALIDRSlice) {
+			if len(nal.RBSP) < 4 {
+				t.Fatalf("short VCL RBSP: %x", nal.RBSP)
+			}
+			annexB, err := AppendAnnexBNAL(nil, nal.RefIDC, nal.Type, nal.RBSP[:len(nal.RBSP)/2])
+			if err != nil {
+				t.Fatal(err)
+			}
+			split, err := SplitAnnexB(annexB)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(split) != 1 {
+				t.Fatalf("truncated VCL split into %d NALs, want 1", len(split))
+			}
+			out = append(out, split[0])
+			truncated = true
+			continue
+		}
+		out = append(out, nal)
+	}
+	if !truncated {
+		t.Fatal("no VCL NAL found")
+	}
+	return out
+}
+
+func simpleDecodeTestFixturePath(t *testing.T, name string) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return filepath.Join(filepath.Dir(file), "..", "..", "testdata", "h264", name)
 }

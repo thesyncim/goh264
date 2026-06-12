@@ -301,18 +301,22 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 			// FFmpeg keeps SEI parse failures non-fatal unless AV_EF_EXPLODE is set.
 			_ = sei.Decode(nal.RBSP, spsList)
 		case NALSlice, NALIDRSlice:
+			returnSliceError := func(err error) ([]*DecodedFrame, error) {
+				st.resetPicture()
+				return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+			}
 			sh, payload, err := parseSliceHeaderWithPayload(nal, ppsList)
 			if err != nil {
-				return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+				return returnSliceError(err)
 			}
 			if sh.RedundantPicCount != 0 {
 				continue
 			}
 			if sh.SliceTypeNoS != PictureTypeI && sh.SliceTypeNoS != PictureTypeP && sh.SliceTypeNoS != PictureTypeB {
-				return returnFramesWithDecodeError(frames, dpb, flushOutput, ErrUnsupported)
+				return returnSliceError(ErrUnsupported)
 			}
 			if err := validateSimpleFrameReferenceSyntax(sh); err != nil {
-				return returnFramesWithDecodeError(frames, dpb, flushOutput, fmt.Errorf("validate simple frame reference syntax: %w", err))
+				return returnSliceError(fmt.Errorf("validate simple frame reference syntax: %w", err))
 			}
 			fieldPicture := sh.PictureStructure != PictureFrame
 			samePendingFieldFrame := st.fieldPairPending &&
@@ -326,16 +330,16 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 			decodingComplementaryField := st.haveSlice && !st.frameComplete && samePendingFieldFrame
 			if st.frameComplete || st.haveSlice && sh.FirstMBAddr == 0 && !startingComplementaryField {
 				if sh.FirstMBAddr != 0 {
-					return returnFramesWithDecodeError(frames, dpb, flushOutput, ErrInvalidData)
+					return returnSliceError(ErrInvalidData)
 				}
 				st.resetPicture()
 			}
 			if !st.haveSlice && sh.FirstMBAddr != 0 {
-				return returnFramesWithDecodeError(frames, dpb, flushOutput, ErrInvalidData)
+				return returnSliceError(ErrInvalidData)
 			}
 			if st.frame == nil {
 				if err := dpb.handleFrameNumGaps(sh, false); err != nil {
-					return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+					return returnSliceError(err)
 				}
 				if sei.PictureTiming.Present != 0 {
 					if err := sei.PictureTiming.Process(sh.SPS); err != nil {
@@ -346,12 +350,12 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				}
 				st.frame, st.tables, err = newSimpleDecodedFrame(sh.SPS)
 				if err != nil {
-					return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+					return returnSliceError(err)
 				}
 				st.frame.SideData = decodedFrameSideDataFromSEI(sei)
 				mergePacketSideDataIntoDecodedFrame(&st.frame.SideData, packetSideData)
 				if err := dpb.initFramePOC(st.frame, sh, nal.RefIDC); err != nil {
-					return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+					return returnSliceError(err)
 				}
 				st.frame.fieldPicture = fieldPicture
 				st.frame.mbaff = sh.PictureStructure == PictureFrame && sh.SPS.MBAFF != 0
@@ -365,17 +369,17 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				}
 				st.loopFilterRefFrameIDs = make(map[*DecodedFrame]int8)
 			} else if err := st.frame.matchesSPS(sh.SPS); err != nil {
-				return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+				return returnSliceError(err)
 			} else if startingComplementaryField {
 				if err := dpb.initFramePOC(st.frame, sh, nal.RefIDC); err != nil {
-					return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+					return returnSliceError(err)
 				}
 				applySimpleFrameTimingProps(st.frame, sh.SPS, sei, dpb)
 			}
 
 			st.sliceNum++
 			if st.sliceNum == ^uint16(0) {
-				return returnFramesWithDecodeError(frames, dpb, flushOutput, ErrInvalidData)
+				return returnSliceError(ErrInvalidData)
 			}
 			for len(st.loopFilterSlices) <= int(st.sliceNum) {
 				st.loopFilterSlices = append(st.loopFilterSlices, h264LoopFilterSliceParams{})
@@ -383,13 +387,13 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 			st.loopFilterSlices[st.sliceNum] = h264LoopFilterSliceParamsFromHeader(sh)
 			refctx, err := dpb.buildRefContext(sh, st.frame)
 			if err != nil {
-				return returnFramesWithDecodeError(frames, dpb, flushOutput, fmt.Errorf("build simple ref context slice=%d type=%d frame_num=%d refs=%d/%d mods=%d/%d picture=%d: %w",
+				return returnSliceError(fmt.Errorf("build simple ref context slice=%d type=%d frame_num=%d refs=%d/%d mods=%d/%d picture=%d: %w",
 					st.sliceNum, sh.SliceTypeNoS, sh.FrameNum, sh.RefCount[0], sh.RefCount[1],
 					sh.NBRefModifications[0], sh.NBRefModifications[1], sh.PictureStructure, err))
 			}
 			st.loopFilterSlices[st.sliceNum].Ref2Frame, err = h264LoopFilterRef2Frame(refctx.Entries, st.loopFilterRefFrameIDs)
 			if err != nil {
-				return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+				return returnSliceError(err)
 			}
 			st.frame.saveRefEntries(refctx.Entries, sh.PictureStructure)
 			var result h264FrameSliceDecodeResult
@@ -440,7 +444,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				if canDropTerminalDamagedFieldSlice(nals, nalIndex, flushOutput, fieldPicture, decodingComplementaryField) {
 					out, drainErr := dpb.drainOutputFrames(true)
 					if drainErr != nil {
-						return returnFramesWithDecodeError(frames, dpb, flushOutput, drainErr)
+						return returnSliceError(drainErr)
 					}
 					frames = append(frames, out...)
 					st.resetPicture()
@@ -449,7 +453,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 					}
 					return frames, nil
 				}
-				return returnFramesWithDecodeError(frames, dpb, flushOutput, fmt.Errorf("decode slice=%d type=%d first_mb=%d frame_num=%d picture=%d refs=%d/%d: %w",
+				return returnSliceError(fmt.Errorf("decode slice=%d type=%d first_mb=%d frame_num=%d picture=%d refs=%d/%d: %w",
 					st.sliceNum, sh.SliceTypeNoS, sh.FirstMBAddr, sh.FrameNum, sh.PictureStructure,
 					sh.RefCount[0], sh.RefCount[1], err))
 			}
@@ -458,7 +462,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				st.pendingFieldStructure = sh.PictureStructure
 				st.pendingFieldFrameNum = sh.FrameNum
 				if err := dpb.markDecodedFrame(st.frame, sh, nal.RefIDC); err != nil {
-					return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+					return returnSliceError(err)
 				}
 			}
 			if completeFrameNow {
@@ -468,14 +472,14 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				st.pendingFieldFrameNum = 0
 				decodedFrames++
 				if err := dpb.markDecodedFrame(st.frame, sh, nal.RefIDC); err != nil {
-					return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+					return returnSliceError(err)
 				}
 				if err := dpb.holdOutputFrame(st.frame, sh); err != nil {
-					return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+					return returnSliceError(err)
 				}
 				out, err := dpb.drainOutputFrames(false)
 				if err != nil {
-					return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
+					return returnSliceError(err)
 				}
 				for i, frame := range out {
 					if frame != nil && frame.idrKeyFrame {
