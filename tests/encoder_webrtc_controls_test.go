@@ -8318,6 +8318,63 @@ func TestEncoderEncodeRTPPacketSlicesAppendDoesNotAliasNextPacket(t *testing.T) 
 	}
 }
 
+func TestEncoderEncodeRTPPacketsAppendDoesNotAliasLaterResult(t *testing.T) {
+	for _, tt := range []struct {
+		name              string
+		packetizationMode goh264.EncoderRTPPacketizationMode
+		maxPayloadSize    int
+		stapa             bool
+	}{
+		{name: "single-nal", packetizationMode: goh264.EncoderRTPPacketizationSingleNAL, maxPayloadSize: 4096},
+		{name: "fua", packetizationMode: goh264.EncoderRTPPacketizationNonInterleaved, maxPayloadSize: 32},
+		{name: "stap-a", packetizationMode: goh264.EncoderRTPPacketizationNonInterleaved, maxPayloadSize: 128, stapa: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.RTPPacketizationMode = tt.packetizationMode
+			cfg.RTPMaxPayloadSize = tt.maxPayloadSize
+			cfg.STAPA = tt.stapa
+			cfg.GOPSize = 10000
+			cfg.IDRInterval = 10000
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode first RTP frame: %v", err)
+			}
+			if len(first.RTPPackets) == 0 {
+				t.Fatal("first RTP packet list is empty")
+			}
+			if cap(first.RTPPackets) != len(first.RTPPackets) {
+				t.Fatalf("first RTPPackets cap = %d, want clipped length %d", cap(first.RTPPackets), len(first.RTPPackets))
+			}
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode second RTP frame: %v", err)
+			}
+			if len(second.RTPPackets) == 0 {
+				t.Fatal("second RTP packet list is empty")
+			}
+			if cap(second.RTPPackets) != len(second.RTPPackets) {
+				t.Fatalf("second RTPPackets cap = %d, want clipped length %d", cap(second.RTPPackets), len(second.RTPPackets))
+			}
+			secondPackets := cloneEncoderRTPPackets(second.RTPPackets)
+
+			grown := append(first.RTPPackets, goh264.EncoderRTPPacket{SequenceNumber: 0xffff})
+			grown[len(first.RTPPackets)].PayloadType = 0x7f
+			if !reflect.DeepEqual(second.RTPPackets, secondPackets) {
+				t.Fatal("appending to first RTPPackets mutated second RTPPackets")
+			}
+		})
+	}
+}
+
 func TestEncoderRTPPacketsDoNotAliasEncodedFrameData(t *testing.T) {
 	for _, tt := range []struct {
 		name              string
