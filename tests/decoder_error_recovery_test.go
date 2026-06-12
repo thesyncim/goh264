@@ -64,6 +64,36 @@ func TestDecodeAVCWithConfigurationRecordRecoversAfterDamagedSlicePacket(t *test
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeAVCFramesWithConfigurationRecordDoesNotAliasCallerBuffer(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	config = append([]byte(nil), config...)
+	firstSample := append([]byte(nil), samples[0]...)
+
+	dec := NewDecoder()
+	frames, err := dec.DecodeAVCFramesWithConfigurationRecord(config, firstSample)
+	if err != nil {
+		t.Fatalf("DecodeAVCFramesWithConfigurationRecord first sample: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	for i := range config {
+		config[i] = 0xff
+	}
+	for i := range firstSample {
+		firstSample[i] = 0xff
+	}
+
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after config-record caller mutation: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestParseAVCDecoderConfigurationRecordRejectPreservesStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
