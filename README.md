@@ -208,10 +208,10 @@ the sole valid frame on single-frame decode helpers and delayed B-frame prefix
 output from configuration-record one-shot decode. Packet
 `NEW_EXTRADATA` recovery also proves malformed AVC and Annex B extradata is
 non-fatal, does not replace the last good decoder configuration or reference
-state, and lets the current valid packet decode. Valid packet `NEW_EXTRADATA`
-and auto-detected avcC admission both store configured-AVC state without
-retaining caller-owned side-data, configuration, or packet buffers after the
-decode call returns. Malformed in-band SPS/PPS NALs are skipped without
+state, and lets the current valid packet decode. Direct avcC parse, valid packet
+`NEW_EXTRADATA`, and auto-detected avcC admission all store configured-AVC state
+without retaining caller-owned side-data, configuration, or packet buffers after
+the decode call returns. Malformed in-band SPS/PPS NALs are skipped without
 replacing the last good parameter sets on configured AVC and mixed
 configured-AVC/Annex B decode paths.
 
