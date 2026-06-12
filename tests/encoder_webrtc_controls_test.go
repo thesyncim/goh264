@@ -425,8 +425,29 @@ func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 		{name: "SetBitrate", call: func() error {
 			return enc.SetBitrate(1, 1)
 		}},
+		{name: "SetRateControl", call: func() error {
+			return enc.SetRateControl(goh264.EncoderRateControlCBR)
+		}},
+		{name: "SetVBVBufferSize", call: func() error {
+			return enc.SetVBVBufferSize(0)
+		}},
+		{name: "SetFrameDropMode", call: func() error {
+			return enc.SetFrameDropMode(goh264.EncoderFrameDropDisabled)
+		}},
+		{name: "SetQP", call: func() error {
+			return enc.SetQP(26, 10, 42)
+		}},
 		{name: "SetFrameRate", call: func() error {
 			return enc.SetFrameRate(1, 1)
+		}},
+		{name: "SetResolution", call: func() error {
+			return enc.SetResolution(16, 16)
+		}},
+		{name: "SetGOP", call: func() error {
+			return enc.SetGOP(60, 60)
+		}},
+		{name: "SetRTPTimestampIncrement", call: func() error {
+			return enc.SetRTPTimestampIncrement(1)
 		}},
 		{name: "SetRTPMaxPayloadSize", call: func() error {
 			return enc.SetRTPMaxPayloadSize(1200)
@@ -439,6 +460,24 @@ func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 		}},
 		{name: "SetMaxEncodeTimeUS", call: func() error {
 			return enc.SetMaxEncodeTimeUS(0)
+		}},
+		{name: "SetDeblockMode", call: func() error {
+			return enc.SetDeblockMode(goh264.EncoderDeblockDisabled)
+		}},
+		{name: "SetSPSPPSMode", call: func() error {
+			return enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand)
+		}},
+		{name: "SetRecoveryPointSEI", call: func() error {
+			return enc.SetRecoveryPointSEI(false)
+		}},
+		{name: "SetOutputFormat", call: func() error {
+			return enc.SetOutputFormat(goh264.EncoderOutputAnnexB)
+		}},
+		{name: "SetRTPPacketizationMode", call: func() error {
+			return enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false)
+		}},
+		{name: "SetRTPMetadata", call: func() error {
+			return enc.SetRTPMetadata(96, 0)
 		}},
 		{name: "Reconfigure", call: func() error {
 			return enc.Reconfigure(goh264.EncoderReconfigure{})
