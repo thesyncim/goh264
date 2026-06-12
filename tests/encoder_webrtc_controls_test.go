@@ -8009,6 +8009,95 @@ func TestEncoderSetFrameRateResetsFrameBudgetAndRTPIncrement(t *testing.T) {
 	}
 }
 
+func TestEncoderSetRTPTimestampIncrementControlsLiveCadence(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputRTP
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
+	cfg.RTPMaxPayloadSize = 1200
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	enc.SetRTPPacketCallback(func(_ goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackMetadata = append(callbackMetadata, meta)
+	})
+
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 0
+	frame.Duration = 0
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR || first.RTPTime != 0 {
+		t.Fatalf("first frame dropped=%v idr=%v rtp=%d, want delivered IDR at 0",
+			first.Dropped, first.IDR, first.RTPTime)
+	}
+	assertRTPPacketTimestamps(t, first.RTPPackets, first.RTPTime)
+
+	if err := enc.SetRTPTimestampIncrement(9000); err != nil {
+		t.Fatalf("SetRTPTimestampIncrement: %v", err)
+	}
+	if got := enc.Config().RTPTimestampIncrement; got != 9000 {
+		t.Fatalf("RTP timestamp increment = %d, want 9000", got)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetRTPTimestampIncrement queued unexpected IDR")
+	}
+
+	second, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first P-skip after SetRTPTimestampIncrement: %v", err)
+	}
+	if second.Dropped || second.IDR || second.RTPTime != cfg.RTPTimestampIncrement {
+		t.Fatalf("second frame dropped=%v idr=%v rtp=%d, want P-skip at old next timestamp %d",
+			second.Dropped, second.IDR, second.RTPTime, cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertRTPPacketTimestamps(t, second.RTPPackets, second.RTPTime)
+
+	third, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode second P-skip after SetRTPTimestampIncrement: %v", err)
+	}
+	if third.Dropped || third.IDR || third.RTPTime != second.RTPTime+9000 {
+		t.Fatalf("third frame dropped=%v idr=%v rtp=%d, want P-skip at updated timestamp %d",
+			third.Dropped, third.IDR, third.RTPTime, second.RTPTime+9000)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{1})
+	assertRTPPacketTimestamps(t, third.RTPPackets, third.RTPTime)
+
+	firstPackets := len(first.RTPPackets)
+	secondPackets := len(second.RTPPackets)
+	if len(callbackMetadata) != firstPackets+secondPackets+len(third.RTPPackets) {
+		t.Fatalf("callback count = %d, want %d",
+			len(callbackMetadata), firstPackets+secondPackets+len(third.RTPPackets))
+	}
+	for i, meta := range callbackMetadata[:firstPackets] {
+		if meta.RTPTime != first.RTPTime || !meta.IDR {
+			t.Fatalf("first callback meta[%d] = %+v, want IDR at %d", i, meta, first.RTPTime)
+		}
+	}
+	for i, meta := range callbackMetadata[firstPackets : firstPackets+secondPackets] {
+		if meta.RTPTime != second.RTPTime || meta.IDR {
+			t.Fatalf("second callback meta[%d] = %+v, want P-skip at %d", i, meta, second.RTPTime)
+		}
+	}
+	for i, meta := range callbackMetadata[firstPackets+secondPackets:] {
+		if meta.RTPTime != third.RTPTime || meta.IDR {
+			t.Fatalf("third callback meta[%d] = %+v, want P-skip at %d", i, meta, third.RTPTime)
+		}
+	}
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, third.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 1}, []uint32{0, 1, 2})
+}
+
 func TestEncoderFrameDropDisabledDoesNotApplyDerivedBitrateBudget(t *testing.T) {
 	for _, format := range []struct {
 		name string
