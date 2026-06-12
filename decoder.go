@@ -1560,12 +1560,12 @@ func frameFromH264(src *h264.DecodedFrame) *Frame {
 		KeyFrame:                       src.KeyFrame,
 		YStride:                        src.LumaStride,
 		CStride:                        src.ChromaStride,
-		Y:                              append([]byte(nil), src.Y...),
-		Cb:                             append([]byte(nil), src.Cb...),
-		Cr:                             append([]byte(nil), src.Cr...),
-		Y16:                            append([]uint16(nil), src.Y16...),
-		Cb16:                           append([]uint16(nil), src.Cb16...),
-		Cr16:                           append([]uint16(nil), src.Cr16...),
+		Y:                              cloneByteSlice(src.Y),
+		Cb:                             cloneByteSlice(src.Cb),
+		Cr:                             cloneByteSlice(src.Cr),
+		Y16:                            cloneUint16Slice(src.Y16),
+		Cb16:                           cloneUint16Slice(src.Cb16),
+		Cr16:                           cloneUint16Slice(src.Cr16),
 		SideData:                       frameSideDataFromH264(src.SideData, src.TimeScale, src.NumUnitsInTick),
 	}
 }
@@ -2129,6 +2129,20 @@ func cloneUint32Slice(src []uint32) []uint32 {
 		return nil
 	}
 	return append([]uint32(nil), src...)
+}
+
+func cloneByteSlice(src []byte) []byte {
+	if len(src) == 0 || len(src) > maxInt/2 {
+		return nil
+	}
+	return append([]byte(nil), src...)
+}
+
+func cloneUint16Slice(src []uint16) []uint16 {
+	if len(src) == 0 || len(src) > maxInt/2 {
+		return nil
+	}
+	return append([]uint16(nil), src...)
 }
 
 func frameChromaSize(width int, height int, chromaFormatIDC uint32) (int, int, error) {

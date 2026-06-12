@@ -207,6 +207,48 @@ func TestFrameSideDataFromH264RejectsOverflowedUserDataListClone(t *testing.T) {
 	}
 }
 
+func TestFrameFromH264ClonesPublicPlanes(t *testing.T) {
+	src := &h264.DecodedFrame{
+		Width:  2,
+		Height: 2,
+		Y:      []byte{1, 2, 3, 4},
+		Cb:     []byte{5},
+		Cr:     []byte{6},
+		Y16:    []uint16{7, 8},
+		Cb16:   []uint16{9},
+		Cr16:   []uint16{10},
+	}
+	got := frameFromH264(src)
+	if got == nil ||
+		len(got.Y) != 4 || got.Y[0] != 1 ||
+		len(got.Cb) != 1 || got.Cb[0] != 5 ||
+		len(got.Cr) != 1 || got.Cr[0] != 6 ||
+		len(got.Y16) != 2 || got.Y16[0] != 7 ||
+		len(got.Cb16) != 1 || got.Cb16[0] != 9 ||
+		len(got.Cr16) != 1 || got.Cr16[0] != 10 {
+		t.Fatalf("frame planes = y %v cb %v cr %v y16 %v cb16 %v cr16 %v", got.Y, got.Cb, got.Cr, got.Y16, got.Cb16, got.Cr16)
+	}
+	src.Y[0], src.Cb[0], src.Cr[0] = 0xff, 0xff, 0xff
+	src.Y16[0], src.Cb16[0], src.Cr16[0] = 0xffff, 0xffff, 0xffff
+	if got.Y[0] != 1 || got.Cb[0] != 5 || got.Cr[0] != 6 ||
+		got.Y16[0] != 7 || got.Cb16[0] != 9 || got.Cr16[0] != 10 {
+		t.Fatalf("frame planes alias source = y %v cb %v cr %v y16 %v cb16 %v cr16 %v", got.Y, got.Cb, got.Cr, got.Y16, got.Cb16, got.Cr16)
+	}
+}
+
+func TestFrameFromH264RejectsOverflowedPublicPlaneClones(t *testing.T) {
+	got := frameFromH264(&h264.DecodedFrame{
+		Y:   fakeEncoderBytesLen(maxInt/2 + 1),
+		Y16: fakeUint16SliceLen(maxInt/2 + 1),
+	})
+	if got == nil {
+		t.Fatal("frameFromH264 returned nil")
+	}
+	if got.Y != nil || got.Y16 != nil {
+		t.Fatalf("overflowed frame planes = y len %d y16 len %d, want nil/nil", len(got.Y), len(got.Y16))
+	}
+}
+
 func fakeEncoderBytesLen(n int) []byte {
 	if n <= 0 {
 		return nil
@@ -237,6 +279,18 @@ func fakeUint32SliceLen(n int) []uint32 {
 	}
 	var v uint32
 	return *(*[]uint32)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&v)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeUint16SliceLen(n int) []uint16 {
+	if n <= 0 {
+		return nil
+	}
+	var v uint16
+	return *(*[]uint16)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(&v)),
 		Len:  n,
 		Cap:  n,
