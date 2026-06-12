@@ -4115,7 +4115,7 @@ func TestEncoderMaxFrameSizeRejectsOversizeAccessUnitWithoutAdvancingState(t *te
 	}
 }
 
-func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingRTPState(t *testing.T) {
+func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingState(t *testing.T) {
 	for _, format := range []struct {
 		name string
 		fmt  goh264.EncoderOutputFormat
@@ -4157,6 +4157,22 @@ func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingRTPState(t *tes
 				assertRTPPacketMetadata(t, out.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
 			} else if len(out.RTPPackets) != 0 {
 				t.Fatalf("non-RTP recovered packets = %d, want none", len(out.RTPPackets))
+			}
+
+			secondFrame := frame
+			secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode second frame after SliceMaxBytes recovery: %v", err)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			stream := annexBFromEncodedFrame(t, out, cfg.OutputFormat)
+			stream = append(stream, annexBFromEncodedFrame(t, second, cfg.OutputFormat)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+			if format.fmt == goh264.EncoderOutputRTP {
+				assertRTPPacketMetadata(t, second.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(len(out.RTPPackets)))
+			} else if len(second.RTPPackets) != 0 {
+				t.Fatalf("non-RTP second packets = %d, want none", len(second.RTPPackets))
 			}
 		})
 	}
