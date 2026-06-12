@@ -84,6 +84,7 @@ type encoderI420P16x16ResidualConfig struct {
 	FrameNum                   uint32
 	InitialQP                  int
 	NextQP                     int
+	NextQPs                    []int
 	DisableDeblockingFilterIDC uint32
 	FirstMBAddr                uint32
 	MacroblockCount            uint32
@@ -413,6 +414,10 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		if len(cfg.Coeffs) > 0 {
 			coeff = cfg.Coeffs[i]
 		}
+		nextQP := cfg.NextQP
+		if len(cfg.NextQPs) > 0 {
+			nextQP = cfg.NextQPs[i]
+		}
 		chromaDCCb, chromaDCCr := cfg.ChromaDCCoeffCb, cfg.ChromaDCCoeffCr
 		if len(cfg.ChromaDCCoeffs) > 0 {
 			chromaDCCb, chromaDCCr = cfg.ChromaDCCoeffs[i][0], cfg.ChromaDCCoeffs[i][1]
@@ -446,10 +451,10 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 		residual.MB[512] = chromaDCCr
 		residual.MB[256+chromaACPos] = chromaACCb
 		residual.MB[512+chromaACPos] = chromaACCr
-		if _, err := writeCAVLCInterPBoundedMacroblock(&bw, &residual, pps, sps, mb, [2]uint32{1, 0}, qscale, cfg.NextQP); err != nil {
+		if _, err := writeCAVLCInterPBoundedMacroblock(&bw, &residual, pps, sps, mb, [2]uint32{1, 0}, qscale, nextQP); err != nil {
 			return nil, err
 		}
-		qscale = cfg.NextQP
+		qscale = nextQP
 	}
 	bw.WriteRBSPTrailingBits()
 	return bw.Bytes(), nil
@@ -704,6 +709,14 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	_, macroblockCount := encoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount)
 	if len(cfg.MVDs) > 0 && len(cfg.MVDs) != macroblockCount {
 		return ErrInvalidData
+	}
+	if len(cfg.NextQPs) > 0 && len(cfg.NextQPs) != macroblockCount {
+		return ErrInvalidData
+	}
+	for _, qp := range cfg.NextQPs {
+		if qp < 0 || qp > 51 {
+			return ErrInvalidData
+		}
 	}
 	if len(cfg.ChromaDCCoeffs) > 0 && len(cfg.ChromaDCCoeffs) != macroblockCount {
 		return ErrInvalidData
