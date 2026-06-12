@@ -121,6 +121,11 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 			c.Crop.Bottom = maxIntForTest - 1
 		}, want: goh264.ErrInvalidData},
 		{name: "crop consumes width", mutate: func(c *goh264.EncoderConfig) { c.Crop.Left = c.Width / 2; c.Crop.Right = c.Width / 2 }, want: goh264.ErrInvalidData},
+		{name: "partial sar", mutate: func(c *goh264.EncoderConfig) { c.Color.SARNum = 1 }, want: goh264.ErrInvalidData},
+		{name: "negative sar", mutate: func(c *goh264.EncoderConfig) { c.Color.SARDen = -1 }, want: goh264.ErrInvalidData},
+		{name: "color primaries too large", mutate: func(c *goh264.EncoderConfig) { c.Color.ColorPrimaries = 256 }, want: goh264.ErrInvalidData},
+		{name: "negative chroma sample location", mutate: func(c *goh264.EncoderConfig) { c.Color.ChromaSampleLocTypeTopField = -1 }, want: goh264.ErrInvalidData},
+		{name: "chroma sample location too large", mutate: func(c *goh264.EncoderConfig) { c.Color.ChromaSampleLocTypeBottomField = 6 }, want: goh264.ErrInvalidData},
 		{name: "slice count beyond macroblocks", mutate: func(c *goh264.EncoderConfig) { c.Width = 16; c.Height = 16; c.SliceCount = 2 }, want: goh264.ErrInvalidData},
 		{name: "negative slice byte target", mutate: func(c *goh264.EncoderConfig) { c.SliceMaxBytes = -1 }, want: goh264.ErrInvalidData},
 		{name: "deterministic multi worker", mutate: func(c *goh264.EncoderConfig) { c.Workers = 2 }, want: goh264.ErrInvalidData},

@@ -2415,6 +2415,9 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	if err := validateEncoderPlaneGeometry(cfg.Width, cfg.Height, cfg.StrideY, cfg.StrideCb, cfg.StrideCr); err != nil {
 		return cfg, err
 	}
+	if err := validateEncoderColorConfig(cfg.Color); err != nil {
+		return cfg, err
+	}
 	if cfg.FrameRateNum <= 0 || cfg.FrameRateDen <= 0 {
 		return cfg, encoderInvalid("frame rate numerator and denominator must be positive")
 	}
@@ -2603,6 +2606,23 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		}
 	}
 	return cfg, nil
+}
+
+func validateEncoderColorConfig(color EncoderColorConfig) error {
+	if color.SARNum < 0 || color.SARDen < 0 || color.SARNum > 0xffff || color.SARDen > 0xffff || (color.SARNum == 0) != (color.SARDen == 0) {
+		return encoderInvalid("invalid SAR")
+	}
+	if color.VideoFormat < 0 || color.VideoFormat > 7 ||
+		color.ColorPrimaries < 0 || color.ColorPrimaries > 255 ||
+		color.ColorTransfer < 0 || color.ColorTransfer > 255 ||
+		color.ColorMatrix < 0 || color.ColorMatrix > 255 {
+		return encoderInvalid("invalid VUI color fields")
+	}
+	if color.ChromaSampleLocTypeTopField < 0 || color.ChromaSampleLocTypeTopField > 5 ||
+		color.ChromaSampleLocTypeBottomField < 0 || color.ChromaSampleLocTypeBottomField > 5 {
+		return encoderInvalid("invalid chroma sample location")
+	}
+	return nil
 }
 
 func validateEncoderCrop(crop EncoderCrop, width int, height int) error {
