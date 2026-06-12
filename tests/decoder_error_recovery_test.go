@@ -388,6 +388,54 @@ func TestParseAVCDecoderConfigurationRecordDoesNotAliasCallerBuffer(t *testing.T
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestParseHeadersAnnexBDoesNotAliasCallerBuffer(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	headers, _ := annexBParameterSetsAndPacket(t, data)
+	_, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	headers = append([]byte(nil), headers...)
+
+	dec := NewDecoder()
+	if _, err := dec.ParseHeadersAnnexB(headers); err != nil {
+		t.Fatalf("ParseHeadersAnnexB: %v", err)
+	}
+	for i := range headers {
+		headers[i] = 0xff
+	}
+
+	frames, err := dec.DecodeFrames(avcSampleToAnnexB(t, samples[0], 4))
+	if err != nil {
+		t.Fatalf("DecodeFrames after Annex B header mutation: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestParseHeadersAVCDoesNotAliasCallerBuffer(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	headersAnnexB, _ := annexBParameterSetsAndPacket(t, data)
+	headers := annexBToAVC(t, headersAnnexB, 4)
+	_, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ParseHeadersAVC(headers, 4); err != nil {
+		t.Fatalf("ParseHeadersAVC: %v", err)
+	}
+	for i := range headers {
+		headers[i] = 0xff
+	}
+
+	frames, err := dec.DecodeFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeFrames after AVC header mutation: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeFramesRejectAVCConfigurationRecordPreservesStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)

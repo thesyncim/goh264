@@ -686,6 +686,9 @@ func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 	}
 	d.sps = spsList
 	d.pps = ppsList
+	if err := d.simple.UpdateParamSets(d.sps, d.pps); err != nil {
+		return StreamInfo{}, err
+	}
 	return info, nil
 }
 
