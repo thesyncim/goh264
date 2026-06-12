@@ -982,6 +982,57 @@ func TestDecoderConfigureAVCCStoresConfiguration(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecoderConfigureAVCCRejectsMalformedWithoutMutation(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	damaged := append([]byte(nil), config...)
+	damaged = damaged[:len(damaged)-1]
+
+	for _, tt := range []struct {
+		name string
+		call func(*Decoder, []byte) (AVCConfig, error)
+	}{
+		{
+			name: "long form",
+			call: func(dec *Decoder, data []byte) (AVCConfig, error) {
+				return dec.ConfigureAVCDecoderConfigurationRecord(data)
+			},
+		},
+		{
+			name: "short form",
+			call: func(dec *Decoder, data []byte) (AVCConfig, error) {
+				return dec.ConfigureAVCC(data)
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			cfg, err := tt.call(dec, config)
+			if err != nil {
+				t.Fatalf("configure valid avcC: %v", err)
+			}
+			if _, err := tt.call(dec, damaged); err == nil {
+				t.Fatal("malformed configure returned nil error")
+			}
+			got, err := dec.AVCConfig()
+			if err != nil {
+				t.Fatalf("AVCConfig after malformed configure: %v", err)
+			}
+			if got != cfg {
+				t.Fatalf("AVCConfig after malformed configure = %+v, want previous %+v", got, cfg)
+			}
+			frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+			if err != nil {
+				t.Fatalf("DecodeConfiguredAVCFrames after malformed configure: %v", err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+		})
+	}
+}
+
 func TestDecoderAVCConfigReportsStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config4, samples4 := annexBToAVCConfigAndSamples(t, data, 4)
