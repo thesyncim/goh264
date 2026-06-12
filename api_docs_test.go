@@ -207,6 +207,38 @@ func TestREADMEEncoderSampleKeepsRTPHelpersInRTPBranch(t *testing.T) {
 	}
 }
 
+func TestREADMEEncoderAdmittedValuesTableDocumentsUnsupportedKnobs(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+	for _, phrase := range []string{
+		"Accepted encoder setup values today",
+		"EncoderProfileConstrainedBaseline",
+		"EncoderProfileBaseline",
+		"EncoderEntropyCAVLC",
+		"Transform8x8=false",
+		"MaxReferenceFrames=1",
+		"BFrames=0",
+		"Main/High profiles",
+		"CABAC",
+		"multiple refs",
+		"B-frames",
+		"IntraRefresh=false",
+		"enabled intra refresh",
+		"packetization-mode 0 with payload size >= 2",
+		"packetization-mode 1 with payload size >= 3",
+		"STAP-A only in mode 1",
+		"DON disabled",
+		"payload type 0..127",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md admitted-values table missing %q", phrase)
+		}
+	}
+}
+
 func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	data, err := os.ReadFile("examples_test.go")
 	if err != nil {
