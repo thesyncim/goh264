@@ -358,6 +358,7 @@ frames, err := dec.DecodePacketFrames(goh264.Packet{
 		{Type: goh264.PacketSideDataNewExtradata, Data: avcc},
 	},
 })
+ownedPacket := goh264.Packet{Data: packet}.Clone()
 ```
 
 `Frame` includes dimensions, crop, chroma format, bit depth, SAR/VUI fields,

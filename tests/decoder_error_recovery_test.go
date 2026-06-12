@@ -3,6 +3,7 @@
 package goh264_test
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
@@ -337,6 +338,57 @@ func TestDecodePacketDoesNotAliasCallerBuffer(t *testing.T) {
 	}
 	for i := range packet {
 		packet[i] = 0xff
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestPacketSideDataCloneDeepCopiesPayload(t *testing.T) {
+	side := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: []byte{1, 2, 3}}
+	clone := side.Clone()
+	if clone.Type != side.Type || !bytes.Equal(clone.Data, side.Data) {
+		t.Fatalf("PacketSideData.Clone = %+v, want byte-identical copy of %+v", clone, side)
+	}
+	if &clone.Data[0] == &side.Data[0] {
+		t.Fatal("PacketSideData.Clone aliases source payload")
+	}
+	side.Data[0] ^= 0xff
+	if bytes.Equal(clone.Data, side.Data) {
+		t.Fatal("mutating source side-data changed clone")
+	}
+}
+
+func TestPacketCloneDeepCopiesDataAndSideData(t *testing.T) {
+	config, samples := annexBToAVCConfigAndSamples(t, decodeHexFixture(t, black16IPAnnexBHex), 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	packet := Packet{
+		Data: samples[0],
+		SideData: []PacketSideData{
+			{Type: PacketSideDataNewExtradata, Data: config},
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{1, 2, 3}},
+		},
+	}
+	clone := packet.Clone()
+	if !bytes.Equal(clone.Data, packet.Data) || len(clone.SideData) != len(packet.SideData) {
+		t.Fatalf("Packet.Clone = %+v, want byte-identical copy of %+v", clone, packet)
+	}
+	if &clone.Data[0] == &packet.Data[0] ||
+		&clone.SideData[0].Data[0] == &packet.SideData[0].Data[0] ||
+		&clone.SideData[1].Data[0] == &packet.SideData[1].Data[0] {
+		t.Fatal("Packet.Clone aliases source storage")
+	}
+	packet.Data[0] ^= 0xff
+	packet.SideData[0].Data[0] ^= 0xff
+	packet.SideData[1].Data[0] ^= 0xff
+	if bytes.Equal(clone.Data, packet.Data) ||
+		bytes.Equal(clone.SideData[0].Data, packet.SideData[0].Data) ||
+		bytes.Equal(clone.SideData[1].Data, packet.SideData[1].Data) {
+		t.Fatal("mutating source packet changed clone")
+	}
+	frame, err := NewDecoder().DecodePacket(clone)
+	if err != nil {
+		t.Fatalf("DecodePacket cloned packet: %v", err)
 	}
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }

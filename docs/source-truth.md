@@ -116,7 +116,7 @@ transactional public `ParseHeadersAnnexB`/`ParseHeadersAVC` rollback when a
 foreign SPS is followed by malformed PPS,
 malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,
-packet side-data byte-slice ownership across delayed B-frame output,
+public packet clone helpers and packet side-data byte-slice ownership across delayed B-frame output,
 first-entry duplicate packet side-data semantics for scalar values, structured
 layouts, and ICC/HDR10+/LCEVC byte payloads, including empty or malformed first
 entries,

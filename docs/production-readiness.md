@@ -203,9 +203,10 @@ updates leave the last stored configuration usable for configured AVC decode.
 In-band malformed SPS/PPS NALs are also guarded as non-fatal: they do not
 replace the last good parameter sets before the next valid slice on configured
 AVC or mixed configured-AVC/Annex B public decode paths.
-Packet side-data byte payloads are copied before delayed B-frame storage:
-mutating caller-owned packet side-data immediately after each decode call does
-not affect immediate or flushed `FrameSideData`.
+Packet and packet side-data clone helpers provide deep-owned compressed-packet
+snapshots, and packet side-data byte payloads are copied before delayed B-frame
+storage: mutating caller-owned packet side-data immediately after each decode
+call does not affect immediate or flushed `FrameSideData`.
 Packet side-data duplicate handling follows first-entry semantics for scalar
 values, structured layouts, and byte payloads: empty or malformed first
 active-format and S12M entries plus empty first ICC, HDR10+, and LCEVC entries

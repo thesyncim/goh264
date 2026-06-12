@@ -88,6 +88,14 @@ type PacketSideData struct {
 	Data []byte
 }
 
+// Clone returns a deep-owned copy of the packet side-data payload.
+func (side PacketSideData) Clone() PacketSideData {
+	return PacketSideData{
+		Type: side.Type,
+		Data: cloneByteSlice(side.Data),
+	}
+}
+
 // Packet is one compressed access unit plus optional packet side data.
 //
 // Data and SideData payloads are caller-owned input. The decoder reads them
@@ -95,6 +103,19 @@ type PacketSideData struct {
 type Packet struct {
 	Data     []byte
 	SideData []PacketSideData
+}
+
+// Clone returns a deep-owned copy of the compressed packet and side-data
+// payloads.
+func (pkt Packet) Clone() Packet {
+	clone := Packet{
+		Data:     cloneByteSlice(pkt.Data),
+		SideData: make([]PacketSideData, len(pkt.SideData)),
+	}
+	for i, side := range pkt.SideData {
+		clone.SideData[i] = side.Clone()
+	}
+	return clone
 }
 
 // FrameSideData contains SEI and packet side-data values attached to a decoded
