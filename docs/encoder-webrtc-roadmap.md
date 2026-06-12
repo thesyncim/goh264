@@ -281,7 +281,8 @@ in one access unit.
    no-residual prediction for frame-wide and per-macroblock integer-pel shifts
    up to 8 pixels, including odd-pixel luma motion only with constant chroma,
    with enabled/slice-boundary deblock proof including multi-macroblock
-   uniform-motion Annex B and mixed per-macroblock fallback,
+   uniform-motion Annex B and mixed per-macroblock fallback across Annex B,
+   configured AVC, and RTP,
    and changed-frame P
    IntraPCM across disabled, enabled, and
    slice-boundary deblock controls, configured multi-slice ranges,

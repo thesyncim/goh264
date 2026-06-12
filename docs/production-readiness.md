@@ -338,7 +338,8 @@ per-macroblock vectors and odd-pixel luma motion when chroma is constant, can
 emit predictive P16x16 no-residual slices through stateful local decode, FFmpeg
 rawvideo decode, configured AVC decode, RTP reassembly decode, and
 enabled/slice-boundary deblock syntax including multi-macroblock uniform-motion
-Annex B proof plus mixed per-macroblock fallback proof,
+Annex B proof plus mixed per-macroblock fallback proof across Annex B,
+configured AVC, and RTP,
 configured AVC/RTP decode, and RTP mode-0 single-NAL packetization, while
 patterned chroma is proved to fall back to P IntraPCM across Annex B,
 configured AVC, RTP reassembly, and RTP mode-0 single-NAL output,

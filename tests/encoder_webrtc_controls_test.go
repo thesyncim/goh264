@@ -4831,6 +4831,109 @@ func TestEncoderEncodePerMacroblockExactP16x16FallsBackWithDeblockControls(t *te
 	}
 }
 
+func TestEncoderEncodePerMacroblockExactP16x16FallsBackWithDeblockControlsForAVCAndRTP(t *testing.T) {
+	motions := []encoderTestMotion{
+		{dx: 2, dy: 0},
+		{dx: -2, dy: 0},
+		{dx: 0, dy: 2},
+		{dx: 0, dy: -2},
+	}
+	for _, tt := range []struct {
+		name   string
+		format goh264.EncoderOutputFormat
+	}{
+		{name: "avc", format: goh264.EncoderOutputAVC},
+		{name: "rtp", format: goh264.EncoderOutputRTP},
+	} {
+		for _, deblock := range []struct {
+			name string
+			mode goh264.EncoderDeblockMode
+		}{
+			{name: "enabled", mode: goh264.EncoderDeblockEnabled},
+			{name: "slice-boundary", mode: goh264.EncoderDeblockSliceBoundary},
+		} {
+			t.Run(tt.name+"/"+deblock.name, func(t *testing.T) {
+				cfg := goh264.DefaultEncoderConfig(32, 32)
+				cfg.OutputFormat = tt.format
+				cfg.DeblockMode = deblock.mode
+				cfg.SliceCount = 2
+				if tt.format != goh264.EncoderOutputRTP {
+					cfg.RTPMaxPayloadSize = 0
+				}
+				enc, err := goh264.NewEncoder(cfg)
+				if err != nil {
+					t.Fatalf("NewEncoder: %v", err)
+				}
+
+				firstFrame := patternedI420EncoderFrame(32, 32)
+				first, err := enc.Encode(firstFrame)
+				if err != nil {
+					t.Fatalf("Encode first IDR: %v", err)
+				}
+				assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5, 5})
+
+				secondFrame := perMacroblockMotionI420EncoderFrame(firstFrame, motions)
+				secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+				second, err := enc.Encode(secondFrame)
+				if err != nil {
+					t.Fatalf("Encode per-macroblock exact P16x16 fallback %s/%s: %v", tt.name, deblock.name, err)
+				}
+				if second.KeyFrame || second.IDR {
+					t.Fatalf("per-macroblock exact P16x16 fallback %s/%s key=%v idr=%v, want recovery P frame",
+						tt.name, deblock.name, second.KeyFrame, second.IDR)
+				}
+				assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1, 1})
+
+				headers, err := enc.ParameterSets()
+				if err != nil {
+					t.Fatalf("ParameterSets: %v", err)
+				}
+				dec := goh264.NewDecoder()
+				var decodedFirst, decodedSecond []*goh264.Frame
+				stream := append([]byte(nil), headers.AnnexB...)
+				switch tt.format {
+				case goh264.EncoderOutputAVC:
+					if _, err := dec.ParseAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
+						t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+					}
+					decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
+					if err != nil {
+						t.Fatalf("DecodeConfiguredAVCFrames first %s: %v", deblock.name, err)
+					}
+					decodedSecond, err = dec.DecodeConfiguredAVCFrames(second.Data)
+					if err != nil {
+						t.Fatalf("DecodeConfiguredAVCFrames second %s: %v", deblock.name, err)
+					}
+					stream = append(stream, annexBFromEncoderAVCSample(t, first.Data)...)
+					stream = append(stream, annexBFromEncoderAVCSample(t, second.Data)...)
+				case goh264.EncoderOutputRTP:
+					decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
+					if err != nil {
+						t.Fatalf("DecodeFrames first RTP %s: %v", deblock.name, err)
+					}
+					decodedSecond, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
+					if err != nil {
+						t.Fatalf("DecodeFrames second RTP %s: %v", deblock.name, err)
+					}
+					stream = append(stream, annexBFromEncoderRTPPackets(t, first.RTPPackets)...)
+					stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+				default:
+					t.Fatalf("unexpected format %v", tt.format)
+				}
+				assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+				assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+				if !decodedSecond[0].KeyFrame ||
+					decodedSecond[0].SideData.RecoveryPoint == nil ||
+					decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
+					t.Fatalf("decoded per-macroblock exact P16x16 fallback %s/%s key=%v recovery=%+v, want immediate recovery frame",
+						tt.name, deblock.name, decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+				}
+				assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1, 1}, []uint32{0, 0, 1, 1})
+			})
+		}
+	}
+}
+
 func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionWithConstantChroma(t *testing.T) {
 	for _, tt := range []struct {
 		name string
