@@ -635,9 +635,12 @@ func (sei EncoderSEI) Clone() EncoderSEI {
 //
 // Non-zero scalar fields replace the matching EncoderConfig field. Pointer
 // fields update when non-nil, including explicit false or zero values where
-// valid. Reconfigure validates the resulting configuration before changing
-// encoder state; invalid updates leave the encoder unchanged. ForceIDR queues an
-// IDR request even when no config field changes.
+// valid. MaxFrameSizeLimit, MaxEncodeTimeUSLimit, and SliceMaxBytesLimit are the
+// zero-capable forms for the legacy MaxFrameSize, MaxEncodeTimeUS, and
+// SliceMaxBytes scalar fields. Reconfigure validates the resulting
+// configuration before changing encoder state; invalid updates leave the
+// encoder unchanged. ForceIDR queues an IDR request even when no config field
+// changes.
 type EncoderReconfigure struct {
 	TargetBitrate         int
 	MaxBitrate            int
@@ -654,9 +657,12 @@ type EncoderReconfigure struct {
 	DeblockMode           EncoderDeblockMode
 	RTPMaxPayloadSize     int
 	MaxFrameSize          int
+	MaxFrameSizeLimit     *int
 	MaxEncodeTimeUS       int
+	MaxEncodeTimeUSLimit  *int
 	SliceCount            int
 	SliceMaxBytes         int
+	SliceMaxBytesLimit    *int
 	Preset                EncoderPreset
 	ForceIDR              bool
 	GOPSize               int
@@ -1543,14 +1549,23 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	if update.MaxFrameSize != 0 {
 		cfg.MaxFrameSize = update.MaxFrameSize
 	}
+	if update.MaxFrameSizeLimit != nil {
+		cfg.MaxFrameSize = *update.MaxFrameSizeLimit
+	}
 	if update.MaxEncodeTimeUS != 0 {
 		cfg.MaxEncodeTimeUS = update.MaxEncodeTimeUS
+	}
+	if update.MaxEncodeTimeUSLimit != nil {
+		cfg.MaxEncodeTimeUS = *update.MaxEncodeTimeUSLimit
 	}
 	if update.SliceCount != 0 {
 		cfg.SliceCount = update.SliceCount
 	}
 	if update.SliceMaxBytes != 0 {
 		cfg.SliceMaxBytes = update.SliceMaxBytes
+	}
+	if update.SliceMaxBytesLimit != nil {
+		cfg.SliceMaxBytes = *update.SliceMaxBytesLimit
 	}
 	if update.Preset != 0 {
 		cfg.Preset = update.Preset

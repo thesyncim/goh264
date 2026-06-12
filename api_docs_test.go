@@ -103,6 +103,9 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"RTPPacketData",
 		"RTPPayloadData",
 		"AVCC",
+		"MaxFrameSizeLimit",
+		"SliceMaxBytesLimit",
+		"MaxEncodeTimeUSLimit",
 	} {
 		requireREADMECodeName(t, readme, name)
 	}

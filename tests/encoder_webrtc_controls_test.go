@@ -7225,6 +7225,100 @@ func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingState(t *testin
 	}
 }
 
+func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		prepare func(*goh264.Encoder) error
+		disable func() goh264.EncoderReconfigure
+		check   func(goh264.EncoderConfig) bool
+	}{
+		{
+			name: "max-frame-size",
+			prepare: func(enc *goh264.Encoder) error {
+				return enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 16})
+			},
+			disable: func() goh264.EncoderReconfigure {
+				zero := 0
+				return goh264.EncoderReconfigure{MaxFrameSizeLimit: &zero}
+			},
+			check: func(cfg goh264.EncoderConfig) bool {
+				return cfg.MaxFrameSize == 0
+			},
+		},
+		{
+			name: "slice-max-bytes",
+			prepare: func(enc *goh264.Encoder) error {
+				return enc.Reconfigure(goh264.EncoderReconfigure{SliceMaxBytes: 1})
+			},
+			disable: func() goh264.EncoderReconfigure {
+				zero := 0
+				return goh264.EncoderReconfigure{SliceMaxBytesLimit: &zero}
+			},
+			check: func(cfg goh264.EncoderConfig) bool {
+				return cfg.SliceMaxBytes == 0
+			},
+		},
+		{
+			name: "max-encode-time",
+			prepare: func(enc *goh264.Encoder) error {
+				return enc.Reconfigure(goh264.EncoderReconfigure{MaxEncodeTimeUS: 1})
+			},
+			disable: func() goh264.EncoderReconfigure {
+				zero := 0
+				return goh264.EncoderReconfigure{MaxEncodeTimeUSLimit: &zero}
+			},
+			check: func(cfg goh264.EncoderConfig) bool {
+				return cfg.MaxEncodeTimeUS == 0
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = goh264.EncoderOutputAnnexB
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.RTPMaxPayloadSize = 0
+			cfg.FrameDrop = goh264.EncoderFrameDropLate
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			if err := tt.prepare(enc); err != nil {
+				t.Fatalf("prepare limited encoder: %v", err)
+			}
+			if err := enc.Reconfigure(tt.disable()); err != nil {
+				t.Fatalf("disable limit through Reconfigure pointer: %v", err)
+			}
+			if got := enc.Config(); !tt.check(got) {
+				t.Fatalf("disabled limit config = %+v", got)
+			}
+
+			frame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode after disabling limit: %v", err)
+			}
+			if first.Dropped {
+				t.Fatal("Encode after disabling limit dropped frame")
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+
+			secondFrame := cloneI420EncoderFrame(frame)
+			secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode second frame after disabling limit: %v", err)
+			}
+			if second.Dropped {
+				t.Fatal("second encode after disabling limit dropped frame")
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			stream := append([]byte(nil), first.Data...)
+			stream = append(stream, second.Data...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+		})
+	}
+}
+
 func TestEncoderSetMaxEncodeTimeUSTogglesLateDropBudget(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(128, 128)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled

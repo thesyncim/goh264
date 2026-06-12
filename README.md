@@ -340,7 +340,9 @@ that are currently intended to be stable enough for integration work:
   already pending.
 - `SetMaxFrameSize`, `SetSliceMaxBytes`, and `SetMaxEncodeTimeUS` provide
   explicit runtime setters for size and latency budgets; passing zero disables
-  the corresponding budget.
+  the corresponding budget. For grouped updates through `EncoderReconfigure`,
+  use `MaxFrameSizeLimit`, `SliceMaxBytesLimit`, and `MaxEncodeTimeUSLimit`
+  when the update must explicitly set a budget to zero.
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
   `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
   `SetDeblockMode`, `SetPreset`, `SetSliceCount`, `SetSPSPPSMode`,
