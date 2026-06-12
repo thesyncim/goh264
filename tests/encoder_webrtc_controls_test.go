@@ -3616,6 +3616,53 @@ func TestEncoderEncodeIntoFrameDropToBitrateReturnsEmptyOutputAndPreservesState(
 	if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
 		t.Fatalf("post-drop callbacks = %d, want %d", callbackCalls, firstPacketCount+len(recovered.RTPPackets))
 	}
+
+	callbacksAfterRecovered := callbackCalls
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 16}); err != nil {
+		t.Fatalf("lower MaxFrameSize for forced IDR drop: %v", err)
+	}
+	enc.ForceIDR()
+	if !enc.PendingIDR() {
+		t.Fatal("ForceIDR before bitrate drop did not queue IDR")
+	}
+	forcedDropFrame := firstFrame
+	forcedDropFrame.PTS = 0
+	forcedDropped, err := enc.EncodeInto(dst[:0], forcedDropFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto forced IDR bitrate drop: %v", err)
+	}
+	if !forcedDropped.Dropped || len(forcedDropped.Data) != 0 || len(forcedDropped.NALUnits) != 0 || len(forcedDropped.RTPPackets) != 0 {
+		t.Fatalf("forced IDR bitrate drop output = %+v, want dropped metadata without output", forcedDropped)
+	}
+	if forcedDropped.RTPTime != recovered.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("forced IDR bitrate drop RTP time = %d, want %d", forcedDropped.RTPTime, recovered.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("bitrate-dropped forced IDR consumed pending IDR")
+	}
+	if callbackCalls != callbacksAfterRecovered {
+		t.Fatalf("forced IDR bitrate drop callbacks = %d, want still %d", callbackCalls, callbacksAfterRecovered)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 4096}); err != nil {
+		t.Fatalf("raise MaxFrameSize for forced IDR: %v", err)
+	}
+	forced, err := enc.EncodeInto(dst[:0], forcedDropFrame)
+	if err != nil {
+		t.Fatalf("EncodeInto after forced IDR bitrate drop: %v", err)
+	}
+	if forced.Dropped || !forced.IDR || enc.PendingIDR() {
+		t.Fatalf("post-bitrate-drop forced output dropped=%v idr=%v pending=%v, want transmitted IDR",
+			forced.Dropped, forced.IDR, enc.PendingIDR())
+	}
+	if forced.RTPTime != forcedDropped.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("post-bitrate-drop forced RTP time = %d, want %d", forced.RTPTime, forcedDropped.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, forced.NALUnits, []uint8{7, 8, 5})
+	assertRTPPacketMetadata(t, forced.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(callbacksAfterRecovered))
+	if callbackCalls != callbacksAfterRecovered+len(forced.RTPPackets) {
+		t.Fatalf("post-bitrate-drop forced callbacks = %d, want %d", callbackCalls, callbacksAfterRecovered+len(forced.RTPPackets))
+	}
 }
 
 func TestEncoderFrameDropToBitrateDropsOversizeSliceWithoutAdvancingFrameState(t *testing.T) {
