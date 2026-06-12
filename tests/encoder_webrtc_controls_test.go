@@ -2892,6 +2892,51 @@ func TestEncoderParameterSetsReturnCallerOwnedSurfaces(t *testing.T) {
 	}
 }
 
+func TestEncoderParameterSetsSurviveLaterParameterSetCall(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(638, 478)
+	cfg.FrameRateNum = 30000
+	cfg.FrameRateDen = 1001
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	first, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets first: %v", err)
+	}
+	firstSPS := append([]byte(nil), first.SPS...)
+	firstPPS := append([]byte(nil), first.PPS...)
+	firstAnnexB := append([]byte(nil), first.AnnexB...)
+	firstAVCC := append([]byte(nil), first.AVCDecoderConfigurationRecord...)
+
+	second, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets second: %v", err)
+	}
+	second.SPS[0] ^= 0xff
+	second.PPS[0] ^= 0xff
+	second.AnnexB[0] ^= 0xff
+	second.AVCDecoderConfigurationRecord[0] ^= 0xff
+
+	if !bytes.Equal(first.SPS, firstSPS) ||
+		!bytes.Equal(first.PPS, firstPPS) ||
+		!bytes.Equal(first.AnnexB, firstAnnexB) ||
+		!bytes.Equal(first.AVCDecoderConfigurationRecord, firstAVCC) {
+		t.Fatalf("first ParameterSets mutated after later call mutation:\nSPS %x want %x\nPPS %x want %x\nAnnexB %x want %x\navcC %x want %x",
+			first.SPS, firstSPS,
+			first.PPS, firstPPS,
+			first.AnnexB, firstAnnexB,
+			first.AVCDecoderConfigurationRecord, firstAVCC)
+	}
+	if _, err := goh264.NewDecoder().ParseHeadersAnnexB(first.AnnexB); err != nil {
+		t.Fatalf("ParseHeadersAnnexB first headers after later mutation: %v", err)
+	}
+	if _, err := goh264.NewDecoder().ParseAVCDecoderConfigurationRecord(first.AVCDecoderConfigurationRecord); err != nil {
+		t.Fatalf("ParseAVCDecoderConfigurationRecord first headers after later mutation: %v", err)
+	}
+}
+
 func TestEncoderHeaderHelpersPreservePendingIDR(t *testing.T) {
 	for _, format := range []struct {
 		name string
