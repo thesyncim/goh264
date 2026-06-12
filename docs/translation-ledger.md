@@ -62,6 +62,9 @@ Public raw-frame output now also has an external-package nil-frame contract
 covering `BytesPerSample`, `RawPixelFormat`, `RawYUVSize`, `AppendRawYUV`,
 `AppendRawYUVBytesLE`, and `AppendRawYUV16`: each rejects the nil receiver with
 `ErrInvalidData`, preserves caller buffers, and does not panic.
+`DecodeAVCFramesWithConfigurationRecord` now has direct recovery evidence that a
+malformed replacement avcC record is rejected before it overwrites the last good
+stored configured-AVC state.
 
 Current encoder evidence addendum: the odd-pixel P16x16 guard now has separate
 constant-chroma admission and patterned-chroma P IntraPCM fallback coverage for
