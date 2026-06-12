@@ -2307,6 +2307,68 @@ func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *t
 	}
 }
 
+func TestEncoderInvalidReconfigurePreservesStoredReference(t *testing.T) {
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = format.fmt
+			cfg.GOPSize = 10000
+			cfg.IDRInterval = 10000
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			if format.fmt == goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 32
+			} else {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if first.Dropped || !first.IDR {
+				t.Fatalf("first output dropped/id = %v/%v, want IDR", first.Dropped, first.IDR)
+			}
+			before := enc.Config()
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{Width: 32, ForceIDR: true}); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("invalid Reconfigure error = %v, want ErrInvalidData", err)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("invalid Reconfigure mutated config = %+v, want %+v", got, before)
+			}
+			if enc.PendingIDR() {
+				t.Fatal("invalid Reconfigure queued an IDR")
+			}
+
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.PTS = int64(before.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode after invalid Reconfigure: %v", err)
+			}
+			if second.Dropped || second.IDR || second.RTPTime != before.RTPTimestampIncrement {
+				t.Fatalf("post-invalid output dropped/id/time = %v/%v/%d, want P-skip time %d",
+					second.Dropped, second.IDR, second.RTPTime, before.RTPTimestampIncrement)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			stream := annexBFromEncodedFrame(t, first, before.OutputFormat)
+			stream = append(stream, annexBFromEncodedFrame(t, second, before.OutputFormat)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+		})
+	}
+}
+
 func TestEncoderReconfigureRejectsInvalidOutputControlsWithoutMutation(t *testing.T) {
 	tests := []struct {
 		name   string
