@@ -226,9 +226,9 @@ verifies frame-shape validation returns
 empty output and leaves RTP sequence, callback, frame-number, timestamp, and
 reference state untouched before the next valid P-skip or queued IDR, proves
 overflowed caller-owned `EncodeInto` destination growth returns an empty hard
-error without consuming queued IDR state or advancing RTP/callback state, rejects
-overflowed configured and per-frame input-plane geometry without wrapped sizes
-or panics, and
+error across Annex B, AVC, and RTP without consuming queued IDR state or
+advancing RTP/callback state, rejects overflowed configured and per-frame
+input-plane geometry without wrapped sizes or panics, and
 proves hard-error and `FrameDropToBitrate` dropped-frame behavior for
 `MaxFrameSize`/`SliceMaxBytes` budget misses and VBV-backed `MaxBitrate` bucket
 misses, including credit consumption/refill across transmitted IDR/P-skip and

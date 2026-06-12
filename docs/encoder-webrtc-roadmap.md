@@ -117,9 +117,9 @@ data. `Encode` and `EncodeInto`
 now validate frame shape before bitstream work, returning empty output for
 invalid frames without advancing RTP sequence, callback, frame-number,
 timestamp, or reference state. Overflowed caller-owned `EncodeInto` destination
-growth also returns an empty hard error without consuming queued IDR state or
-advancing RTP/callback state, then valid input resumes as the queued IDR. They
-emit the first admitted frame bitstream
+growth also returns an empty hard error across Annex B, AVC, and RTP without
+consuming queued IDR state or advancing RTP/callback state, then valid input
+resumes as the queued IDR. They emit the first admitted frame bitstream
 paths: 8-bit I420 Constrained Baseline IDR IntraPCM access units with Annex B,
 AVC, RTP packetization-mode 0 single-NAL output, and RTP packetization-mode 1
 output, plus configured `SliceCount` multi-slice VCL output, guarded CAVLC
