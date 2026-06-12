@@ -228,6 +228,9 @@ source-shaped MSB-first writer primitives for raw bits, unsigned/signed
 Exp-Golomb codes, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC
 NAL packaging, and AVC decoder configuration records. The writer round-trips
 through the existing decoder readers/parsers in `internal/h264/bitwriter_test.go`.
+`internal/h264/cavlc.go` now also contains CAVLC coeff-token, total-zeros, and
+run-before VLC write primitives, with every emitted table code round-tripped
+through the existing CAVLC decoder tables.
 `internal/h264/encoder_headers.go` adds baseline SPS/PPS syntax writers,
 including 4:2:0 crop-unit emission, in the same source-shaped style and
 round-trips through `DecodeSPS`, `DecodePPS`, `SplitAnnexB`, and the avcC
@@ -253,7 +256,8 @@ in one access unit.
    that reject invalid WebRTC configurations.
 2. Done: add bitstream writer primitives. Done for raw NAL/RBSP,
    Exp-Golomb, Annex B/AVC packaging, AVC configuration records, and baseline
-   SPS/PPS plus recovery-point SEI syntax.
+   SPS/PPS plus recovery-point SEI syntax, with CAVLC residual VLC write
+   primitives now table-round-tripped through the decoder.
 3. Done: add an intra-only IDR path for I420 input and prove that local decode,
    FFmpeg decode, AVC decode, and RTP FU-A reassembly produce matching raw
    frames.

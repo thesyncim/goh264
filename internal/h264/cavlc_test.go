@@ -76,6 +76,166 @@ func assertCAVLCVLCEntries(t *testing.T, name string, vlc cavlcVLC) {
 	}
 }
 
+func TestCAVLCAllVLCEntriesWriteAndDecodeToTheirSymbols(t *testing.T) {
+	assertCAVLCVLCWriteEntries(t, "chroma_dc_coeff_token", cavlcVLC{
+		length: cavlcChromaDCCoeffTokenLen[:],
+		bits:   cavlcChromaDCCoeffTokenBits[:],
+		maxLen: chromaDCCoeffTokenVLCBits,
+	})
+	assertCAVLCVLCWriteEntries(t, "chroma422_dc_coeff_token", cavlcVLC{
+		length: cavlcChroma422DCCoeffTokenLen[:],
+		bits:   cavlcChroma422DCCoeffTokenBits[:],
+		maxLen: chroma422DCCoeffTokenVLCBits,
+	})
+	for i := range cavlcCoeffTokenLen {
+		assertCAVLCVLCWriteEntries(t, "coeff_token", cavlcVLC{
+			length: cavlcCoeffTokenLen[i][:],
+			bits:   cavlcCoeffTokenBits[i][:],
+			maxLen: coeffTokenVLCBits,
+		})
+	}
+	for i := 0; i < 15; i++ {
+		assertCAVLCVLCWriteEntries(t, "total_zeros", cavlcVLC{
+			length: cavlcTotalZerosLen[i][:],
+			bits:   cavlcTotalZerosBits[i][:],
+			maxLen: totalZerosVLCBits,
+		})
+	}
+	for i := range cavlcChromaDCTotalZerosLen {
+		assertCAVLCVLCWriteEntries(t, "chroma_dc_total_zeros", cavlcVLC{
+			length: cavlcChromaDCTotalZerosLen[i][:],
+			bits:   cavlcChromaDCTotalZerosBits[i][:],
+			maxLen: chromaDCTotalZerosVLCBits,
+		})
+	}
+	for i := range cavlcChroma422DCTotalZerosLen {
+		assertCAVLCVLCWriteEntries(t, "chroma422_dc_total_zeros", cavlcVLC{
+			length: cavlcChroma422DCTotalZerosLen[i][:],
+			bits:   cavlcChroma422DCTotalZerosBits[i][:],
+			maxLen: chroma422DCTotalZerosVLCBits,
+		})
+	}
+	for i := range cavlcRunLen {
+		maxLen := uint8(run7VLCBits)
+		if i < 6 {
+			maxLen = runVLCBits
+		}
+		assertCAVLCVLCWriteEntries(t, "run", cavlcVLC{
+			length: cavlcRunLen[i][:],
+			bits:   cavlcRunBits[i][:],
+			maxLen: maxLen,
+		})
+	}
+}
+
+func assertCAVLCVLCWriteEntries(t *testing.T, name string, vlc cavlcVLC) {
+	t.Helper()
+	for symbol, length := range vlc.length {
+		if length == 0 {
+			continue
+		}
+		var bw BitWriter
+		if err := vlc.write(&bw, symbol); err != nil {
+			t.Fatalf("%s symbol %d write failed: %v", name, symbol, err)
+		}
+		gb := newBitReader(bw.Bytes())
+		got, err := vlc.read(&gb)
+		if err != nil {
+			t.Fatalf("%s symbol %d read written code failed: %v", name, symbol, err)
+		}
+		if got != symbol {
+			t.Fatalf("%s written code symbol = %d, want %d", name, got, symbol)
+		}
+		if gb.bitPos != uint32(length) {
+			t.Fatalf("%s symbol %d consumed %d bits, want %d", name, symbol, gb.bitPos, length)
+		}
+	}
+}
+
+func TestCAVLCWriteResidualSyntaxPrimitivesRoundTrip(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		maxCoeff     int
+		nC           int
+		totalCoeff   int
+		trailingOnes int
+		totalZeros   int
+		runBefore    int
+		zerosLeft    int
+	}{
+		{name: "luma coeff-token total-zeros run", maxCoeff: 16, nC: 0, totalCoeff: 2, trailingOnes: 1, totalZeros: 3, runBefore: 2, zerosLeft: 3},
+		{name: "chroma-dc coeff-token total-zeros", maxCoeff: 4, totalCoeff: 1, trailingOnes: 0, totalZeros: 2, runBefore: 1, zerosLeft: 2},
+		{name: "chroma422-dc coeff-token total-zeros", maxCoeff: 8, totalCoeff: 3, trailingOnes: 2, totalZeros: 4, runBefore: 0, zerosLeft: 4},
+		{name: "full block omits total-zeros bits", maxCoeff: 16, nC: 8, totalCoeff: 16, trailingOnes: 3, totalZeros: 0, runBefore: 0, zerosLeft: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			if err := writeCAVLCCoeffToken(&bw, tt.totalCoeff, tt.trailingOnes, tt.nC, tt.maxCoeff); err != nil {
+				t.Fatalf("write coeff token: %v", err)
+			}
+			if err := writeCAVLCTotalZeros(&bw, tt.totalZeros, tt.totalCoeff, tt.maxCoeff); err != nil {
+				t.Fatalf("write total zeros: %v", err)
+			}
+			if tt.totalCoeff < tt.maxCoeff {
+				if err := writeCAVLCRunBefore(&bw, tt.runBefore, tt.zerosLeft); err != nil {
+					t.Fatalf("write run before: %v", err)
+				}
+			}
+
+			gb := newBitReader(bw.Bytes())
+			coeffToken, err := readCAVLCCoeffToken(&gb, tt.nC, tt.maxCoeff)
+			if err != nil {
+				t.Fatalf("read coeff token: %v", err)
+			}
+			if got := coeffToken >> 2; got != tt.totalCoeff {
+				t.Fatalf("totalCoeff = %d, want %d", got, tt.totalCoeff)
+			}
+			if got := coeffToken & 3; got != tt.trailingOnes {
+				t.Fatalf("trailingOnes = %d, want %d", got, tt.trailingOnes)
+			}
+			totalZeros, err := readCAVLCTotalZeros(&gb, tt.totalCoeff, tt.maxCoeff)
+			if err != nil {
+				t.Fatalf("read total zeros: %v", err)
+			}
+			if totalZeros != tt.totalZeros {
+				t.Fatalf("totalZeros = %d, want %d", totalZeros, tt.totalZeros)
+			}
+			if tt.totalCoeff < tt.maxCoeff {
+				runBefore, err := readCAVLCRunBefore(&gb, tt.zerosLeft)
+				if err != nil {
+					t.Fatalf("read run before: %v", err)
+				}
+				if runBefore != tt.runBefore {
+					t.Fatalf("runBefore = %d, want %d", runBefore, tt.runBefore)
+				}
+			}
+		})
+	}
+}
+
+func TestCAVLCWriteResidualSyntaxPrimitivesRejectInvalid(t *testing.T) {
+	var bw BitWriter
+	for _, tt := range []struct {
+		name string
+		err  error
+	}{
+		{name: "bad coeff token count", err: writeCAVLCCoeffToken(&bw, 17, 0, 0, 16)},
+		{name: "bad trailing ones", err: writeCAVLCCoeffToken(&bw, 1, 2, 0, 16)},
+		{name: "bad nC", err: writeCAVLCCoeffToken(&bw, 1, 0, 17, 16)},
+		{name: "bad maxCoeff", err: writeCAVLCCoeffToken(&bw, 0, 0, 0, 0)},
+		{name: "bad total zeros", err: writeCAVLCTotalZeros(&bw, 15, 2, 16)},
+		{name: "bad full-block total zeros", err: writeCAVLCTotalZeros(&bw, 1, 16, 16)},
+		{name: "bad run before", err: writeCAVLCRunBefore(&bw, 3, 2)},
+		{name: "bad zeros left", err: writeCAVLCRunBefore(&bw, 0, 0)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.err != ErrInvalidData {
+				t.Fatalf("error = %v, want ErrInvalidData", tt.err)
+			}
+		})
+	}
+}
+
 func TestCAVLCLevelTableMatchesFFmpegSpots(t *testing.T) {
 	cases := []struct {
 		suffix int

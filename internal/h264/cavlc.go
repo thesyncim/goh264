@@ -231,6 +231,17 @@ type cavlcVLC struct {
 	maxLen uint8
 }
 
+func (vlc cavlcVLC) write(bw *BitWriter, symbol int) error {
+	if bw == nil || symbol < 0 || symbol >= len(vlc.length) {
+		return ErrInvalidData
+	}
+	length := vlc.length[symbol]
+	if length == 0 {
+		return ErrInvalidData
+	}
+	return bw.WriteBits(uint32(vlc.bits[symbol]), uint32(length))
+}
+
 func (vlc cavlcVLC) read(gb *bitReader) (int, error) {
 	var code uint32
 	maxLen := vlc.maxLen
@@ -316,6 +327,35 @@ func readCAVLCCoeffToken(gb *bitReader, nC int, maxCoeff int) (int, error) {
 	return vlc.read(gb)
 }
 
+func writeCAVLCCoeffToken(bw *BitWriter, totalCoeff int, trailingOnes int, nC int, maxCoeff int) error {
+	if maxCoeff <= 0 || maxCoeff > 16 ||
+		totalCoeff < 0 || totalCoeff > maxCoeff ||
+		trailingOnes < 0 || trailingOnes > 3 || trailingOnes > totalCoeff {
+		return ErrInvalidData
+	}
+	symbol := (totalCoeff << 2) | trailingOnes
+	if maxCoeff <= 8 {
+		if maxCoeff == 4 {
+			return (cavlcVLC{
+				length: cavlcChromaDCCoeffTokenLen[:],
+				bits:   cavlcChromaDCCoeffTokenBits[:],
+				maxLen: chromaDCCoeffTokenVLCBits,
+			}).write(bw, symbol)
+		}
+		return (cavlcVLC{
+			length: cavlcChroma422DCCoeffTokenLen[:],
+			bits:   cavlcChroma422DCCoeffTokenBits[:],
+			maxLen: chroma422DCCoeffTokenVLCBits,
+		}).write(bw, symbol)
+	}
+
+	vlc, err := coeffTokenVLC(nC)
+	if err != nil {
+		return err
+	}
+	return vlc.write(bw, symbol)
+}
+
 func readCAVLCTotalZeros(gb *bitReader, totalCoeff int, maxCoeff int) (int, error) {
 	if totalCoeff <= 0 || totalCoeff > maxCoeff || maxCoeff > 16 {
 		return 0, ErrInvalidData
@@ -346,6 +386,40 @@ func readCAVLCTotalZeros(gb *bitReader, totalCoeff int, maxCoeff int) (int, erro
 	}).read(gb)
 }
 
+func writeCAVLCTotalZeros(bw *BitWriter, totalZeros int, totalCoeff int, maxCoeff int) error {
+	if totalCoeff <= 0 || totalCoeff > maxCoeff || maxCoeff > 16 ||
+		totalZeros < 0 || totalZeros > maxCoeff-totalCoeff {
+		return ErrInvalidData
+	}
+	if totalCoeff == maxCoeff {
+		if totalZeros != 0 {
+			return ErrInvalidData
+		}
+		return nil
+	}
+
+	if maxCoeff <= 8 {
+		if maxCoeff == 4 {
+			return (cavlcVLC{
+				length: cavlcChromaDCTotalZerosLen[totalCoeff-1][:],
+				bits:   cavlcChromaDCTotalZerosBits[totalCoeff-1][:],
+				maxLen: chromaDCTotalZerosVLCBits,
+			}).write(bw, totalZeros)
+		}
+		return (cavlcVLC{
+			length: cavlcChroma422DCTotalZerosLen[totalCoeff-1][:],
+			bits:   cavlcChroma422DCTotalZerosBits[totalCoeff-1][:],
+			maxLen: chroma422DCTotalZerosVLCBits,
+		}).write(bw, totalZeros)
+	}
+
+	return (cavlcVLC{
+		length: cavlcTotalZerosLen[totalCoeff-1][:],
+		bits:   cavlcTotalZerosBits[totalCoeff-1][:],
+		maxLen: totalZerosVLCBits,
+	}).write(bw, totalZeros)
+}
+
 func readCAVLCRunBefore(gb *bitReader, zerosLeft int) (int, error) {
 	if zerosLeft <= 0 {
 		return 0, ErrInvalidData
@@ -361,6 +435,23 @@ func readCAVLCRunBefore(gb *bitReader, zerosLeft int) (int, error) {
 		bits:   cavlcRunBits[row][:],
 		maxLen: maxLen,
 	}).read(gb)
+}
+
+func writeCAVLCRunBefore(bw *BitWriter, runBefore int, zerosLeft int) error {
+	if zerosLeft <= 0 || runBefore < 0 || runBefore > zerosLeft {
+		return ErrInvalidData
+	}
+	row := 6
+	maxLen := uint8(run7VLCBits)
+	if zerosLeft < 7 {
+		row = zerosLeft - 1
+		maxLen = runVLCBits
+	}
+	return (cavlcVLC{
+		length: cavlcRunLen[row][:],
+		bits:   cavlcRunBits[row][:],
+		maxLen: maxLen,
+	}).write(bw, runBefore)
 }
 
 func readCAVLCLevels(gb *bitReader, totalCoeff int, trailingOnes int) ([16]int32, error) {
