@@ -8436,6 +8436,59 @@ func TestEncoderRTPPacketCallbackReceivesWebRTCMetadata(t *testing.T) {
 	}
 }
 
+func TestEncoderRTPPacketCallbackPacketsSurviveLaterEncode(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPMaxPayloadSize = 128
+	cfg.STAPA = true
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.GOPSize = 10000
+	cfg.IDRInterval = 10000
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackPackets []goh264.EncoderRTPPacket
+	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, _ goh264.EncoderRTPPacketMetadata) {
+		callbackPackets = append(callbackPackets, pkt)
+	})
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 0
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first RTP frame: %v", err)
+	}
+	if len(callbackPackets) != len(first.RTPPackets) || len(callbackPackets) == 0 {
+		t.Fatalf("first callback packets = %d, want returned packet count %d", len(callbackPackets), len(first.RTPPackets))
+	}
+	firstCallbackPackets := append([]goh264.EncoderRTPPacket(nil), callbackPackets...)
+	firstCallbackSnapshot := cloneEncoderRTPPackets(firstCallbackPackets)
+	for i := range firstCallbackPackets {
+		if !bytes.Equal(firstCallbackPackets[i].Data, first.RTPPackets[i].Data) ||
+			!bytes.Equal(firstCallbackPackets[i].Payload, first.RTPPackets[i].Payload) {
+			t.Fatalf("callback packet[%d] did not match first returned packet", i)
+		}
+	}
+	callbackPackets = callbackPackets[:0]
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
+	secondFrame.Y[0] ^= 0x33
+	if _, err := enc.Encode(secondFrame); err != nil {
+		t.Fatalf("Encode second RTP frame: %v", err)
+	}
+	if len(callbackPackets) == 0 {
+		t.Fatal("second encode produced no callback packets")
+	}
+	for i, pkt := range firstCallbackPackets {
+		if !bytes.Equal(pkt.Data, firstCallbackSnapshot[i].Data) ||
+			!bytes.Equal(pkt.Payload, firstCallbackSnapshot[i].Payload) {
+			t.Fatalf("callback packet[%d] changed after later encode", i)
+		}
+	}
+}
+
 func TestEncoderRTPPacketCallbackReceivesMode0IDRSingleNALMetadata(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
