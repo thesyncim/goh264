@@ -661,6 +661,10 @@ func writeCAVLCResidualThirteenNonTrailingLevels(bw *BitWriter, block []int32, n
 	return writeCAVLCResidualNonTrailingLevels(bw, block, n, scantable, maxCoeff, predictedNnz, 13, 13)
 }
 
+func writeCAVLCResidualFourteenNonTrailingLevels(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
+	return writeCAVLCResidualNonTrailingLevels(bw, block, n, scantable, maxCoeff, predictedNnz, 14, 14)
+}
+
 func writeCAVLCResidualSingleLevelTrailingOnes(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
 	if bw == nil || maxCoeff <= 0 || maxCoeff > 16 || len(scantable) < maxCoeff {
 		return 0, ErrInvalidData

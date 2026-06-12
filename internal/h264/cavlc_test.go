@@ -1307,6 +1307,81 @@ func TestCAVLCWriteResidualThirteenNonTrailingLevelsRejectsUnsupportedBlocks(t *
 	}
 }
 
+func TestCAVLCWriteResidualFourteenNonTrailingLevelsRoundTripsThroughDecoder(t *testing.T) {
+	scan := cavlcIdentityScan()
+	for _, tt := range []struct {
+		name         string
+		block        [16]int32
+		predictedNnz int
+	}{
+		{name: "adjacent positive levels", block: [16]int32{0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 2}},
+		{name: "adjacent negative levels", block: [16]int32{0: -2, 1: -3, 2: -4, 3: -5, 4: -6, 5: -7, 6: -8, 7: -9, 8: -10, 9: -11, 10: -12, 11: -13, 12: -14, 13: -2}},
+		{name: "sparse mixed levels", block: [16]int32{0: 3, 1: -4, 2: 5, 3: -6, 4: 7, 6: -8, 8: 9, 9: -10, 10: 11, 11: -12, 12: 13, 13: -14, 14: 15, 15: 2}, predictedNnz: 2},
+		{name: "suffix one first level then growth", block: [16]int32{0: 7, 1: -8, 2: 9, 3: -10, 5: 11, 6: -9, 7: 10, 8: -8, 9: 9, 10: -7, 11: 8, 12: -9, 14: 10, 15: 3}, predictedNnz: 4},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			totalCoeff, err := writeCAVLCResidualFourteenNonTrailingLevels(&bw, tt.block[:], 0, scan[:], 16, tt.predictedNnz)
+			if err != nil {
+				t.Fatalf("write residual: %v", err)
+			}
+			if totalCoeff != 14 {
+				t.Fatalf("totalCoeff = %d, want 14", totalCoeff)
+			}
+
+			gb := newBitReader(bw.Bytes())
+			var got [16]int32
+			decodedCoeff, err := decodeCAVLCResidual(&gb, got[:], 0, scan[:], nil, 16, tt.predictedNnz)
+			if err != nil {
+				t.Fatalf("decode written residual: %v", err)
+			}
+			if decodedCoeff != 14 {
+				t.Fatalf("decoded totalCoeff = %d, want 14", decodedCoeff)
+			}
+			if got != tt.block {
+				t.Fatalf("decoded block = %v, want %v", got, tt.block)
+			}
+		})
+	}
+}
+
+func TestCAVLCWriteResidualFourteenNonTrailingLevelsRejectsUnsupportedBlocks(t *testing.T) {
+	scan := cavlcIdentityScan()
+	for _, tt := range []struct {
+		name  string
+		block [16]int32
+	}{
+		{name: "empty", block: [16]int32{}},
+		{name: "thirteen levels", block: [16]int32{0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 2}},
+		{name: "trailing-one positive", block: [16]int32{0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 1}},
+		{name: "trailing-one negative", block: [16]int32{0: -1, 1: -2, 2: -3, 3: -4, 4: -5, 5: -6, 6: -7, 7: -8, 8: -9, 9: -10, 10: -11, 11: -12, 12: -13, 13: -14}},
+		{name: "fifteen levels", block: [16]int32{0: 2, 1: -3, 2: 4, 3: -5, 4: 6, 5: -7, 6: 8, 7: -9, 8: 10, 9: -11, 10: 12, 11: -13, 12: 14, 13: -15, 14: 16}},
+		{name: "subsequent level beyond bounded prefix", block: [16]int32{0: 3000, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 2}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var bw BitWriter
+			if _, err := writeCAVLCResidualFourteenNonTrailingLevels(&bw, tt.block[:], 0, scan[:], 16, 0); err != ErrInvalidData {
+				t.Fatalf("write residual error = %v, want ErrInvalidData", err)
+			}
+		})
+	}
+
+	var bw BitWriter
+	block := [16]int32{0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10, 9: 11, 10: 12, 11: 13, 12: 14, 13: 2}
+	if _, err := writeCAVLCResidualFourteenNonTrailingLevels(nil, block[:], 0, scan[:], 16, 0); err != ErrInvalidData {
+		t.Fatalf("nil writer error = %v, want ErrInvalidData", err)
+	}
+	if _, err := writeCAVLCResidualFourteenNonTrailingLevels(&bw, block[:], 0, scan[:4], 16, 0); err != ErrInvalidData {
+		t.Fatalf("short scan error = %v, want ErrInvalidData", err)
+	}
+	if _, err := writeCAVLCResidualFourteenNonTrailingLevels(&bw, block[:], 0, scan[:], 17, 0); err != ErrInvalidData {
+		t.Fatalf("bad maxCoeff error = %v, want ErrInvalidData", err)
+	}
+	if _, err := writeCAVLCResidualFourteenNonTrailingLevels(&bw, block[:], 1, scan[:], 16, 0); err != ErrInvalidData {
+		t.Fatalf("block offset overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
 func TestCAVLCWriteResidualSingleLevelTrailingOnesRoundTripsThroughDecoder(t *testing.T) {
 	scan := cavlcIdentityScan()
 	for _, tt := range []struct {
