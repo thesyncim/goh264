@@ -1265,6 +1265,34 @@ func (e *Encoder) SetFrameRate(num, den int) error {
 	return nil
 }
 
+// SetResolution updates encoded frame dimensions and default I420 strides.
+//
+// A valid resolution update clears the current reference state and queues an
+// IDR. Invalid updates leave the encoder configuration and coding state
+// unchanged.
+func (e *Encoder) SetResolution(width, height int) error {
+	return e.Reconfigure(EncoderReconfigure{Width: width, Height: height})
+}
+
+// SetGOP updates GOP and IDR cadence.
+//
+// Invalid updates leave the encoder configuration and coding state unchanged.
+func (e *Encoder) SetGOP(gopSize, idrInterval int) error {
+	return e.Reconfigure(EncoderReconfigure{GOPSize: gopSize, IDRInterval: idrInterval})
+}
+
+// SetRTPTimestampIncrement updates the automatic RTP timestamp step.
+//
+// Passing zero is invalid at runtime; use SetFrameRate to derive a new
+// increment from frame-rate controls. Invalid updates leave the encoder
+// configuration and coding state unchanged.
+func (e *Encoder) SetRTPTimestampIncrement(increment uint32) error {
+	if increment == 0 {
+		return encoderInvalid("RTP timestamp increment cannot be zero")
+	}
+	return e.Reconfigure(EncoderReconfigure{RTPTimestampIncrement: increment})
+}
+
 // SetRTPMaxPayloadSize updates the RTP packet payload limit after validating the
 // resulting configuration.
 func (e *Encoder) SetRTPMaxPayloadSize(size int) error {

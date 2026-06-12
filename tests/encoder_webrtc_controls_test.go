@@ -749,6 +749,27 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 		t.Fatalf("frame rate config = %d/%d rtp=%d, want 60/1 rtp=1500",
 			got.FrameRateNum, got.FrameRateDen, got.RTPTimestampIncrement)
 	}
+	if err := enc.SetRTPTimestampIncrement(1234); err != nil {
+		t.Fatalf("SetRTPTimestampIncrement valid: %v", err)
+	}
+	if got := enc.Config(); got.RTPTimestampIncrement != 1234 {
+		t.Fatalf("rtp timestamp increment = %d, want 1234", got.RTPTimestampIncrement)
+	}
+	if err := enc.SetGOP(90, 30); err != nil {
+		t.Fatalf("SetGOP valid: %v", err)
+	}
+	if got := enc.Config(); got.GOPSize != 90 || got.IDRInterval != 30 {
+		t.Fatalf("gop controls = %d/%d, want 90/30", got.GOPSize, got.IDRInterval)
+	}
+	if err := enc.SetResolution(320, 240); err != nil {
+		t.Fatalf("SetResolution valid: %v", err)
+	}
+	if got := enc.Config(); got.Width != 320 || got.Height != 240 ||
+		got.StrideY != 320 || got.StrideCb != 160 || got.StrideCr != 160 ||
+		!enc.PendingIDR() {
+		t.Fatalf("resolution controls = %dx%d strides %d/%d/%d pending %v, want 320x240 320/160/160 and queued IDR",
+			got.Width, got.Height, got.StrideY, got.StrideCb, got.StrideCr, enc.PendingIDR())
+	}
 
 	if err := enc.SetRTPMaxPayloadSize(1000); err != nil {
 		t.Fatalf("SetRTPMaxPayloadSize valid: %v", err)
@@ -886,6 +907,15 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 		}},
 		{name: "SetFrameRate", call: func(enc *goh264.Encoder) error {
 			return enc.SetFrameRate(0, 1)
+		}},
+		{name: "SetRTPTimestampIncrement", call: func(enc *goh264.Encoder) error {
+			return enc.SetRTPTimestampIncrement(0)
+		}},
+		{name: "SetGOP", call: func(enc *goh264.Encoder) error {
+			return enc.SetGOP(2, 3)
+		}},
+		{name: "SetResolution", call: func(enc *goh264.Encoder) error {
+			return enc.SetResolution(32, 0)
 		}},
 		{name: "SetDeblockMode", call: func(enc *goh264.Encoder) error {
 			return enc.SetDeblockMode(goh264.EncoderDeblockMode(99))
@@ -13065,7 +13095,8 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	for _, method := range []string{
 		"Config", "ParameterSets", "Encode", "EncodeInto", "ForceIDR", "HandlePLI", "HandleFIR",
 		"PendingIDR", "RecoveryPointSEI", "SetBitrate", "SetRateControl", "SetVBVBufferSize",
-		"SetFrameDropMode", "SetQP", "SetFrameRate", "SetDeblockMode", "SetRTPMaxPayloadSize",
+		"SetFrameDropMode", "SetQP", "SetFrameRate", "SetRTPTimestampIncrement",
+		"SetGOP", "SetResolution", "SetDeblockMode", "SetRTPMaxPayloadSize",
 		"SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
 		"SetSPSPPSMode", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
 		"SetRTPMetadata", "SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",

@@ -237,10 +237,11 @@ RTP metadata, and packetization updates leave config, queued-IDR state, RTP
 cadence, packets, callbacks, and rejected bundled ForceIDR requests intact
 across Annex B, AVC, and RTP output surfaces where the controls apply,
 proves accepted bitrate, rate-control, VBV, frame-drop, QP, frame-rate,
-deblock, RTP payload-size, max-frame-size, slice-byte, encode-time,
-output/cadence, RTP packetization, RTP metadata, and reconfigure updates,
-including SPS/PPS cadence and recovery-point toggles, preserve a queued IDR
-until the next successful IDR encode,
+RTP timestamp increment, GOP/IDR cadence, resolution, deblock, RTP payload-size,
+max-frame-size, slice-byte, encode-time, output/cadence, RTP packetization,
+RTP metadata, and reconfigure updates, including SPS/PPS cadence and
+recovery-point toggles, preserve a queued IDR until the next successful IDR
+encode,
 proves runtime resolution reset rejects stale-size frames without
 consuming the queued IDR before emitting/decoding a new-size IDR and resuming
 P-skip references at the new dimensions, proves

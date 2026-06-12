@@ -258,6 +258,9 @@ err = enc.SetVBVBufferSize(1_000_000)
 err = enc.SetFrameDropMode(goh264.EncoderFrameDropToBitrate)
 err = enc.SetQP(26, 10, 42)
 err = enc.SetFrameRate(30, 1)
+err = enc.SetRTPTimestampIncrement(3000)
+err = enc.SetGOP(60, 60)
+err = enc.SetResolution(640, 480)
 err = enc.SetDeblockMode(goh264.EncoderDeblockDisabled)
 err = enc.SetRTPMaxPayloadSize(1200)
 err = enc.SetMaxFrameSize(0)    // disable the access-unit byte budget
@@ -307,14 +310,15 @@ that are currently intended to be stable enough for integration work:
   explicit runtime setters for size and latency budgets; passing zero disables
   the corresponding budget.
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
-  `SetDeblockMode`, `SetSPSPPSMode`, `SetRecoveryPointSEI`, `SetOutputFormat`,
-  `SetRTPPacketizationMode`, and `SetRTPMetadata` cover common quality,
-  budget, output, cadence, packetization, and RTP header changes without
-  constructing an `EncoderReconfigure` value. `SetQP` and `SetOutputFormat`
-  queue an IDR boundary after a valid update.
+  `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
+  `SetDeblockMode`, `SetSPSPPSMode`, `SetRecoveryPointSEI`,
+  `SetOutputFormat`, `SetRTPPacketizationMode`, and `SetRTPMetadata` cover
+  common quality, budget, geometry, output, cadence, packetization, and RTP
+  header changes without constructing an `EncoderReconfigure` value. `SetQP`,
+  `SetResolution`, and `SetOutputFormat` queue an IDR boundary after a valid
+  update.
 - `EncoderReconfigure` remains the grouped low-level update surface for
-  resolution, GOP/IDR cadence, RTP timestamp increments, and bundled force-IDR
-  changes.
+  bundled multi-field changes and explicit force-IDR requests.
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
