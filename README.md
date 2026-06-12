@@ -287,9 +287,9 @@ and frame-number state before the next P-skip.
 They emit the admitted IDR IntraPCM, identical-reference P-skip, exact
 macroblock-aligned frame-wide or per-macroblock P16x16 no-residual, or
 changed-frame P IntraPCM frame path, optionally split into configured
-multi-slice VCL NALs. Exact P16x16 is admitted for disabled-deblock
-multi-macroblock frames and single-macroblock
-enabled/slice-boundary deblock frames. Changed-frame P IntraPCM recovery
+multi-slice VCL NALs. Exact P16x16 is admitted for disabled, enabled, and
+slice-boundary deblock frames, including multi-macroblock frames.
+Changed-frame P IntraPCM recovery
 pictures carry recovery-point SEI when enabled. RTP output includes payloads
 plus complete RTP
 packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1

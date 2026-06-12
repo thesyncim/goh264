@@ -6,11 +6,10 @@ bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
 IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
 output, and RTP packetization-mode 1 output, plus guarded identical-reference
 CAVLC P-skip, bounded exact macroblock-aligned P16x16 no-residual prediction
-for frame-wide and per-macroblock integer-pel shifts up to 8 pixels under
-disabled-deblock multi-macroblock frames plus single-macroblock
-enabled/slice-boundary deblock, with odd-pixel
-luma motion admitted only when both 4:2:0 chroma planes are constant,
-and changed-frame
+for frame-wide and per-macroblock integer-pel shifts up to 8 pixels, including
+enabled and slice-boundary deblock on multi-macroblock frames, with odd-pixel
+luma motion admitted only when both 4:2:0 chroma planes are constant, and
+changed-frame
 P IntraPCM across disabled, enabled, and slice-boundary deblock controls.
 Encoder
 production gates live in `docs/encoder-webrtc-roadmap.md` until broader
@@ -337,10 +336,10 @@ exact shifted macroblock-aligned frames up to 8 pixels, including mixed
 per-macroblock vectors and odd-pixel luma motion when chroma is constant, can
 emit predictive P16x16 no-residual slices through stateful local decode, FFmpeg
 rawvideo decode, configured AVC decode, RTP reassembly decode, and
-single-macroblock enabled/slice-boundary deblock syntax plus configured AVC/RTP
-decode and RTP mode-0 single-NAL packetization, while patterned chroma is
-proved to fall back to P IntraPCM
-across Annex B, configured AVC, RTP reassembly, and RTP mode-0 single-NAL output,
+enabled/slice-boundary deblock syntax including multi-macroblock Annex B proof,
+configured AVC/RTP decode, and RTP mode-0 single-NAL packetization, while
+patterned chroma is proved to fall back to P IntraPCM across Annex B,
+configured AVC, RTP reassembly, and RTP mode-0 single-NAL output,
 changed second frames can emit P IntraPCM recovery pictures across disabled,
 enabled, and slice-boundary deblock controls, and queued IDR requests emit IDR.
 It now includes `EncodeInto` allocation canaries for caller-buffer Annex B

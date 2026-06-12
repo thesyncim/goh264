@@ -1514,9 +1514,6 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView, dst []encoderP16
 		view.width&15 != 0 {
 		return nil, false
 	}
-	if e.cfg.DeblockMode != EncoderDeblockDisabled && encoderMacroblockCount(view.width, view.height) != 1 {
-		return nil, false
-	}
 	ref := &e.reference
 	if !ref.valid || ref.width != view.width || ref.height != view.height {
 		return nil, false

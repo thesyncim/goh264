@@ -4924,59 +4924,71 @@ func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
 	}
 }
 
-func TestEncoderEncodeWideExactP16x16RequiresDeblockDisabled(t *testing.T) {
-	cfg := goh264.DefaultEncoderConfig(32, 16)
-	cfg.OutputFormat = goh264.EncoderOutputAnnexB
-	cfg.RTPMaxPayloadSize = 0
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	if got := enc.Config().DeblockMode; got != goh264.EncoderDeblockEnabled {
-		t.Fatalf("default deblock mode = %v, want enabled", got)
-	}
+func TestEncoderEncodeWideExactP16x16WithDeblockControls(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		deblock     goh264.EncoderDeblockMode
+		wantDeblock int32
+	}{
+		{name: "enabled", deblock: goh264.EncoderDeblockEnabled, wantDeblock: 1},
+		{name: "slice-boundary", deblock: goh264.EncoderDeblockSliceBoundary, wantDeblock: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(32, 16)
+			cfg.OutputFormat = goh264.EncoderOutputAnnexB
+			cfg.DeblockMode = tt.deblock
+			cfg.RTPMaxPayloadSize = 0
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
 
-	firstFrame := patternedI420EncoderFrame(32, 16)
-	first, err := enc.Encode(firstFrame)
-	if err != nil {
-		t.Fatalf("Encode first IDR: %v", err)
-	}
-	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+			headers, err := enc.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
+			firstFrame := patternedI420EncoderFrame(32, 16)
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
 
-	secondFrame := integerMotionI420EncoderFrame(firstFrame, 2, 0)
-	secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
-	second, err := enc.Encode(secondFrame)
-	if err != nil {
-		t.Fatalf("Encode wide exact-motion deblock-enabled fallback: %v", err)
-	}
-	if second.KeyFrame || second.IDR {
-		t.Fatalf("wide exact-motion fallback key=%v idr=%v, want non-IDR P IntraPCM", second.KeyFrame, second.IDR)
-	}
-	assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+			secondFrame := integerMotionI420EncoderFrame(firstFrame, 2, 0)
+			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode wide exact P16x16 with deblock %s: %v", tt.name, err)
+			}
+			if second.KeyFrame || second.IDR {
+				t.Fatalf("wide exact P16x16 deblock %s key=%v idr=%v, want predictive P frame", tt.name, second.KeyFrame, second.IDR)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			assertEncoderVCLDeblocks(t, append(append([]byte(nil), headers.AnnexB...), second.Data...), []uint8{1}, []int32{tt.wantDeblock})
 
-	dec := goh264.NewDecoder()
-	decodedFirst, err := dec.DecodeFrames(first.Data)
-	if err != nil {
-		t.Fatalf("Decode first IDR: %v", err)
-	}
-	assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
-	decodedSecond, err := dec.DecodeFrames(second.Data)
-	if err != nil {
-		t.Fatalf("Decode wide exact-motion deblock-enabled fallback: %v", err)
-	}
-	assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
-	if !decodedSecond[0].KeyFrame ||
-		decodedSecond[0].SideData.RecoveryPoint == nil ||
-		decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
-		t.Fatalf("wide exact-motion fallback recovery side data key=%v recovery=%+v, want immediate recovery point",
-			decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
-	}
+			dec := goh264.NewDecoder()
+			decodedFirst, err := dec.DecodeFrames(first.Data)
+			if err != nil {
+				t.Fatalf("Decode first IDR: %v", err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
+			decodedSecond, err := dec.DecodeFrames(second.Data)
+			if err != nil {
+				t.Fatalf("Decode wide exact P16x16 with deblock %s: %v", tt.name, err)
+			}
+			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
+			if decodedSecond[0].KeyFrame || decodedSecond[0].SideData.RecoveryPoint != nil {
+				t.Fatalf("wide exact P16x16 deblock %s key=%v recovery=%+v, want predictive non-recovery frame",
+					tt.name, decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+			}
 
-	stream := append(append([]byte(nil), first.Data...), second.Data...)
-	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
-	wantStream := appendI420FrameBytes(nil, firstFrame)
-	wantStream = appendI420FrameBytes(wantStream, secondFrame)
-	assertFFmpegRawVideoOracle(t, stream, wantStream)
+			stream := append(append([]byte(nil), first.Data...), second.Data...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+			wantStream := appendI420FrameBytes(nil, firstFrame)
+			wantStream = appendI420FrameBytes(wantStream, secondFrame)
+			assertFFmpegRawVideoOracle(t, stream, wantStream)
+		})
+	}
 }
 
 func TestEncoderEncodeChangedSecondFrameUsesPIntraPCM(t *testing.T) {
