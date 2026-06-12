@@ -7384,6 +7384,7 @@ func TestEncoderRTPPacketCallbackReceivesMode1SingleNALMetadata(t *testing.T) {
 			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
 			assertEncoderRTPSingleNALPackets(t, first, cfg.RTPMaxPayloadSize)
 			if tt.name == "idr" {
+				assertEncoderVCLFrameNums(t, annexBFromEncoderRTPPackets(t, callbackPackets), []uint8{5}, []uint32{0})
 				assertEncoderRTPSingleNALCallbackMetadata(t, callbackPackets, callbackMetadata, first, firstFrame, cfg, true, true)
 				return
 			}
@@ -7398,6 +7399,9 @@ func TestEncoderRTPPacketCallbackReceivesMode1SingleNALMetadata(t *testing.T) {
 			}
 			assertEncoderNALTypes(t, second.NALUnits, tt.wantNALs)
 			assertEncoderRTPSingleNALPackets(t, second, cfg.RTPMaxPayloadSize)
+			callbackStream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			callbackStream = append(callbackStream, annexBFromEncoderRTPPackets(t, callbackPackets)...)
+			assertEncoderVCLFrameNums(t, callbackStream, []uint8{5, 1}, []uint32{0, 1})
 			assertEncoderRTPSingleNALCallbackMetadata(t, callbackPackets, callbackMetadata, second, secondFrame, cfg, false, false)
 		})
 	}
@@ -7494,6 +7498,9 @@ func TestEncoderRTPPacketCallbackReceivesPFrameSingleNALMetadata(t *testing.T) {
 				t.Fatalf("callback packets/meta = %d/%d, want RTP packet count %d",
 					len(callbackPackets), len(callbackMetadata), len(second.RTPPackets))
 			}
+			callbackStream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			callbackStream = append(callbackStream, annexBFromEncoderRTPPackets(t, callbackPackets)...)
+			assertEncoderVCLFrameNums(t, callbackStream, []uint8{5, 1}, []uint32{0, 1})
 			for i, meta := range callbackMetadata {
 				pkt := callbackPackets[i]
 				if meta.PacketIndex != i || meta.PacketCount != len(second.RTPPackets) {

@@ -75,8 +75,10 @@ frame-number proof across disabled, default, and slice-boundary deblock controls
 RTP packetization-mode 0 IDR/P-frame single-NAL reassembly now has direct VCL
 frame-number proof across P-skip, exact P16x16, odd-pixel fallback, and changed-P
 IntraPCM rows, while packetization-mode 1 STAP-A IDR and changed-P recovery
-reassembly plus FU-A IDR fragmentation have direct VCL frame-number proof. Mode 0/1 RTP callbacks,
-caller-buffer `EncodeInto` allocation
+reassembly plus FU-A IDR fragmentation have direct VCL frame-number proof. Mode
+0/1 RTP callback packet clones now have direct VCL frame-number proof across
+IDR and admitted P-frame single-NAL rows before alias-mutation guards.
+Caller-buffer `EncodeInto` allocation
 canaries, and package-level `-benchmem` rows across Annex B, AVC, RTP including
 STAP-A IDR/changed-P and max-frame-size/late drop paths, shared RTP packet
 header and clipped-slice metadata guards, public NAL-unit metadata index guards
