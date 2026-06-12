@@ -549,6 +549,64 @@ func writeCAVLCResidualSingleLevel(bw *BitWriter, block []int32, n int, scantabl
 	return 1, nil
 }
 
+func writeCAVLCResidualTwoLevels(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
+	if bw == nil || maxCoeff <= 0 || maxCoeff > 16 || len(scantable) < maxCoeff {
+		return 0, ErrInvalidData
+	}
+	var scanIndex [2]int
+	var level [2]int32
+	totalCoeff := 0
+	for i := 0; i < maxCoeff; i++ {
+		pos := int(scantable[i])
+		if pos < 0 || n+pos < 0 || n+pos >= len(block) {
+			return 0, ErrInvalidData
+		}
+		v := block[n+pos]
+		if v == 0 {
+			continue
+		}
+		if v == 1 || v == -1 || totalCoeff == len(scanIndex) {
+			return 0, ErrInvalidData
+		}
+		scanIndex[totalCoeff] = i
+		level[totalCoeff] = v
+		totalCoeff++
+	}
+	if totalCoeff != 2 {
+		return 0, ErrInvalidData
+	}
+
+	if err := writeCAVLCCoeffToken(bw, totalCoeff, 0, predictedNnz, maxCoeff); err != nil {
+		return 0, err
+	}
+	firstLevel := level[totalCoeff-1]
+	firstCode, err := cavlcFirstLevelCode(firstLevel)
+	if err != nil {
+		return 0, err
+	}
+	if err := writeCAVLCLevelCode(bw, firstCode); err != nil {
+		return 0, err
+	}
+	suffixLength := cavlcSuffixLengthAfterFirstLevel(firstLevel, firstCode)
+	if err := writeCAVLCSubsequentLevel(bw, level[0], suffixLength); err != nil {
+		return 0, err
+	}
+
+	totalZeros := scanIndex[totalCoeff-1] + 1 - totalCoeff
+	if err := writeCAVLCTotalZeros(bw, totalZeros, totalCoeff, maxCoeff); err != nil {
+		return 0, err
+	}
+	zerosLeft := totalZeros
+	for i := totalCoeff - 2; i >= 0 && zerosLeft > 0; i-- {
+		runBefore := scanIndex[i+1] - scanIndex[i] - 1
+		if err := writeCAVLCRunBefore(bw, runBefore, zerosLeft); err != nil {
+			return 0, err
+		}
+		zerosLeft -= runBefore
+	}
+	return totalCoeff, nil
+}
+
 func writeCAVLCResidualSingleLevelTrailingOnes(bw *BitWriter, block []int32, n int, scantable []uint8, maxCoeff int, predictedNnz int) (int, error) {
 	if bw == nil || maxCoeff <= 0 || maxCoeff > 16 || len(scantable) < maxCoeff {
 		return 0, ErrInvalidData
@@ -620,6 +678,17 @@ func writeCAVLCFirstLevel(bw *BitWriter, level int32) error {
 	if bw == nil || level == 0 || level == 1 || level == -1 {
 		return ErrInvalidData
 	}
+	code, err := cavlcFirstLevelCode(level)
+	if err != nil {
+		return err
+	}
+	return writeCAVLCLevelCode(bw, code)
+}
+
+func cavlcFirstLevelCode(level int32) (int64, error) {
+	if level == 0 || level == 1 || level == -1 {
+		return 0, ErrInvalidData
+	}
 	adjusted := level - 1
 	if level < 0 {
 		adjusted = level + 1
@@ -629,9 +698,44 @@ func writeCAVLCFirstLevel(bw *BitWriter, level int32) error {
 		code = int64(-adjusted)*2 - 1
 	}
 	if code < 0 {
+		return 0, ErrInvalidData
+	}
+	return code, nil
+}
+
+func cavlcSuffixLengthAfterFirstLevel(level int32, code int64) int {
+	if code >= 14 {
+		return 2
+	}
+	suffixLength := 1
+	if uint32(level)+3 > 6 {
+		suffixLength = 2
+	}
+	return suffixLength
+}
+
+func writeCAVLCSubsequentLevel(bw *BitWriter, level int32, suffixLength int) error {
+	if bw == nil || level == 0 || suffixLength < 1 || suffixLength > 6 {
 		return ErrInvalidData
 	}
-	return writeCAVLCLevelCode(bw, code)
+	code := int64(level)*2 - 2
+	if level < 0 {
+		code = int64(-level)*2 - 1
+	}
+	prefix := code >> uint(suffixLength)
+	if code < 0 || prefix >= 15 {
+		return ErrInvalidData
+	}
+	for i := int64(0); i < prefix; i++ {
+		bw.WriteBit(0)
+	}
+	bw.WriteBit(1)
+	suffixMask := int64(1<<uint(suffixLength)) - 1
+	suffix := code & suffixMask
+	for i := suffixLength - 1; i >= 0; i-- {
+		bw.WriteBit(uint32((suffix >> uint(i)) & 1))
+	}
+	return nil
 }
 
 func writeCAVLCLevelCode(bw *BitWriter, code int64) error {
