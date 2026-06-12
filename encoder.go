@@ -382,14 +382,8 @@ func (frame EncodedFrame) NALData(index int) ([]byte, error) {
 		return nil, ErrInvalidData
 	}
 	unit := frame.NALUnits[index]
-	if unit.Offset < 0 || unit.Size <= 0 {
-		return nil, ErrInvalidData
-	}
-	end, err := checkedAddInt(unit.Offset, unit.Size)
-	if err != nil || end > len(frame.Data) {
-		return nil, ErrInvalidData
-	}
-	if unit.Type != 0 && unit.Type != frame.Data[unit.Offset]&0x1f {
+	end, err := frame.validateNALUnitMetadata(unit)
+	if err != nil {
 		return nil, ErrInvalidData
 	}
 	return frame.Data[unit.Offset:end:end], nil
@@ -415,14 +409,8 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 	start := -1
 	end := 0
 	for _, unit := range frame.NALUnits {
-		if unit.Offset < 4 || unit.Size <= 0 {
-			return nil, ErrInvalidData
-		}
-		unitEnd, err := checkedAddInt(unit.Offset, unit.Size)
-		if err != nil || unitEnd > len(frame.Data) {
-			return nil, ErrInvalidData
-		}
-		if unit.Type != 0 && unit.Type != frame.Data[unit.Offset]&0x1f {
+		unitEnd, err := frame.validateNALUnitMetadata(unit)
+		if err != nil || unit.Offset < 4 {
 			return nil, ErrInvalidData
 		}
 		prefixStart := unit.Offset - 4
@@ -443,6 +431,29 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 		return nil, ErrInvalidData
 	}
 	return frame.Data[start:end:end], nil
+}
+
+func (frame EncodedFrame) validateNALUnitMetadata(unit EncoderNALUnit) (int, error) {
+	if unit.Offset < 0 || unit.Size <= 0 {
+		return 0, ErrInvalidData
+	}
+	end, err := checkedAddInt(unit.Offset, unit.Size)
+	if err != nil || end > len(frame.Data) {
+		return 0, ErrInvalidData
+	}
+	if unit.Type == 0 {
+		return end, nil
+	}
+	if unit.Type != frame.Data[unit.Offset]&0x1f {
+		return 0, ErrInvalidData
+	}
+	if unit.ParameterSet != (unit.Type == 7 || unit.Type == 8) {
+		return 0, ErrInvalidData
+	}
+	if unit.KeyFrame != (unit.Type == 5 || unit.ParameterSet) {
+		return 0, ErrInvalidData
+	}
+	return end, nil
 }
 
 // AppendAccessUnitData appends a caller-owned copy of AccessUnitData to dst.
