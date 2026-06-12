@@ -1494,9 +1494,33 @@ func TestEncoderValidOutputReconfigurePreservesPendingIDR(t *testing.T) {
 		}
 		assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
 		assertRTPPacketMetadata(t, second.RTPPackets, payloadType, ssrc, uint16(len(first.RTPPackets)))
+
+		defaultSSRC := uint32(0x55667788)
+		if err := enc.SetRTPMetadata(0, defaultSSRC); err != nil {
+			t.Fatalf("SetRTPMetadata default payload type: %v", err)
+		}
+		if got := enc.Config(); got.RTPPayloadType != 96 || got.RTPSSRC != defaultSSRC {
+			t.Fatalf("defaulted RTP metadata = payload %d ssrc %#x, want 96/%#x",
+				got.RTPPayloadType, got.RTPSSRC, defaultSSRC)
+		}
+
+		thirdFrame := frame
+		thirdFrame.PTS += int64(cfg.RTPTimestampIncrement)
+		third, err := enc.Encode(thirdFrame)
+		if err != nil {
+			t.Fatalf("Encode after defaulted SetRTPMetadata: %v", err)
+		}
+		if third.Dropped || third.IDR || third.KeyFrame {
+			t.Fatalf("defaulted RTP metadata frame dropped=%v idr=%v key=%v, want delivered P-skip",
+				third.Dropped, third.IDR, third.KeyFrame)
+		}
+		assertEncoderNALTypes(t, third.NALUnits, []uint8{1})
+		assertRTPPacketMetadata(t, third.RTPPackets, 96, defaultSSRC, uint16(len(first.RTPPackets)+len(second.RTPPackets)))
+
 		stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
 		stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
-		assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
+		stream = append(stream, annexBFromEncoderRTPPackets(t, third.RTPPackets)...)
+		assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1}, []uint32{0, 1, 2})
 	})
 }
 
