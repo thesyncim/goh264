@@ -338,13 +338,15 @@ func EncodeI420P16x16NoResidualSliceRBSP(cfg EncoderI420P16x16NoResidualConfig) 
 		if err := bw.WriteUEGolomb(0); err != nil { // mb_skip_run
 			return nil, err
 		}
-		if err := bw.WriteUEGolomb(0); err != nil { // P_L0_16x16
-			return nil, err
+		mb := cavlcInterMacroblockSyntax{
+			cavlcMacroblockSyntax: cavlcMacroblockSyntax{
+				MBType:         MBType16x16 | MBTypeP0L0,
+				PartitionCount: 1,
+			},
+			Ref: [2][4]int32{{0}},
 		}
-		if err := writeCAVLCMVD(&bw, [2]int32{mvdX, mvdY}); err != nil {
-			return nil, err
-		}
-		if err := bw.WriteUEGolomb(0); err != nil { // coded_block_pattern
+		mb.MVD[0][0] = [2]int32{mvdX, mvdY}
+		if err := writeCAVLCInterPNoResidualMacroblock(&bw, mb, [2]uint32{1, 0}, true); err != nil {
 			return nil, err
 		}
 	}

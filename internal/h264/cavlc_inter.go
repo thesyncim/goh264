@@ -65,6 +65,98 @@ func writeCAVLCMVD(bw *BitWriter, mvd [2]int32) error {
 	return bw.WriteSEGolomb(mvd[1])
 }
 
+func writeCAVLCInterPNoResidualMacroblock(bw *BitWriter, mb cavlcInterMacroblockSyntax, refCount [2]uint32, decodeChroma bool) error {
+	if bw == nil {
+		return ErrInvalidData
+	}
+	if isIntra(mb.MBType) || mb.CBP != 0 {
+		return ErrUnsupported
+	}
+	if err := writeCAVLCMBType(bw, PictureTypeP, PictureTypeP, mb.cavlcMacroblockSyntax); err != nil {
+		return err
+	}
+
+	if mb.PartitionCount == 4 {
+		for i := 0; i < 4; i++ {
+			info := PMBInfo{Type: mb.SubMBType[i], PartitionCount: mb.SubPartitionCount[i]}
+			if err := writeCAVLCPSubMBType(bw, info); err != nil {
+				return err
+			}
+		}
+
+		refTotal := refCount[0]
+		if isRef0(mb.MBType) {
+			refTotal = 1
+		}
+		for i := 0; i < 4; i++ {
+			if isDir(mb.SubMBType[i], 0, 0) {
+				if err := writeCAVLCRefIndex(bw, refTotal, mb.Ref[0][i]); err != nil {
+					return err
+				}
+			}
+		}
+
+		for i := 0; i < 4; i++ {
+			if !isDir(mb.SubMBType[i], 0, 0) {
+				continue
+			}
+			blockWidth := 1
+			if mb.SubMBType[i]&(MBType16x16|MBType16x8) != 0 {
+				blockWidth = 2
+			}
+			for j := 0; j < int(mb.SubPartitionCount[i]); j++ {
+				index := 4*i + blockWidth*j
+				if err := writeCAVLCMVD(bw, mb.MVD[0][index]); err != nil {
+					return err
+				}
+			}
+		}
+	} else if is16x16(mb.MBType) {
+		if isDir(mb.MBType, 0, 0) {
+			if err := writeCAVLCRefIndex(bw, refCount[0], mb.Ref[0][0]); err != nil {
+				return err
+			}
+			if err := writeCAVLCMVD(bw, mb.MVD[0][0]); err != nil {
+				return err
+			}
+		}
+	} else if is16x8(mb.MBType) {
+		for i := 0; i < 2; i++ {
+			if isDir(mb.MBType, i, 0) {
+				if err := writeCAVLCRefIndex(bw, refCount[0], mb.Ref[0][i]); err != nil {
+					return err
+				}
+			}
+		}
+		for i := 0; i < 2; i++ {
+			if isDir(mb.MBType, i, 0) {
+				if err := writeCAVLCMVD(bw, mb.MVD[0][8*i]); err != nil {
+					return err
+				}
+			}
+		}
+	} else if is8x16(mb.MBType) {
+		for i := 0; i < 2; i++ {
+			if isDir(mb.MBType, i, 0) {
+				if err := writeCAVLCRefIndex(bw, refCount[0], mb.Ref[0][i]); err != nil {
+					return err
+				}
+			}
+		}
+		for i := 0; i < 2; i++ {
+			if isDir(mb.MBType, i, 0) {
+				if err := writeCAVLCMVD(bw, mb.MVD[0][4*i]); err != nil {
+					return err
+				}
+			}
+		}
+	} else {
+		return ErrUnsupported
+	}
+
+	return writeCAVLCCBP(bw, mb.MBType, decodeChroma, 0)
+}
+
 func (c *cavlcResidualContext) decodeCAVLCInterPMacroblock(gb *bitReader, pps *PPS, sps *SPS, qscale int, refCount [2]uint32, dct8x8Allowed bool) (cavlcInterMacroblockSyntax, error) {
 	var mb cavlcInterMacroblockSyntax
 	base, err := decodeCAVLCMBType(gb, PictureTypeP, PictureTypeP)
