@@ -62,6 +62,7 @@ printf '\nworktree-clean: pass\n' | tee -a "$summary"
 
 run_gate git-diff-check git diff --check
 run_gate git-diff-cached-check git diff --cached --check
+run_gate go-vet go vet ./...
 run_gate go-test-all go test ./...
 
 if [[ -s testdata/h264/realvectors/failures.jsonl && "${GOH264_RELEASE_ALLOW_KNOWN_RED:-0}" != "1" ]]; then

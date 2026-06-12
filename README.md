@@ -596,6 +596,7 @@ No tag should be treated as production until a release-evidence pass proves:
 - `scripts/h264-release-evidence.sh` is green as the combined decoder and
   admitted-encoder release gate.
 - `scripts/h264-decoder-release-evidence.sh` is green.
+- `go vet ./...` is green.
 - `go test ./...` is green.
 - `scripts/h264-real-vector-strict.sh` is green.
 - `GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v` is green.
@@ -616,7 +617,8 @@ No tag should be treated as production until a release-evidence pass proves:
 - `scripts/h264-performance-evidence.sh` creates the local performance bundle
   with JSON benchmark output plus CPU/heap profiles.
 - `scripts/h264-encoder-release-evidence.sh` is green for the admitted
-  realtime/WebRTC encoder contract, writer, allocation, and benchmark gates.
+  realtime/WebRTC encoder vet, contract, writer, allocation, and benchmark
+  gates.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support remains non-production until

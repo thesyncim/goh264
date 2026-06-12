@@ -382,8 +382,9 @@ Encoder support is not production-ready until:
 - Encoded streams pass local and FFmpeg decode oracles.
 - WebRTC packetization tests cover every exposed packetization control.
 - Allocation and realtime budget gates are checked into the normal release
-  evidence. The admitted local contract, writer, allocation, and `-benchmem`
-  rows are now bundled by `scripts/h264-encoder-release-evidence.sh`; broader
-  production status still requires the combined
-  `scripts/h264-release-evidence.sh` pass plus the remaining motion-search,
-  residual, rate-control, and packetizer breadth above.
+  evidence. The admitted local vet, contract, writer, allocation, and
+  `-benchmem` rows are now bundled by
+  `scripts/h264-encoder-release-evidence.sh`; broader production status still
+  requires the combined `scripts/h264-release-evidence.sh` pass plus the
+  remaining motion-search, residual, rate-control, and packetizer breadth
+  above.

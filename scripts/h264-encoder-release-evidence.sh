@@ -52,6 +52,7 @@ printf '\nworktree-clean: pass\n' | tee -a "$summary"
 
 run_gate git-diff-check git diff --check
 run_gate git-diff-cached-check git diff --cached --check
+run_gate go-vet go vet ./...
 run_gate go-test-all go test ./...
 run_gate encoder-contract go test ./tests -run '^TestEncoder' -count=1 -v
 run_gate encoder-allocation-canary go test ./tests -run '^TestEncoderEncodeIntoAllocationCanary$' -count=1 -v
