@@ -109,9 +109,12 @@ type Packet struct {
 // payloads.
 func (pkt Packet) Clone() Packet {
 	clone := Packet{
-		Data:     cloneByteSlice(pkt.Data),
-		SideData: make([]PacketSideData, len(pkt.SideData)),
+		Data: cloneByteSlice(pkt.Data),
 	}
+	if len(pkt.SideData) == 0 {
+		return clone
+	}
+	clone.SideData = make([]PacketSideData, len(pkt.SideData))
 	for i, side := range pkt.SideData {
 		clone.SideData[i] = side.Clone()
 	}

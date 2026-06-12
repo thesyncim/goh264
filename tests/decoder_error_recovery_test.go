@@ -357,6 +357,13 @@ func TestPacketSideDataCloneDeepCopiesPayload(t *testing.T) {
 	}
 }
 
+func TestPacketClonePreservesZeroValue(t *testing.T) {
+	var packet Packet
+	if clone := packet.Clone(); clone.Data != nil || clone.SideData != nil {
+		t.Fatalf("zero Packet.Clone = %+v, want zero Packet", clone)
+	}
+}
+
 func TestPacketCloneDeepCopiesDataAndSideData(t *testing.T) {
 	config, samples := annexBToAVCConfigAndSamples(t, decodeHexFixture(t, black16IPAnnexBHex), 4)
 	if len(samples) != 2 {
