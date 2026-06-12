@@ -270,54 +270,66 @@ owned, err := out.Clone()   // deep-owned snapshot for async retention
 err = enc.Reset()           // clear encoder coding state, keep config/callback
 ```
 
-`EncoderConfig.Normalize` exposes the exact validated configuration stored by
-`NewEncoder`. `EncoderConfig.ParameterSets` and
-`EncoderConfig.RecoveryPointSEIMessage` generate the same caller-owned helper surfaces
-without constructing a live encoder. `EncoderConfig.ValidateFrame` and
-`Encoder.ValidateFrame` validate frame shape before bitstream work; invalid
-frames return empty output without advancing RTP sequence, callback,
-frame-number, timestamp, or reference state, then valid input resumes as the
-expected P-skip, or as the queued IDR when a prior IDR request was pending.
-`EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
-async handoff.
-Overflowed caller-owned `EncodeInto` destination growth is also rejected across
-Annex B, AVC, and RTP without consuming queued IDR state or advancing
-RTP/callback state, and the same hard-error path preserves P-frame reference
-and frame-number state before the next P-skip.
-They emit the admitted IDR IntraPCM, identical-reference P-skip, exact
-macroblock-aligned frame-wide or per-macroblock P16x16 no-residual, or
-changed-frame P IntraPCM frame path, optionally split into configured
-multi-slice VCL NALs. Exact P16x16 is admitted for disabled, enabled, and
-slice-boundary deblock frames, including multi-macroblock frames.
-Changed-frame P IntraPCM recovery
-pictures carry recovery-point SEI when enabled. RTP output includes payloads
-plus complete RTP
-packet bytes, packetization-mode 0 single-NAL output, packetization-mode 1
-FU-A/STAP-A output with small-payload STAP-A fallback to non-aggregated mode-1
-packets plus accurate fallback-IDR and post-fallback P-skip callback payload
-metadata and callback packet isolation, RTP packet storage isolated from `EncodedFrame.Data`,
-public `EncodedFrame.RTPPacketData` and `EncodedFrame.RTPPayloadData` helpers,
-deep-owned `EncodedFrame.Clone` snapshots for retained results,
-optional per-packet callback metadata including mode 0/1
-IDR/P-frame single-NAL packets for multi-slice IDR, P-skip, exact P16x16,
-odd-pixel constant chroma, and P IntraPCM fallback rows with callback packet storage isolated from
-the returned RTP packets, mode-0 oversize rejection live-state rollback for
-queued-IDR and P-frame paths, and automatic
-timestamp progression when frames omit explicit PTS. SPS/PPS cadence modes now
-separate in-band keyframe headers, out-of-band headers, and every-IDR emission,
-and runtime reconfiguration can switch output format and RTP packetization
-controls, including RTP-to-configured-AVC forced IDR/P-skip decode with
-out-of-band parameter sets and paused RTP packets/callbacks, plus
+The admitted encoder contract is deliberately narrow:
+
+- `EncoderConfig.Normalize` exposes the exact validated configuration stored by
+  `NewEncoder`.
+- `EncoderConfig.ParameterSets` and `EncoderConfig.RecoveryPointSEIMessage`
+  generate caller-owned helper surfaces without constructing a live encoder.
+- `EncoderConfig.ValidateFrame` and `Encoder.ValidateFrame` validate frame shape
+  before bitstream work. Invalid frames return empty output without advancing
+  RTP sequence, callback, frame-number, timestamp, or reference state. The next
+  valid input resumes as P-skip, or as the queued IDR when an IDR request was
+  already pending.
+- `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
+  async handoff.
+- Overflowed caller-owned `EncodeInto` destination growth is rejected across
+  Annex B, AVC, and RTP without consuming queued IDR state or advancing
+  RTP/callback state. The same hard-error path preserves P-frame reference and
+  frame-number state before the next P-skip.
+
+Current emitted frame types are IDR IntraPCM, identical-reference P-skip, exact
+macroblock-aligned frame-wide or per-macroblock P16x16 no-residual, and
+changed-frame P IntraPCM. Output can be split into configured multi-slice VCL
+NALs. Exact P16x16 is admitted for disabled, enabled, and slice-boundary deblock
+frames, including multi-macroblock frames. Changed-frame P IntraPCM recovery
+pictures carry recovery-point SEI when enabled.
+
+RTP output currently covers:
+
+- payload bytes plus complete RTP packet bytes;
+- packetization-mode 0 single-NAL output;
+- packetization-mode 1 FU-A/STAP-A output, including small-payload STAP-A
+  fallback to non-aggregated mode-1 packets;
+- accurate fallback-IDR and post-fallback P-skip callback payload metadata;
+- RTP packet storage isolated from `EncodedFrame.Data`;
+- public `EncodedFrame.RTPPacketData` and `EncodedFrame.RTPPayloadData` helpers;
+- deep-owned `EncodedFrame.Clone` snapshots for retained results;
+- optional per-packet callback metadata for mode 0/1 IDR/P-frame single-NAL
+  packets, including multi-slice IDR, P-skip, exact P16x16, odd-pixel constant
+  chroma, and P IntraPCM fallback rows;
+- callback packet storage isolated from returned RTP packets;
+- mode-0 oversize rejection with live-state rollback for queued-IDR and P-frame
+  paths;
+- automatic timestamp progression when frames omit explicit PTS.
+
+SPS/PPS cadence modes separate in-band keyframe headers, out-of-band headers,
+and every-IDR emission. Runtime reconfiguration can switch output format and RTP
+packetization controls, including RTP-to-configured-AVC forced IDR/P-skip decode
+with out-of-band parameter sets and paused RTP packets/callbacks, and
 configured-AVC-to-RTP forced IDR/P-skip packetization with sequence/callback
-start, plus rate-control/QP/GOP/deblock controls while preserving state on
-rejected updates. Bitrate-budget drops use the configured `MaxBitrate` refill
-rate and `VBVBufferSize` burst capacity, then surface through
-`EncodedFrame.Dropped` when `FrameDropToBitrate` is active; caller-buffer
-`EncodeInto` drops return empty output without RTP packets or callbacks before
-the next valid frame resumes as P-skip.
-Motion search beyond the bounded 8-pixel exact macroblock-aligned inter path,
-quantized residual coding, and adaptive rate-control feedback are still future
-encoder slices.
+start. Rejected rate-control, QP, GOP, deblock, output, and RTP updates preserve
+live state.
+
+Bitrate-budget drops use the configured `MaxBitrate` refill rate and
+`VBVBufferSize` burst capacity, then surface through `EncodedFrame.Dropped` when
+`FrameDropToBitrate` is active. Caller-buffer `EncodeInto` drops return empty
+output without RTP packets or callbacks before the next valid frame resumes as
+P-skip.
+
+Still future: motion search beyond the bounded 8-pixel exact
+macroblock-aligned inter path, quantized residual coding, and adaptive
+rate-control feedback.
 
 ## Supported Inputs
 
@@ -422,9 +434,10 @@ the oracle-checked benchmark run; `GOH264_BENCH_CPU_PROFILE` and
 `GOH264_BENCH_MEM_PROFILE` forward those paths through the real-vector
 benchmark script.
 For repeated `go test -benchmem` samples covering one-shot Annex B decode,
-stateful Annex B access-unit streaming, isolated raw-output export, and the admitted realtime encoder
-IDR/P-frame Annex B/AVC/RTP paths, including RTP P-IntraPCM and
-packetization-mode 0 IDR/P-frame rows, suitable for `benchstat`, run:
+stateful Annex B access-unit streaming, isolated raw-output export, and the
+admitted realtime encoder IDR/P-frame Annex B/AVC/RTP paths, including RTP
+P-IntraPCM and packetization-mode 0 IDR/P-frame rows, suitable for `benchstat`,
+run:
 
 ```sh
 scripts/h264-benchstat-canary.sh
