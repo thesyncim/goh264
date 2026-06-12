@@ -1008,6 +1008,33 @@ func TestEncoderValidSetterPreservesPendingIDR(t *testing.T) {
 		{name: "SetRTPMaxPayloadSize", call: func(enc *goh264.Encoder) error {
 			return enc.SetRTPMaxPayloadSize(1000)
 		}},
+		{name: "SetMaxFrameSize", call: func(enc *goh264.Encoder) error {
+			return enc.SetMaxFrameSize(4096)
+		}},
+		{name: "SetMaxFrameSize zero", call: func(enc *goh264.Encoder) error {
+			if err := enc.SetMaxFrameSize(4096); err != nil {
+				return err
+			}
+			return enc.SetMaxFrameSize(0)
+		}},
+		{name: "SetSliceMaxBytes", call: func(enc *goh264.Encoder) error {
+			return enc.SetSliceMaxBytes(4096)
+		}},
+		{name: "SetSliceMaxBytes zero", call: func(enc *goh264.Encoder) error {
+			if err := enc.SetSliceMaxBytes(4096); err != nil {
+				return err
+			}
+			return enc.SetSliceMaxBytes(0)
+		}},
+		{name: "SetMaxEncodeTimeUS", call: func(enc *goh264.Encoder) error {
+			return enc.SetMaxEncodeTimeUS(10_000_000)
+		}},
+		{name: "SetMaxEncodeTimeUS zero", call: func(enc *goh264.Encoder) error {
+			if err := enc.SetMaxEncodeTimeUS(10_000_000); err != nil {
+				return err
+			}
+			return enc.SetMaxEncodeTimeUS(0)
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
