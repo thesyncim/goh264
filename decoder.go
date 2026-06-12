@@ -2119,7 +2119,7 @@ func cloneByteSlices(src [][]byte) [][]byte {
 	}
 	out := make([][]byte, len(src))
 	for i := range src {
-		out[i] = append([]byte(nil), src[i]...)
+		out[i] = cloneByteSlice(src[i])
 	}
 	return out
 }

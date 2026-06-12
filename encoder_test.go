@@ -207,6 +207,23 @@ func TestFrameSideDataFromH264RejectsOverflowedUserDataListClone(t *testing.T) {
 	}
 }
 
+func TestFrameSideDataFromH264RejectsOverflowedUserDataPayloadClone(t *testing.T) {
+	src := h264.DecodedFrameSideData{UserDataUnregistered: [][]byte{
+		fakeEncoderBytesLen(maxInt/2 + 1),
+		{0x01, 0x02},
+	}}
+	got := frameSideDataFromH264(src, 0, 0)
+	if len(got.UserDataUnregistered) != 2 {
+		t.Fatalf("unregistered user data len = %d, want 2", len(got.UserDataUnregistered))
+	}
+	if got.UserDataUnregistered[0] != nil {
+		t.Fatalf("overflowed unregistered user data payload = len %d, want nil", len(got.UserDataUnregistered[0]))
+	}
+	if len(got.UserDataUnregistered[1]) != 2 || got.UserDataUnregistered[1][0] != 0x01 {
+		t.Fatalf("valid unregistered user data payload = %x, want 0102", got.UserDataUnregistered[1])
+	}
+}
+
 func TestFrameFromH264ClonesPublicPlanes(t *testing.T) {
 	src := &h264.DecodedFrame{
 		Width:  2,
