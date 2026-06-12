@@ -9078,6 +9078,121 @@ func TestEncoderConstantQPDoesNotApplyDerivedBitrateBudgetAcrossReconfigure(t *t
 	}
 }
 
+func TestEncoderSetRateControlTogglesDerivedBitrateBudget(t *testing.T) {
+	probeFrame := patternedI420EncoderFrame(16, 16)
+	probeCfg := goh264.DefaultEncoderConfig(16, 16)
+	probeCfg.DeblockMode = goh264.EncoderDeblockDisabled
+	probeCfg.FrameDrop = goh264.EncoderFrameDropDisabled
+	probe, err := goh264.NewEncoder(probeCfg)
+	if err != nil {
+		t.Fatalf("NewEncoder probe: %v", err)
+	}
+	probeIDR, err := probe.Encode(probeFrame)
+	if err != nil {
+		t.Fatalf("probe IDR: %v", err)
+	}
+	probePSkip, err := probe.Encode(probeFrame)
+	if err != nil {
+		t.Fatalf("probe P-skip: %v", err)
+	}
+	idrBytes := len(probeIDR.Data)
+	pskipBytes := len(probePSkip.Data)
+	if idrBytes == 0 || pskipBytes < 2 {
+		t.Fatalf("probe sizes IDR/P-skip = %d/%d, want IDR > 0 and P-skip >= 2 bytes", idrBytes, pskipBytes)
+	}
+
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RateControl = goh264.EncoderRateControlConstantQP
+	cfg.TargetBitrate = (pskipBytes - 1) * 8 * cfg.FrameRateNum / cfg.FrameRateDen
+	cfg.MaxBitrate = cfg.TargetBitrate
+	cfg.VBVBufferSize = (pskipBytes - 1) * 8
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = int64(cfg.RTPTimestampIncrement)
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode ConstantQP low-budget IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR || len(first.Data) != idrBytes {
+		t.Fatalf("ConstantQP low-budget output dropped=%v idr=%v data=%d, want transmitted IDR size %d",
+			first.Dropped, first.IDR, len(first.Data), idrBytes)
+	}
+	assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+	firstPacketCount := len(first.RTPPackets)
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("ConstantQP callbacks = %d, want %d", callbackCalls, firstPacketCount)
+	}
+
+	if err := enc.SetRateControl(goh264.EncoderRateControlCBR); err != nil {
+		t.Fatalf("SetRateControl CBR: %v", err)
+	}
+	if got := enc.Config().RateControl; got != goh264.EncoderRateControlCBR {
+		t.Fatalf("rate control = %v, want CBR", got)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetRateControl CBR queued unexpected IDR")
+	}
+	cbrFrame := frame
+	cbrFrame.PTS = frame.PTS + int64(cfg.RTPTimestampIncrement)
+	cbrDropped, err := enc.Encode(cbrFrame)
+	if err != nil {
+		t.Fatalf("Encode low-budget CBR P-skip: %v", err)
+	}
+	if !cbrDropped.Dropped || len(cbrDropped.Data) != 0 || len(cbrDropped.NALUnits) != 0 || len(cbrDropped.RTPPackets) != 0 {
+		t.Fatalf("low-budget CBR output = %+v, want dropped metadata without output", cbrDropped)
+	}
+	if cbrDropped.RTPTime != first.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("low-budget CBR RTP time = %d, want %d", cbrDropped.RTPTime, first.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("low-budget CBR callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+	}
+
+	if err := enc.SetRateControl(goh264.EncoderRateControlConstantQP); err != nil {
+		t.Fatalf("SetRateControl ConstantQP: %v", err)
+	}
+	if got := enc.Config().RateControl; got != goh264.EncoderRateControlConstantQP {
+		t.Fatalf("rate control = %v, want ConstantQP", got)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("SetRateControl ConstantQP queued unexpected IDR")
+	}
+	recoveredFrame := frame
+	recoveredFrame.PTS = cbrFrame.PTS + int64(cfg.RTPTimestampIncrement)
+	recovered, err := enc.Encode(recoveredFrame)
+	if err != nil {
+		t.Fatalf("Encode ConstantQP after CBR drop: %v", err)
+	}
+	if recovered.Dropped || recovered.IDR || len(recovered.Data) != pskipBytes {
+		t.Fatalf("post-CBR ConstantQP output dropped=%v idr=%v data=%d, want transmitted P-skip size %d",
+			recovered.Dropped, recovered.IDR, len(recovered.Data), pskipBytes)
+	}
+	if recovered.RTPTime != cbrDropped.RTPTime+cfg.RTPTimestampIncrement {
+		t.Fatalf("post-CBR ConstantQP RTP time = %d, want %d",
+			recovered.RTPTime, cbrDropped.RTPTime+cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
+	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+		t.Fatalf("post-CBR ConstantQP callbacks = %d, want %d",
+			callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+	}
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, recovered.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+}
+
 func TestEncoderFrameDropLateDropsOverBudgetFrameWithoutAdvancingReferenceOrPacketState(t *testing.T) {
 	for _, format := range []struct {
 		name string
