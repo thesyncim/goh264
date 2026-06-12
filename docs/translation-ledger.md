@@ -77,7 +77,8 @@ frame-number proof across P-skip, exact P16x16, odd-pixel fallback, and changed-
 IntraPCM rows, while packetization-mode 1 STAP-A IDR and changed-P recovery
 reassembly plus FU-A IDR fragmentation have direct VCL frame-number proof. Mode
 0/1 RTP callback packet clones now have direct VCL frame-number proof across
-IDR and admitted P-frame single-NAL rows before alias-mutation guards.
+IDR and admitted P-frame single-NAL rows plus pre-mutation WebRTC STAP-A/FU-A
+callback snapshots before alias-mutation guards.
 Caller-buffer `EncodeInto` allocation
 canaries, and package-level `-benchmem` rows across Annex B, AVC, RTP including
 STAP-A IDR/changed-P and max-frame-size/late drop paths, shared RTP packet

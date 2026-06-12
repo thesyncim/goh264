@@ -7168,9 +7168,20 @@ func TestEncoderRTPPacketCallbackReceivesWebRTCMetadata(t *testing.T) {
 	}
 
 	var callbackPackets []goh264.EncoderRTPPacket
+	var callbackPacketsBeforeMutation []goh264.EncoderRTPPacket
 	var callbackMetadata []goh264.EncoderRTPPacketMetadata
 	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
 		callbackPackets = append(callbackPackets, pkt)
+		data := append([]byte(nil), pkt.Data...)
+		callbackPacketsBeforeMutation = append(callbackPacketsBeforeMutation, goh264.EncoderRTPPacket{
+			Data:           data,
+			Payload:        data[12:],
+			PayloadType:    pkt.PayloadType,
+			SequenceNumber: pkt.SequenceNumber,
+			Timestamp:      pkt.Timestamp,
+			SSRC:           pkt.SSRC,
+			Marker:         pkt.Marker,
+		})
 		callbackMetadata = append(callbackMetadata, meta)
 		if len(pkt.Payload) != 0 {
 			pkt.Payload[0] ^= 0xff
@@ -7193,6 +7204,7 @@ func TestEncoderRTPPacketCallbackReceivesWebRTCMetadata(t *testing.T) {
 	if len(out.RTPPackets) < 3 {
 		t.Fatalf("RTP packet count = %d, want STAP-A plus FU-A fragments", len(out.RTPPackets))
 	}
+	assertEncoderVCLFrameNums(t, annexBFromEncoderRTPPackets(t, callbackPacketsBeforeMutation), []uint8{5}, []uint32{0})
 
 	var sawSTAPA, sawFUAStart, sawFUAEnd bool
 	for i, meta := range callbackMetadata {
