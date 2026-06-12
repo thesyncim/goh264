@@ -682,6 +682,55 @@ func TestDecodePacketFramesPacketSideDataMapsToFrame(t *testing.T) {
 	}
 }
 
+func TestDecodePacketFramesPacketSideDataDoesNotRepeat(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	extradata, _ := annexBParameterSetsAndPacket(t, data)
+	_, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	firstPacket := avcSampleToAnnexB(t, samples[0], 4)
+	secondPacket := avcSampleToAnnexB(t, samples[1], 4)
+
+	dec := NewDecoder()
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data: firstPacket,
+		SideData: []PacketSideData{
+			{Type: PacketSideDataNewExtradata, Data: extradata},
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0x01, 0x02, 0x03}},
+			{Type: PacketSideDataActiveFormat, Data: []byte{0x0a}},
+			{Type: PacketSideDataS12MTimecode, Data: []byte{
+				0x01, 0x00, 0x00, 0x00,
+				0x44, 0x33, 0x22, 0x11,
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames first packet: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if got, want := frames[0].SideData.A53ClosedCaptions, []byte{0x01, 0x02, 0x03}; !bytes.Equal(got, want) {
+		t.Fatalf("first packet a53 captions = %x, want %x", got, want)
+	}
+	if frames[0].SideData.ActiveFormat == nil || frames[0].SideData.ActiveFormat.Description != 0x0a {
+		t.Fatalf("first packet active format = %+v", frames[0].SideData.ActiveFormat)
+	}
+	if got, want := frames[0].SideData.S12MTimecodes, []uint32{0x11223344}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("first packet s12m timecodes = %08x, want %08x", got, want)
+	}
+
+	frames, err = dec.DecodePacketFrames(Packet{Data: secondPacket})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames second packet: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if len(frames[0].SideData.A53ClosedCaptions) != 0 ||
+		frames[0].SideData.ActiveFormat != nil ||
+		len(frames[0].SideData.S12MTimecodes) != 0 {
+		t.Fatalf("second packet repeated packet side data: %+v", frames[0].SideData)
+	}
+}
+
 func TestDecodePacketFramesGlobalPacketSideDataMapsToFrame(t *testing.T) {
 	primaries := [3][2]uint16{{30000, 35000}, {10000, 20000}, {15000, 25000}}
 	white := [2]uint16{15635, 16450}
