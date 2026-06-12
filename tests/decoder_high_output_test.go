@@ -4,6 +4,7 @@ package goh264_test
 
 import (
 	"bytes"
+	"errors"
 	"reflect"
 	"testing"
 	"unsafe"
@@ -124,6 +125,44 @@ func TestFrameRawPixelFormatAndSize(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFrameRawOutputRejectsNilFrame(t *testing.T) {
+	var frame *Frame
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("nil frame raw-output helper panicked: %v", r)
+		}
+	}()
+
+	if got, err := frame.BytesPerSample(); got != 0 || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("BytesPerSample nil frame = (%d, %v), want (0, ErrInvalidData)", got, err)
+	}
+	if got, err := frame.RawPixelFormat(); got != "" || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("RawPixelFormat nil frame = (%q, %v), want empty format and ErrInvalidData", got, err)
+	}
+	if got, err := frame.RawYUVSize(); got != 0 || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("RawYUVSize nil frame = (%d, %v), want (0, ErrInvalidData)", got, err)
+	}
+
+	byteDst, byteBefore := decoderPrefilledByteBuffer()
+	if got, err := frame.AppendRawYUV(byteDst); len(got) != len(byteDst) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("AppendRawYUV nil frame got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+	assertDecoderByteBufferUnchanged(t, byteDst, byteBefore)
+
+	byteLEDst, byteLEBefore := decoderPrefilledByteBuffer()
+	if got, err := frame.AppendRawYUVBytesLE(byteLEDst); len(got) != len(byteLEDst) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("AppendRawYUVBytesLE nil frame got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+	assertDecoderByteBufferUnchanged(t, byteLEDst, byteLEBefore)
+
+	uint16Dst, uint16Before := decoderPrefilledUint16Buffer()
+	if got, err := frame.AppendRawYUV16(uint16Dst); len(got) != len(uint16Dst) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("AppendRawYUV16 nil frame got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+	assertDecoderUint16BufferUnchanged(t, uint16Dst, uint16Before)
 }
 
 func TestFrameAppendRawYUV16AndBytesLEPreserveSamplesAndCrop(t *testing.T) {
