@@ -1091,6 +1091,9 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 		{name: "bitrate", update: goh264.EncoderReconfigure{TargetBitrate: 800_000, MaxBitrate: 900_000}, wantNALs: []uint8{7, 8, 5}},
 		{name: "frame rate", update: goh264.EncoderReconfigure{FrameRateNum: 60, FrameRateDen: 1}, wantNALs: []uint8{7, 8, 5}},
 		{name: "payload size", update: goh264.EncoderReconfigure{RTPMaxPayloadSize: 1000}, wantNALs: []uint8{7, 8, 5}},
+		{name: "max frame size", update: goh264.EncoderReconfigure{MaxFrameSize: 4096}, wantNALs: []uint8{7, 8, 5}},
+		{name: "slice max bytes", update: goh264.EncoderReconfigure{SliceMaxBytes: 4096}, wantNALs: []uint8{7, 8, 5}},
+		{name: "max encode time", update: goh264.EncoderReconfigure{MaxEncodeTimeUS: 10_000_000}, wantNALs: []uint8{7, 8, 5}},
 		{name: "timestamp increment", update: goh264.EncoderReconfigure{RTPTimestampIncrement: 1234}, wantNALs: []uint8{7, 8, 5}, wantRTPIncrement: 1234},
 		{name: "deblock", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockDisabled}, wantNALs: []uint8{7, 8, 5}},
 		{name: "sps pps cadence", update: goh264.EncoderReconfigure{
