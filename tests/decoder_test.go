@@ -327,6 +327,47 @@ func TestFrameCloneRejectsNilFrame(t *testing.T) {
 	}
 }
 
+func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
+	side := FrameSideData{
+		UserDataUnregistered: [][]byte{{1, 2, 3}},
+		A53ClosedCaptions:    []byte{4, 5},
+		S12MTimecodes:        []uint32{6, 7},
+		PictureTiming:        &PictureTiming{PicStruct: 1, Timecode: []Timecode{{Full: true, Frame: 12}}},
+		RecoveryPoint:        &RecoveryPoint{RecoveryFrameCount: 2},
+		ICCProfile:           []byte{14, 15},
+		DynamicHDR10Plus:     []byte{16},
+		LCEVC:                []byte{17},
+		ReferenceDisplays:    &ReferenceDisplaysInfo{Displays: []ReferenceDisplay{{LeftViewID: 18, RightViewID: 19}}},
+	}
+	clone := side.Clone()
+	if !reflect.DeepEqual(clone, side) {
+		t.Fatalf("FrameSideData.Clone = %+v, want %+v", clone, side)
+	}
+	if &clone.UserDataUnregistered[0][0] == &side.UserDataUnregistered[0][0] ||
+		&clone.A53ClosedCaptions[0] == &side.A53ClosedCaptions[0] ||
+		&clone.S12MTimecodes[0] == &side.S12MTimecodes[0] ||
+		&clone.PictureTiming.Timecode[0] == &side.PictureTiming.Timecode[0] ||
+		&clone.ICCProfile[0] == &side.ICCProfile[0] ||
+		&clone.DynamicHDR10Plus[0] == &side.DynamicHDR10Plus[0] ||
+		&clone.LCEVC[0] == &side.LCEVC[0] ||
+		&clone.ReferenceDisplays.Displays[0] == &side.ReferenceDisplays.Displays[0] {
+		t.Fatal("FrameSideData.Clone aliases source slices")
+	}
+	if clone.PictureTiming == side.PictureTiming ||
+		clone.RecoveryPoint == side.RecoveryPoint ||
+		clone.ReferenceDisplays == side.ReferenceDisplays {
+		t.Fatal("FrameSideData.Clone aliases source pointers")
+	}
+	side.UserDataUnregistered[0][0] ^= 0xff
+	side.PictureTiming.Timecode[0].Frame++
+	side.ReferenceDisplays.Displays[0].LeftViewID++
+	if clone.UserDataUnregistered[0][0] == side.UserDataUnregistered[0][0] ||
+		clone.PictureTiming.Timecode[0].Frame == side.PictureTiming.Timecode[0].Frame ||
+		clone.ReferenceDisplays.Displays[0].LeftViewID == side.ReferenceDisplays.Displays[0].LeftViewID {
+		t.Fatal("mutating source side data changed clone")
+	}
+}
+
 func TestFrameCloneDeepCopiesPlanesAndSideData(t *testing.T) {
 	frame := &Frame{
 		Width:           2,

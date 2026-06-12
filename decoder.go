@@ -151,6 +151,11 @@ type FrameSideData struct {
 	ReferenceDisplays    *ReferenceDisplaysInfo
 }
 
+// Clone returns a deep-owned copy of the decoded frame side data.
+func (side FrameSideData) Clone() FrameSideData {
+	return cloneFrameSideData(side)
+}
+
 type PictureTiming struct {
 	PicStruct       int32
 	CTType          int32
