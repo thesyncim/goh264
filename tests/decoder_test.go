@@ -970,6 +970,40 @@ func TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStaleP
 	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
 }
 
+func TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference(t *testing.T) {
+	extradata16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
+	extradata32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	if len(packets16) != 2 || len(packets32) != 2 {
+		t.Fatalf("packet counts = %d/%d, want 2/2", len(packets16), len(packets32))
+	}
+
+	dec := NewDecoder()
+	out, err := dec.DecodePacketFrames(Packet{
+		Data:     packets16[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 Annex B NEW_EXTRADATA IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
+	}
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     packets32[1],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata32}},
+	})
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 Annex B P-skip after incompatible NEW_EXTRADATA = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+
+	out, err = dec.DecodePacketFrames(Packet{Data: packets32[0]})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 32x16 Annex B IDR after stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
 func encodeDecoderAVCTestStream(t *testing.T, width int, height int) ([]byte, [][]byte, []goh264.EncoderFrame) {
 	t.Helper()
 	cfg := goh264.DefaultEncoderConfig(width, height)
@@ -1000,6 +1034,41 @@ func encodeDecoderAVCTestStream(t *testing.T, width int, height int) ([]byte, []
 			width, height, firstOut.IDR, len(firstOut.Data), secondOut.IDR, len(secondOut.Data))
 	}
 	return headers.AVCDecoderConfigurationRecord, [][]byte{firstOut.Data, secondOut.Data}, []goh264.EncoderFrame{first, second}
+}
+
+func encodeDecoderAnnexBTestStream(t *testing.T, width int, height int) ([]byte, [][]byte, []goh264.EncoderFrame) {
+	t.Helper()
+	cfg := goh264.DefaultEncoderConfig(width, height)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder %dx%d Annex B: %v", width, height, err)
+	}
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets %dx%d Annex B: %v", width, height, err)
+	}
+	first := patternedI420EncoderFrame(width, height)
+	firstOut, err := enc.Encode(first)
+	if err != nil {
+		t.Fatalf("Encode first %dx%d Annex B: %v", width, height, err)
+	}
+	second := first
+	second.PTS = int64(cfg.RTPTimestampIncrement)
+	secondOut, err := enc.Encode(second)
+	if err != nil {
+		t.Fatalf("Encode second %dx%d Annex B: %v", width, height, err)
+	}
+	if !firstOut.IDR || secondOut.IDR || len(firstOut.Data) == 0 || len(secondOut.Data) == 0 || len(headers.AnnexB) == 0 {
+		t.Fatalf("encoded %dx%d Annex B IDR/P state first idr=%v bytes=%d second idr=%v bytes=%d extradata=%d",
+			width, height, firstOut.IDR, len(firstOut.Data), secondOut.IDR, len(secondOut.Data), len(headers.AnnexB))
+	}
+	return append([]byte(nil), headers.AnnexB...),
+		[][]byte{append([]byte(nil), firstOut.Data...), append([]byte(nil), secondOut.Data...)},
+		[]goh264.EncoderFrame{first, second}
 }
 
 func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {

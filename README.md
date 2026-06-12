@@ -217,7 +217,9 @@ the configuration and drains delayed output without reporting an invalid packet.
 Use this for ordinary in-stream avcC updates and IDR-bound stream switches. For
 an unrelated stream where the decoder cannot infer the boundary from avcC,
 call `Reset` before storing the new avcC. `PacketSideDataNewExtradata` uses the
-same stateful update rule when it carries avcC data.
+same stateful update rule when it carries avcC or Annex B parameter-set data:
+compatible updates retain references; incompatible active SPS changes reset
+picture state before decoding.
 
 Parse headers without decoding full frames:
 
@@ -283,7 +285,7 @@ suppress later duplicates.
 | --- | --- |
 | `Decoder.DecodeFrames` / `DecodePacketFrames` | Retain decoder references and delayed output across stream packets; empty input flushes delayed frames. |
 | `Decoder.ConfigureAVCC` | Stores avcC metadata and resets decoder picture state for a new configured-AVC stream. |
-| `Decoder.DecodeAVCCFrames` / packet `NEW_EXTRADATA` | Compatible avcC updates retain references; incompatible active SPS changes reset picture state before decoding. |
+| `Decoder.DecodeAVCCFrames` / packet `NEW_EXTRADATA` | Compatible avcC or Annex B parameter-set updates retain references; incompatible active SPS changes reset picture state before decoding. |
 | `Decoder.Reset` | Clears stored SPS/PPS, avcC length-size, references, delayed output, and parsed slice state. |
 | `Encoder.Reset` | Clears coding/reference/rate state and queued IDR state while preserving configuration and RTP callback. |
 | `Encoder.SetResolution` / `SetOutputFormat` | Apply validated live changes and queue an IDR boundary for the next emitted access unit. |

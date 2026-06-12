@@ -249,6 +249,7 @@ func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"decoder-ref-modifications",
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
+		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestSimpleFrameDPBRejectsMissingShortRefModificationTarget",
 		"TestSimpleFrameDPBRejectsMissingLongRefModificationTarget",
 	} {
@@ -364,7 +365,7 @@ func TestREADMEStateLifecycleDocumentsDecoderEncoderBoundaries(t *testing.T) {
 		"`Decoder.ConfigureAVCC`",
 		"resets decoder picture state for a new configured-AVC stream",
 		"`Decoder.DecodeAVCCFrames` / packet `NEW_EXTRADATA`",
-		"Compatible avcC updates retain references",
+		"Compatible avcC or Annex B parameter-set updates retain references",
 		"incompatible active SPS changes reset picture state before decoding",
 		"`Decoder.Reset`",
 		"Clears stored SPS/PPS, avcC length-size, references, delayed output, and parsed slice state",

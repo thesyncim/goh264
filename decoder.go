@@ -924,7 +924,7 @@ func (d *Decoder) storeAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationR
 }
 
 func (d *Decoder) updateAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationRecord) {
-	resetDPB := d.avcConfigurationNeedsDPBReset(cfg)
+	resetDPB := d.parameterSetUpdateNeedsDPBReset(cfg.SPS, cfg.PPS)
 	d.sps = cfg.SPS
 	d.pps = cfg.PPS
 	d.avcNALLengthSize = cfg.NALLengthSize
@@ -935,39 +935,36 @@ func (d *Decoder) updateAVCDecoderConfiguration(cfg h264.AVCDecoderConfiguration
 	_ = d.simple.UpdateParamSets(d.sps, d.pps)
 }
 
-func (d *Decoder) avcConfigurationNeedsDPBReset(cfg h264.AVCDecoderConfigurationRecord) bool {
-	if d == nil || d.avcNALLengthSize == 0 {
+func (d *Decoder) parameterSetUpdateNeedsDPBReset(nextSPS [32]*h264.SPS, nextPPS [256]*h264.PPS) bool {
+	if d == nil {
 		return false
 	}
-	if cfg.FirstSPSID >= uint32(len(cfg.SPS)) {
+	prevID, prevOK := activeSPSIDFromParamSets(d.sps, d.pps)
+	nextID, nextOK := activeSPSIDFromParamSets(nextSPS, nextPPS)
+	if !prevOK || !nextOK {
 		return false
 	}
-	next := cfg.SPS[cfg.FirstSPSID]
-	if next == nil {
-		return false
-	}
-	if d.avcActiveSPSID() != cfg.FirstSPSID {
+	if prevID != nextID {
 		return true
 	}
-	prev := d.sps[cfg.FirstSPSID]
-	return avcSPSRequiresDPBReset(prev, next)
+	return spsRequiresDPBReset(d.sps[prevID], nextSPS[nextID])
 }
 
-func (d *Decoder) avcActiveSPSID() uint32 {
-	for _, pps := range d.pps {
+func activeSPSIDFromParamSets(sps [32]*h264.SPS, pps [256]*h264.PPS) (uint32, bool) {
+	for _, pps := range pps {
 		if pps != nil {
-			return pps.SPSID
+			return pps.SPSID, true
 		}
 	}
-	for i, sps := range d.sps {
+	for i, sps := range sps {
 		if sps != nil {
-			return uint32(i)
+			return uint32(i), true
 		}
 	}
-	return 0
+	return 0, false
 }
 
-func avcSPSRequiresDPBReset(prev *h264.SPS, next *h264.SPS) bool {
+func spsRequiresDPBReset(prev *h264.SPS, next *h264.SPS) bool {
 	if prev == nil || next == nil {
 		return false
 	}
@@ -1048,9 +1045,13 @@ func (d *Decoder) storeAnnexBParameterSets(nals []h264.NALUnit) error {
 	if !havePS {
 		return ErrInvalidData
 	}
+	resetDPB := d.parameterSetUpdateNeedsDPBReset(spsList, ppsList)
 	d.sps = spsList
 	d.pps = ppsList
 	d.avcNALLengthSize = 0
+	if resetDPB {
+		return d.simple.StoreParamSets(d.sps, d.pps)
+	}
 	return d.simple.UpdateParamSets(d.sps, d.pps)
 }
 
