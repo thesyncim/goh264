@@ -3039,53 +3039,99 @@ func TestEncoderRecoveryPointSEIExposesWebRTCRecoverySignal(t *testing.T) {
 }
 
 func TestEncoderRecoveryPointSEIRejectsInvalidFrameCount(t *testing.T) {
-	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
-	if err != nil {
-		t.Fatalf("Encode first IDR: %v", err)
-	}
-	if !first.IDR || enc.PendingIDR() {
-		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
-	}
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = format.fmt
+			if format.fmt == goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 32
+			} else {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			var callbackCalls int
+			enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+				callbackCalls++
+			})
+			firstFrame := patternedI420EncoderFrame(16, 16)
+			firstFrame.PTS = 0
+			first, err := enc.Encode(firstFrame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if first.Dropped || !first.IDR || first.RTPTime != 0 || enc.PendingIDR() {
+				t.Fatalf("first frame dropped/idr/time/pending=%v/%v/%d/%v, want completed IDR time 0",
+					first.Dropped, first.IDR, first.RTPTime, enc.PendingIDR())
+			}
+			firstPacketCount := len(first.RTPPackets)
+			if format.fmt == goh264.EncoderOutputRTP {
+				if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+					t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+						firstPacketCount, callbackCalls)
+				}
+			} else if firstPacketCount != 0 || callbackCalls != 0 {
+				t.Fatalf("non-RTP first packets/callbacks = %d/%d, want none", firstPacketCount, callbackCalls)
+			}
 
-	enc.ForceIDR()
-	if !enc.PendingIDR() {
-		t.Fatal("ForceIDR before invalid RecoveryPointSEI did not queue IDR")
-	}
-	before := enc.Config()
-	sei, err := enc.RecoveryPointSEI(1 << 16)
-	if !errors.Is(err, goh264.ErrInvalidData) {
-		t.Fatalf("RecoveryPointSEI invalid error = %v, want ErrInvalidData", err)
-	}
-	if len(sei.NAL) != 0 || len(sei.AnnexB) != 0 || len(sei.AVC) != 0 {
-		t.Fatalf("invalid RecoveryPointSEI returned surfaces = %+v, want empty", sei)
-	}
-	if got := enc.Config(); got != before {
-		t.Fatalf("invalid RecoveryPointSEI mutated config = %+v, want %+v", got, before)
-	}
-	if !enc.PendingIDR() {
-		t.Fatal("invalid RecoveryPointSEI cleared pending IDR")
-	}
+			enc.ForceIDR()
+			if !enc.PendingIDR() {
+				t.Fatal("ForceIDR before invalid RecoveryPointSEI did not queue IDR")
+			}
+			before := enc.Config()
+			sei, err := enc.RecoveryPointSEI(1 << 16)
+			if !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("RecoveryPointSEI invalid error = %v, want ErrInvalidData", err)
+			}
+			if len(sei.NAL) != 0 || len(sei.AnnexB) != 0 || len(sei.AVC) != 0 {
+				t.Fatalf("invalid RecoveryPointSEI returned surfaces = %+v, want empty", sei)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("invalid RecoveryPointSEI mutated config = %+v, want %+v", got, before)
+			}
+			if !enc.PendingIDR() {
+				t.Fatal("invalid RecoveryPointSEI cleared pending IDR")
+			}
+			if callbackCalls != firstPacketCount {
+				t.Fatalf("invalid RecoveryPointSEI callbacks = %d, want still %d",
+					callbackCalls, firstPacketCount)
+			}
 
-	secondFrame := patternedI420EncoderFrame(16, 16)
-	secondFrame.Y[0] ^= 0x33
-	second, err := enc.Encode(secondFrame)
-	if err != nil {
-		t.Fatalf("Encode after invalid RecoveryPointSEI: %v", err)
+			secondFrame := patternedI420EncoderFrame(16, 16)
+			secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
+			secondFrame.Y[0] ^= 0x33
+			second, err := enc.Encode(secondFrame)
+			if err != nil {
+				t.Fatalf("Encode after invalid RecoveryPointSEI: %v", err)
+			}
+			if second.Dropped || !second.IDR || second.RTPTime != before.RTPTimestampIncrement || enc.PendingIDR() {
+				t.Fatalf("post-invalid-RecoveryPointSEI frame dropped/idr/time/pending=%v/%v/%d/%v, want delivered IDR time %d",
+					second.Dropped, second.IDR, second.RTPTime, enc.PendingIDR(), before.RTPTimestampIncrement)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+			stream := annexBFromEncodedFrame(t, first, before.OutputFormat)
+			stream = append(stream, annexBFromEncodedFrame(t, second, before.OutputFormat)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
+			if format.fmt == goh264.EncoderOutputRTP {
+				assertRTPPacketMetadata(t, second.RTPPackets, before.RTPPayloadType, before.RTPSSRC, uint16(firstPacketCount))
+			} else if len(second.RTPPackets) != 0 {
+				t.Fatalf("non-RTP second packets = %d, want none", len(second.RTPPackets))
+			}
+			if callbackCalls != firstPacketCount+len(second.RTPPackets) {
+				t.Fatalf("post-invalid-RecoveryPointSEI callbacks = %d, want %d",
+					callbackCalls, firstPacketCount+len(second.RTPPackets))
+			}
+		})
 	}
-	if !second.IDR || enc.PendingIDR() {
-		t.Fatalf("post-invalid-RecoveryPointSEI frame idr=%v pending=%v, want delivered IDR",
-			second.IDR, enc.PendingIDR())
-	}
-	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
-	assertEncoderVCLFrameNums(t,
-		append(append([]byte(nil), first.Data...), second.Data...),
-		[]uint8{5, 5},
-		[]uint32{0, 1},
-	)
 }
 
 func TestEncoderEncodeAnnexBIDRIntraPCMDecodesThroughLocalAndFFmpeg(t *testing.T) {
