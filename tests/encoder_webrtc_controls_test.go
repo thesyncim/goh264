@@ -476,6 +476,9 @@ func TestEncoderMethodsHandleNilEncoder(t *testing.T) {
 		{name: "SetSPSPPSBeforeIDR", call: func() error {
 			return enc.SetSPSPPSBeforeIDR(false)
 		}},
+		{name: "SetIntraRefresh", call: func() error {
+			return enc.SetIntraRefresh(false)
+		}},
 		{name: "SetRecoveryPointSEI", call: func() error {
 			return enc.SetRecoveryPointSEI(false)
 		}},
@@ -867,6 +870,9 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 	if err := enc.SetSPSPPSBeforeIDR(false); err != nil {
 		t.Fatalf("SetSPSPPSBeforeIDR valid: %v", err)
 	}
+	if err := enc.SetIntraRefresh(false); err != nil {
+		t.Fatalf("SetIntraRefresh disable: %v", err)
+	}
 	if err := enc.SetRecoveryPointSEI(false); err != nil {
 		t.Fatalf("SetRecoveryPointSEI valid: %v", err)
 	}
@@ -879,13 +885,14 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 	if got := enc.Config(); got.SliceCount != 2 ||
 		got.SPSPPSMode != goh264.EncoderSPSPPSOutOfBand ||
 		got.SPSPPSBeforeIDR ||
+		got.IntraRefresh ||
 		got.RecoveryPointSEI ||
 		got.RTPPacketizationMode != goh264.EncoderRTPPacketizationSingleNAL ||
 		got.STAPA ||
 		got.RTPPayloadType != 110 ||
 		got.RTPSSRC != 0x11223344 {
-		t.Fatalf("explicit runtime controls = slices %d spspps %v before-idr %v recovery %v packetization %v stapa %v payload %d ssrc %#x, want 2/out-of-band/false/false/mode0/false/110/0x11223344",
-			got.SliceCount, got.SPSPPSMode, got.SPSPPSBeforeIDR, got.RecoveryPointSEI, got.RTPPacketizationMode, got.STAPA, got.RTPPayloadType, got.RTPSSRC)
+		t.Fatalf("explicit runtime controls = slices %d spspps %v before-idr %v intra-refresh %v recovery %v packetization %v stapa %v payload %d ssrc %#x, want 2/out-of-band/false/false/false/mode0/false/110/0x11223344",
+			got.SliceCount, got.SPSPPSMode, got.SPSPPSBeforeIDR, got.IntraRefresh, got.RecoveryPointSEI, got.RTPPacketizationMode, got.STAPA, got.RTPPayloadType, got.RTPSSRC)
 	}
 	enc.ForceIDR()
 	if !enc.PendingIDR() {
@@ -1058,6 +1065,47 @@ func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {
 			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 		})
 	}
+}
+
+func TestEncoderSetIntraRefreshEnableIsUnsupportedAndPreservesState(t *testing.T) {
+	enc, err := goh264.NewEncoder(goh264.DefaultEncoderConfig(16, 16))
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	first, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if !first.IDR || enc.PendingIDR() {
+		t.Fatalf("first frame idr=%v pending=%v, want completed IDR", first.IDR, enc.PendingIDR())
+	}
+
+	enc.ForceIDR()
+	before := enc.Config()
+	if err := enc.SetIntraRefresh(true); !errors.Is(err, goh264.ErrUnsupported) {
+		t.Fatalf("SetIntraRefresh enable error = %v, want ErrUnsupported", err)
+	}
+	if got := enc.Config(); got != before {
+		t.Fatalf("unsupported SetIntraRefresh mutated config = %+v, want %+v", got, before)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("unsupported SetIntraRefresh cleared pending IDR")
+	}
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.Y[0] ^= 0x11
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode after unsupported SetIntraRefresh: %v", err)
+	}
+	if !second.IDR || enc.PendingIDR() {
+		t.Fatalf("post-unsupported-intra-refresh frame idr=%v pending=%v, want delivered IDR",
+			second.IDR, enc.PendingIDR())
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 }
 
 func TestEncoderDroppedFramePreservesPendingIDR(t *testing.T) {
@@ -13166,7 +13214,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 		"SetFrameDropMode", "SetQP", "SetFrameRate", "SetRTPTimestampIncrement",
 		"SetGOP", "SetResolution", "SetDeblockMode", "SetRTPMaxPayloadSize",
 		"SetMaxFrameSize", "SetSliceMaxBytes", "SetMaxEncodeTimeUS",
-		"SetPreset", "SetSliceCount", "SetSPSPPSMode", "SetSPSPPSBeforeIDR", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
+		"SetPreset", "SetSliceCount", "SetSPSPPSMode", "SetSPSPPSBeforeIDR", "SetIntraRefresh", "SetRecoveryPointSEI", "SetOutputFormat", "SetRTPPacketizationMode",
 		"SetRTPMetadata", "SetRTPPacketCallback", "Reconfigure", "I420Frame", "ValidateFrame", "Reset",
 	} {
 		if _, ok := encType.MethodByName(method); !ok {

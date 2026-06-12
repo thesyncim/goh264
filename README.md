@@ -273,6 +273,7 @@ err = enc.SetSliceMaxBytes(0)   // disable the per-slice byte budget
 err = enc.SetMaxEncodeTimeUS(0) // disable the late-frame time budget
 err = enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand)
 err = enc.SetSPSPPSBeforeIDR(false)
+err = enc.SetIntraRefresh(false) // enabling intra refresh is not admitted yet
 err = enc.SetRecoveryPointSEI(true)
 err = enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false)
 err = enc.SetRTPMetadata(110, 0x11223344)
@@ -318,12 +319,13 @@ that are currently intended to be stable enough for integration work:
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
   `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
   `SetDeblockMode`, `SetPreset`, `SetSliceCount`, `SetSPSPPSMode`,
-  `SetSPSPPSBeforeIDR`, `SetRecoveryPointSEI`,
+  `SetSPSPPSBeforeIDR`, `SetIntraRefresh`, `SetRecoveryPointSEI`,
   `SetOutputFormat`, `SetRTPPacketizationMode`, and `SetRTPMetadata` cover
   common quality, budget, geometry, output, cadence, packetization, and RTP
   header changes without constructing an `EncoderReconfigure` value. `SetQP`,
   `SetResolution`, and `SetOutputFormat` queue an IDR boundary after a valid
-  update.
+  update. `SetIntraRefresh(true)` returns `ErrUnsupported` until intra refresh
+  is admitted.
 - `EncoderReconfigure` remains the grouped low-level update surface for
   bundled multi-field changes and explicit force-IDR requests.
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or

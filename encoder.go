@@ -1398,6 +1398,29 @@ func (e *Encoder) SetSPSPPSBeforeIDR(enabled bool) error {
 	return e.Reconfigure(EncoderReconfigure{SPSPPSBeforeIDR: &enabled})
 }
 
+// SetIntraRefresh enables or disables intra refresh.
+//
+// Enabling intra refresh is not admitted yet and returns ErrUnsupported.
+// Disabling it is accepted as an explicit no-op for callers that mirror a
+// runtime control surface. Invalid updates leave the encoder configuration and
+// coding state unchanged.
+func (e *Encoder) SetIntraRefresh(enabled bool) error {
+	if e == nil {
+		return encoderInvalid("nil encoder")
+	}
+	if enabled {
+		return encoderUnsupported("intra refresh is planned but not admitted yet")
+	}
+	cfg := e.cfg
+	cfg.IntraRefresh = false
+	normalized, err := normalizeEncoderConfig(cfg)
+	if err != nil {
+		return err
+	}
+	e.cfg = normalized
+	return nil
+}
+
 // SetRecoveryPointSEI enables or disables recovery-point SEI emission for
 // non-IDR recovery pictures.
 //
