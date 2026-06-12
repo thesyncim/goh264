@@ -294,6 +294,32 @@ func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	}
 }
 
+func TestREADMEDecoderAVCCPreferredNamesTable(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+	for _, phrase := range []string{
+		"Preferred avcC names",
+		"Stateless avcC metadata inspection",
+		"`InspectAVCC`",
+		"Store avcC for configured-AVC streaming",
+		"`ConfigureAVCC`",
+		"Decode with already stored avcC",
+		"`DecodeConfiguredAVCFrames`",
+		"Update avcC, decode one packet, then drain delayed output",
+		"`DecodeAVCCFrames`",
+		"Compatibility aliases",
+		"decoder `ParseAVCC`",
+		"package `ParseAVCC`",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md decoder avcC preferred-name table missing %q", phrase)
+		}
+	}
+}
+
 func requireREADMECodeName(t *testing.T, readme string, name string) {
 	t.Helper()
 	if !strings.Contains(readme, "`"+name+"`") && !strings.Contains(readme, name) {

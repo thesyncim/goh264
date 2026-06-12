@@ -182,7 +182,7 @@ Choose the entry point by ownership and packet shape:
 | Same stream path plus packet side data such as `NEW_EXTRADATA` | `DecodePacketFrames` |
 | Complete Annex B bytestream with no streaming state needed | `DecodeAnnexBFrames` |
 | Complete length-prefixed AVC packet stream with known NAL length size | `DecodeAVCFrames` |
-| Stored avcC/configured-AVC stream packets | `ConfigureAVCDecoderConfigurationRecord` or `ConfigureAVCC`, then `DecodeConfiguredAVCFrames` |
+| Stored avcC/configured-AVC stream packets | `ConfigureAVCC`, then `DecodeConfiguredAVCFrames` |
 | Exactly one expected output frame | `Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`, `DecodeConfiguredAVC`, or `DecodeAVCC` |
 
 Use the format-specific helpers when the packet format is already known:
@@ -238,6 +238,15 @@ and `ParseAVCC` remain compatibility aliases. Package-level `InspectAVCC`,
 `InspectAVCDecoderConfigurationRecord`, `ParseAVCC`, and
 `ParseAVCDecoderConfigurationRecord` parse the same metadata without mutating
 decoder state.
+
+Preferred avcC names:
+
+| Need | Preferred | Compatibility aliases |
+| --- | --- | --- |
+| Stateless avcC metadata inspection | `InspectAVCC` | `InspectAVCDecoderConfigurationRecord`, package `ParseAVCC`, package `ParseAVCDecoderConfigurationRecord` |
+| Store avcC for configured-AVC streaming | `ConfigureAVCC` | decoder `ConfigureAVCDecoderConfigurationRecord`, decoder `ParseAVCC`, decoder `ParseAVCDecoderConfigurationRecord` |
+| Decode with already stored avcC | `DecodeConfiguredAVCFrames` | `DecodeConfiguredAVC` for exactly one output frame |
+| Update avcC, decode one packet, then drain delayed output | `DecodeAVCCFrames` | `DecodeAVCFramesWithConfigurationRecord`, `DecodeAVCC` for exactly one output frame |
 
 Packet side-data support mirrors FFmpeg-facing surfaces used by the port:
 
