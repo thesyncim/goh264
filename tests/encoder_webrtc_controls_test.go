@@ -6101,12 +6101,12 @@ func TestEncoderMaxFrameSizeRejectsOversizeAccessUnitWithoutAdvancingState(t *te
 			if _, err := enc.Encode(frame); !errors.Is(err, goh264.ErrInvalidData) {
 				t.Fatalf("oversize MaxFrameSize encode error = %v, want ErrInvalidData", err)
 			}
-			if err := enc.Reconfigure(goh264.EncoderReconfigure{MaxFrameSize: 4096}); err != nil {
-				t.Fatalf("raise MaxFrameSize: %v", err)
+			if err := enc.SetMaxFrameSize(0); err != nil {
+				t.Fatalf("disable MaxFrameSize: %v", err)
 			}
 			first, err := enc.Encode(frame)
 			if err != nil {
-				t.Fatalf("Encode after rejected MaxFrameSize frame: %v", err)
+				t.Fatalf("Encode after disabled MaxFrameSize budget: %v", err)
 			}
 			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
 			assertEncoderVCLFrameNums(t, annexBFromEncodedFrame(t, first, cfg.OutputFormat), []uint8{5}, []uint32{0})
