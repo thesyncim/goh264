@@ -112,3 +112,38 @@ func ExampleEncoder_EncodeInto() {
 	fmt.Println(len(encoded.NALUnits), encoded.KeyFrame)
 	// Output: 3 true
 }
+
+func ExampleEncoder_SetRTPPacketCallback() {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
+	cfg.MaxEncodeTimeUS = 0
+	cfg.RTPMaxPayloadSize = 1200
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var first goh264.EncoderRTPPacketMetadata
+	callbacks := 0
+	enc.SetRTPPacketCallback(func(_ goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		if callbacks == 0 {
+			first = meta
+		}
+		callbacks++
+	})
+
+	frame := enc.I420Frame(
+		make([]byte, cfg.StrideY*cfg.Height),
+		make([]byte, cfg.StrideCb*(cfg.Height/2)),
+		make([]byte, cfg.StrideCr*(cfg.Height/2)),
+		0,
+	)
+	encoded, err := enc.Encode(frame)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(encoded.IDR, len(encoded.RTPPackets), callbacks, first.PacketIndex, first.PacketCount, first.IDR)
+	// Output: true 3 3 0 3 true
+}
