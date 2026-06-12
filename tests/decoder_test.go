@@ -218,6 +218,83 @@ func TestParseHeadersRejectsNilDecoder(t *testing.T) {
 	}
 }
 
+func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
+	var dec *Decoder
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{name: "Decode", call: func() error {
+			_, err := dec.Decode([]byte{0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "DecodeFrames", call: func() error {
+			_, err := dec.DecodeFrames([]byte{0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "DecodePacket", call: func() error {
+			_, err := dec.DecodePacket(Packet{Data: []byte{0, 0, 1, 0x65}})
+			return err
+		}},
+		{name: "DecodePacketFrames", call: func() error {
+			_, err := dec.DecodePacketFrames(Packet{Data: []byte{0, 0, 1, 0x65}})
+			return err
+		}},
+		{name: "DecodeAnnexB", call: func() error {
+			_, err := dec.DecodeAnnexB([]byte{0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "DecodeAnnexBFrames", call: func() error {
+			_, err := dec.DecodeAnnexBFrames([]byte{0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "DecodeAVC", call: func() error {
+			_, err := dec.DecodeAVC([]byte{0, 0, 0, 1, 0x65}, 4)
+			return err
+		}},
+		{name: "DecodeAVCFrames", call: func() error {
+			_, err := dec.DecodeAVCFrames([]byte{0, 0, 0, 1, 0x65}, 4)
+			return err
+		}},
+		{name: "DecodeConfiguredAVC", call: func() error {
+			_, err := dec.DecodeConfiguredAVC([]byte{0, 0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "DecodeConfiguredAVCFrames", call: func() error {
+			_, err := dec.DecodeConfiguredAVCFrames([]byte{0, 0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "FlushDelayedFrames", call: func() error {
+			_, err := dec.FlushDelayedFrames()
+			return err
+		}},
+		{name: "DecodeAVCWithConfigurationRecord", call: func() error {
+			_, err := dec.DecodeAVCWithConfigurationRecord([]byte{1}, []byte{0, 0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "DecodeAVCFramesWithConfigurationRecord", call: func() error {
+			_, err := dec.DecodeAVCFramesWithConfigurationRecord([]byte{1}, []byte{0, 0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "ParseAVCDecoderConfigurationRecord", call: func() error {
+			_, err := dec.ParseAVCDecoderConfigurationRecord([]byte{1})
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("%s panicked on nil decoder: %v", tt.name, r)
+				}
+			}()
+			if err := tt.call(); err != ErrInvalidData {
+				t.Fatalf("%s nil decoder error = %v, want ErrInvalidData", tt.name, err)
+			}
+		})
+	}
+}
+
 func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	dec := NewDecoder()
