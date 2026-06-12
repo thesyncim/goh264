@@ -658,6 +658,7 @@ func TestDecodePacketFramesNewExtradataDoesNotAliasCallerBuffers(t *testing.T) {
 	for i := range firstSample {
 		firstSample[i] = 0xff
 	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
 	frames, err = dec.DecodePacketFrames(Packet{Data: samples[1]})
 	if err != nil {
@@ -691,6 +692,7 @@ func TestDecodePacketNewExtradataDoesNotAliasCallerBuffers(t *testing.T) {
 	for i := range firstSample {
 		firstSample[i] = 0xff
 	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
 	frames, err := dec.DecodeConfiguredAVCFrames(samples[1])
 	if err != nil {
@@ -761,6 +763,7 @@ func TestDecodePacketFramesAnnexBNewExtradataDoesNotAliasCallerBuffers(t *testin
 	for i := range firstPacket {
 		firstPacket[i] = 0xff
 	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
 	frames, err = dec.DecodePacketFrames(Packet{Data: secondPacket})
 	if err != nil {
@@ -796,6 +799,7 @@ func TestDecodePacketAnnexBNewExtradataDoesNotAliasCallerBuffers(t *testing.T) {
 	for i := range firstPacket {
 		firstPacket[i] = 0xff
 	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
 	frames, err := dec.DecodePacketFrames(Packet{Data: secondPacket})
 	if err != nil {
