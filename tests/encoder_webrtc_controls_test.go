@@ -1481,18 +1481,18 @@ func TestEncoderReconfigureRejectsInvalidRuntimeRateControlsWithoutMutation(t *t
 		name   string
 		update goh264.EncoderReconfigure
 	}{
-		{name: "bad rate-control mode", update: goh264.EncoderReconfigure{RateControl: goh264.EncoderRateControlMode(99)}},
-		{name: "bad vbv", update: goh264.EncoderReconfigure{VBVBufferSize: &badVBV}},
-		{name: "bad qp range", update: goh264.EncoderReconfigure{InitialQP: &badInitialQP, MinQP: &minQP, MaxQP: &maxQP}},
-		{name: "bad frame-drop mode", update: goh264.EncoderReconfigure{FrameDrop: goh264.EncoderFrameDropMode(99)}},
+		{name: "bad rate-control mode", update: goh264.EncoderReconfigure{RateControl: goh264.EncoderRateControlMode(99), ForceIDR: true}},
+		{name: "bad vbv", update: goh264.EncoderReconfigure{VBVBufferSize: &badVBV, ForceIDR: true}},
+		{name: "bad qp range", update: goh264.EncoderReconfigure{InitialQP: &badInitialQP, MinQP: &minQP, MaxQP: &maxQP, ForceIDR: true}},
+		{name: "bad frame-drop mode", update: goh264.EncoderReconfigure{FrameDrop: goh264.EncoderFrameDropMode(99), ForceIDR: true}},
 		{name: "partial width resolution", update: goh264.EncoderReconfigure{Width: 32, ForceIDR: true}},
 		{name: "partial height resolution", update: goh264.EncoderReconfigure{Height: 32, ForceIDR: true}},
 		{name: "negative width resolution", update: goh264.EncoderReconfigure{Width: -16, Height: 16, ForceIDR: true}},
 		{name: "negative height resolution", update: goh264.EncoderReconfigure{Width: 16, Height: -16, ForceIDR: true}},
-		{name: "bad gop interval", update: goh264.EncoderReconfigure{GOPSize: 2, IDRInterval: 3}},
+		{name: "bad gop interval", update: goh264.EncoderReconfigure{GOPSize: 2, IDRInterval: 3, ForceIDR: true}},
 		{name: "negative gop size", update: goh264.EncoderReconfigure{GOPSize: -1, ForceIDR: true}},
 		{name: "negative idr interval", update: goh264.EncoderReconfigure{IDRInterval: -1, ForceIDR: true}},
-		{name: "bad deblock mode", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockMode(99)}},
+		{name: "bad deblock mode", update: goh264.EncoderReconfigure{DeblockMode: goh264.EncoderDeblockMode(99), ForceIDR: true}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
