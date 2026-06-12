@@ -1706,6 +1706,13 @@ func TestEncoderRealtimeControlLoopStressPreservesPacketAndReferenceState(t *tes
 		t.Fatalf("Decode RTP re-entry P-skip: %v", err)
 	}
 	assertDecodedEncoderFrameBytes(t, decodedSixth, appendI420FrameBytes(nil, lateChangedFrame))
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, second.Data...)
+	stream = append(stream, fourth.Data...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, fifth.RTPPackets)...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, sixth.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1, 5, 1}, []uint32{0, 1, 2, 3, 4})
 }
 
 func TestEncoderReconfigureUpdatesRateControlQPDropAndGOPControls(t *testing.T) {
@@ -1785,6 +1792,11 @@ func TestEncoderReconfigureUpdatesRateControlQPDropAndGOPControls(t *testing.T) 
 		t.Fatalf("fourth frame idr=%v, want IDR after updated interval", fourth.IDR)
 	}
 	assertEncoderNALTypes(t, fourth.NALUnits, []uint8{7, 8, 5})
+	stream := append([]byte(nil), first.Data...)
+	stream = append(stream, second.Data...)
+	stream = append(stream, third.Data...)
+	stream = append(stream, fourth.Data...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1, 5}, []uint32{0, 1, 2, 3})
 }
 
 func TestEncoderReconfigureAcceptsExplicitZeroQP(t *testing.T) {
@@ -1797,7 +1809,8 @@ func TestEncoderReconfigureAcceptsExplicitZeroQP(t *testing.T) {
 		t.Fatalf("NewEncoder: %v", err)
 	}
 	frame := patternedI420EncoderFrame(16, 16)
-	if _, err := enc.Encode(frame); err != nil {
+	first, err := enc.Encode(frame)
+	if err != nil {
 		t.Fatalf("Encode first IDR: %v", err)
 	}
 
@@ -1823,6 +1836,7 @@ func TestEncoderReconfigureAcceptsExplicitZeroQP(t *testing.T) {
 	}
 	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
 	assertEncoderVCLQScales(t, second.Data, []uint8{5}, []uint32{0})
+	assertEncoderVCLFrameNums(t, append(append([]byte(nil), first.Data...), second.Data...), []uint8{5, 5}, []uint32{0, 1})
 }
 
 func TestEncoderReconfigureDeblockModeControlsPFrameAdmission(t *testing.T) {
