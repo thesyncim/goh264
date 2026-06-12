@@ -1072,6 +1072,13 @@ func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	if f.BitDepthLuma != 8 || (f.ChromaFormatIDC != 0 && f.BitDepthChroma != 8) {
 		return dst, ErrUnsupported
 	}
+	size, err := f.RawYUVSize()
+	if err != nil {
+		return dst, err
+	}
+	if _, err := checkedAddInt(len(dst), size); err != nil {
+		return dst, err
+	}
 	return f.appendRawYUVBytes8(dst)
 }
 
@@ -1145,6 +1152,13 @@ func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 	if depth == 8 {
 		return dst, ErrUnsupported
 	}
+	samples, err := f.rawYUVSampleCount()
+	if err != nil {
+		return dst, err
+	}
+	if _, err := checkedAddInt(len(dst), samples); err != nil {
+		return dst, err
+	}
 	chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, err := f.rawYUV16Geometry()
 	if err != nil {
 		return dst, err
@@ -1196,6 +1210,13 @@ func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
 	depth, err := f.rawBitDepth()
 	if err != nil {
+		return dst, err
+	}
+	size, err := f.RawYUVSize()
+	if err != nil {
+		return dst, err
+	}
+	if _, err := checkedAddInt(len(dst), size); err != nil {
 		return dst, err
 	}
 	if depth == 8 {

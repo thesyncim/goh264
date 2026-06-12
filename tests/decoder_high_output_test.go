@@ -4,7 +4,9 @@ package goh264_test
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
+	"unsafe"
 )
 
 const maxIntForTest = int(^uint(0) >> 1)
@@ -472,6 +474,43 @@ func TestFrameRawYUVSizeRejectsOverflow(t *testing.T) {
 	}
 }
 
+func TestFrameAppendRawYUVRejectsOverflowedDestination(t *testing.T) {
+	eight := Frame{
+		Width:           2,
+		Height:          2,
+		ChromaFormatIDC: 0,
+		BitDepthLuma:    8,
+		BitDepthChroma:  8,
+		YStride:         2,
+		Y:               []byte{1, 2, 3, 4},
+	}
+	eightDst := fakeDecoderRawBytesLen(maxIntForTest - 5)
+	if got, err := eight.AppendRawYUV(eightDst); err != ErrInvalidData || len(got) != len(eightDst) {
+		t.Fatalf("AppendRawYUV overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+	if got, err := eight.AppendRawYUVBytesLE(eightDst); err != ErrInvalidData || len(got) != len(eightDst) {
+		t.Fatalf("AppendRawYUVBytesLE 8-bit overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+
+	high := Frame{
+		Width:           2,
+		Height:          2,
+		ChromaFormatIDC: 0,
+		BitDepthLuma:    10,
+		BitDepthChroma:  10,
+		YStride:         2,
+		Y16:             []uint16{1, 2, 3, 4},
+	}
+	highByteDst := fakeDecoderRawBytesLen(maxIntForTest - 11)
+	if got, err := high.AppendRawYUVBytesLE(highByteDst); err != ErrInvalidData || len(got) != len(highByteDst) {
+		t.Fatalf("AppendRawYUVBytesLE high overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+	highSampleDst := fakeDecoderRawUint16Len(maxIntForTest - 5)
+	if got, err := high.AppendRawYUV16(highSampleDst); err != ErrInvalidData || len(got) != len(highSampleDst) {
+		t.Fatalf("AppendRawYUV16 overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
+	}
+}
+
 func TestFrameAppendRawYUVRejectsOverflowedPlaneGeometryWithoutPanic(t *testing.T) {
 	tests := []struct {
 		name string
@@ -626,6 +665,30 @@ func decoderPrefilledUint16Buffer() ([]uint16, []uint16) {
 	prefix := []uint16{0xdead, 0xbeef}
 	copy(backing, prefix)
 	return backing[:len(prefix)], append([]uint16(nil), backing...)
+}
+
+func fakeDecoderRawBytesLen(n int) []byte {
+	if n <= 0 {
+		return nil
+	}
+	var b byte
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&b)),
+		Len:  n,
+		Cap:  n,
+	}))
+}
+
+func fakeDecoderRawUint16Len(n int) []uint16 {
+	if n <= 0 {
+		return nil
+	}
+	var v uint16
+	return *(*[]uint16)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&v)),
+		Len:  n,
+		Cap:  n,
+	}))
 }
 
 func assertDecoderByteBufferUnchanged(t *testing.T, dst []byte, before []byte) {
