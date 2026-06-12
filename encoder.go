@@ -2300,10 +2300,23 @@ func encoderSTAPASize(nals []encoderRawNAL, maxPayloadSize int) (int, int, error
 
 func appendEncoderSTAPA(dst []byte, nals []encoderRawNAL, maxPayloadSize int) ([]byte, int, error) {
 	start := len(dst)
+	size, plannedCount, err := encoderSTAPASize(nals, maxPayloadSize)
+	if err != nil {
+		return dst, 0, err
+	}
+	if plannedCount < 2 {
+		return dst, plannedCount, nil
+	}
+	if _, err := checkedAddInt(len(dst), size); err != nil {
+		return dst, 0, encoderInvalid("STAP-A destination size overflows")
+	}
 	dst = append(dst, 24)
 	var maxNRI byte
 	count := 0
 	for _, nal := range nals {
+		if count == plannedCount {
+			break
+		}
 		if !nal.parameterSet {
 			break
 		}

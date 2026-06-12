@@ -3,6 +3,7 @@
 package goh264
 
 import (
+	"bytes"
 	"errors"
 	"reflect"
 	"testing"
@@ -134,6 +135,32 @@ func TestPacketizeEncoderRTPSingleNALRejectsStorageOverflow(t *testing.T) {
 	}
 	if _, err := packetizeEncoderRTPSingleNAL(nals, maxInt, 0); !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("packetizeEncoderRTPSingleNAL storage overflow error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestAppendEncoderSTAPARejectsOverflowedDestination(t *testing.T) {
+	nals := []encoderRawNAL{
+		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
+		{raw: []byte{byte(h264.NALPPS)}, parameterSet: true},
+	}
+	dst := fakeEncoderBytesLen(maxInt - 6)
+	if got, count, err := appendEncoderSTAPA(dst, nals, 8); !errors.Is(err, ErrInvalidData) || count != 0 || len(got) != len(dst) {
+		t.Fatalf("appendEncoderSTAPA overflow got len=%d count=%d err=%v, want original buffer, count 0, ErrInvalidData", len(got), count, err)
+	}
+}
+
+func TestAppendEncoderSTAPADoesNotMutateWhenNotAggregating(t *testing.T) {
+	dst := []byte{0xaa}
+	nals := []encoderRawNAL{
+		{raw: []byte{byte(h264.NALSPS)}, parameterSet: true},
+		{raw: []byte{byte(h264.NALSlice)}},
+	}
+	got, count, err := appendEncoderSTAPA(dst, nals, 8)
+	if err != nil {
+		t.Fatalf("appendEncoderSTAPA one parameter set: %v", err)
+	}
+	if count != 1 || !bytes.Equal(got, dst) {
+		t.Fatalf("appendEncoderSTAPA one parameter set got=%x count=%d, want original buffer and count 1", got, count)
 	}
 }
 
