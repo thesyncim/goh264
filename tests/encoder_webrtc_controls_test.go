@@ -139,6 +139,46 @@ func TestEncoderConfigNormalizeAppliesDerivedDefaults(t *testing.T) {
 	}
 }
 
+func TestEncoderConfigExplicitQPZeroConstructsAndEncodes(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RateControl = goh264.EncoderRateControlConstantQP
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.InitialQP = 0
+	cfg.MinQP = 0
+	cfg.MaxQP = 0
+	cfg.ExplicitQP = true
+
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize explicit QP0 config: %v", err)
+	}
+	if normalized.InitialQP != 0 || normalized.MinQP != 0 || normalized.MaxQP != 0 || !normalized.ExplicitQP {
+		t.Fatalf("normalized explicit QP = initial/min/max/explicit %d/%d/%d/%v, want 0/0/0/true",
+			normalized.InitialQP, normalized.MinQP, normalized.MaxQP, normalized.ExplicitQP)
+	}
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder explicit QP0: %v", err)
+	}
+	if got := enc.Config(); got != normalized {
+		t.Fatalf("NewEncoder explicit QP0 config = %+v, want %+v", got, normalized)
+	}
+
+	out, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode explicit QP0 IDR: %v", err)
+	}
+	if out.Dropped || !out.IDR {
+		t.Fatalf("explicit QP0 output dropped=%v idr=%v, want emitted IDR", out.Dropped, out.IDR)
+	}
+	assertEncoderVCLQScales(t, out.Data, []uint8{5}, []uint32{0})
+	if frames, err := goh264.NewDecoder().DecodeAnnexBFrames(out.Data); err != nil || len(frames) != 1 {
+		t.Fatalf("DecodeAnnexBFrames explicit QP0 output frames=%d err=%v, want one frame", len(frames), err)
+	}
+}
+
 func TestEncoderConfigAdmitsNonDeterministicMultiWorkerMode(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(64, 32)
 	cfg.Deterministic = false
@@ -1067,6 +1107,44 @@ func TestEncoderRuntimeControlsValidateAndReconfigure(t *testing.T) {
 	if got := enc.Config(); got != before {
 		t.Fatalf("invalid Reconfigure mutated config = %+v, want %+v", got, before)
 	}
+}
+
+func TestEncoderSetQPZeroSurvivesNoopReconfigureAndEncodes(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RateControl = goh264.EncoderRateControlConstantQP
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	if err := enc.SetQP(0, 0, 0); err != nil {
+		t.Fatalf("SetQP zero: %v", err)
+	}
+	got := enc.Config()
+	if got.InitialQP != 0 || got.MinQP != 0 || got.MaxQP != 0 || !got.ExplicitQP || !enc.PendingIDR() {
+		t.Fatalf("SetQP zero config = initial/min/max/explicit/pending %d/%d/%d/%v/%v, want 0/0/0/true/true",
+			got.InitialQP, got.MinQP, got.MaxQP, got.ExplicitQP, enc.PendingIDR())
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{}); err != nil {
+		t.Fatalf("empty Reconfigure after SetQP zero: %v", err)
+	}
+	got = enc.Config()
+	if got.InitialQP != 0 || got.MinQP != 0 || got.MaxQP != 0 || !got.ExplicitQP {
+		t.Fatalf("empty Reconfigure after SetQP zero config = initial/min/max/explicit %d/%d/%d/%v, want 0/0/0/true",
+			got.InitialQP, got.MinQP, got.MaxQP, got.ExplicitQP)
+	}
+
+	out, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode after SetQP zero: %v", err)
+	}
+	if out.Dropped || !out.IDR {
+		t.Fatalf("SetQP zero output dropped=%v idr=%v, want emitted IDR", out.Dropped, out.IDR)
+	}
+	assertEncoderVCLQScales(t, out.Data, []uint8{5}, []uint32{0})
 }
 
 func TestEncoderInvalidSetterPreservesPendingIDR(t *testing.T) {

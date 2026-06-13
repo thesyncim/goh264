@@ -145,6 +145,9 @@ type EncoderColorConfig struct {
 // NewEncoder and Validate normalize derived defaults and reject invalid or
 // unsupported controls. Crop and Color are encoded in SPS/VUI headers from this
 // config; per-frame Color is validated but does not rewrite output headers.
+// InitialQP, MinQP, and MaxQP accept 0..51. When ExplicitQP is false, zero QP
+// fields select derived defaults during setup normalization; set ExplicitQP when
+// zero is an intentional setup value.
 type EncoderConfig struct {
 	Width        int
 	Height       int
@@ -176,6 +179,7 @@ type EncoderConfig struct {
 	InitialQP     int
 	MinQP         int
 	MaxQP         int
+	ExplicitQP    bool
 	Preset        EncoderPreset
 
 	ZeroLookahead   bool
@@ -3817,6 +3821,11 @@ func normalizeEncoderConfig(cfg EncoderConfig) (EncoderConfig, error) {
 }
 
 func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, explicitMinQP, explicitMaxQP bool) (EncoderConfig, error) {
+	if cfg.ExplicitQP {
+		explicitInitialQP = true
+		explicitMinQP = true
+		explicitMaxQP = true
+	}
 	if cfg.Width <= 0 || cfg.Height <= 0 {
 		return cfg, encoderInvalid("width and height must be positive")
 	}
@@ -3942,6 +3951,9 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	}
 	if cfg.MinQP < 0 || cfg.MinQP > 51 || cfg.MaxQP < 0 || cfg.MaxQP > 51 || cfg.InitialQP < cfg.MinQP || cfg.InitialQP > cfg.MaxQP {
 		return cfg, encoderInvalid("QP range must be within 0..51 and contain the initial QP")
+	}
+	if explicitInitialQP || explicitMinQP || explicitMaxQP {
+		cfg.ExplicitQP = true
 	}
 	if cfg.Preset == 0 {
 		cfg.Preset = EncoderPresetRealtime

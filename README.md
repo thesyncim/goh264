@@ -349,6 +349,11 @@ Accepted encoder setup values:
 | Output | Annex B, AVC samples, or RTP | Unknown output formats |
 | RTP | packetization-mode 0 with payload size >= 2; packetization-mode 1 with payload size >= 3; STAP-A only in mode 1; DON disabled; payload type 0..127 | Mode-0 STAP-A, DON/interleaved mode, payload type >127, undersized RTP payloads |
 
+For setup-time QP, zero scalar QP fields normally select derived defaults; set
+`EncoderConfig.ExplicitQP=true` when QP 0 is an intentional setup value. Runtime
+`SetQP` and pointer QP fields in `EncoderReconfigure` treat zero as an explicit
+value.
+
 `EncoderConfig` owns encoded crop/color metadata. `Crop` and `Color` are written
 into SPS/VUI headers from the normalized encoder config. `EncoderFrame.Color` is
 validated input metadata and does not rewrite SPS/VUI per frame.
