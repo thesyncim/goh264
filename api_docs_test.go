@@ -136,19 +136,18 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"Clone",
 		"CloneChecked",
 		"Append",
-		"AppendSPSChecked",
-		"AppendPPSChecked",
-		"AppendAnnexBChecked",
-		"AppendAVCCChecked",
-		"AppendNALChecked",
-		"AppendAVCChecked",
+		"AppendSPS",
+		"AppendPPS",
+		"AppendAnnexB",
+		"AppendAVCC",
+		"AppendNAL",
+		"AppendAVC",
 		"OutputFormat",
 		"AccessUnitData",
 		"NALData",
 		"RTPPacketData",
 		"RTPPayloadData",
 		"AVCC",
-		"AVCCChecked",
 		"Limits",
 		"MaxFrameSizeLimit",
 		"SliceMaxBytesLimit",
@@ -162,21 +161,71 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		typ      reflect.Type
 		method   string
 	}{
-		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "CloneChecked"},
-		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "CloneChecked"},
-		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AVCCChecked"},
-		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendSPSChecked"},
-		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendPPSChecked"},
-		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAnnexBChecked"},
-		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAVCCChecked"},
-		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendNALChecked"},
-		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAnnexBChecked"},
-		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAVCChecked"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "Clone"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AVCC"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendSPS"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendPPS"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAnnexB"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAVCC"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "Clone"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendNAL"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAnnexB"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAVC"},
 	} {
 		if _, ok := tt.typ.MethodByName(tt.method); !ok {
 			t.Fatalf("README encoder ownership names missing %s.%s", tt.typeName, tt.method)
 		}
 		requireREADMECodeName(t, readme, tt.typeName)
+	}
+}
+
+func TestEncoderHelperAPIReturnsErrors(t *testing.T) {
+	errorType := reflect.TypeOf((*error)(nil)).Elem()
+	for _, tt := range []struct {
+		typeName string
+		typ      reflect.Type
+		method   string
+	}{
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AVCC"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendSPS"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendPPS"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAnnexB"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAVCC"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "Clone"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendNAL"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAnnexB"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAVC"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "Clone"},
+	} {
+		method, ok := tt.typ.MethodByName(tt.method)
+		if !ok {
+			t.Fatalf("%s missing %s", tt.typeName, tt.method)
+		}
+		if method.Type.NumOut() == 0 || !method.Type.Out(method.Type.NumOut()-1).Implements(errorType) {
+			t.Fatalf("%s.%s should return an error", tt.typeName, tt.method)
+		}
+	}
+
+	for _, tt := range []struct {
+		typeName string
+		typ      reflect.Type
+		baseName string
+	}{
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AVCC"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AppendSPS"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AppendPPS"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AppendAnnexB"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AppendAVCC"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "Clone"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), baseName: "AppendNAL"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), baseName: "AppendAnnexB"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), baseName: "AppendAVC"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), baseName: "Clone"},
+	} {
+		methodName := tt.baseName + "Checked"
+		if _, ok := tt.typ.MethodByName(methodName); ok {
+			t.Fatalf("%s.%s is not a canonical encoder helper name", tt.typeName, methodName)
+		}
 	}
 }
 
@@ -435,8 +484,8 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderParameterSetsAVCCReturnsCallerOwnedBytes",
 		"TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes",
 		"TestEncodedFrameCloneRejectsInvalidMetadata",
-		"TestEncoderCheckedCloneHelpersRejectOverflowedPublicStorage",
-		"TestEncoderCheckedAppendHelpersRejectOverflowedPublicStorage",
+		"TestEncoderHelperClonesRejectOverflowedPublicStorage",
+		"TestEncoderAppendHelpersRejectOverflowedPublicStorage",
 		"TestEncodedFrameOutputHelpersRejectOverflowedPublicStorage",
 		"encoder-writers",
 		"TestCAVLCWriteResidual",

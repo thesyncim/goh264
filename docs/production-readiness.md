@@ -289,17 +289,17 @@ payload metadata, and decodes the RTP IDR/P-skip sequence, proves
 `ParameterSets` emits SPS/PPS NALs,
 Annex B headers, and avcC records accepted by the public decoder parsers,
 with caller mutation/append isolation, deep-owned `EncoderParameterSets.Clone`
-snapshots, and checked `EncoderParameterSets.CloneChecked` storage validation
-plus checked avcC-view and append-source/destination validation proved across
+snapshots, and helper clone storage validation plus avcC-view and
+append-source/destination validation proved across
 repeated helper calls,
 proves in-band keyframe, suppressed in-band, out-of-band, and every-IDR header
 modes across Annex B, AVC, and RTP, proves force-IDR, PLI, FIR, and per-frame
 keyframe requests deliver IDR output across those surfaces, proves
 `RecoveryPointSEI` emits caller-owned Annex B/AVC recovery-point SEI NAL
 surfaces accepted by public decode paths with the same mutation/append
-isolation plus deep-owned `EncoderSEI.Clone` snapshots and checked
-`EncoderSEI.CloneChecked` storage validation plus checked
-append-source/destination validation, and proves valid and invalid header/SEI helper calls preserve queued
+isolation plus deep-owned `EncoderSEI.Clone` snapshots, helper clone storage
+validation, and append-source/destination validation, and proves valid and
+invalid header/SEI helper calls preserve queued
 IDR, config, callback, RTP packet metadata, and frame-number state across Annex
 B, AVC, and RTP,
 proves `Encoder.Reset` preserves config and callback while clearing reference,

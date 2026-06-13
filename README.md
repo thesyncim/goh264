@@ -332,7 +332,7 @@ Choose the encoder surface by what the caller owns:
 | Request or inspect an IDR boundary | `ForceIDR`, `HandlePLI`, `HandleFIR`, and `PendingIDR` |
 | Change one live control | Explicit setters such as `SetBitrate`, `SetQP`, `SetRTPMaxPayloadSize`, `SetOutputFormat`, and `SetRTPMetadata` |
 | Apply a bundled low-level update | `Reconfigure` |
-| Retain input/output beyond the call | `Clone`, `CloneChecked`, or `Append...` helpers |
+| Retain input/output beyond the call | `Clone` or `Append...` helpers |
 
 Accepted encoder setup values:
 
@@ -363,7 +363,11 @@ headers, err := cfg.ParameterSets()
 if err != nil {
 	log.Fatal(err)
 }
-_ = headers.AVCC()
+headerAVCC, err := headers.AVCC()
+if err != nil {
+	log.Fatal(err)
+}
+_ = headerAVCC
 sei, err := cfg.RecoveryPointSEIMessage(0)
 if err != nil {
 	log.Fatal(err)
@@ -414,7 +418,11 @@ headers, err = enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 if err != nil {
 	log.Fatal(err)
 }
-_ = headers.AVCC()
+headerAVCC, err = headers.AVCC()
+if err != nil {
+	log.Fatal(err)
+}
+_ = headerAVCC
 sei, err = enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
 if err != nil {
 	log.Fatal(err)
@@ -479,9 +487,8 @@ with the strongest public API coverage for integration work:
   accepted runtime setters and `Reconfigure` updates.
 - `EncoderConfig.ParameterSets` and `EncoderConfig.RecoveryPointSEIMessage`
   generate caller-owned helper surfaces without constructing a live encoder.
-  Header and SEI results include append helpers for retaining individual byte
-  surfaces in caller-managed buffers, plus `CloneChecked` for validating
-  caller-constructed helper storage before cloning.
+  Header and SEI results include error-returning `Clone` and append helpers for
+  validating and retaining individual byte surfaces in caller-managed buffers.
 - `EncoderConfig.ValidateFrame` and `Encoder.ValidateFrame` validate frame shape
   before bitstream work. Invalid frames return empty output without advancing
   RTP sequence, callback, frame-number, timestamp, or reference state. The next
@@ -518,11 +525,10 @@ with the strongest public API coverage for integration work:
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
   payload helpers have `Append...` forms for caller-owned retention buffers and
-  `Clone` forms for async snapshots. `EncoderParameterSets.CloneChecked` and
-  `EncoderSEI.CloneChecked` validate public storage sizes before cloning.
-  `AVCCChecked`, `AppendSPSChecked`, `AppendPPSChecked`,
-  `AppendAnnexBChecked`, `AppendAVCCChecked`, `AppendNALChecked`, and
-  `AppendAVCChecked` provide the same storage validation for avcC bytes and
+  `Clone` forms for async snapshots. `EncoderParameterSets.Clone` and
+  `EncoderSEI.Clone` validate public storage sizes before cloning. `AVCC`,
+  `AppendSPS`, `AppendPPS`, `AppendAnnexB`, `AppendAVCC`, `AppendNAL`, and
+  `AppendAVC` provide the same storage validation for avcC bytes and
   caller-managed append buffers.
   Invalid or overflowed-destination append calls return the original destination
   unchanged. If a caller-managed append destination overlaps the helper source
