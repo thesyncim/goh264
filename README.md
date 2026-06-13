@@ -48,7 +48,7 @@ or performance evidence.
 ## Worklist
 
 The remaining work is mainly quality evidence, fresh artifact evidence, API
-cleanup, allocation/performance evidence, and broader encoder coverage. The
+surface review, allocation/performance evidence, and broader encoder coverage. The
 detailed worklist lives in:
 
 - [docs/production-readiness.md](docs/production-readiness.md)
@@ -105,10 +105,12 @@ mixed chroma/luma bit depths.
 
 ## Quick Start: Decode
 
-For whole Annex B files, use the complete-stream helper. For packetized stream
-processing, keep one decoder and feed access units with `DecodeFrames` or
-`DecodePacketFrames`; empty calls flush delayed B-frame output. The raw-output
-helpers append pixels in FFmpeg-compatible plane order:
+Use `DecodeAnnexBFrames` for a complete Annex B buffer when no decoder state must
+be retained. For streaming access units, keep one decoder and call `DecodeFrames`
+or `DecodePacketFrames`; call `FlushDelayedFrames` or pass empty input at end of
+stream. For 1-, 2-, or 3-byte length-prefixed AVC, call `DecodeAVCFrames` or
+configure avcC first. The raw-output helpers append pixels in FFmpeg-compatible
+plane order:
 
 ```go
 package main
@@ -170,7 +172,7 @@ The recommended decoder path is intentionally small:
 
 ```go
 dec := goh264.NewDecoder()
-frames, err := dec.DecodeFrames(packet)      // auto Annex B / configured AVC / avcC
+frames, err := dec.DecodeFrames(packet)      // stateful Annex B, stored configured AVC, or avcC records
 frames, err = dec.DecodePacketFrames(packet) // packet side data and NEW_EXTRADATA
 frames, err = dec.FlushDelayedFrames()       // end-of-stream delayed output
 err = dec.Reset()                            // clear decoder state
@@ -180,13 +182,13 @@ Choose the entry point by ownership and packet shape:
 
 | Need | Use |
 | --- | --- |
-| Stateful stream packets, auto Annex B/configured AVC detection, avcC storage, delayed-output flush | `DecodeFrames` |
+| Stateful Annex B access units, stored configured-AVC packets, avcC records, and empty-input delayed-output flush; unconfigured AVC auto-sniffing is 4-byte only | `DecodeFrames` |
 | Same stream path plus packet side data such as `NEW_EXTRADATA` | `DecodePacketFrames` |
 | Complete Annex B bytestream with no streaming state needed | `DecodeAnnexBFrames` |
 | Complete length-prefixed AVC packet stream with known 1-, 2-, 3-, or 4-byte NAL length size | `DecodeAVCFrames` |
-| Header metadata without decoder state mutation | `InspectAnnexBHeaders` or `InspectAVCHeaders` |
+| Stateless header/config metadata | `InspectAnnexBHeaders`, `InspectAVCHeaders`, or `InspectAVCC` |
 | Stored avcC/configured-AVC stream packets | `ConfigureAVCC`, then `DecodeConfiguredAVCFrames` |
-| Exactly one expected output frame | `Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`, `DecodeConfiguredAVC`, or `DecodeAVCC` |
+| Exactly one expected output frame or one delayed flush | `Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`, `DecodeConfiguredAVC`, `DecodeAVCC`, or `FlushDelayedFrame` |
 
 Use the format-specific helpers when the packet format is already known:
 
@@ -204,9 +206,9 @@ Single-frame helpers (`Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`,
 `ErrUnsupported` when a packet produces zero or multiple frames. If a damaged
 packet produces exactly one valid frame before a later decode error, the helper
 returns that frame with the error. For stream processing, prefer `DecodeFrames` or
-`DecodePacketFrames`; they retain decoder reference state across packets, auto
-detect Annex B versus configured AVC, store avcC records when encountered, and
-flush delayed output when called with empty data. `DecodeConfiguredAVCFrames`
+`DecodePacketFrames`; they retain decoder reference state across packets, select
+Annex B or the stored configured-AVC length size, store avcC records when
+encountered, and flush delayed output when called with empty data. `DecodeConfiguredAVCFrames`
 uses the stored avcC length size directly. Bare length-prefixed AVC packets
 with 1-, 2-, or 3-byte NAL length fields should use `DecodeAVCFrames` or a
 configured-AVC path after `ConfigureAVCC`/`ParseHeadersAVC`; unconfigured
@@ -320,7 +322,7 @@ LCEVC entries suppress later duplicates.
 ## Encoder API
 
 The encoder surface is intentionally split into a small recommended realtime
-path and lower-level escape hatches. Prefer the explicit setters for live
+path and grouped update helpers. Prefer the explicit setters for live
 controls; use `Reconfigure` only when a grouped update needs fields that do not
 have a dedicated helper.
 
@@ -333,9 +335,9 @@ Choose the encoder surface by what the caller owns:
 | View exact setup before construction | `EncoderConfig.Normalize` |
 | Read the exact live setup after accepted setters | `Encoder.Config` |
 | Validate one input frame without mutating encoder state | `EncoderConfig.ValidateFrame` or `Encoder.ValidateFrame` |
-| Generate SPS/PPS or recovery SEI without a live encoder | `EncoderConfig.ParameterSets` or `RecoveryPointSEIMessage` |
-| Encode with encoder-owned access-unit storage | `Encode` |
-| Encode into caller-owned access-unit storage | `EncodeInto` |
+| Generate SPS/PPS or recovery SEI without a live encoder | `EncoderConfig.ParameterSets` or `EncoderConfig.RecoveryPointSEIMessage` |
+| Encode with encoder-owned result storage | `Encode` |
+| Encode into caller-owned result byte storage where supported | `EncodeInto` |
 | Request or inspect an IDR boundary | `ForceIDR`, `HandlePLI`, `HandleFIR`, and `PendingIDR` |
 | Change one live control | Explicit setters such as `SetBitrate`, `SetQP`, `SetRTPMaxPayloadSize`, `SetOutputFormat`, and `SetRTPMetadata` |
 | Apply a bundled low-level update | `Reconfigure` |
@@ -348,8 +350,8 @@ Accepted encoder setup values:
 | Input | 8-bit I420, even width/height, valid I420 crop and strides | Other pixel formats, odd I420 dimensions, invalid crop/stride geometry |
 | Profile/tools | `EncoderProfileConstrainedBaseline` or `EncoderProfileBaseline`, `EncoderEntropyCAVLC`, `Transform8x8=false`, `MaxReferenceFrames=1`, `BFrames=0` | Main/High profiles, CABAC, 8x8 transform, multiple refs, B-frames |
 | Runtime | `Workers=1` for deterministic mode; `Workers>1` only with `Deterministic=false` and no parallel throughput guarantee; `SliceCount` from 1 through coded macroblock count; `IntraRefresh=false` | Deterministic multi-worker encode, too many slices, enabled intra refresh |
-| Rate/budget | CBR or ConstantQP, QP range 0..51, non-negative VBV/frame/slice/time budgets | VBR until it drives quality decisions, bad bitrate ordering, QP outside 0..51, negative budgets |
-| Preset | `EncoderPresetRealtime` | Balanced/Quality presets until they drive mode decisions |
+| Rate/budget | CBR or ConstantQP, QP range 0..51, non-negative VBV/frame/slice/time budgets | VBR mode; invalid bitrate ordering, QP outside 0..51, negative budgets |
+| Preset | `EncoderPresetRealtime` | Balanced/Quality presets; only `EncoderPresetRealtime` drives current mode selection |
 | Output | Annex B, AVC samples, or RTP | Unknown output formats |
 | RTP | packetization-mode 0 with payload size >= 2; packetization-mode 1 with payload size >= 3; STAP-A only in mode 1; DON disabled; payload type 0..127 | Mode-0 STAP-A, DON/interleaved mode, payload type >127, undersized RTP payloads |
 
@@ -418,7 +420,7 @@ must(enc.SetPreset(goh264.EncoderPresetRealtime))
 must(enc.SetSliceCount(2))
 must(enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand))
 must(enc.SetSPSPPSBeforeIDR(false))
-must(enc.SetIntraRefresh(false)) // enabling intra refresh is outside the admitted subset
+must(enc.SetIntraRefresh(false)) // true returns ErrUnsupported
 must(enc.SetRecoveryPointSEI(true))
 must(enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false))
 must(enc.SetRTPMetadata(110, 0x11223344))
@@ -534,7 +536,8 @@ with the strongest public API coverage for integration work:
   changes queue an IDR boundary after a valid update. RTP packetization and
   metadata are validated even before switching output to RTP, so invalid RTP
   state cannot be parked behind Annex B or AVC output. `SetIntraRefresh(true)`
-  returns `ErrUnsupported` until intra refresh is admitted.
+  returns `ErrUnsupported` because intra refresh is not part of the current
+  encoder contract.
 - `EncoderReconfigure` remains the grouped low-level update surface for
   bundled multi-field changes, grouped `Limits`, and explicit force-IDR
   requests. Zero scalar fields in `EncoderReconfigure` mean unchanged; use
@@ -560,9 +563,9 @@ with the strongest public API coverage for integration work:
   dropped frames, so callers do not need to infer format from packet presence.
   Caller-constructed `EncodedFrame` values must set `OutputFormat` before using
   access-unit/RTP helper methods or cloning dropped results.
-- For RTP output, `EncodedFrame.Data` remains an Annex B access-unit view for
-  `AccessUnitData` and `NALData`; send packet bytes from `RTPPackets`,
-  `RTPPacketData`, or `RTPPayloadData`. Packet-level helpers validate the
+- For RTP output, send `RTPPackets`, `RTPPacketData`, or `RTPPayloadData`.
+  `EncodedFrame.Data` is retained only as an Annex B access-unit view for local
+  inspection through `AccessUnitData` and `NALData`. Packet-level helpers validate the
   encoder-emitted 12-byte RTP header shape and exported packet metadata before
   returning packet bytes. Payload helpers and packet clones also require
   `Payload` to be exactly `Data[12:]`.
@@ -622,10 +625,10 @@ Bitrate-budget drops use the configured `MaxBitrate` refill rate and
 output without RTP packets or callbacks before the next valid frame resumes as
 P-skip.
 
-Still outside the admitted subset: motion search beyond the bounded 8-pixel exact
-macroblock-aligned inter path, broader quantized residual coding beyond the
-guarded luma-DC/chroma-only/combined luma-chroma paths, and adaptive
-rate-control feedback.
+Outside the documented realtime encoder contract: motion search beyond the
+bounded 8-pixel exact macroblock-aligned inter path, broader quantized residual
+coding beyond the guarded luma-DC/chroma-only/combined luma-chroma paths, and
+adaptive rate-control feedback.
 
 ## Decoder Coverage At A Glance
 
@@ -732,11 +735,10 @@ Production use should be backed by a fresh quality-evidence pass proving:
   `GOH264_FFMPEG_BIN` when the oracle binary is not named `ffmpeg`.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
-- Encoder support stays in the admitted subset until
-  [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md) has matching
-  broader motion-search P prediction, residual bitstream implementation,
-  rate-control behavior, remaining packetizer breadth, controls, and oracle
-  evidence.
+- The documented encoder contract is limited to the listed realtime subset.
+  Broader support requires matching motion-search, residual, rate-control,
+  packetizer, control, and oracle evidence in
+  [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md).
 - The source-truth and translation-ledger docs match the committed tests.
 
 The combined quality-evidence runner writes logs under

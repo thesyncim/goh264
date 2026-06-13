@@ -48,7 +48,7 @@ defaults:
   limits, RTP payload metadata, timestamp increment, rate-control/QP,
   frame-drop, GOP/IDR, deblock, and latency/quality preset changes.
 
-Current safe point: the public control contract is present in `encoder.go` and
+Documented encoder contract: the public control contract is present in `encoder.go` and
 covered by `tests/encoder_webrtc_controls_test.go`, including public
 input/result/callback surface guards for integration-facing encoder structs.
 Valid 8-bit I420 constrained-baseline realtime/WebRTC configs can be
@@ -284,20 +284,20 @@ P IntraPCM fallback boundary.
 
 ## Implementation Order
 
-1. Done: add the public encoder configuration and control contract with tests
+1. Supported now: public encoder configuration and control contract with tests
    that reject invalid WebRTC configurations.
-2. Done: add bitstream writer primitives. Done for raw NAL/RBSP,
+2. Supported now: bitstream writer primitives for raw NAL/RBSP,
    Exp-Golomb, Annex B/AVC packaging, AVC configuration records, and baseline
    SPS/PPS plus recovery-point SEI syntax, with CAVLC residual VLC write
    primitives plus trailing-ones, single-level, and
    single-level-plus-trailing-ones residual block writing now round-tripped
    through the decoder.
-3. Done: add an intra-only IDR path for I420 input and prove that local decode,
+3. Supported now: intra-only IDR path for I420 input with local decode,
    FFmpeg decode, AVC decode, and RTP FU-A reassembly produce matching raw
    frames.
-4. In progress: add P-frame prediction, reference management, CAVLC residual
+4. Expansion target: P-frame prediction, reference management, CAVLC residual
    coding, deblock policy, and rate-control feedback in small oracle-backed
-   slices. Done for identical-reference P-skip, exact macroblock-aligned P16x16
+   slices. Supported now for identical-reference P-skip, exact macroblock-aligned P16x16
    no-residual prediction for frame-wide and per-macroblock integer-pel shifts
    up to 8 pixels, exact luma-DC, chroma-only, and combined luma/chroma
    residual-P across public Annex B/AVC/RTP outputs, including odd-pixel luma
@@ -310,8 +310,8 @@ P IntraPCM fallback boundary.
    slice-boundary deblock controls, configured multi-slice ranges,
    and recovery-point SEI emission on changed-frame P IntraPCM recovery
    pictures; forced keyframes still emit IDR.
-5. In progress: add RTP packetization and WebRTC control handling with
-   packet-level tests. Done for packetization-mode 0 single-NAL IDR, P-skip,
+5. Expansion target: RTP packetization and WebRTC control handling with
+   packet-level tests. Supported now for packetization-mode 0 single-NAL IDR, P-skip,
    exact-P16x16, and P IntraPCM output with oversize rejection,
    packetization-mode 1 single NAL/FU-A output, and
    STAP-A parameter-set aggregation with marker-bit boundaries plus changed-P
@@ -363,7 +363,7 @@ P IntraPCM fallback boundary.
    that exceed `MaxEncodeTimeUS`
    without advancing reference/frame/packet state, including after a transmitted
    reference frame.
-6. In progress: add realtime allocation budgets, encode timing benchmarks, and
+6. Expansion target: realtime allocation budgets, encode timing benchmarks, and
    control-loop stress tests. Done for the first RTP/Annex B/RTP control-loop
    stress proof, initial `EncodeInto` allocation canaries on Annex B, AVC, and
    RTP admitted IDR/P-frame paths including Annex B odd-pixel constant-chroma
@@ -402,7 +402,8 @@ Encoder tests need independent evidence, not only local decode:
 
 ## Production Bar
 
-Encoder support stays in the admitted subset until:
+The documented encoder contract is limited to the guarded realtime subset.
+Broader support requires:
 
 - The decoder production bar remains green.
 - The encoder controls above are represented by tests.
@@ -412,7 +413,7 @@ Encoder support stays in the admitted subset until:
   quality evidence. The admitted local vet, contract, API-surface,
   bitstream-oracles, residual-boundary, writer, allocation, and `-benchmem`
   rows are now bundled by
-  `scripts/h264-encoder-quality-evidence.sh`; broader production status still
+  `scripts/h264-encoder-quality-evidence.sh`; broader documented support
   requires the combined `scripts/h264-quality-evidence.sh` pass plus the
   remaining motion-search, residual, rate-control, and packetizer breadth
   above.

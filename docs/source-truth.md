@@ -299,7 +299,7 @@ current-checkout evidence. The always-on
 `TestH264DecoderTDDContractClassifiesEveryImportedPublicVector` test treats
 that inventory as the decoder TDD backlog: every imported ref must be executable
 in the manifest, documented as an exclusion, or recorded as a known-red
-manifest row. Matrix mode is the safe-point gate. Green oracle rows include
+manifest row. Matrix mode is the matrix verification gate. Green oracle rows include
 decode-ok, metadata-ok, and expected decode-error rows. The strict script
 excludes only rows in
 `testdata/h264/realvectors/failures.jsonl`, which is currently empty; the

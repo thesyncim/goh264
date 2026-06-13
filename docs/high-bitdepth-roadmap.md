@@ -1,6 +1,6 @@
 # High-Bit-Depth Roadmap
 
-High-bit-depth decode is fixture-gated, not generally admitted.
+High-bit-depth decode is documented only for the listed fixture-backed paths.
 
 Proved: selected High10 IDR/I/P/B plus public High10/High422 intra conformance, weighted/
 partitioned/direct-sub lanes, CAVLC direct-sub residual, CABAC fixture

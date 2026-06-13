@@ -10,10 +10,10 @@ coefficient positions across all four luma CBP partitions and chroma-only DC/AC
 residual payloads without requiring luma coefficients. Public encoder coverage
 pins exact luma-DC, chroma-only, and combined luma/chroma residual-P admission
 across Annex B, AVC, RTP mode 1, and RTP mode 0. Broader residual shapes stay
-on the admitted recovery-SEI plus P IntraPCM fallback boundary until their
-bitstream generation has matching oracles.
+on the documented recovery-SEI plus P IntraPCM fallback boundary while broader
+bitstream generation still needs matching oracles.
 
-Harness-first status, with quality gates before timing tools:
+Harness-first evidence, with quality gates before timing tools:
 
 ```sh
 scripts/h264-quality-evidence.sh # combined race, decoder, and admitted encoder quality runner
