@@ -139,8 +139,10 @@ runner into separate child directories.
 `scripts/h264-decoder-release-evidence.sh` runs the decoder release checklist
 as one gate and writes per-command logs plus the local performance bundle under
 `.artifacts/h264-release-evidence/`. It includes the repo-wide `go vet ./...`
-static correctness gate and fails by default if the known-red failure ledger is
-non-empty or the worktree is dirty.
+static correctness gate, focused decoder API-surface checks covering stateless
+header inspection and avcC/reset behavior, and focused ref-modification checks.
+It fails by default if the known-red failure ledger is non-empty or the
+worktree is dirty.
 `scripts/h264-encoder-release-evidence.sh` runs the admitted encoder local
 release checklist as one gate: `go vet ./...`, full tests, the external
 encoder control contract, the explicit `EncodeInto` allocation canary,
