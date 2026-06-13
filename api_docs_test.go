@@ -551,6 +551,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecodeAVCOneByteLengthSizePublicSurfaces",
 		"TestFrameCloneRejectsOverflowedPublicStorage",
 		"TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage",
+		"TestDecodePacketFramesRejectsOverflowedSideDataListWithoutDroppingPacket",
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",

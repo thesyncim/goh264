@@ -658,7 +658,8 @@ func (d *Decoder) DecodePacket(pkt Packet) (*Frame, error) {
 //
 // PacketSideDataNewExtradata is parsed before packet data and is non-fatal when
 // malformed, leaving the previous configuration in use. Passing an empty packet
-// flushes delayed frames and does not attach packet side data.
+// flushes delayed frames and does not attach packet side data. Side-data lists
+// beyond public storage limits are ignored while packet data still decodes.
 func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
@@ -1388,6 +1389,9 @@ func (d *Decoder) storeAnnexBParameterSetsForPacket(nals []h264.NALUnit, packetD
 }
 
 func packetSideDataGet(sideData []PacketSideData, typ PacketSideDataType) (PacketSideData, bool) {
+	if len(sideData) > maxInt/32 {
+		return PacketSideData{}, false
+	}
 	for _, side := range sideData {
 		if side.Type == typ {
 			return side, true
@@ -1398,6 +1402,9 @@ func packetSideDataGet(sideData []PacketSideData, typ PacketSideDataType) (Packe
 
 func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameSideData {
 	var out h264.DecodedFrameSideData
+	if len(sideData) > maxInt/32 {
+		return out
+	}
 	if side, ok := packetSideDataGet(sideData, PacketSideDataA53ClosedCaptions); ok {
 		out.A53ClosedCaptions = cloneByteSlice(side.Data)
 	}

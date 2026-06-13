@@ -447,6 +447,21 @@ func TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 	}
 }
 
+func TestDecodePacketFramesRejectsOverflowedSideDataListWithoutDroppingPacket(t *testing.T) {
+	side := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0x01, 0x02}}
+	frames, err := NewDecoder().DecodePacketFrames(Packet{
+		Data:     decodeHexFixture(t, black16AnnexBHex),
+		SideData: fakeDecoderRawSliceLen(&side, maxIntForTest/32+1),
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames with overflowed side-data list: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if got := frames[0].SideData.A53ClosedCaptions; got != nil {
+		t.Fatalf("DecodePacketFrames imported side data from overflowed list: %x", got)
+	}
+}
+
 func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 	side := FrameSideData{
 		UserDataUnregistered: [][]byte{{1, 2, 3}},

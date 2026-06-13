@@ -679,6 +679,19 @@ func TestPacketFrameSideDataFromPacketRejectsOverflowedBytePayloads(t *testing.T
 	}
 }
 
+func TestPacketSideDataHelpersRejectOverflowedSideDataList(t *testing.T) {
+	side := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0x01}}
+	sideData := fakeEncoderSliceLen(&side, maxInt/32+1)
+	if got, ok := packetSideDataGet(sideData, PacketSideDataA53ClosedCaptions); ok || got.Data != nil {
+		t.Fatalf("overflowed packet side-data lookup = %+v/%v, want no match", got, ok)
+	}
+
+	got := packetFrameSideDataFromPacket(sideData)
+	if got.A53ClosedCaptions != nil {
+		t.Fatalf("overflowed packet side-data list imported captions length %d, want nil", len(got.A53ClosedCaptions))
+	}
+}
+
 func TestFrameSideDataFromH264RejectsOverflowedBytePayloads(t *testing.T) {
 	src := h264.DecodedFrameSideData{
 		A53ClosedCaptions: fakeEncoderBytesLen(maxInt/2 + 1),

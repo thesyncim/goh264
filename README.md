@@ -299,6 +299,8 @@ malformed snapshots are not silently truncated.
 Structured side-data entries are decoded only when their payload validates;
 byte-oriented packet side data such as A53 captions, ICC profile, HDR10+, and
 LCEVC is copied into frame side data for caller-owned retention.
+Packet side-data lists beyond public storage limits are ignored during decode;
+the compressed packet data still decodes.
 Duplicate packet side data follows first-entry semantics: empty or malformed
 first `NEW_EXTRADATA`, active-format, S12M timecode, ICC profile, HDR10+, and
 LCEVC entries suppress later duplicates.
