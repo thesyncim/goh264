@@ -183,7 +183,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}
 }
 
-func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
+func TestREADMEQualityEvidenceDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatalf("read README.md: %v", err)
@@ -191,12 +191,13 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 	readme := string(data)
 	readmeLower := strings.ToLower(readme)
 	for _, phrase := range []string{
-		"still hardening as a complete codec package",
-		"still below quality parity with a production H.264 encoder",
+		"Quality And Parity Evidence",
+		"Guarded realtime subset",
+		"Remaining gaps",
 		"Examples",
 		"API smoke tests only",
 		"oracle-backed bitstream parity",
-		"production acceptance",
+		"acceptance",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md missing quality/parity status phrase %q", phrase)
@@ -565,7 +566,7 @@ func TestREADMEEncoderAdmittedValuesTableDocumentsUnsupportedKnobs(t *testing.T)
 	}
 	readme := string(data)
 	for _, phrase := range []string{
-		"Accepted encoder setup values today",
+		"Accepted encoder setup values",
 		"EncoderProfileConstrainedBaseline",
 		"EncoderProfileBaseline",
 		"EncoderEntropyCAVLC",
@@ -581,7 +582,7 @@ func TestREADMEEncoderAdmittedValuesTableDocumentsUnsupportedKnobs(t *testing.T)
 		"EncoderPresetRealtime",
 		"Balanced/Quality presets until they drive mode decisions",
 		"Workers>1` only with `Deterministic=false`",
-		"no parallel throughput guarantee yet",
+		"no parallel throughput guarantee",
 		"IntraRefresh=false",
 		"enabled intra refresh",
 		"packetization-mode 0 with payload size >= 2",
@@ -604,7 +605,7 @@ func TestREADMEEncoderDocumentsRealtimeDefaultAndLiveConfig(t *testing.T) {
 	readme := string(data)
 	for _, phrase := range []string{
 		"supported realtime/WebRTC baseline",
-		"`DefaultRealtimeEncoderConfig`; `DefaultEncoderConfig` is a compatibility alias",
+		"`DefaultRealtimeEncoderConfig`; `DefaultEncoderConfig` returns the same template",
 		"Read the exact live setup after accepted setters",
 		"`Encoder.Config`",
 		"Encoder.Config` returns the exact normalized live configuration",
@@ -628,7 +629,7 @@ func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
 	for _, phrase := range []string{
 		"Compatible in-stream avcC updates retain references",
 		"incompatible active SPS changes reset picture state",
-		"old references are not visible to the new stream",
+		"prior references are not used across the incompatible boundary",
 		"IDR-bound stream switches",
 		"unrelated stream where the decoder cannot infer the boundary from avcC",
 		"call `Reset` before storing the new avcC",
@@ -641,18 +642,18 @@ func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
 	}
 }
 
-func TestREADMEStateLifecycleDocumentsDecoderEncoderBoundaries(t *testing.T) {
+func TestREADMEStateAndOwnershipDocumentsDecoderEncoderBoundaries(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatalf("read README.md: %v", err)
 	}
 	readme := string(data)
 	for _, phrase := range []string{
-		"## State Lifecycle",
+		"## State And Ownership Boundaries",
 		"`Decoder.DecodeFrames` / `DecodePacketFrames`",
 		"Retain decoder references and delayed output across stream packets",
 		"`Decoder.ConfigureAVCC`",
-		"resets decoder picture state for a new configured-AVC stream",
+		"resets decoder picture state for the configured-AVC boundary",
 		"`Decoder.DecodeAVCCFrames` / packet `NEW_EXTRADATA`",
 		"Compatible avcC or Annex B parameter-set updates retain references",
 		"incompatible active SPS changes reset picture state before decoding",
@@ -666,12 +667,12 @@ func TestREADMEStateLifecycleDocumentsDecoderEncoderBoundaries(t *testing.T) {
 		"Leave configuration, queued IDR state, RTP sequence/callback state, frame number, timestamp, and references unchanged",
 	} {
 		if !strings.Contains(readme, phrase) {
-			t.Fatalf("README.md lifecycle table missing %q", phrase)
+			t.Fatalf("README.md state/ownership table missing %q", phrase)
 		}
 	}
 }
 
-func TestPublicCommentsDocumentStateLifecycleBoundaries(t *testing.T) {
+func TestPublicCommentsDocumentStateAndOwnershipBoundaries(t *testing.T) {
 	decoderData, err := os.ReadFile("decoder.go")
 	if err != nil {
 		t.Fatalf("read decoder.go: %v", err)
@@ -689,22 +690,23 @@ func TestPublicCommentsDocumentStateLifecycleBoundaries(t *testing.T) {
 		"Storing a configuration resets decoder picture state for a new",
 		"ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,\n// resets decoder picture state",
 		"ConfigureAVCC parses an avcC record, stores it for configured-AVC decode\n// calls, resets decoder picture state",
-		"ConfigureAVCC is the preferred short avcC API",
-		"InspectAVCC is the preferred short stateless avcC name",
+		"ConfigureAVCC is the short avcC API",
+		"InspectAVCC is the short stateless avcC name",
+		"DecodeAVCCFrames updates the stored AVC configuration from an avcC record,\n// decodes data with that configuration, and drains delayed frames",
 	} {
 		if !strings.Contains(decoder, phrase) {
-			t.Fatalf("decoder public comments missing lifecycle phrase %q", phrase)
+			t.Fatalf("decoder public comments missing state/ownership phrase %q", phrase)
 		}
 	}
 	for _, phrase := range []string{
 		"DefaultRealtimeEncoderConfig returns a realtime/WebRTC-oriented 8-bit I420",
-		"DefaultEncoderConfig remains as a compatibility alias",
+		"DefaultEncoderConfig returns the same realtime template",
 		"Config returns a copy of the current normalized encoder configuration",
 		"Reset clears encoder coding state while preserving configuration and RTP callback",
 		"After Reset, the next successfully encoded frame starts a fresh sequence",
 	} {
 		if !strings.Contains(encoder, phrase) {
-			t.Fatalf("encoder public comments missing lifecycle phrase %q", phrase)
+			t.Fatalf("encoder public comments missing state/ownership phrase %q", phrase)
 		}
 	}
 }
@@ -719,14 +721,14 @@ func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	}
 }
 
-func TestREADMEDecoderAVCCPreferredNamesTable(t *testing.T) {
+func TestREADMEDecoderAVCCNameMap(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatalf("read README.md: %v", err)
 	}
 	readme := string(data)
 	for _, phrase := range []string{
-		"Preferred avcC names",
+		"avcC name map",
 		"Stateless avcC metadata inspection",
 		"`InspectAVCC`",
 		"Store avcC for configured-AVC streaming",
@@ -735,13 +737,13 @@ func TestREADMEDecoderAVCCPreferredNamesTable(t *testing.T) {
 		"`DecodeConfiguredAVCFrames`",
 		"Update avcC, decode one packet, then drain delayed output",
 		"`DecodeAVCCFrames`",
-		"Equivalent or compatibility names",
+		"Equivalent names",
 		"Single-frame helper",
 		"decoder `ParseAVCC`",
 		"package `ParseAVCC`",
 	} {
 		if !strings.Contains(readme, phrase) {
-			t.Fatalf("README.md decoder avcC preferred-name table missing %q", phrase)
+			t.Fatalf("README.md decoder avcC name-map table missing %q", phrase)
 		}
 	}
 }

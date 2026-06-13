@@ -1,7 +1,6 @@
 # Realtime/WebRTC Encoder Roadmap
 
-This repo is decoder-first today, but encoder support is now explicitly in
-scope. The encoder target is realtime/WebRTC H.264, not an archival offline
+This repo is decoder-first, with encoder support explicitly in scope. The encoder target is realtime/WebRTC H.264, not an archival offline
 encoder. The implementation should land in source-shaped, test-driven slices
 with the same rule as the decoder: no production claim until controls,
 bitstream validity, oracle behavior, and allocation/performance evidence are

@@ -2,14 +2,14 @@
 
 Decoder scope: FFmpeg `n8.0.1` H.264 decoder path only.
 
-Expanded product scope: realtime/WebRTC H.264 encoder support is now planned in
+Expanded product scope: realtime/WebRTC H.264 encoder support is planned in
 `docs/encoder-webrtc-roadmap.md`. The public encoder control contract now lives
 in `encoder.go` and is tested from the external `tests` package. Encoder
 parameter-set and recovery-point SEI writers follow FFmpeg `n8.0.1`
 `libavcodec/cbs_h264_syntax_template.c` syntax order; recovery-point SEI
 defaults mirror the FFmpeg VAAPI/Vulkan encoder shape for I-picture recovery
 points (`recovery_frame_cnt=0`, exact-match set, broken-link only when B-frame
-chains exist). The admitted encoder bitstream path is still a narrow 8-bit I420
+chains exist). The admitted encoder bitstream path is a narrow 8-bit I420
 Constrained Baseline subset: IDR IntraPCM, identical-reference CAVLC P-skip,
 bounded exact P16x16 no-residual prediction, changed-frame P IntraPCM recovery
 pictures, Annex B/AVC access-unit output, configured multi-slice output, and
@@ -21,7 +21,7 @@ broader motion search, adaptive rate-control feedback, and production encoder
 parity claims remain pending. Encoder work must land behind its own controls,
 oracles, and quality evidence while the decoder production bar stays green.
 
-Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
+Proved: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
 no-deblock plus weighted 4:2:2/4:4:4 luma-only and luma+chroma P frame deblock modes 0/1 and
 slice-boundary mode-2 deblock plus CAVLC/CABAC 4:2:2/4:4:4 implicit and
@@ -113,7 +113,7 @@ package-level `InspectAnnexBHeaders`/`InspectAVCHeaders` stream metadata
 inspection without decoder-state mutation,
 package-level `InspectAVCC`/`InspectAVCDecoderConfigurationRecord` metadata
 inspection without decoder-state mutation, with `ParseAVCC` and
-`ParseAVCDecoderConfigurationRecord` retained as compatibility aliases,
+`ParseAVCDecoderConfigurationRecord` available as equivalent parse names,
 malformed standalone AVC decoder configuration records preserving the last
 stored configured-AVC state,
 malformed AVC/Annex B `NEW_EXTRADATA` non-fatal packet-side-data guards,

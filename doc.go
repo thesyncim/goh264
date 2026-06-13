@@ -1,5 +1,5 @@
-// Package goh264 provides a pure-Go H.264 decoder and an experimental
-// realtime-oriented encoder.
+// Package goh264 provides a pure-Go H.264 decoder and a realtime-oriented
+// encoder surface.
 //
 // Decoder API shape:
 //
@@ -17,16 +17,16 @@
 // Encoder API shape:
 //
 //   - Start from DefaultRealtimeEncoderConfig, normalize or validate it, then
-//     construct an Encoder with NewEncoder. DefaultEncoderConfig remains as a
-//     compatibility alias.
+//     construct an Encoder with NewEncoder. DefaultEncoderConfig returns the
+//     same realtime template.
 //   - Use explicit runtime setters for ordinary bitrate, frame-rate, GOP,
 //     geometry, slice, header, packetization, RTP, and recovery-SEI controls.
 //   - Use Reconfigure only for grouped low-level updates, grouped Limits, or
-//     fields that do not have a dedicated setter yet.
+//     fields without a dedicated setter.
 //   - Use EncodeInto when the caller owns access-unit storage, and Encode when
 //     encoder-owned storage is sufficient.
 //
 // The decoder is the best-covered side of the module. The encoder deliberately
 // admits a narrower Constrained Baseline I420 subset while its broader
-// production coverage is still being hardened.
+// quality evidence and coding coverage expand.
 package goh264

@@ -126,7 +126,7 @@ the admitted encoder Annex B/AVC/RTP IDR/P-skip/exact-P16
 edge-search/P-IntraPCM and RTP packetization benchmarks with `-benchmem`; its
 output is suitable for `benchstat` trend comparisons. `GOH264_BENCHSTAT_TIME`
 sets the effective `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is accepted as an
-alias when `GOH264_BENCHSTAT_TIME` is unset, and the performance/quality
+alternate input when `GOH264_BENCHSTAT_TIME` is unset, and the performance/quality
 evidence metadata records the effective value.
 `scripts/h264-performance-evidence.sh` writes a local evidence bundle under
 `.artifacts/h264-performance-evidence/` containing benchstat samples, the JSON
@@ -230,13 +230,13 @@ configuration state does not retain caller-owned side-data, configuration, or
 packet buffers after return.
 Package-level `InspectAnnexBHeaders` and `InspectAVCHeaders` expose stateless
 SPS/PPS stream metadata inspection without touching decoder state.
-Package-level `InspectAVCC` provides the preferred short stateless avcC metadata
+Package-level `InspectAVCC` provides the short stateless avcC metadata
 inspection; `InspectAVCDecoderConfigurationRecord` is the equivalent long-form
 name, and package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord`
-remain compatibility aliases. Damaged configuration rejection leaves an
+parse the same metadata. Damaged configuration rejection leaves an
 existing decoder configuration and delayed-output path usable.
 Malformed standalone AVC decoder configuration records are also guarded: failed
-`ConfigureAVCDecoderConfigurationRecord`, compatibility parse aliases, and
+`ConfigureAVCDecoderConfigurationRecord`, equivalent parse names, and
 auto-detected `DecodeFrames` config updates leave the last stored configuration
 usable for configured AVC decode.
 In-band malformed SPS/PPS NALs are also guarded as non-fatal: they do not

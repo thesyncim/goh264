@@ -3,34 +3,29 @@
 Pure-Go H.264 codec workbench, decoder-first and source-shaped from FFmpeg
 `libavcodec`.
 
-This repository is an active port of the FFmpeg `n8.0.1` H.264 decoder path,
-pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`. The decoder is the
-best-covered side of the project: public Annex B, AVC, avcC, packet,
-raw-output, side-data, and delayed-output surfaces are covered by unit, corpus,
-FATE, and FFmpeg-oracle tests.
+This repository ports the FFmpeg `n8.0.1` H.264 decoder path, pinned at
+`894da5ca7d742e4429ffb2af534fcda0103ef593`. Decoder evidence covers public
+Annex B, AVC, avcC, packet, raw-output, side-data, delayed-output, corpus, FATE,
+and FFmpeg-oracle surfaces.
 
-The encoder is intentionally narrower. It has a tested realtime/WebRTC-facing
-API and admits a guarded Constrained Baseline I420 subset today: IDR IntraPCM,
-identical-reference P-skip, bounded exact P16x16 no-residual prediction, changed
-P IntraPCM recovery frames, AVC/Annex B output, configured multi-slice output,
-and RTP packetization modes 0 and 1. The API is usable for integration testing,
-but broader motion search, public residual macroblock admission, rate-control
-behavior, and production performance evidence are still in flight.
+The encoder surface targets realtime/WebRTC integration and admits a guarded
+Constrained Baseline I420 subset: IDR IntraPCM, identical-reference P-skip,
+bounded exact P16x16 no-residual prediction, bounded residual-P candidates,
+changed P IntraPCM recovery frames, AVC/Annex B output, configured multi-slice
+output, and RTP packetization modes 0 and 1. Remaining encoder work includes
+general motion search, pixel-domain residual macroblock generation,
+rate-control decisions, wider packetizer/control breadth, and reviewed
+allocation/performance evidence.
 
-## Quality And Parity Status
+## Quality And Parity Evidence
 
-This project is still hardening as a complete codec package. The decoder has
-the strongest evidence and is the current parity focus; the encoder is an
-admitted realtime/WebRTC subset with many public API contracts covered, but it
-is still below quality parity with a production H.264 encoder.
-
-| Area | Quality state | Strong evidence today | Missing before production parity |
+| Area | Evidence shape | Covered surfaces | Remaining gaps |
 | --- | --- | --- | --- |
-| Decoder | Best-covered, still hardening | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Final production evidence, every selected gate green together, exact parity on remaining unselected field/MBAFF/damaged-edge behavior |
-| Encoder | Admitted realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, public residual macroblock admission, mature rate control, wider packetizer/control breadth, oracle-backed bitstream parity, reviewed allocation/performance evidence |
-| Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, production acceptance, or performance evidence |
+| Decoder | Parity-driven port from the pinned FFmpeg path | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Broader field/MBAFF/damaged-edge behavior, full selected-gate evidence, allocation/performance review |
+| Encoder | Guarded realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, bounded residual-P candidates, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, pixel-domain residual generation, adaptive rate control, wider packetizer/control breadth, oracle-backed bitstream parity, allocation/performance review |
+| Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, acceptance, or performance evidence |
 
-## What Works Today
+## Capabilities
 
 - **Decoder:** pure Go, no cgo, no module dependencies.
 - **Inputs:** Annex B bytestreams, length-prefixed AVC packets, avcC decoder
@@ -40,17 +35,16 @@ is still below quality parity with a production H.264 encoder.
   side-data cloning.
 - **State:** streaming decode keeps references and delayed B-frame output across
   calls; empty decode calls flush delayed output.
-- **Encoder:** usable as an experimental realtime/WebRTC integration surface for
-  the admitted Baseline paths listed above. It is not a general-purpose H.264
-  encoder yet.
+- **Encoder:** realtime/WebRTC integration surface for the guarded Baseline paths
+  listed above.
 - **Verification:** the selected public-vector decoder matrix is green with no
   known-red rows.
 
-## Hardening Scope
+## Worklist
 
-Treat the current module as still hardening. The remaining work is mainly
-quality evidence, API cleanup, allocation/performance evidence, and broader
-encoder coverage. The detailed status lives in:
+The remaining work is mainly quality evidence, API cleanup,
+allocation/performance evidence, and broader encoder coverage. The detailed
+worklist lives in:
 
 - [docs/production-readiness.md](docs/production-readiness.md)
 - [docs/source-truth.md](docs/source-truth.md)
@@ -68,9 +62,9 @@ Requires Go 1.24 or newer.
 FFmpeg is not required to import the package. FFmpeg is used by the oracle,
 corpus-fetch, extraction, and benchmark scripts.
 
-## Status Snapshot
+## Decoder Evidence Snapshot
 
-Current public-vector matrix:
+Public-vector matrix:
 
 | Set | Count |
 | --- | ---: |
@@ -83,7 +77,7 @@ Current public-vector matrix:
 
 The selected manifest represents 225 imported decoder-facing refs; the remaining
 imported ref is the documented non-H.264 MKV exclusion. No known-red
-public-vector rows currently remain. The executable ledger at
+public-vector rows are listed. The executable ledger at
 `testdata/h264/realvectors/failures.jsonl` stays in place for future red rows
 and is checked by the freshness/matrix gates when populated.
 `TestH264DecoderTDDContractClassifiesEveryImportedPublicVector` is the always-on
@@ -97,7 +91,7 @@ transform-bypass rows, configured AVC surfaces, container-extracted Annex B
 vectors, malformed packet recovery, side-data surfaces, and bounded public
 no-panic fuzz coverage.
 
-Still guarded: unselected MBAFF/PIC-AFF/PAFF motion paths, broader
+Guarded decoder areas: unselected MBAFF/PIC-AFF/PAFF motion paths, broader
 high-bit-depth field/inter streams, broader damaged-slice error resilience,
 threading/SIMD, bulk allocation hardening, and exact libavcodec delayed-output
 edge behavior. Intentionally unsupported at the pinned FFmpeg parity boundary:
@@ -214,17 +208,19 @@ format and length-size.
 `DecodeAVCCFrames` updates the decoder's AVC configuration, decodes the
 supplied AVC packet, and drains delayed output before returning. Compatible
 in-stream avcC updates retain references; incompatible active SPS changes reset
-picture state before the packet is decoded so old references are not visible to
-the new stream. Passing an empty AVC packet with a configuration record updates
-the configuration and drains delayed output without reporting an invalid packet.
+picture state before the packet is decoded so prior references are not used
+across the incompatible boundary. Passing an empty AVC packet with a
+configuration record updates the configuration and drains delayed output without
+reporting an invalid packet.
 Use this for ordinary in-stream avcC updates and IDR-bound stream switches. For
 an unrelated stream where the decoder cannot infer the boundary from avcC,
 call `Reset` before storing the new avcC. `PacketSideDataNewExtradata` uses the
 same stateful update rule when it carries avcC or Annex B parameter-set data:
 compatible updates retain references; incompatible active SPS changes reset
-picture state before decoding. When an update carries multiple SPS/PPS entries,
-the reset decision follows the packet's slice-selected PPS/SPS when that packet
-can be parsed. `AVCConfig` reports the packet-active SPS after a successful
+picture state before decoding, so prior references are not used across the
+incompatible boundary. When an update carries multiple SPS/PPS entries, the
+reset decision follows the packet's slice-selected PPS/SPS when that packet can
+be parsed. `AVCConfig` reports the packet-active SPS after a successful
 configured-AVC packet identifies one; before that it reports the first SPS from
 the stored avcC record. Standalone multi-SPS avcC records accepted through
 `DecodeFrames` reset picture state conservatively when any SPS/PPS candidate
@@ -251,18 +247,18 @@ configuration, and delayed configured-AVC B-frame output remains available for
 flush after the rejected parse.
 Decoder `ConfigureAVCC` stores the configuration for later configured-AVC
 decode; `ConfigureAVCDecoderConfigurationRecord` is the equivalent long-form
-name, and decoder `ParseAVCDecoderConfigurationRecord` and `ParseAVCC` remain
-compatibility aliases. Package-level `InspectAVCC` is the preferred stateless
+name, and decoder `ParseAVCDecoderConfigurationRecord` and `ParseAVCC` perform
+the same stateful update. Package-level `InspectAVCC` is the short stateless
 name; `InspectAVCDecoderConfigurationRecord` is the equivalent long-form name,
-and package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` remain
-compatibility aliases that parse the same metadata without mutating decoder
-state. Malformed avcC records, including invalid reserved bits or
+and package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` parse
+the same metadata without mutating decoder state. Malformed avcC records,
+including invalid reserved bits or
 caller-constructed impossible-size inputs, are rejected before replacing the
 previous stored configuration.
 
-Preferred avcC names:
+avcC name map:
 
-| Need | Preferred | Equivalent or compatibility names | Single-frame helper |
+| Need | Primary helper | Equivalent names | Single-frame helper |
 | --- | --- | --- | --- |
 | Stateless avcC metadata inspection | `InspectAVCC` | `InspectAVCDecoderConfigurationRecord`, package `ParseAVCC`, package `ParseAVCDecoderConfigurationRecord` | n/a |
 | Store avcC for configured-AVC streaming | `ConfigureAVCC` | decoder `ConfigureAVCDecoderConfigurationRecord`, decoder `ParseAVCC`, decoder `ParseAVCDecoderConfigurationRecord` | n/a |
@@ -303,12 +299,12 @@ Duplicate packet side data follows first-entry semantics: empty or malformed
 first active-format, S12M timecode, ICC profile, HDR10+, and LCEVC entries
 suppress later duplicates.
 
-## State Lifecycle
+## State And Ownership Boundaries
 
 | Surface | State behavior |
 | --- | --- |
 | `Decoder.DecodeFrames` / `DecodePacketFrames` | Retain decoder references and delayed output across stream packets; empty input flushes delayed frames. |
-| `Decoder.ConfigureAVCC` | Stores avcC metadata and resets decoder picture state for a new configured-AVC stream. |
+| `Decoder.ConfigureAVCC` | Stores avcC metadata and resets decoder picture state for the configured-AVC boundary. |
 | `Decoder.DecodeAVCCFrames` / packet `NEW_EXTRADATA` | Compatible avcC or Annex B parameter-set updates retain references; incompatible active SPS changes reset picture state before decoding. |
 | `Decoder.Reset` | Clears stored SPS/PPS, avcC length-size, references, delayed output, and parsed slice state. |
 | `Encoder.Reset` | Clears coding/reference/rate state and queued IDR state while preserving configuration and RTP callback. |
@@ -320,13 +316,13 @@ suppress later duplicates.
 The encoder surface is intentionally split into a small recommended realtime
 path and lower-level escape hatches. Prefer the explicit setters for live
 controls; use `Reconfigure` only when a grouped update needs fields that do not
-yet have a dedicated helper.
+have a dedicated helper.
 
 Choose the encoder surface by what the caller owns:
 
 | Need | Use |
 | --- | --- |
-| Start from a supported realtime/WebRTC baseline | `DefaultRealtimeEncoderConfig`; `DefaultEncoderConfig` is a compatibility alias |
+| Start from a supported realtime/WebRTC baseline | `DefaultRealtimeEncoderConfig`; `DefaultEncoderConfig` returns the same template |
 | Validate and see the exact setup before construction | `EncoderConfig.Normalize` or `Validate` |
 | Read the exact live setup after accepted setters | `Encoder.Config` |
 | Validate one input frame without mutating encoder state | `EncoderConfig.ValidateFrame` or `Encoder.ValidateFrame` |
@@ -338,13 +334,13 @@ Choose the encoder surface by what the caller owns:
 | Apply a bundled low-level update | `Reconfigure` |
 | Retain input/output beyond the call | `Clone`, `CloneChecked`, or `Append...` helpers |
 
-Accepted encoder setup values today:
+Accepted encoder setup values:
 
 | Area | Accepted values | Rejected/admission-limited values |
 | --- | --- | --- |
 | Input | 8-bit I420, even width/height, valid I420 crop and strides | Other pixel formats, odd I420 dimensions, invalid crop/stride geometry |
 | Profile/tools | `EncoderProfileConstrainedBaseline` or `EncoderProfileBaseline`, `EncoderEntropyCAVLC`, `Transform8x8=false`, `MaxReferenceFrames=1`, `BFrames=0` | Main/High profiles, CABAC, 8x8 transform, multiple refs, B-frames |
-| Runtime | `Workers=1` for deterministic mode; `Workers>1` only with `Deterministic=false` and no parallel throughput guarantee yet; `SliceCount` from 1 through coded macroblock count; `IntraRefresh=false` | Deterministic multi-worker encode, too many slices, enabled intra refresh |
+| Runtime | `Workers=1` for deterministic mode; `Workers>1` only with `Deterministic=false` and no parallel throughput guarantee; `SliceCount` from 1 through coded macroblock count; `IntraRefresh=false` | Deterministic multi-worker encode, too many slices, enabled intra refresh |
 | Rate/budget | CBR or ConstantQP, QP range 0..51, non-negative VBV/frame/slice/time budgets | VBR until it drives quality decisions, bad bitrate ordering, QP outside 0..51, negative budgets |
 | Preset | `EncoderPresetRealtime` | Balanced/Quality presets until they drive mode decisions |
 | Output | Annex B, AVC samples, or RTP | Unknown output formats |
@@ -487,8 +483,8 @@ with the strongest public API coverage for integration work:
   remain explicit single-limit setters. For grouped updates through
   `EncoderReconfigure`, prefer `Limits` when budget updates must be applied
   atomically with other runtime controls or explicitly set a budget to zero.
-  `MaxFrameSizeLimit`, `SliceMaxBytesLimit`, and `MaxEncodeTimeUSLimit` remain
-  compatibility fields for zero-capable single-budget updates.
+  `MaxFrameSizeLimit`, `SliceMaxBytesLimit`, and `MaxEncodeTimeUSLimit` are
+  zero-capable single-budget update fields.
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
   `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
   `SetDeblockMode`, `SetRTPMaxPayloadSize`, `SetPreset`, `SetSliceCount`,
@@ -507,7 +503,7 @@ with the strongest public API coverage for integration work:
   pointer fields, grouped `Limits`, or dedicated setters when zero is the value
   to apply. `FrameRateNum`/`FrameRateDen` and `Width`/`Height` must be supplied
   as pairs. When `Limits` is non-nil, it is applied after the individual budget
-  fields and their pointer compatibility forms.
+  fields and their pointer zero-value forms.
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
@@ -533,17 +529,18 @@ with the strongest public API coverage for integration work:
   RTP/callback state. The same hard-error path preserves P-frame reference and
   frame-number state before the next P-skip.
 
-Current emitted frame types are IDR IntraPCM, identical-reference P-skip, exact
-macroblock-aligned frame-wide or per-macroblock P16x16 no-residual, and
-changed-frame P IntraPCM. Output can be split into configured multi-slice VCL
-NALs. Exact P16x16 is admitted for disabled-deblock frames and for
+Emitted frame types in the guarded encoder subset are IDR IntraPCM,
+identical-reference P-skip, exact macroblock-aligned frame-wide or
+per-macroblock P16x16 no-residual, and changed-frame P IntraPCM. Output can be
+split into configured multi-slice VCL NALs. Exact P16x16 is admitted for
+disabled-deblock frames and for
 chroma-aligned uniform-motion enabled/slice-boundary deblock frames, including
 multi-macroblock frames. Guarded mixed-vector and odd-pixel deblock cases fall
 back to P IntraPCM recovery across Annex B, configured AVC, RTP reassembly, and
 RTP packetization-mode 0 single-NAL output. Changed-frame P IntraPCM recovery
 pictures carry recovery-point SEI when enabled.
 
-RTP output currently covers:
+RTP output covers:
 
 - payload bytes plus complete RTP packet bytes;
 - packetization-mode 0 single-NAL output;
@@ -622,19 +619,19 @@ scripts/h264-real-vector-upstream-audit.sh
 What those gates mean:
 
 - `h264-real-vector-strict.sh` runs the green public-vector oracle set,
-  including expected decode-error rows, and excludes only rows currently listed
+  including expected decode-error rows, and excludes only rows listed
   in the failure ledger.
 - `FailureLedgerFreshness` runs only known-red rows when the ledger is populated
   and requires each failure class/detail to remain current.
-- `FailureMatrix` runs the full 225-row manifest, currently requiring all 225
-  rows to match oracle output.
+- `FailureMatrix` runs the full 225-row manifest and requires all 225 rows to
+  match oracle output.
 - `TestH264DecoderTDDContractClassifiesEveryImportedPublicVector` runs in
   normal `go test ./tests` and fails if any imported public ref is not
   classified as executable or explicitly excluded.
 - `h264-real-vector-upstream-audit.sh` fetches the pinned FFmpeg source and
-  verifies that the checked-in inventory still matches all decoder-facing
-  upstream H.264 FATE sample references, except documented non-decoder rows,
-  and that public-vector count claims in the quality docs match the checked-in
+  verifies that the checked-in inventory matches all decoder-facing upstream
+  H.264 FATE sample references, except documented non-decoder rows, and that
+  public-vector count claims in the quality docs match the checked-in
   manifests.
   Normal `go test ./tests` also checks that every imported public ref is either
   represented by the manifest or listed in the exclusion file.
@@ -697,8 +694,8 @@ scripts/h264-benchstat-canary.sh
 ```
 
 Use `GOH264_BENCHSTAT_COUNT` and `GOH264_BENCHSTAT_TIME` to control sample
-count and `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is accepted as a
-compatibility alias when `GOH264_BENCHSTAT_TIME` is unset.
+count and `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is accepted when
+`GOH264_BENCHSTAT_TIME` is unset.
 
 To create a local quality-evidence bundle with benchstat samples, the JSON
 real-vector benchmark report, CPU/heap profiles, and run metadata:
@@ -714,12 +711,11 @@ Performance status is intentionally conservative: the benchmark harness exists
 and rejects quality drift before timing, and public raw-output helpers have
 caller-buffer zero-allocation guards. A checked-in public-vector allocation
 canary, profile-output hooks, a benchstat-compatible decoder/encoder canary,
-and a local performance-evidence bundle runner now exist, while checked-in
-reviewed profile artifacts, a larger performance corpus, and an in-process
-libavcodec baseline are still pending. Treat the decoder as still under
-hardening for throughput-sensitive use until
-[docs/production-readiness.md](docs/production-readiness.md) has those evidence
-artifacts.
+and a local performance-evidence bundle runner exist. Missing evidence includes
+checked-in reviewed profile artifacts, a larger performance corpus, and an
+in-process libavcodec baseline. For throughput-sensitive use, back decisions
+with the gates in [docs/production-readiness.md](docs/production-readiness.md)
+and the evidence artifacts they describe.
 
 ## Project Layout
 
@@ -732,9 +728,9 @@ artifacts.
 | `testdata/h264/realvectors/` | Public FFmpeg FATE manifest, exclusions, and known-red ledger |
 | `scripts/` | Upstream fetch, oracle probes, public-vector gates, diagnostics, benchmarks |
 | `cmd/goh264bench/` | JSON benchmark and FFmpeg comparison CLI |
-| `docs/source-truth.md` | Compact current parity snapshot |
+| `docs/source-truth.md` | Compact parity snapshot |
 | `docs/translation-ledger.md` | Upstream-to-Go translation ledger |
-| `docs/production-readiness.md` | Current verification and performance gates |
+| `docs/production-readiness.md` | Verification and performance gates |
 | `docs/high-bitdepth-roadmap.md` | High-bit-depth parity plan |
 | `docs/encoder-webrtc-roadmap.md` | Realtime/WebRTC encoder target, controls, and gates |
 
@@ -751,7 +747,7 @@ Production use should be backed by a fresh quality-evidence pass proving:
 - `go test -race ./...` is green.
 - `scripts/h264-real-vector-strict.sh` is green.
 - `GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v` is green.
-- `scripts/h264-real-vector-upstream-audit.sh` still represents all pinned
+- `scripts/h264-real-vector-upstream-audit.sh` represents all pinned
   decoder-facing FFmpeg H.264 FATE sample references in
   `testdata/h264/realvectors/upstream-inventory.jsonl`, except documented
   non-decoder exclusions, and quality-doc public-vector counts match the
@@ -763,8 +759,8 @@ Production use should be backed by a fresh quality-evidence pass proving:
   allocation canary budget.
 - `scripts/h264-benchstat-canary.sh` runs decoder and admitted encoder rows
   with stable `-benchmem` output for trend comparison. `GOH264_BENCHSTAT_TIME`
-  controls the effective `-benchtime`, with `GOH264_BENCHSTAT_BENCHTIME`
-  accepted as an unset-time alias.
+  controls the effective `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is also
+  accepted when `GOH264_BENCHSTAT_TIME` is unset.
 - `scripts/h264-performance-evidence.sh` creates the local performance bundle
   with JSON benchmark output plus CPU/heap profiles.
 - `scripts/h264-encoder-quality-evidence.sh` is green for the admitted

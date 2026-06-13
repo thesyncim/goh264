@@ -58,7 +58,7 @@ type AVCDecoderConfiguration struct {
 	StreamInfo    StreamInfo
 }
 
-// AVCConfig is a short alias for AVC decoder configuration metadata returned
+// AVCConfig is the short name for AVC decoder configuration metadata returned
 // after parsing an avcC record.
 type AVCConfig = AVCDecoderConfiguration
 
@@ -87,7 +87,7 @@ func InspectAVCHeaders(data []byte, nalLengthSize int) (StreamInfo, error) {
 // ParseAVCDecoderConfigurationRecord parses an AVC decoder configuration record
 // without changing decoder state.
 //
-// InspectAVCC is the preferred short stateless avcC name.
+// InspectAVCC is the short stateless avcC name.
 // InspectAVCDecoderConfigurationRecord is the long-form equivalent.
 func ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
 	return InspectAVCDecoderConfigurationRecord(data)
@@ -96,9 +96,10 @@ func ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, e
 // InspectAVCDecoderConfigurationRecord parses AVC decoder configuration
 // metadata without changing decoder state.
 //
-// InspectAVCC is the preferred short stateless avcC name.
+// InspectAVCC is the short stateless avcC name.
 // InspectAVCDecoderConfigurationRecord is the long-form equivalent.
-// ParseAVCDecoderConfigurationRecord remains as a compatibility alias.
+// ParseAVCDecoderConfigurationRecord accepts the same input and returns the
+// same metadata.
 func InspectAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
 	cfg, err := h264.DecodeAVCDecoderConfigurationRecord(data)
 	if err != nil {
@@ -109,16 +110,16 @@ func InspectAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration,
 
 // ParseAVCC parses an avcC record without changing decoder state.
 //
-// InspectAVCC is the preferred short stateless avcC name.
-// ParseAVCC remains as a compatibility alias.
+// InspectAVCC is the short stateless avcC name. ParseAVCC accepts the same
+// input and returns the same metadata.
 func ParseAVCC(data []byte) (AVCConfig, error) {
 	return ParseAVCDecoderConfigurationRecord(data)
 }
 
 // InspectAVCC parses avcC metadata without changing decoder state.
 //
-// InspectAVCC is the preferred stateless name. ParseAVCC remains as a
-// compatibility alias.
+// InspectAVCC is the short stateless name. ParseAVCC accepts the same input
+// and returns the same metadata.
 func InspectAVCC(data []byte) (AVCConfig, error) {
 	return InspectAVCDecoderConfigurationRecord(data)
 }
@@ -838,8 +839,9 @@ func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []b
 	return d.decodeAVCFramesWithConfig(data, cfg)
 }
 
-// DecodeAVCCFrames updates the stored AVC configuration from an avcC record and
-// decodes data with that configuration.
+// DecodeAVCCFrames updates the stored AVC configuration from an avcC record,
+// decodes data with that configuration, and drains delayed frames before
+// returning.
 func (d *Decoder) DecodeAVCCFrames(config []byte, data []byte) ([]*Frame, error) {
 	return d.DecodeAVCFramesWithConfigurationRecord(config, data)
 }
@@ -939,8 +941,8 @@ func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, e
 // ParseAVCDecoderConfigurationRecord parses an AVC decoder configuration record,
 // stores it for configured-AVC decode calls, and returns stream metadata.
 //
-// ParseAVCDecoderConfigurationRecord remains as a compatibility alias for
-// ConfigureAVCDecoderConfigurationRecord.
+// ConfigureAVCDecoderConfigurationRecord provides the same stateful avcC
+// operation with a name that makes the mutation explicit.
 func (d *Decoder) ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
 	return d.ConfigureAVCDecoderConfigurationRecord(data)
 }
@@ -951,8 +953,8 @@ func (d *Decoder) ParseAVCDecoderConfigurationRecord(data []byte) (AVCDecoderCon
 // configured-AVC stream.
 //
 // ConfigureAVCDecoderConfigurationRecord is the long-form mutating name.
-// ConfigureAVCC is the preferred short avcC API. ParseAVCDecoderConfigurationRecord
-// remains as a compatibility alias.
+// ConfigureAVCC is the short avcC API. ParseAVCDecoderConfigurationRecord
+// performs the same stateful update.
 func (d *Decoder) ConfigureAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
 	if d == nil {
 		return AVCDecoderConfiguration{}, ErrInvalidData
@@ -979,7 +981,8 @@ func avcDecoderConfigurationFromH264(cfg h264.AVCDecoderConfigurationRecord) (AV
 // ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,
 // resets decoder picture state, and returns stream metadata.
 //
-// ParseAVCC remains as a compatibility alias for ConfigureAVCC.
+// ConfigureAVCC provides the same stateful operation with a name that makes the
+// mutation explicit.
 func (d *Decoder) ParseAVCC(data []byte) (AVCConfig, error) {
 	return d.ParseAVCDecoderConfigurationRecord(data)
 }
@@ -987,13 +990,13 @@ func (d *Decoder) ParseAVCC(data []byte) (AVCConfig, error) {
 // ConfigureAVCC parses an avcC record, stores it for configured-AVC decode
 // calls, resets decoder picture state, and returns stream metadata.
 //
-// ConfigureAVCC is the preferred mutating name. ParseAVCC remains as a
-// compatibility alias.
+// ConfigureAVCC is the short mutating name. ParseAVCC performs the same
+// stateful update.
 func (d *Decoder) ConfigureAVCC(data []byte) (AVCConfig, error) {
 	return d.ConfigureAVCDecoderConfigurationRecord(data)
 }
 
-// AVCConfig returns the currently stored avcC/configured-AVC metadata.
+// AVCConfig returns the stored avcC/configured-AVC metadata.
 func (d *Decoder) AVCConfig() (AVCConfig, error) {
 	if d == nil || d.avcNALLengthSize == 0 {
 		return AVCConfig{}, ErrInvalidData

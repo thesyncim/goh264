@@ -21,9 +21,8 @@ const (
 // EncoderProfile selects H.264 profile syntax.
 //
 // NewEncoder admits EncoderProfileConstrainedBaseline and
-// EncoderProfileBaseline. Main and High are exported control values for the
-// broader API surface; NewEncoder returns ErrUnsupported while they remain
-// outside the admitted encoder subset.
+// EncoderProfileBaseline. Main and High are exported control values that
+// return ErrUnsupported from NewEncoder.
 type EncoderProfile uint8
 
 const (
@@ -35,9 +34,8 @@ const (
 
 // EncoderEntropyMode selects entropy coding syntax.
 //
-// NewEncoder admits EncoderEntropyCAVLC. CABAC is an exported control value for
-// the broader API surface; NewEncoder returns ErrUnsupported while it remains
-// outside the admitted encoder subset.
+// NewEncoder admits EncoderEntropyCAVLC. CABAC is an exported control value
+// that returns ErrUnsupported from NewEncoder.
 type EncoderEntropyMode uint8
 
 const (
@@ -65,8 +63,8 @@ type EncoderRateControlMode uint8
 
 const (
 	EncoderRateControlCBR EncoderRateControlMode = iota + 1
-	// EncoderRateControlVBR is an exported control value for callers that mirror
-	// a broader encoder surface; NewEncoder returns ErrUnsupported for it.
+	// EncoderRateControlVBR is an exported control value that returns
+	// ErrUnsupported from NewEncoder.
 	EncoderRateControlVBR
 	EncoderRateControlConstantQP
 )
@@ -74,8 +72,7 @@ const (
 // EncoderPreset selects speed/quality tradeoff policy.
 //
 // NewEncoder admits EncoderPresetRealtime. Balanced and Quality are exported
-// control values for the broader API surface; NewEncoder returns ErrUnsupported
-// while they remain outside the admitted mode-decision subset.
+// control values that return ErrUnsupported from NewEncoder.
 type EncoderPreset uint8
 
 const (
@@ -144,10 +141,10 @@ type EncoderColorConfig struct {
 // EncoderConfig controls encoder setup.
 //
 // Start from DefaultRealtimeEncoderConfig and override the fields needed by the
-// integration. DefaultEncoderConfig remains as a compatibility alias. NewEncoder
-// and Validate normalize derived defaults and reject invalid or unadmitted
-// controls. Crop and Color are encoded in SPS/VUI headers from this config;
-// per-frame Color is validated but does not rewrite output headers.
+// integration. DefaultEncoderConfig returns the same realtime template.
+// NewEncoder and Validate normalize derived defaults and reject invalid or
+// unsupported controls. Crop and Color are encoded in SPS/VUI headers from this
+// config; per-frame Color is validated but does not rewrite output headers.
 type EncoderConfig struct {
 	Width        int
 	Height       int
@@ -977,9 +974,9 @@ func byteSlicesOverlap(a []byte, b []byte) bool {
 // Scalar fields update when non-zero. Paired scalar fields, including
 // FrameRateNum/FrameRateDen and Width/Height, must be supplied together.
 // Pointer fields update when non-nil, including explicit false or zero values
-// where valid. Limits is the preferred zero-capable grouped budget update and
-// is applied after MaxFrameSize, MaxEncodeTimeUS, SliceMaxBytes, and their
-// pointer compatibility forms. Reconfigure validates the resulting
+// where valid. Limits is the zero-capable grouped budget update and is applied
+// after MaxFrameSize, MaxEncodeTimeUS, SliceMaxBytes, and their pointer
+// zero-value forms. Reconfigure validates the resulting
 // configuration before changing encoder state; invalid updates leave the
 // encoder unchanged. ForceIDR queues an IDR request even when no config field
 // changes.
@@ -1097,10 +1094,8 @@ func DefaultRealtimeEncoderConfig(width, height int) EncoderConfig {
 	}
 }
 
-// DefaultEncoderConfig returns DefaultRealtimeEncoderConfig.
-//
-// DefaultEncoderConfig remains as a compatibility alias for the preferred
-// realtime-specific name.
+// DefaultEncoderConfig returns the same realtime template as
+// DefaultRealtimeEncoderConfig.
 func DefaultEncoderConfig(width, height int) EncoderConfig {
 	return DefaultRealtimeEncoderConfig(width, height)
 }
@@ -3743,7 +3738,7 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		cfg.PixelFormat = EncoderPixelFormatI420
 	}
 	if cfg.PixelFormat != EncoderPixelFormatI420 {
-		return cfg, encoderUnsupported("only 8-bit I420 input is in the realtime encoder scope today")
+		return cfg, encoderUnsupported("only 8-bit I420 input is in the realtime encoder scope")
 	}
 	if cfg.Width%2 != 0 || cfg.Height%2 != 0 {
 		return cfg, encoderInvalid("I420 width and height must be even")
