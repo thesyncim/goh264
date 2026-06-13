@@ -509,7 +509,8 @@ with the strongest public API coverage for integration work:
   `EncoderReconfigure`, prefer `Limits` when budget updates must be applied
   atomically with other runtime controls or explicitly set a budget to zero.
   `MaxFrameSizeLimit`, `SliceMaxBytesLimit`, and `MaxEncodeTimeUSLimit` are
-  zero-capable single-budget update fields.
+  zero-capable single-budget update fields. The encoder API-surface gate covers
+  scalar, pointer, and grouped budget reconfigure precedence and rollback.
 - `SetRateControl`, `SetVBVBufferSize`, `SetFrameDropMode`, `SetQP`,
   `SetFrameRate`, `SetRTPTimestampIncrement`, `SetGOP`, `SetResolution`,
   `SetDeblockMode`, `SetRTPMaxPayloadSize`, `SetPreset`, `SetSliceCount`,
