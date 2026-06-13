@@ -8367,6 +8367,12 @@ func TestEncoderMultiSliceLumaDCResidualPUsesResidualAcrossPublicOutputs(t *test
 	}, encoderP16x16MultiMacroblockLumaDCResidualFrame)
 }
 
+func TestEncoderSixMacroblockRowCrossingLumaDCResidualPUsesResidualAcrossPublicOutputs(t *testing.T) {
+	testEncoderResidualPUsesResidualAcrossPublicOutputsWithConfig(t, "six-macroblock row-crossing luma-DC residual P", 48, 32, func(cfg *goh264.EncoderConfig) {
+		cfg.SliceCount = 3
+	}, encoderP16x16SixMacroblockLumaDCResidualFrame)
+}
+
 func testEncoderResidualPUsesResidualAcrossPublicOutputs(t *testing.T, label string, buildSecondFrame func(*testing.T, goh264.EncoderConfig, goh264.EncoderFrame, int64) goh264.EncoderFrame) {
 	t.Helper()
 	testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t, label, 16, 16, buildSecondFrame)
@@ -17666,22 +17672,47 @@ func encoderP16x16MultiMacroblockLumaDCResidualFrame(t *testing.T, cfg goh264.En
 	if cfg.Width != 32 || cfg.Height != 16 {
 		t.Fatalf("multi-macroblock residual fixture requires 32x16 config, got %dx%d", cfg.Width, cfg.Height)
 	}
+	return encoderP16x16LumaDCResidualFrameFromPoints(t, cfg, reference, pts, []encoderP16x16LumaDCResidualPoint{
+		{x: 4, y: 0, level: 3},
+		{x: 12, y: 12, level: -3},
+		{x: 20, y: 4, level: 2},
+		{x: 16, y: 8, level: -2},
+	})
+}
+
+func encoderP16x16SixMacroblockLumaDCResidualFrame(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64) goh264.EncoderFrame {
+	t.Helper()
+	if cfg.Width != 48 || cfg.Height != 32 {
+		t.Fatalf("six-macroblock residual fixture requires 48x32 config, got %dx%d", cfg.Width, cfg.Height)
+	}
+	return encoderP16x16LumaDCResidualFrameFromPoints(t, cfg, reference, pts, []encoderP16x16LumaDCResidualPoint{
+		{x: 4, y: 0, level: 3},
+		{x: 20, y: 4, level: -3},
+		{x: 32, y: 12, level: 2},
+		{x: 4, y: 20, level: -2},
+		{x: 16, y: 28, level: 3},
+		{x: 36, y: 16, level: -3},
+	})
+}
+
+type encoderP16x16LumaDCResidualPoint struct {
+	x     int
+	y     int
+	level int32
+}
+
+func encoderP16x16LumaDCResidualFrameFromPoints(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64, points []encoderP16x16LumaDCResidualPoint) goh264.EncoderFrame {
+	t.Helper()
 	target, err := reference.Clone()
 	if err != nil {
 		t.Fatalf("Clone reference: %v", err)
 	}
 	target.PTS = pts
 	qmul := encoderP16x16TestLumaDCQMul(t, cfg)
-	for _, want := range []struct {
-		x     int
-		y     int
-		level int32
-	}{
-		{x: 4, y: 0, level: 3},
-		{x: 12, y: 12, level: -3},
-		{x: 20, y: 4, level: 2},
-		{x: 16, y: 8, level: -2},
-	} {
+	for _, want := range points {
+		if want.x < 0 || want.y < 0 || want.x+4 > target.Width || want.y+4 > target.Height {
+			t.Fatalf("residual point %d,%d outside %dx%d frame", want.x, want.y, target.Width, target.Height)
+		}
 		delta := encoderP16x16TestResidualPixelDeltaForDCLevel(want.level, qmul)
 		if delta == 0 {
 			t.Fatalf("derived pixel delta for residual level %d is zero", want.level)

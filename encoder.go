@@ -2338,7 +2338,7 @@ func (e *Encoder) p16x16NoResidualMotion(view encoderFrameView, dst []encoderP16
 }
 
 func (e *Encoder) p16x16ResidualNALs(view encoderFrameView, sliceRanges []encoderSliceRange) ([]encoderRawNAL, bool, error) {
-	if !e.p16x16ResidualCandidateAllowed(view, sliceRanges) {
+	if !e.p16x16ResidualAllowed(view, sliceRanges) {
 		return nil, false, nil
 	}
 	if plan, planOK, err := e.p16x16ResidualPlanFromPixelDelta(view, sliceRanges); err != nil {
@@ -2355,6 +2355,9 @@ func (e *Encoder) p16x16ResidualNALs(view encoderFrameView, sliceRanges []encode
 		if ok {
 			return nals, true, nil
 		}
+	}
+	if !encoderP16x16ResidualBruteForceAllowed(view) {
+		return nil, false, nil
 	}
 	for _, candidate := range encoderP16x16ResidualCandidates {
 		nals := make([]encoderRawNAL, 0, len(sliceRanges))
@@ -2567,7 +2570,7 @@ func encoderP16x16ResidualPixelDeltaForDCLevel(level int32, qmul uint32) int {
 	return (int(dequantized) + 32) >> 6
 }
 
-func (e *Encoder) p16x16ResidualCandidateAllowed(view encoderFrameView, sliceRanges []encoderSliceRange) bool {
+func (e *Encoder) p16x16ResidualAllowed(view encoderFrameView, sliceRanges []encoderSliceRange) bool {
 	if e.cfg.DeblockMode != EncoderDeblockDisabled ||
 		e.cfg.RateControl != EncoderRateControlConstantQP ||
 		e.cfg.Crop != (EncoderCrop{}) ||
@@ -2585,14 +2588,18 @@ func (e *Encoder) p16x16ResidualCandidateAllowed(view encoderFrameView, sliceRan
 	if !ok || len(e.reference.y) != lumaSize || len(e.reference.cb) != chromaSize || len(e.reference.cr) != chromaSize {
 		return false
 	}
+	return true
+}
+
+func encoderP16x16ResidualBruteForceAllowed(view encoderFrameView) bool {
 	macroblocksPerRow := view.width >> 4
 	macroblockRows := view.height >> 4
 	macroblockCount, err := checkedMulInt(macroblocksPerRow, macroblockRows)
 	if err != nil {
 		return false
 	}
-	const maxExactResidualCandidateMacroblocks = 4
-	return macroblockCount <= maxExactResidualCandidateMacroblocks
+	const maxBruteForceResidualCandidateMacroblocks = 4
+	return macroblockCount <= maxBruteForceResidualCandidateMacroblocks
 }
 
 func (e *Encoder) p16x16ResidualCandidateMatches(view encoderFrameView, nals []encoderRawNAL) (bool, error) {
