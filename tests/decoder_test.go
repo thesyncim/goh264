@@ -1244,6 +1244,99 @@ func TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUse
 	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
 }
 
+func TestDecodeFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference(t *testing.T) {
+	headers16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
+	headers32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	if len(packets16) != 2 || len(packets32) != 2 {
+		t.Fatalf("packet counts = %d/%d, want 2/2", len(packets16), len(packets32))
+	}
+
+	dec := NewDecoder()
+	first16 := append(append([]byte(nil), headers16...), packets16[0]...)
+	out, err := dec.DecodeFrames(first16)
+	if err != nil {
+		t.Fatalf("DecodeFrames 16x16 in-band IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 in-band IDR output frames = %d, want 1", len(out))
+	}
+
+	pskip32 := append(append([]byte(nil), headers32...), packets32[1]...)
+	out, err = dec.DecodeFrames(pskip32)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 in-band P-skip after incompatible parameter sets = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+
+	out, err = dec.DecodeFrames(packets32[0])
+	if err != nil {
+		t.Fatalf("DecodeFrames 32x16 IDR after in-band stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
+func TestDecodePacketFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference(t *testing.T) {
+	headers16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
+	headers32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	if len(packets16) != 2 || len(packets32) != 2 {
+		t.Fatalf("packet counts = %d/%d, want 2/2", len(packets16), len(packets32))
+	}
+
+	dec := NewDecoder()
+	first16 := append(append([]byte(nil), headers16...), packets16[0]...)
+	out, err := dec.DecodePacketFrames(Packet{Data: first16})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 in-band IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 in-band packet IDR output frames = %d, want 1", len(out))
+	}
+
+	pskip32 := append(append([]byte(nil), headers32...), packets32[1]...)
+	out, err = dec.DecodePacketFrames(Packet{Data: pskip32})
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 packet in-band P-skip after incompatible parameter sets = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+
+	out, err = dec.DecodePacketFrames(Packet{Data: packets32[0]})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 32x16 IDR after in-band stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
+func TestDecodeConfiguredAVCFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference(t *testing.T) {
+	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
+	headers32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	if len(samples16) != 2 || len(packets32) != 2 {
+		t.Fatalf("sample/packet counts = %d/%d, want 2/2", len(samples16), len(packets32))
+	}
+
+	dec := NewDecoder()
+	out, err := dec.DecodeFrames(config16)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("DecodeFrames 16x16 avcC config frames=%d err=%v, want no output/error", len(out), err)
+	}
+	out, err = dec.DecodeConfiguredAVCFrames(samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames 16x16 IDR: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("16x16 configured IDR output frames = %d, want 1", len(out))
+	}
+
+	pskip32 := append(annexBToAVC(t, headers32, 4), annexBToAVC(t, packets32[1], 4)...)
+	out, err = dec.DecodeConfiguredAVCFrames(pskip32)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("32x16 configured in-band P-skip after incompatible parameter sets = frames %d err %v, want no stale-reference output", len(out), err)
+	}
+
+	out, err = dec.DecodeConfiguredAVCFrames(annexBToAVC(t, packets32[0], 4))
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames 32x16 IDR after in-band stale P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+}
+
 func TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference(t *testing.T) {
 	headers16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
 	headers32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
