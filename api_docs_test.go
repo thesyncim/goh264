@@ -263,6 +263,7 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncodedFrameAppendNALAndAccessUnitDataReturnCallerOwnedBytes",
 		"TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes",
 		"TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes",
+		"TestEncodedFrameCloneRejectsInvalidMetadata",
 		"encoder-writers",
 		"TestCAVLCWriteResidual",
 		"TestWriteCAVLCInterPBoundedMacroblock",

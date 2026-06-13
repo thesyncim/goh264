@@ -235,7 +235,8 @@ RTP header bytes with public `EncodedFrame.RTPPacketData`/
 clipped packet payload views over packet data, and packet storage isolated from
 `EncodedFrame.Data` including caller-backed `EncodeInto` output buffers,
 unchanged caller append destinations on invalid access-unit, NAL, RTP packet,
-and RTP payload appends, shared packet metadata guards for
+and RTP payload appends, malformed dropped-result storage rejected by
+`EncodedFrame.Clone`, shared packet metadata guards for
 header fields and clipped packet slices, optional
 RTP callback metadata including malformed STAP-A/FU-A payload classification and mode 0/1 IDR/P-frame single-NAL packets with
 multi-slice IDR, P-skip, exact P16x16, odd-pixel constant chroma, and P IntraPCM fallback rows

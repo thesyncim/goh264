@@ -499,7 +499,8 @@ with the strongest public API coverage for integration work:
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
   payload helpers have `Append...` forms for caller-owned retention buffers and
   `Clone` forms for async snapshots. Invalid append calls return the original
-  destination unchanged.
+  destination unchanged, and `EncodedFrame.Clone` rejects dropped results that
+  still carry emitted byte, NAL, or RTP packet storage.
 - `EncodedFrame.OutputFormat` records the emitted result format, including
   dropped frames, so callers do not need to infer format from packet presence.
 - For RTP output, `EncodedFrame.Data` remains an Annex B access-unit view for
@@ -532,7 +533,8 @@ RTP output currently covers:
   packet-level `EncoderRTPPacket` byte helpers;
 - caller-owned append helpers for access-unit, NAL, RTP packet, and RTP payload
   bytes, including unchanged destinations on invalid appends;
-- deep-owned `EncodedFrame.Clone` snapshots for retained results;
+- deep-owned `EncodedFrame.Clone` snapshots for retained results, with malformed
+  dropped-result storage rejected;
 - optional per-packet callback metadata for mode 0/1 IDR/P-frame single-NAL
   packets, including multi-slice IDR, P-skip, exact P16x16, odd-pixel constant
   chroma, and P IntraPCM fallback rows;

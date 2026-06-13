@@ -619,7 +619,8 @@ func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, e
 // buffers are reused.
 func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 	if frame.Dropped {
-		if !validEncoderOutputFormat(frame.OutputFormat) {
+		if !validEncoderOutputFormat(frame.OutputFormat) ||
+			len(frame.Data) != 0 || len(frame.NALUnits) != 0 || len(frame.RTPPackets) != 0 {
 			return EncodedFrame{}, ErrInvalidData
 		}
 		return EncodedFrame{

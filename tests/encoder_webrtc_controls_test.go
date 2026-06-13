@@ -13367,6 +13367,33 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 				Dropped:      true,
 			},
 		},
+		{
+			name: "dropped with data",
+			frame: goh264.EncodedFrame{
+				OutputFormat: goh264.EncoderOutputAnnexB,
+				Dropped:      true,
+				Data:         []byte{0, 0, 0, 1, 0x65},
+			},
+		},
+		{
+			name: "dropped with nal metadata",
+			frame: goh264.EncodedFrame{
+				OutputFormat: goh264.EncoderOutputAnnexB,
+				Dropped:      true,
+				NALUnits:     []goh264.EncoderNALUnit{{Type: 5, Offset: 4, Size: 1, KeyFrame: true}},
+			},
+		},
+		{
+			name: "dropped with rtp packets",
+			frame: goh264.EncodedFrame{
+				OutputFormat: goh264.EncoderOutputRTP,
+				Dropped:      true,
+				RTPPackets: []goh264.EncoderRTPPacket{{
+					Data:    validPacket,
+					Payload: validPacket[12:],
+				}},
+			},
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if got, err := tt.frame.Clone(); !errors.Is(err, goh264.ErrInvalidData) ||
@@ -13381,8 +13408,6 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 		Dropped:      true,
 		KeyFrame:     true,
 		IDR:          true,
-		Data:         []byte{1},
-		NALUnits:     []goh264.EncoderNALUnit{{Offset: 0, Size: 1}},
 	}
 	clone, err := dropped.Clone()
 	if err != nil {
