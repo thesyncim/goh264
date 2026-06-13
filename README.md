@@ -691,7 +691,7 @@ Production use should be backed by a fresh quality-evidence pass proving:
 - `scripts/h264-quality-evidence.sh` is green as the combined decoder and
   admitted-encoder quality gate.
 - `scripts/h264-decoder-quality-evidence.sh` is green, including
-  decoder API-surface and ref-modification gates.
+  decoder API-surface gates, ref-modification gates, and native/FFmpeg oracle smoke gates.
 - `go vet ./...` is green.
 - `go test ./...` is green.
 - `go test -race ./...` is green.

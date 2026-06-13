@@ -537,6 +537,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	for _, phrase := range []string{
 		"decoder API-surface",
 		"ref-modification gates",
+		"native/FFmpeg oracle smoke gates",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md decoder quality evidence text missing %q", phrase)
@@ -545,14 +546,27 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	for _, phrase := range []string{
 		"run_go_test_gate()",
 		"run_exact_go_test_gate()",
+		"run_exact_oracle_go_test_gate()",
+		"require_oracle_command()",
+		"require_oracle_file()",
 		"go test \"$pkg\" -list \"$pattern\"",
 		"go test \"$pkg\" -run '^$' -list \"$pattern\"",
 		"status: fail (no matching tests)",
 		"status: fail (missing focused test",
+		"status: fail (oracle test skipped)",
 		"run_exact_go_test_gate decoder-api-surfaces ./tests",
 		"run_exact_go_test_gate decoder-ref-modifications ./internal/h264",
+		"run_exact_oracle_go_test_gate decoder-ffmpeg-oracle-smoke ./tests",
+		"run_exact_oracle_go_test_gate decoder-native-oracle-smoke ./internal/h264",
+		"require_oracle_command ffmpeg",
+		"require_oracle_command ffprobe",
+		"require_oracle_command cc",
+		"require_oracle_file .upstream/ffmpeg-n8.0.1/libavcodec/cabac.c",
+		"require_oracle_file .upstream/ffmpeg-n8.0.1/libavcodec/h264idct_template.c",
 		"decoder-api-surfaces",
 		"decoder-ref-modifications",
+		"decoder-ffmpeg-oracle-smoke",
+		"decoder-native-oracle-smoke",
 		"TestParseHeadersAnnexBBlack16",
 		"TestParseHeadersAVCBlack16",
 		"TestPackageAVCCParsersDoNotMutateDecoderState",
@@ -580,6 +594,11 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration",
 		"TestSimpleFrameDPBRejectsMissingShortRefModificationTarget",
 		"TestSimpleFrameDPBRejectsMissingLongRefModificationTarget",
+		"TestS12MTimecodePackingMatchesNativeFFmpegOracle",
+		"TestFFprobeOracleBlack16",
+		"TestFFmpegFrameMD5OracleBlack16",
+		"TestCABACPrimitiveSequenceUpstreamOracle",
+		"TestH264IDCTUpstreamOracle",
 	} {
 		if !strings.Contains(script, phrase) {
 			t.Fatalf("decoder quality evidence script missing focused gate phrase %q", phrase)
