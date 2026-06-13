@@ -13309,6 +13309,7 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 	zeroFUAPacketData := rtpPacketWithPayload(28, 0x80)
 	reservedFUAPacketData := rtpPacketWithPayload(28, 0xa5)
 	invalidStartEndFUAPacketData := rtpPacketWithPayload(28, 0xc5, 0x99)
+	shiftedPayloadPacketData := rtpPacketWithPayload(0x65, 0x61, 0x62)
 	for _, tt := range []struct {
 		name  string
 		frame goh264.EncodedFrame
@@ -13321,6 +13322,8 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "annexb output format", frame: annexBFrameWithRTPPackets},
 		{name: "avc output format", frame: avcFrameWithRTPPackets},
 		{name: "short packet", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(packetData[:11], packetData[12:])}}},
+		{name: "payload starts after header", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(shiftedPayloadPacketData, shiftedPayloadPacketData[13:])}}},
+		{name: "payload truncated before packet end", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(packetData, packetData[12:14])}}},
 		{name: "empty payload", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(packetData, nil)}}},
 		{name: "payload before header", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(packetData, packetData[8:12])}}},
 		{name: "payload forbidden zero bit", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(forbiddenPayloadPacketData, forbiddenPayloadPacketData[12:])}}},
@@ -13494,6 +13497,7 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 	}
 	malformedSTAPAPacketData := rtpPacketWithPayload(24, 0, 2, 0x67)
 	malformedFUAPacketData := rtpPacketWithPayload(28, 0x85)
+	shiftedPayloadPacketData := rtpPacketWithPayload(0x65, 0x61, 0x62)
 	payloadTypeMismatchPacket := encoderRTPPacketFromTestData(packetData, packetData[12:])
 	payloadTypeMismatchPacket.PayloadType ^= 1
 	sequenceMismatchPacket := encoderRTPPacketFromTestData(packetData, packetData[12:])
@@ -13519,6 +13523,8 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 		{name: "timestamp mismatch", packet: timestampMismatchPacket, packetDataInvalid: true},
 		{name: "ssrc mismatch", packet: ssrcMismatchPacket, packetDataInvalid: true},
 		{name: "marker mismatch", packet: markerMismatchPacket, packetDataInvalid: true},
+		{name: "payload starts after header", packet: encoderRTPPacketFromTestData(shiftedPayloadPacketData, shiftedPayloadPacketData[13:])},
+		{name: "payload truncated before packet end", packet: encoderRTPPacketFromTestData(packetData, packetData[12:14])},
 		{name: "empty payload", packet: encoderRTPPacketFromTestData(packetData, nil)},
 		{name: "payload before header", packet: encoderRTPPacketFromTestData(packetData, packetData[8:12])},
 		{name: "payload forbidden zero bit", packet: encoderRTPPacketFromTestData(badPayloadPacketData, badPayloadPacketData[12:])},
@@ -13883,6 +13889,9 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 	validRTPPacket := encoderRTPPacketFromTestData(validPacket, validPacket[12:])
 	metadataMismatchPacket := validRTPPacket
 	metadataMismatchPacket.SequenceNumber++
+	invalidPayloadViewPacket := []byte{0x80, 0xe0, 0, 1, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd, 0x65, 0x61, 0x62}
+	shiftedPayloadViewPacket := encoderRTPPacketFromTestData(invalidPayloadViewPacket, invalidPayloadViewPacket[13:])
+	truncatedPayloadViewPacket := encoderRTPPacketFromTestData(invalidPayloadViewPacket, invalidPayloadViewPacket[12:14])
 	for _, tt := range []struct {
 		name  string
 		frame goh264.EncodedFrame
@@ -13923,6 +13932,24 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 				Data:         []byte{0, 0, 0, 1, 0x65},
 				NALUnits:     []goh264.EncoderNALUnit{{Type: 5, Offset: 4, Size: 1, KeyFrame: true}},
 				RTPPackets:   []goh264.EncoderRTPPacket{metadataMismatchPacket},
+			},
+		},
+		{
+			name: "rtp payload starts after header",
+			frame: goh264.EncodedFrame{
+				OutputFormat: goh264.EncoderOutputRTP,
+				Data:         []byte{0, 0, 0, 1, 0x65},
+				NALUnits:     []goh264.EncoderNALUnit{{Type: 5, Offset: 4, Size: 1, KeyFrame: true}},
+				RTPPackets:   []goh264.EncoderRTPPacket{shiftedPayloadViewPacket},
+			},
+		},
+		{
+			name: "rtp payload truncated before packet end",
+			frame: goh264.EncodedFrame{
+				OutputFormat: goh264.EncoderOutputRTP,
+				Data:         []byte{0, 0, 0, 1, 0x65},
+				NALUnits:     []goh264.EncoderNALUnit{{Type: 5, Offset: 4, Size: 1, KeyFrame: true}},
+				RTPPackets:   []goh264.EncoderRTPPacket{truncatedPayloadViewPacket},
 			},
 		},
 		{

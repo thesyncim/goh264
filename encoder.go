@@ -273,10 +273,10 @@ type EncoderNALUnit struct {
 
 // EncoderRTPPacket is one encoded RTP packet.
 //
-// Data contains the complete RTP packet, including the 12-byte header. Payload
-// is a clipped view over the payload bytes inside Data, so appending to either
-// slice cannot overwrite another returned packet. Returned RTP packet storage is
-// independent from EncodedFrame.Data.
+// Data contains the complete RTP packet, including the 12-byte header. Payload is
+// the exact clipped view over Data[12:], so appending to either slice cannot
+// overwrite another returned packet. Returned RTP packet storage is independent
+// from EncodedFrame.Data.
 type EncoderRTPPacket struct {
 	Data           []byte
 	Payload        []byte
@@ -312,19 +312,20 @@ func (packet EncoderRTPPacket) AppendPacketData(dst []byte) ([]byte, error) {
 
 // PayloadData returns the RTP payload bytes.
 //
-// The returned slice is clipped to its length, so appending to it cannot
-// overwrite the following bytes in the packet backing store.
+// Payload must be the exact Data[12:] payload view. The returned slice is
+// clipped to its length, so appending to it cannot overwrite the following bytes
+// in the packet backing store.
 func (packet EncoderRTPPacket) PayloadData() ([]byte, error) {
 	if !encoderRTPPacketCloneStorageOK(packet) ||
 		!encoderRTPPacketHeaderMetadataOK(packet) || len(packet.Payload) == 0 {
 		return nil, ErrInvalidData
 	}
 	dataStart := unsafeSliceOffset(packet.Data, packet.Payload)
-	if dataStart < 12 {
+	if dataStart != 12 {
 		return nil, ErrInvalidData
 	}
 	dataEnd, err := checkedAddInt(dataStart, len(packet.Payload))
-	if err != nil || dataEnd > len(packet.Data) {
+	if err != nil || dataEnd != len(packet.Data) {
 		return nil, ErrInvalidData
 	}
 	if err := validateEncoderRTPPayload(packet.Payload); err != nil {
