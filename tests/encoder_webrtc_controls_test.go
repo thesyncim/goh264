@@ -8361,12 +8361,30 @@ func TestEncoderMultiMacroblockLumaDCResidualPUsesResidualAcrossPublicOutputs(t 
 	testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t, "multi-macroblock luma-DC residual P", 32, 16, encoderP16x16MultiMacroblockLumaDCResidualFrame)
 }
 
+func TestEncoderMultiSliceLumaDCResidualPUsesResidualAcrossPublicOutputs(t *testing.T) {
+	testEncoderResidualPUsesResidualAcrossPublicOutputsWithConfig(t, "multi-slice luma-DC residual P", 32, 16, func(cfg *goh264.EncoderConfig) {
+		cfg.SliceCount = 2
+	}, encoderP16x16MultiMacroblockLumaDCResidualFrame)
+}
+
 func testEncoderResidualPUsesResidualAcrossPublicOutputs(t *testing.T, label string, buildSecondFrame func(*testing.T, goh264.EncoderConfig, goh264.EncoderFrame, int64) goh264.EncoderFrame) {
 	t.Helper()
 	testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t, label, 16, 16, buildSecondFrame)
 }
 
 func testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t *testing.T, label string, width int, height int, buildSecondFrame func(*testing.T, goh264.EncoderConfig, goh264.EncoderFrame, int64) goh264.EncoderFrame) {
+	t.Helper()
+	testEncoderResidualPUsesResidualAcrossPublicOutputsWithConfig(t, label, width, height, nil, buildSecondFrame)
+}
+
+func testEncoderResidualPUsesResidualAcrossPublicOutputsWithConfig(
+	t *testing.T,
+	label string,
+	width int,
+	height int,
+	configureConfig func(*goh264.EncoderConfig),
+	buildSecondFrame func(*testing.T, goh264.EncoderConfig, goh264.EncoderFrame, int64) goh264.EncoderFrame,
+) {
 	t.Helper()
 	for _, tt := range []struct {
 		name      string
@@ -8408,6 +8426,9 @@ func testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t *testing.T, l
 			cfg.DeblockMode = goh264.EncoderDeblockDisabled
 			cfg.RateControl = goh264.EncoderRateControlConstantQP
 			tt.configure(&cfg)
+			if configureConfig != nil {
+				configureConfig(&cfg)
+			}
 			enc, err := goh264.NewEncoder(cfg)
 			if err != nil {
 				t.Fatalf("NewEncoder: %v", err)
@@ -8433,7 +8454,11 @@ func testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t *testing.T, l
 					label,
 					second.Dropped, second.KeyFrame, second.IDR)
 			}
-			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			wantSliceCount := cfg.SliceCount
+			if wantSliceCount == 0 {
+				wantSliceCount = 1
+			}
+			assertEncoderNALTypes(t, second.NALUnits, repeatedEncoderNALTypes(uint8(h264.NALSlice), wantSliceCount))
 
 			dec := goh264.NewDecoder()
 			var decodedFirst, decodedSecond []*goh264.Frame
@@ -8485,7 +8510,14 @@ func testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t *testing.T, l
 			stream := append([]byte(nil), headers.AnnexB...)
 			stream = append(stream, annexBFromEncodedFrame(t, first, cfg.OutputFormat)...)
 			stream = append(stream, annexBFromEncodedFrame(t, second, cfg.OutputFormat)...)
-			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+			wantVCLTypes := repeatedEncoderNALTypes(uint8(h264.NALIDRSlice), wantSliceCount)
+			wantVCLTypes = append(wantVCLTypes, repeatedEncoderNALTypes(uint8(h264.NALSlice), wantSliceCount)...)
+			wantFrameNums := repeatedEncoderUint32s(0, wantSliceCount)
+			wantFrameNums = append(wantFrameNums, repeatedEncoderUint32s(1, wantSliceCount)...)
+			assertEncoderVCLFrameNums(t, stream, wantVCLTypes, wantFrameNums)
+			wantFirstMBs := encoderExpectedSliceFirstMBs(width, height, wantSliceCount)
+			wantStreamFirstMBs := append(append([]uint32(nil), wantFirstMBs...), wantFirstMBs...)
+			assertEncoderVCLFirstMBs(t, stream, wantVCLTypes, wantStreamFirstMBs)
 			wantStream := appendI420FrameBytes(nil, firstFrame)
 			wantStream = appendI420FrameBytes(wantStream, secondFrame)
 			assertFFmpegRawVideoOracle(t, stream, wantStream)
@@ -17853,6 +17885,51 @@ func assertEncoderNALTypes(t *testing.T, nals []goh264.EncoderNALUnit, want []ui
 			t.Fatalf("NAL[%d] type = %d, want %d (%+v)", i, nals[i].Type, typ, nals)
 		}
 	}
+}
+
+func repeatedEncoderNALTypes(typ uint8, count int) []uint8 {
+	if count <= 0 {
+		return nil
+	}
+	types := make([]uint8, count)
+	for i := range types {
+		types[i] = typ
+	}
+	return types
+}
+
+func repeatedEncoderUint32s(v uint32, count int) []uint32 {
+	if count <= 0 {
+		return nil
+	}
+	values := make([]uint32, count)
+	for i := range values {
+		values[i] = v
+	}
+	return values
+}
+
+func encoderExpectedSliceFirstMBs(width int, height int, sliceCount int) []uint32 {
+	total := (width >> 4) * (height >> 4)
+	if sliceCount <= 0 {
+		sliceCount = 1
+	}
+	if sliceCount > total {
+		sliceCount = total
+	}
+	base := total / sliceCount
+	extra := total % sliceCount
+	first := 0
+	firstMBs := make([]uint32, 0, sliceCount)
+	for i := 0; i < sliceCount; i++ {
+		count := base
+		if i < extra {
+			count++
+		}
+		firstMBs = append(firstMBs, uint32(first))
+		first += count
+	}
+	return firstMBs
 }
 
 func assertEncodedFrameNALUnitIndexes(t *testing.T, out goh264.EncodedFrame, format goh264.EncoderOutputFormat) {
