@@ -1720,7 +1720,11 @@ func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
 		return dst, ErrInvalidData
 	}
-	if f.BitDepthLuma != 8 || (f.ChromaFormatIDC != 0 && f.BitDepthChroma != 8) {
+	depth, err := f.rawBitDepth()
+	if err != nil {
+		return dst, err
+	}
+	if depth != 8 {
 		return dst, ErrUnsupported
 	}
 	size, err := f.RawYUVSize()

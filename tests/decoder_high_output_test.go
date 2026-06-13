@@ -865,6 +865,38 @@ func TestFrameAppendRawYUVMetadataErrorsPreserveCallerBuffer(t *testing.T) {
 			want: ErrUnsupported,
 		},
 		{
+			name: "zero-luma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 0, BitDepthChroma: 8,
+			},
+			want: ErrInvalidData,
+		},
+		{
+			name: "negative-luma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: -1, BitDepthChroma: 8,
+			},
+			want: ErrInvalidData,
+		},
+		{
+			name: "zero-chroma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: 0,
+			},
+			want: ErrInvalidData,
+		},
+		{
+			name: "negative-chroma-depth",
+			frame: Frame{
+				Width: 2, Height: 2, ChromaFormatIDC: 1,
+				BitDepthLuma: 8, BitDepthChroma: -1,
+			},
+			want: ErrInvalidData,
+		},
+		{
 			name: "mismatched-chroma-depth",
 			frame: Frame{
 				Width: 2, Height: 2, ChromaFormatIDC: 1,
