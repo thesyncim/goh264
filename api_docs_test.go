@@ -726,19 +726,32 @@ func TestREADMEEncoderRTPDataSurfaceDocumentsPacketBytes(t *testing.T) {
 	}
 }
 
-func TestREADMEEncoderSampleKeepsRTPHelpersInRTPBranch(t *testing.T) {
+func TestREADMEEncoderSamplesSeparateAccessUnitAndRTPSurfaces(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatalf("read README.md: %v", err)
 	}
 	readme := string(data)
-	rtpCase := "case goh264.EncoderOutputRTP:\n\t// Use RTPPackets or the RTP helper methods below.\n\tpacket0, err := out.RTPPacketData(0)"
-	if !strings.Contains(readme, rtpCase) {
-		t.Fatal("README.md encoder sample should call RTPPacketData only inside the RTP output branch")
+	if strings.Contains(readme, "switch out.OutputFormat") {
+		t.Fatal("README.md encoder sample should not mix mutually exclusive output formats in one runtime switch")
 	}
-	accessUnitCase := "case goh264.EncoderOutputAnnexB, goh264.EncoderOutputAVC:\n\t// Use the access-unit helpers below.\n\taccessUnit, err := out.AccessUnitData()"
-	if !strings.Contains(readme, accessUnitCase) {
-		t.Fatal("README.md encoder sample should call AccessUnitData inside the Annex B/AVC output branch")
+	for _, phrase := range []string{
+		"must(enc.SetOutputFormat(goh264.EncoderOutputAVC)) // queues an IDR boundary",
+		"accessUnit, err := out.AccessUnitData()",
+		"nal0, err := out.NALData(0)",
+		"For RTP output, set the RTP output format before encoding",
+		"must(enc.SetOutputFormat(goh264.EncoderOutputRTP))",
+		"packet0, err := out.RTPPacketData(0)",
+		"payload0, err := out.RTPPayloadData(0)",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md encoder output samples missing separated surface phrase %q", phrase)
+		}
+	}
+	avcIndex := strings.Index(readme, "must(enc.SetOutputFormat(goh264.EncoderOutputAVC))")
+	rtpIndex := strings.Index(readme, "must(enc.SetOutputFormat(goh264.EncoderOutputRTP))")
+	if avcIndex < 0 || rtpIndex < 0 || rtpIndex < avcIndex {
+		t.Fatalf("README.md RTP output sample should follow the AVC/access-unit sample, indexes avc=%d rtp=%d", avcIndex, rtpIndex)
 	}
 }
 
@@ -889,6 +902,11 @@ func TestPublicCommentsDocumentStateAndOwnershipBoundaries(t *testing.T) {
 	decoder := string(decoderData)
 	encoder := string(encoderData)
 	for _, phrase := range []string{
+		"ErrInvalidData reports malformed input or invalid public API arguments",
+		"ErrUnsupported reports valid inputs or controls outside the supported",
+		"decoder or encoder contract",
+		"Errors can wrap this sentinel with additional detail; use errors.Is to",
+		"test for it",
 		"InspectAnnexBHeaders parses Annex B parameter sets and returns stream\n// metadata without changing decoder state",
 		"InspectAVCHeaders parses length-prefixed AVC parameter sets and returns\n// stream metadata without changing decoder state",
 		"ParseHeadersAVC parses AVC parameter sets, stores SPS/PPS state and the AVC\n// NAL length size for later DecodeConfiguredAVCFrames calls",

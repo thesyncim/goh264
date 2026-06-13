@@ -453,38 +453,46 @@ if err != nil {
 if out.Dropped {
 	// Realtime budget drop: no bytes or RTP packets were emitted.
 }
-switch out.OutputFormat {
-case goh264.EncoderOutputAnnexB, goh264.EncoderOutputAVC:
-	// Use the access-unit helpers below.
-	accessUnit, err := out.AccessUnitData()
-	if err != nil {
-		log.Fatal(err)
-	}
-	nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
-	if err != nil {
-		log.Fatal(err)
-	}
-	_ = accessUnit
-	_ = nal0
-case goh264.EncoderOutputRTP:
-	// Use RTPPackets or the RTP helper methods below.
-	packet0, err := out.RTPPacketData(0)
-	if err != nil {
-		log.Fatal(err)
-	}
-	payload0, err := out.RTPPayloadData(0)
-	if err != nil {
-		log.Fatal(err)
-	}
-	_ = packet0
-	_ = payload0
+accessUnit, err := out.AccessUnitData()
+if err != nil {
+	log.Fatal(err)
 }
+nal0, err := out.NALData(0) // clipped raw NAL bytes from EncodedFrame.Data
+if err != nil {
+	log.Fatal(err)
+}
+_ = accessUnit
+_ = nal0
 owned, err := out.Clone()   // deep-owned snapshot for async retention
 if err != nil {
 	log.Fatal(err)
 }
 _ = owned
 must(enc.Reset()) // clear encoder coding state, keep config/callback
+```
+
+For RTP output, set the RTP output format before encoding and use the RTP packet
+helpers instead of the access-unit helpers:
+
+```go
+must(enc.SetOutputFormat(goh264.EncoderOutputRTP))
+must(enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false))
+must(enc.SetRTPMetadata(110, 0x11223344))
+
+out, err := enc.Encode(frame)
+if err != nil {
+	log.Fatal(err)
+}
+packet0, err := out.RTPPacketData(0)
+if err != nil {
+	log.Fatal(err)
+}
+payload0, err := out.RTPPayloadData(0)
+if err != nil {
+	log.Fatal(err)
+}
+_ = packet0
+_ = payload0
 ```
 
 The admitted encoder contract is deliberately narrow, and these are the pieces

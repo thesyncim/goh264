@@ -12,7 +12,17 @@ import (
 )
 
 var (
+	// ErrInvalidData reports malformed input or invalid public API arguments.
+	//
+	// Errors can wrap this sentinel with additional detail; use errors.Is to
+	// test for it.
 	ErrInvalidData = h264.ErrInvalidData
+
+	// ErrUnsupported reports valid inputs or controls outside the supported
+	// decoder or encoder contract.
+	//
+	// Errors can wrap this sentinel with additional detail; use errors.Is to
+	// test for it.
 	ErrUnsupported = h264.ErrUnsupported
 )
 
