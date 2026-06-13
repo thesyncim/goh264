@@ -8508,7 +8508,7 @@ func TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs(t *testing.
 				t.Fatalf("Encode first IDR: %v", err)
 			}
 
-			secondFrame := encoderP16x16ResidualCandidateFrame(t, cfg, firstFrame, firstFrame.PTS+int64(cfg.RTPTimestampIncrement))
+			secondFrame := encoderP16x16PixelDeltaResidualFrame(t, cfg, firstFrame, firstFrame.PTS+int64(cfg.RTPTimestampIncrement))
 			second, err := enc.Encode(secondFrame)
 			if err != nil {
 				t.Fatalf("Encode residual-shaped P delta: %v", err)
@@ -17644,7 +17644,7 @@ func clampEncoderTestCoord(v int, limit int) int {
 	return v
 }
 
-func encoderP16x16ResidualCandidateFrame(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64) goh264.EncoderFrame {
+func encoderP16x16PixelDeltaResidualFrame(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64) goh264.EncoderFrame {
 	t.Helper()
 	sets, err := h264.BuildEncoderParameterSets(h264.EncoderParameterSetConfig{
 		ProfileIDC:         66,
@@ -17686,11 +17686,7 @@ func encoderP16x16ResidualCandidateFrame(t *testing.T, cfg goh264.EncoderConfig,
 		InitialQP:                  cfg.InitialQP,
 		NextQP:                     cfg.InitialQP,
 		DisableDeblockingFilterIDC: 1,
-		Coeff:                      4,
-		ChromaDCCoeffCb:            2,
-		ChromaDCCoeffCr:            -2,
-		ChromaACCoeffCb:            1,
-		ChromaACCoeffCr:            -1,
+		Coeff:                      3,
 		NALLengthSize:              4,
 	})
 	if err != nil {

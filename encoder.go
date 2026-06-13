@@ -2145,6 +2145,10 @@ type encoderP16x16ResidualCandidate struct {
 	chromaACCoeffCr int32
 }
 
+type encoderP16x16ResidualPlan struct {
+	lumaCoefficients [][]h264.EncoderResidualCoefficient
+}
+
 var encoderP16x16ResidualCandidates = [...]encoderP16x16ResidualCandidate{
 	{coeff: 4, chromaDCCoeffCb: 2, chromaDCCoeffCr: -2, chromaACCoeffCb: 1, chromaACCoeffCr: -1},
 	{coeff: -4, chromaDCCoeffCb: -2, chromaDCCoeffCr: 2, chromaACCoeffCb: -1, chromaACCoeffCr: 1},
@@ -2426,6 +2430,21 @@ func (e *Encoder) p16x16ResidualNALs(view encoderFrameView, sliceRanges []encode
 	if !e.p16x16ResidualCandidateAllowed(view, sliceRanges) {
 		return nil, false, nil
 	}
+	if plan, planOK, err := e.p16x16ResidualPlanFromPixelDelta(view, sliceRanges); err != nil {
+		return nil, false, err
+	} else if planOK {
+		nals, err := e.p16x16ResidualPlanNALs(view, sliceRanges, plan)
+		if err != nil {
+			return nil, false, err
+		}
+		ok, err := e.p16x16ResidualCandidateMatches(view, nals)
+		if err != nil {
+			return nil, false, err
+		}
+		if ok {
+			return nals, true, nil
+		}
+	}
 	for _, candidate := range encoderP16x16ResidualCandidates {
 		nals := make([]encoderRawNAL, 0, len(sliceRanges))
 		for _, r := range sliceRanges {
@@ -2459,6 +2478,167 @@ func (e *Encoder) p16x16ResidualNALs(view encoderFrameView, sliceRanges []encode
 		}
 	}
 	return nil, false, nil
+}
+
+func (e *Encoder) p16x16ResidualPlanNALs(view encoderFrameView, sliceRanges []encoderSliceRange, plan encoderP16x16ResidualPlan) ([]encoderRawNAL, error) {
+	nals := make([]encoderRawNAL, 0, len(sliceRanges))
+	for _, r := range sliceRanges {
+		end := r.firstMB + r.macroblockCount
+		if r.firstMB < 0 || r.macroblockCount <= 0 || end > len(plan.lumaCoefficients) {
+			return nil, ErrInvalidData
+		}
+		nal, err := buildEncoderI420P16x16ResidualNAL(h264.EncoderI420P16x16ResidualConfig{
+			Width:                      view.width,
+			Height:                     view.height,
+			FrameNum:                   e.frameNum & 0xff,
+			InitialQP:                  e.cfg.InitialQP,
+			NextQP:                     e.cfg.InitialQP,
+			DisableDeblockingFilterIDC: encoderDeblockingFilterIDC(e.cfg.DeblockMode),
+			FirstMBAddr:                uint32(r.firstMB),
+			MacroblockCount:            uint32(r.macroblockCount),
+			LumaCoefficients:           plan.lumaCoefficients[r.firstMB:end],
+			NALLengthSize:              4,
+		})
+		if err != nil {
+			return nil, err
+		}
+		nals = append(nals, encoderRawNAL{typ: uint8(h264.NALSlice), raw: nal})
+	}
+	return nals, nil
+}
+
+func (e *Encoder) p16x16ResidualPlanFromPixelDelta(view encoderFrameView, sliceRanges []encoderSliceRange) (encoderP16x16ResidualPlan, bool, error) {
+	if !encoderI420ReferenceChromaMatchesView(&e.reference, view) {
+		return encoderP16x16ResidualPlan{}, false, nil
+	}
+	qmul, err := e.p16x16ResidualLumaDCQMul()
+	if err != nil {
+		return encoderP16x16ResidualPlan{}, false, err
+	}
+	macroblockCount, err := encoderMacroblockCountChecked(view.width, view.height)
+	if err != nil {
+		return encoderP16x16ResidualPlan{}, false, err
+	}
+	lumaCoefficients := make([][]h264.EncoderResidualCoefficient, macroblockCount)
+	macroblocksPerRow := view.width >> 4
+	for _, r := range sliceRanges {
+		end := r.firstMB + r.macroblockCount
+		if r.firstMB < 0 || r.macroblockCount <= 0 || end > macroblockCount {
+			return encoderP16x16ResidualPlan{}, false, nil
+		}
+		for mbAddr := r.firstMB; mbAddr < end; mbAddr++ {
+			coeff, ok := encoderP16x16LumaDCCoefficientFromPixels(&e.reference, view, mbAddr, macroblocksPerRow, qmul)
+			if !ok {
+				return encoderP16x16ResidualPlan{}, false, nil
+			}
+			lumaCoefficients[mbAddr] = []h264.EncoderResidualCoefficient{{Pos: 0, Value: coeff}}
+		}
+	}
+	return encoderP16x16ResidualPlan{lumaCoefficients: lumaCoefficients}, true, nil
+}
+
+func (e *Encoder) p16x16ResidualLumaDCQMul() (uint32, error) {
+	parameterSetCfg, err := e.parameterSetConfig()
+	if err != nil {
+		return 0, err
+	}
+	sets, err := h264.BuildEncoderParameterSets(parameterSetCfg)
+	if err != nil {
+		return 0, err
+	}
+	avcc, err := h264.DecodeAVCDecoderConfigurationRecord(sets.AVCDecoderConfigurationRecord)
+	if err != nil {
+		return 0, err
+	}
+	for _, pps := range avcc.PPS {
+		if pps != nil {
+			qmul := pps.Dequant4Buffer[3][e.cfg.InitialQP][0]
+			if qmul == 0 {
+				return 0, ErrInvalidData
+			}
+			return qmul, nil
+		}
+	}
+	return 0, ErrInvalidData
+}
+
+func encoderI420ReferenceChromaMatchesView(ref *encoderReferenceFrame, view encoderFrameView) bool {
+	if ref == nil || !ref.valid || ref.width != view.width || ref.height != view.height {
+		return false
+	}
+	_, chromaSize, ok := encoderI420ReferencePlaneSizes(view)
+	if !ok || len(ref.cb) != chromaSize || len(ref.cr) != chromaSize {
+		return false
+	}
+	chromaWidth := view.width >> 1
+	chromaHeight := view.height >> 1
+	for y := 0; y < chromaHeight; y++ {
+		srcCb := view.cb[y*view.strideCb : y*view.strideCb+chromaWidth]
+		srcCr := view.cr[y*view.strideCr : y*view.strideCr+chromaWidth]
+		dstCb := ref.cb[y*chromaWidth : (y+1)*chromaWidth]
+		dstCr := ref.cr[y*chromaWidth : (y+1)*chromaWidth]
+		if !bytes.Equal(srcCb, dstCb) || !bytes.Equal(srcCr, dstCr) {
+			return false
+		}
+	}
+	return true
+}
+
+func encoderP16x16LumaDCCoefficientFromPixels(ref *encoderReferenceFrame, view encoderFrameView, mbAddr int, macroblocksPerRow int, qmul uint32) (int32, bool) {
+	if ref == nil || macroblocksPerRow <= 0 || mbAddr < 0 || qmul == 0 {
+		return 0, false
+	}
+	mbX := mbAddr % macroblocksPerRow
+	mbY := mbAddr / macroblocksPerRow
+	baseX := mbX << 4
+	baseY := mbY << 4
+	if baseX+16 > view.width || baseY+16 > view.height || len(ref.y) != view.width*view.height {
+		return 0, false
+	}
+	delta := 0
+	for y := 0; y < 16; y++ {
+		viewRow := view.y[(baseY+y)*view.strideY+baseX : (baseY+y)*view.strideY+baseX+16]
+		refRow := ref.y[(baseY+y)*view.width+baseX : (baseY+y)*view.width+baseX+16]
+		for x := 0; x < 16; x++ {
+			pixelDelta := int(viewRow[x]) - int(refRow[x])
+			if x < 4 && y < 4 {
+				if x == 0 && y == 0 {
+					delta = pixelDelta
+					continue
+				}
+				if pixelDelta != delta {
+					return 0, false
+				}
+				continue
+			}
+			if pixelDelta != 0 {
+				return 0, false
+			}
+		}
+	}
+	if delta == 0 {
+		return 0, false
+	}
+	return encoderP16x16ResidualLumaDCLevelForPixelDelta(delta, qmul)
+}
+
+func encoderP16x16ResidualLumaDCLevelForPixelDelta(delta int, qmul uint32) (int32, bool) {
+	const maxDerivedResidualLevel = 512
+	for absLevel := int32(1); absLevel <= maxDerivedResidualLevel; absLevel++ {
+		if encoderP16x16ResidualPixelDeltaForDCLevel(absLevel, qmul) == delta {
+			return absLevel, true
+		}
+		negLevel := -absLevel
+		if encoderP16x16ResidualPixelDeltaForDCLevel(negLevel, qmul) == delta {
+			return negLevel, true
+		}
+	}
+	return 0, false
+}
+
+func encoderP16x16ResidualPixelDeltaForDCLevel(level int32, qmul uint32) int {
+	dequantized := int32(uint32(level)*qmul+32) >> 6
+	return (int(dequantized) + 32) >> 6
 }
 
 func (e *Encoder) p16x16ResidualCandidateAllowed(view encoderFrameView, sliceRanges []encoderSliceRange) bool {

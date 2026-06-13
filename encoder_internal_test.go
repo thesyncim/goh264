@@ -108,6 +108,100 @@ func TestEncoderEncodeIntoDroppedP16PlanningDoesNotCommitScratch(t *testing.T) {
 	}
 }
 
+func TestEncoderP16x16ResidualPlanFromPixelDeltaDerivesLumaDC(t *testing.T) {
+	cfg := DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = EncoderDeblockDisabled
+	cfg.RateControl = EncoderRateControlConstantQP
+	enc, err := NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	reference := testPatternedI420EncoderFrame(cfg, 0)
+	referenceView, err := enc.validatedFrameView(reference)
+	if err != nil {
+		t.Fatalf("validated reference view: %v", err)
+	}
+	enc.storeReference(referenceView)
+
+	target, err := reference.Clone()
+	if err != nil {
+		t.Fatalf("Clone reference: %v", err)
+	}
+	target.PTS += int64(cfg.RTPTimestampIncrement)
+	qmul, err := enc.p16x16ResidualLumaDCQMul()
+	if err != nil {
+		t.Fatalf("p16x16ResidualLumaDCQMul: %v", err)
+	}
+	const wantLevel int32 = 3
+	delta := encoderP16x16ResidualPixelDeltaForDCLevel(wantLevel, qmul)
+	if delta == 0 {
+		t.Fatalf("derived delta for level %d = 0, want visible pixel delta", wantLevel)
+	}
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			pos := y*target.StrideY + x
+			v := int(target.Y[pos]) + delta
+			if v < 0 || v > 255 {
+				t.Fatalf("test target luma overflows at %d,%d: %d + %d", x, y, target.Y[pos], delta)
+			}
+			target.Y[pos] = byte(v)
+		}
+	}
+	targetView, err := enc.validatedFrameView(target)
+	if err != nil {
+		t.Fatalf("validated target view: %v", err)
+	}
+	plan, ok, err := enc.p16x16ResidualPlanFromPixelDelta(targetView, []encoderSliceRange{{firstMB: 0, macroblockCount: 1}})
+	if err != nil {
+		t.Fatalf("p16x16ResidualPlanFromPixelDelta: %v", err)
+	}
+	if !ok {
+		t.Fatal("p16x16ResidualPlanFromPixelDelta did not admit representable luma DC delta")
+	}
+	if len(plan.lumaCoefficients) != 1 || len(plan.lumaCoefficients[0]) != 1 {
+		t.Fatalf("luma coefficients = %+v, want one coefficient for one macroblock", plan.lumaCoefficients)
+	}
+	if got := plan.lumaCoefficients[0][0]; got.Pos != 0 || got.Value != wantLevel {
+		t.Fatalf("luma coefficient = %+v, want pos 0 value %d", got, wantLevel)
+	}
+}
+
+func TestEncoderP16x16ResidualPlanFromPixelDeltaRejectsUnrepresentableShape(t *testing.T) {
+	cfg := DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = EncoderDeblockDisabled
+	cfg.RateControl = EncoderRateControlConstantQP
+	enc, err := NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	reference := testPatternedI420EncoderFrame(cfg, 0)
+	referenceView, err := enc.validatedFrameView(reference)
+	if err != nil {
+		t.Fatalf("validated reference view: %v", err)
+	}
+	enc.storeReference(referenceView)
+
+	target, err := reference.Clone()
+	if err != nil {
+		t.Fatalf("Clone reference: %v", err)
+	}
+	target.PTS += int64(cfg.RTPTimestampIncrement)
+	target.Y[8*target.StrideY+8] ^= 0x01
+	targetView, err := enc.validatedFrameView(target)
+	if err != nil {
+		t.Fatalf("validated target view: %v", err)
+	}
+	if _, ok, err := enc.p16x16ResidualPlanFromPixelDelta(targetView, []encoderSliceRange{{firstMB: 0, macroblockCount: 1}}); err != nil || ok {
+		t.Fatalf("p16x16ResidualPlanFromPixelDelta ok=%v err=%v, want clean rejection", ok, err)
+	}
+}
+
 func testPatternedI420EncoderFrame(cfg EncoderConfig, pts int64) EncoderFrame {
 	frame := cfg.I420Frame(
 		make([]byte, cfg.StrideY*cfg.Height),
