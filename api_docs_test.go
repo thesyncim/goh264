@@ -151,6 +151,20 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	} {
 		requireREADMECodeName(t, readme, name)
 	}
+
+	for _, tt := range []struct {
+		typeName string
+		typ      reflect.Type
+		method   string
+	}{
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "CloneChecked"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "CloneChecked"},
+	} {
+		if _, ok := tt.typ.MethodByName(tt.method); !ok {
+			t.Fatalf("README encoder ownership names missing %s.%s", tt.typeName, tt.method)
+		}
+		requireREADMECodeName(t, readme, tt.typeName)
+	}
 }
 
 func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
@@ -268,6 +282,8 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes",
 		"TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes",
 		"TestEncodedFrameCloneRejectsInvalidMetadata",
+		"TestEncoderCheckedCloneHelpersRejectOverflowedPublicStorage",
+		"TestEncodedFrameOutputHelpersRejectOverflowedPublicStorage",
 		"encoder-writers",
 		"TestCAVLCWriteResidual",
 		"TestWriteCAVLCInterPBoundedMacroblock",

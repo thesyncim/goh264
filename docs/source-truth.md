@@ -184,13 +184,15 @@ runtime configured-AVC-to-RTP output switching that forces an every-IDR RTP
 frame, starts RTP sequence numbers and callbacks from the first emitted packet,
 carries retargeted payload metadata, and decodes the RTP IDR/P-skip sequence,
 caller-owned parameter-set and recovery-point SEI surfaces with mutation/append
-isolation across repeated helper calls,
+isolation and checked helper-clone storage validation across repeated helper
+calls,
 public input/result/callback surface guards for integration-facing encoder
 structs, including I420 frame construction and clipped encoded-result helpers,
 input-frame plane ownership guards proving post-call caller mutation does not
 change the next Annex B, AVC, or RTP encode,
 returned `Encode` result lifetime guards across later Annex B, AVC, and RTP
-encodes plus `EncodedFrame.Clone` deep-owned result snapshots,
+encodes plus `EncodedFrame.Clone` deep-owned result snapshots with malformed
+metadata and overflowed public-storage rejection,
 invalid-frame validation that returns empty output and leaves RTP sequence,
 callback, frame-number, timestamp, and reference state untouched before the next
 valid P-skip,
@@ -226,7 +228,8 @@ views and prefix-aware access-unit views for non-empty caller-buffer prefixes,
 caller-buffer preservation on RTP mode-0 rejection and
 mode-0 oversize queued-IDR/P-frame packetization rollback, Annex B/AVC/RTP
 bitrate-drop and late-drop non-output paths, checked
-access-unit and RTP packet storage-size overflow rejection, RTP packetization-mode 0 single-NAL IDR/P-frame
+access-unit, NAL-list, and RTP packet storage-size overflow rejection,
+RTP packetization-mode 0 single-NAL IDR/P-frame
 reassembly and oversize rejection, RTP packetization-mode 1 FU-A reassembly,
 `EncoderConfig.Normalize` parity with constructed encoder config,
 STAP-A parameter-set aggregation with callback metadata and packet isolation plus small-payload fallback to non-aggregated
@@ -238,8 +241,8 @@ clipped packet payload views over packet data, and packet storage isolated from
 `EncodedFrame.Data` including caller-backed `EncodeInto` output buffers,
 unchanged caller append destinations on invalid access-unit, NAL, RTP packet,
 and RTP payload appends, malformed dropped-result storage rejected by
-`EncodedFrame.Clone`, shared packet metadata guards for
-header fields and clipped packet slices, optional
+`EncodedFrame.Clone`, checked `EncoderRTPPacket` payload/data clone rejection,
+shared packet metadata guards for header fields and clipped packet slices, optional
 RTP callback metadata including malformed STAP-A/FU-A payload classification and mode 0/1 IDR/P-frame single-NAL packets with
 multi-slice IDR, P-skip, exact P16x16, odd-pixel constant chroma, and P IntraPCM fallback rows
 and callback packet storage isolated from returned RTP packets while preserving

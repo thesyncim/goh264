@@ -334,7 +334,7 @@ Choose the encoder surface by what the caller owns:
 | Request or inspect an IDR boundary | `ForceIDR`, `HandlePLI`, `HandleFIR`, and `PendingIDR` |
 | Change one live control | Explicit setters such as `SetBitrate`, `SetQP`, `SetRTPMaxPayloadSize`, `SetOutputFormat`, and `SetRTPMetadata` |
 | Apply a bundled low-level update | `Reconfigure` |
-| Retain input/output beyond the call | `Clone` or `Append...` helpers |
+| Retain input/output beyond the call | `Clone`, `CloneChecked`, or `Append...` helpers |
 
 Accepted encoder setup values today:
 
@@ -468,7 +468,8 @@ with the strongest public API coverage for integration work:
 - `EncoderConfig.ParameterSets` and `EncoderConfig.RecoveryPointSEIMessage`
   generate caller-owned helper surfaces without constructing a live encoder.
   Header and SEI results include append helpers for retaining individual byte
-  surfaces in caller-managed buffers.
+  surfaces in caller-managed buffers, plus `CloneChecked` for validating
+  caller-constructed helper storage before cloning.
 - `EncoderConfig.ValidateFrame` and `Encoder.ValidateFrame` validate frame shape
   before bitstream work. Invalid frames return empty output without advancing
   RTP sequence, callback, frame-number, timestamp, or reference state. The next
@@ -505,9 +506,11 @@ with the strongest public API coverage for integration work:
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
   payload helpers have `Append...` forms for caller-owned retention buffers and
-  `Clone` forms for async snapshots. Invalid append calls return the original
-  destination unchanged, and `EncodedFrame.Clone` rejects dropped results that
-  still carry emitted byte, NAL, or RTP packet storage.
+  `Clone` forms for async snapshots. `EncoderParameterSets.CloneChecked` and
+  `EncoderSEI.CloneChecked` validate public storage sizes before cloning.
+  Invalid append calls return the original destination unchanged, and
+  `EncodedFrame.Clone` rejects dropped results that still carry emitted byte,
+  NAL, or RTP packet storage.
 - `EncodedFrame.OutputFormat` records the emitted result format, including
   dropped frames, so callers do not need to infer format from packet presence.
 - For RTP output, `EncodedFrame.Data` remains an Annex B access-unit view for
@@ -541,7 +544,7 @@ RTP output currently covers:
 - caller-owned append helpers for access-unit, NAL, RTP packet, and RTP payload
   bytes, including unchanged destinations on invalid appends;
 - deep-owned `EncodedFrame.Clone` snapshots for retained results, with malformed
-  dropped-result storage rejected;
+  metadata and overflowed public result storage rejected;
 - optional per-packet callback metadata for mode 0/1 IDR/P-frame single-NAL
   packets, including multi-slice IDR, P-skip, exact P16x16, odd-pixel constant
   chroma, and P IntraPCM fallback rows;

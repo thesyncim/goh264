@@ -78,7 +78,11 @@ const (
 // returns ErrUnsupported for them until they drive mode-decision work.
 type EncoderPreset uint8
 
-const maxEncoderRawNALListLen = maxInt / 64
+const (
+	maxEncoderRawNALListLen    = maxInt / 64
+	maxEncoderNALUnitListLen   = maxInt / 32
+	maxEncoderRTPPacketListLen = maxInt / 64
+)
 
 const (
 	EncoderPresetRealtime EncoderPreset = iota + 1
@@ -286,7 +290,7 @@ type EncoderRTPPacket struct {
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (packet EncoderRTPPacket) PacketData() ([]byte, error) {
-	if len(packet.Data) < 12 || packet.Data[0]>>6 != 2 {
+	if len(packet.Data) > maxInt/2 || len(packet.Data) < 12 || packet.Data[0]>>6 != 2 {
 		return nil, ErrInvalidData
 	}
 	return packet.Data[:len(packet.Data):len(packet.Data)], nil
@@ -308,7 +312,8 @@ func (packet EncoderRTPPacket) AppendPacketData(dst []byte) ([]byte, error) {
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (packet EncoderRTPPacket) PayloadData() ([]byte, error) {
-	if len(packet.Data) < 12 || packet.Data[0]>>6 != 2 || len(packet.Payload) == 0 {
+	if !encoderRTPPacketCloneStorageOK(packet) ||
+		len(packet.Data) < 12 || packet.Data[0]>>6 != 2 || len(packet.Payload) == 0 {
 		return nil, ErrInvalidData
 	}
 	dataStart := unsafeSliceOffset(packet.Data, packet.Payload)
@@ -381,6 +386,9 @@ func (packet EncoderRTPPacket) AppendPayloadData(dst []byte) ([]byte, error) {
 // The cloned Payload view points into the cloned Data backing store and is safe
 // to retain after the original packet storage is reused or mutated.
 func (packet EncoderRTPPacket) Clone() (EncoderRTPPacket, error) {
+	if !encoderRTPPacketCloneStorageOK(packet) {
+		return EncoderRTPPacket{}, ErrInvalidData
+	}
 	if _, err := packet.PacketData(); err != nil {
 		return EncoderRTPPacket{}, err
 	}
@@ -393,6 +401,10 @@ func (packet EncoderRTPPacket) Clone() (EncoderRTPPacket, error) {
 	clone.Data = data
 	clone.Payload = data[payloadOffset : payloadOffset+len(packet.Payload) : payloadOffset+len(packet.Payload)]
 	return clone, nil
+}
+
+func encoderRTPPacketCloneStorageOK(packet EncoderRTPPacket) bool {
+	return len(packet.Data) <= maxInt/2 && len(packet.Payload) <= maxInt/2
 }
 
 type EncoderRTPPayloadFormat uint8
@@ -456,7 +468,8 @@ type EncodedFrame struct {
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in EncodedFrame.Data.
 func (frame EncodedFrame) NALData(index int) ([]byte, error) {
-	if frame.Dropped || index < 0 || index >= len(frame.NALUnits) {
+	if frame.Dropped || len(frame.Data) > maxInt/2 || len(frame.NALUnits) > maxEncoderNALUnitListLen ||
+		index < 0 || index >= len(frame.NALUnits) {
 		return nil, ErrInvalidData
 	}
 	unit := frame.NALUnits[index]
@@ -483,7 +496,8 @@ func (frame EncodedFrame) AppendNALData(dst []byte, index int) ([]byte, error) {
 // The returned slice is clipped to its length. For EncodeInto calls that append
 // after an existing dst prefix, AccessUnitData excludes the caller prefix.
 func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
-	if frame.Dropped || len(frame.NALUnits) == 0 {
+	if frame.Dropped || len(frame.Data) > maxInt/2 || len(frame.NALUnits) > maxEncoderNALUnitListLen ||
+		len(frame.NALUnits) == 0 {
 		return nil, ErrInvalidData
 	}
 	start := -1
@@ -572,6 +586,7 @@ func (frame EncodedFrame) AppendAccessUnitData(dst []byte) ([]byte, error) {
 // overwrite the following bytes in the packet backing store.
 func (frame EncodedFrame) RTPPacketData(index int) ([]byte, error) {
 	if frame.Dropped || (frame.OutputFormat != 0 && frame.OutputFormat != EncoderOutputRTP) ||
+		len(frame.RTPPackets) > maxEncoderRTPPacketListLen ||
 		index < 0 || index >= len(frame.RTPPackets) {
 		return nil, ErrInvalidData
 	}
@@ -595,6 +610,7 @@ func (frame EncodedFrame) AppendRTPPacketData(dst []byte, index int) ([]byte, er
 // overwrite the following bytes in the packet backing store.
 func (frame EncodedFrame) RTPPayloadData(index int) ([]byte, error) {
 	if frame.Dropped || (frame.OutputFormat != 0 && frame.OutputFormat != EncoderOutputRTP) ||
+		len(frame.RTPPackets) > maxEncoderRTPPacketListLen ||
 		index < 0 || index >= len(frame.RTPPackets) {
 		return nil, ErrInvalidData
 	}
@@ -618,6 +634,9 @@ func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, e
 // independent from frame and safe to retain after caller-owned EncodeInto
 // buffers are reused.
 func (frame EncodedFrame) Clone() (EncodedFrame, error) {
+	if !encodedFrameCloneStorageOK(frame) {
+		return EncodedFrame{}, ErrInvalidData
+	}
 	if frame.Dropped {
 		if !validEncoderOutputFormat(frame.OutputFormat) ||
 			len(frame.Data) != 0 || len(frame.NALUnits) != 0 || len(frame.RTPPackets) != 0 {
@@ -663,6 +682,20 @@ func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 		clone.RTPPackets[i] = clonePacket
 	}
 	return clone, nil
+}
+
+func encodedFrameCloneStorageOK(frame EncodedFrame) bool {
+	if len(frame.Data) > maxInt/2 ||
+		len(frame.NALUnits) > maxEncoderNALUnitListLen ||
+		len(frame.RTPPackets) > maxEncoderRTPPacketListLen {
+		return false
+	}
+	for _, packet := range frame.RTPPackets {
+		if !encoderRTPPacketCloneStorageOK(packet) {
+			return false
+		}
+	}
+	return true
 }
 
 func unsafeSliceOffset(base []byte, sub []byte) int {
@@ -719,13 +752,35 @@ func (sets EncoderParameterSets) AppendAVCC(dst []byte) []byte {
 }
 
 // Clone returns a deep-owned copy of the parameter-set helper surfaces.
+//
+// For caller-constructed values that need validation, use CloneChecked.
 func (sets EncoderParameterSets) Clone() EncoderParameterSets {
+	clone, err := sets.CloneChecked()
+	if err != nil {
+		return EncoderParameterSets{}
+	}
+	return clone
+}
+
+// CloneChecked returns a deep-owned copy of the parameter-set helper surfaces
+// after validating public storage sizes.
+func (sets EncoderParameterSets) CloneChecked() (EncoderParameterSets, error) {
+	if !encoderParameterSetsCloneStorageOK(sets) {
+		return EncoderParameterSets{}, ErrInvalidData
+	}
 	return EncoderParameterSets{
 		SPS:                           cloneByteSlice(sets.SPS),
 		PPS:                           cloneByteSlice(sets.PPS),
 		AnnexB:                        cloneByteSlice(sets.AnnexB),
 		AVCDecoderConfigurationRecord: cloneByteSlice(sets.AVCDecoderConfigurationRecord),
-	}
+	}, nil
+}
+
+func encoderParameterSetsCloneStorageOK(sets EncoderParameterSets) bool {
+	return len(sets.SPS) <= maxInt/2 &&
+		len(sets.PPS) <= maxInt/2 &&
+		len(sets.AnnexB) <= maxInt/2 &&
+		len(sets.AVCDecoderConfigurationRecord) <= maxInt/2
 }
 
 // EncoderSEI contains caller-owned recovery-point SEI helper surfaces.
@@ -754,12 +809,33 @@ func (sei EncoderSEI) AppendAVC(dst []byte) []byte {
 }
 
 // Clone returns a deep-owned copy of the SEI helper surfaces.
+//
+// For caller-constructed values that need validation, use CloneChecked.
 func (sei EncoderSEI) Clone() EncoderSEI {
+	clone, err := sei.CloneChecked()
+	if err != nil {
+		return EncoderSEI{}
+	}
+	return clone
+}
+
+// CloneChecked returns a deep-owned copy of the SEI helper surfaces after
+// validating public storage sizes.
+func (sei EncoderSEI) CloneChecked() (EncoderSEI, error) {
+	if !encoderSEICloneStorageOK(sei) {
+		return EncoderSEI{}, ErrInvalidData
+	}
 	return EncoderSEI{
 		NAL:    cloneByteSlice(sei.NAL),
 		AnnexB: cloneByteSlice(sei.AnnexB),
 		AVC:    cloneByteSlice(sei.AVC),
-	}
+	}, nil
+}
+
+func encoderSEICloneStorageOK(sei EncoderSEI) bool {
+	return len(sei.NAL) <= maxInt/2 &&
+		len(sei.AnnexB) <= maxInt/2 &&
+		len(sei.AVC) <= maxInt/2
 }
 
 // EncoderReconfigure contains optional runtime encoder updates.
