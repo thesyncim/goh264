@@ -12649,11 +12649,12 @@ func TestEncodedFrameAppendNALAndAccessUnitDataReturnCallerOwnedBytes(t *testing
 		t.Fatalf("AppendAccessUnitData output aliases source after mutation: %x", accessUnit)
 	}
 
-	if got, err := (goh264.EncodedFrame{}).AppendNALData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
-		t.Fatalf("AppendNALData invalid = %x/%v, want nil ErrInvalidData", got, err)
+	invalidPrefix := []byte{1, 2}
+	if got, err := (goh264.EncodedFrame{}).AppendNALData(append([]byte(nil), invalidPrefix...), 0); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, invalidPrefix) {
+		t.Fatalf("AppendNALData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
-	if got, err := (goh264.EncodedFrame{}).AppendAccessUnitData([]byte{1, 2}); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
-		t.Fatalf("AppendAccessUnitData invalid = %x/%v, want nil ErrInvalidData", got, err)
+	if got, err := (goh264.EncodedFrame{}).AppendAccessUnitData(append([]byte(nil), invalidPrefix...)); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, invalidPrefix) {
+		t.Fatalf("AppendAccessUnitData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
 }
 
@@ -12798,19 +12799,20 @@ func TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes(t *testing.T) {
 		t.Fatalf("AppendRTPPayloadData output aliases source after mutation: %x", payload)
 	}
 
-	if got, err := (goh264.EncodedFrame{}).AppendRTPPacketData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
-		t.Fatalf("AppendRTPPacketData invalid = %x/%v, want nil ErrInvalidData", got, err)
+	invalidPrefix := []byte{1, 2}
+	if got, err := (goh264.EncodedFrame{}).AppendRTPPacketData(append([]byte(nil), invalidPrefix...), 0); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, invalidPrefix) {
+		t.Fatalf("AppendRTPPacketData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
-	if got, err := (goh264.EncodedFrame{}).AppendRTPPayloadData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
-		t.Fatalf("AppendRTPPayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
+	if got, err := (goh264.EncodedFrame{}).AppendRTPPayloadData(append([]byte(nil), invalidPrefix...), 0); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, invalidPrefix) {
+		t.Fatalf("AppendRTPPayloadData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
 	nonRTP := valid
 	nonRTP.OutputFormat = goh264.EncoderOutputAVC
-	if got, err := nonRTP.AppendRTPPacketData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
-		t.Fatalf("AppendRTPPacketData non-RTP = %x/%v, want nil ErrInvalidData", got, err)
+	if got, err := nonRTP.AppendRTPPacketData(append([]byte(nil), invalidPrefix...), 0); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, invalidPrefix) {
+		t.Fatalf("AppendRTPPacketData non-RTP = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
-	if got, err := nonRTP.AppendRTPPayloadData([]byte{1, 2}, 0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
-		t.Fatalf("AppendRTPPayloadData non-RTP = %x/%v, want nil ErrInvalidData", got, err)
+	if got, err := nonRTP.AppendRTPPayloadData(append([]byte(nil), invalidPrefix...), 0); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, invalidPrefix) {
+		t.Fatalf("AppendRTPPayloadData non-RTP = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
 }
 
@@ -12914,12 +12916,17 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 				if !errors.Is(err, goh264.ErrInvalidData) {
 					t.Fatalf("PacketData error = %v, want ErrInvalidData", err)
 				}
+				prefix := []byte{1, 2}
+				if got, err := tt.packet.AppendPacketData(append([]byte(nil), prefix...)); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, prefix) {
+					t.Fatalf("AppendPacketData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
+				}
 			}
 			if got, err := tt.packet.PayloadData(); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
 				t.Fatalf("PayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
 			}
-			if got, err := tt.packet.AppendPayloadData([]byte{1, 2}); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
-				t.Fatalf("AppendPayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
+			prefix := []byte{1, 2}
+			if got, err := tt.packet.AppendPayloadData(append([]byte(nil), prefix...)); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, prefix) {
+				t.Fatalf("AppendPayloadData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
 			}
 			if got, err := tt.packet.Clone(); !errors.Is(err, goh264.ErrInvalidData) || got.Data != nil || got.Payload != nil {
 				t.Fatalf("Clone invalid = %+v/%v, want empty ErrInvalidData", got, err)

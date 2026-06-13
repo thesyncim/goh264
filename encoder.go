@@ -293,10 +293,12 @@ func (packet EncoderRTPPacket) PacketData() ([]byte, error) {
 }
 
 // AppendPacketData appends a caller-owned copy of PacketData to dst.
+//
+// On error, dst is returned unchanged.
 func (packet EncoderRTPPacket) AppendPacketData(dst []byte) ([]byte, error) {
 	data, err := packet.PacketData()
 	if err != nil {
-		return nil, err
+		return dst, err
 	}
 	return append(dst, data...), nil
 }
@@ -364,10 +366,12 @@ func validateEncoderRTPPayload(payload []byte) error {
 }
 
 // AppendPayloadData appends a caller-owned copy of PayloadData to dst.
+//
+// On error, dst is returned unchanged.
 func (packet EncoderRTPPacket) AppendPayloadData(dst []byte) ([]byte, error) {
 	data, err := packet.PayloadData()
 	if err != nil {
-		return nil, err
+		return dst, err
 	}
 	return append(dst, data...), nil
 }
@@ -464,10 +468,12 @@ func (frame EncodedFrame) NALData(index int) ([]byte, error) {
 }
 
 // AppendNALData appends a caller-owned copy of NALData(index) to dst.
+//
+// On error, dst is returned unchanged.
 func (frame EncodedFrame) AppendNALData(dst []byte, index int) ([]byte, error) {
 	data, err := frame.NALData(index)
 	if err != nil {
-		return nil, err
+		return dst, err
 	}
 	return append(dst, data...), nil
 }
@@ -550,10 +556,12 @@ func (frame EncodedFrame) validateNALUnitMetadata(unit EncoderNALUnit) (int, err
 }
 
 // AppendAccessUnitData appends a caller-owned copy of AccessUnitData to dst.
+//
+// On error, dst is returned unchanged.
 func (frame EncodedFrame) AppendAccessUnitData(dst []byte) ([]byte, error) {
 	data, err := frame.AccessUnitData()
 	if err != nil {
-		return nil, err
+		return dst, err
 	}
 	return append(dst, data...), nil
 }
@@ -571,10 +579,12 @@ func (frame EncodedFrame) RTPPacketData(index int) ([]byte, error) {
 }
 
 // AppendRTPPacketData appends a caller-owned copy of RTPPacketData(index) to dst.
+//
+// On error, dst is returned unchanged.
 func (frame EncodedFrame) AppendRTPPacketData(dst []byte, index int) ([]byte, error) {
 	data, err := frame.RTPPacketData(index)
 	if err != nil {
-		return nil, err
+		return dst, err
 	}
 	return append(dst, data...), nil
 }
@@ -592,10 +602,12 @@ func (frame EncodedFrame) RTPPayloadData(index int) ([]byte, error) {
 }
 
 // AppendRTPPayloadData appends a caller-owned copy of RTPPayloadData(index) to dst.
+//
+// On error, dst is returned unchanged.
 func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, error) {
 	data, err := frame.RTPPayloadData(index)
 	if err != nil {
-		return nil, err
+		return dst, err
 	}
 	return append(dst, data...), nil
 }

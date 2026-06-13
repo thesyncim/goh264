@@ -233,7 +233,9 @@ metadata and callback packet isolation, RTP payload-type/SSRC/sequence metadata,
 RTP header bytes with public `EncodedFrame.RTPPacketData`/
 `EncodedFrame.RTPPayloadData` and packet-level `EncoderRTPPacket` helpers,
 clipped packet payload views over packet data, and packet storage isolated from
-`EncodedFrame.Data` including caller-backed `EncodeInto` output buffers, shared packet metadata guards for
+`EncodedFrame.Data` including caller-backed `EncodeInto` output buffers,
+unchanged caller append destinations on invalid access-unit, NAL, RTP packet,
+and RTP payload appends, shared packet metadata guards for
 header fields and clipped packet slices, optional
 RTP callback metadata including malformed STAP-A/FU-A payload classification and mode 0/1 IDR/P-frame single-NAL packets with
 multi-slice IDR, P-skip, exact P16x16, odd-pixel constant chroma, and P IntraPCM fallback rows
