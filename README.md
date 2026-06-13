@@ -27,7 +27,7 @@ is still below quality parity with a production H.264 encoder.
 | Area | Quality state | Strong evidence today | Missing before production parity |
 | --- | --- | --- | --- |
 | Decoder | Best-covered, still hardening | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Final production evidence, every selected gate green together, exact parity on remaining unselected field/MBAFF/damaged-edge behavior |
-| Encoder | Experimental admitted subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, public residual macroblock admission, mature rate control, wider packetizer/control breadth, oracle-backed bitstream parity, reviewed allocation/performance evidence |
+| Encoder | Admitted realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, public residual macroblock admission, mature rate control, wider packetizer/control breadth, oracle-backed bitstream parity, reviewed allocation/performance evidence |
 | Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, production acceptance, or performance evidence |
 
 ## What Works Today
@@ -315,7 +315,7 @@ suppress later duplicates.
 | `Encoder.SetQP` / `SetResolution` / `SetOutputFormat` | Apply validated live changes and queue an IDR boundary for the next emitted access unit. |
 | Invalid encoder setters or `Reconfigure` updates | Leave configuration, queued IDR state, RTP sequence/callback state, frame number, timestamp, and references unchanged. |
 
-## Encoder API (Experimental)
+## Encoder API
 
 The encoder surface is intentionally split into a small recommended realtime
 path and lower-level escape hatches. Prefer the explicit setters for live
@@ -340,7 +340,7 @@ Choose the encoder surface by what the caller owns:
 
 Accepted encoder setup values today:
 
-| Area | Accepted values | Rejected/not-yet-admitted values |
+| Area | Accepted values | Rejected/admission-limited values |
 | --- | --- | --- |
 | Input | 8-bit I420, even width/height, valid I420 crop and strides | Other pixel formats, odd I420 dimensions, invalid crop/stride geometry |
 | Profile/tools | `EncoderProfileConstrainedBaseline` or `EncoderProfileBaseline`, `EncoderEntropyCAVLC`, `Transform8x8=false`, `MaxReferenceFrames=1`, `BFrames=0` | Main/High profiles, CABAC, 8x8 transform, multiple refs, B-frames |
@@ -378,7 +378,7 @@ if err != nil {
 }
 must := func(err error) {
 	if err != nil {
-		// Invalid controls return ErrInvalidData; unsupported future tools return ErrUnsupported.
+		// Invalid controls return ErrInvalidData; unsupported tools return ErrUnsupported.
 		log.Fatal(err)
 	}
 }
@@ -403,7 +403,7 @@ must(enc.SetPreset(goh264.EncoderPresetRealtime))
 must(enc.SetSliceCount(2))
 must(enc.SetSPSPPSMode(goh264.EncoderSPSPPSOutOfBand))
 must(enc.SetSPSPPSBeforeIDR(false))
-must(enc.SetIntraRefresh(false)) // enabling intra refresh is not admitted yet
+must(enc.SetIntraRefresh(false)) // enabling intra refresh is outside the admitted subset
 must(enc.SetRecoveryPointSEI(true))
 must(enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false))
 must(enc.SetRTPMetadata(110, 0x11223344))
@@ -580,7 +580,7 @@ Bitrate-budget drops use the configured `MaxBitrate` refill rate and
 output without RTP packets or callbacks before the next valid frame resumes as
 P-skip.
 
-Still future: motion search beyond the bounded 8-pixel exact
+Still outside the admitted subset: motion search beyond the bounded 8-pixel exact
 macroblock-aligned inter path, quantized residual coding, and adaptive
 rate-control feedback.
 

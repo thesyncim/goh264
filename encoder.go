@@ -20,10 +20,10 @@ const (
 
 // EncoderProfile selects H.264 profile syntax.
 //
-// NewEncoder currently admits EncoderProfileConstrainedBaseline and
+// NewEncoder admits EncoderProfileConstrainedBaseline and
 // EncoderProfileBaseline. Main and High are exported control values for the
-// broader API surface, and NewEncoder returns ErrUnsupported for them until
-// those profiles are admitted.
+// broader API surface; NewEncoder returns ErrUnsupported while they remain
+// outside the admitted encoder subset.
 type EncoderProfile uint8
 
 const (
@@ -35,9 +35,9 @@ const (
 
 // EncoderEntropyMode selects entropy coding syntax.
 //
-// NewEncoder currently admits EncoderEntropyCAVLC. CABAC is an exported control
-// value for the broader API surface, and NewEncoder returns ErrUnsupported for
-// it until that entropy mode is admitted.
+// NewEncoder admits EncoderEntropyCAVLC. CABAC is an exported control value for
+// the broader API surface; NewEncoder returns ErrUnsupported while it remains
+// outside the admitted encoder subset.
 type EncoderEntropyMode uint8
 
 const (
@@ -65,17 +65,17 @@ type EncoderRateControlMode uint8
 
 const (
 	EncoderRateControlCBR EncoderRateControlMode = iota + 1
-	// EncoderRateControlVBR is reserved for a future quality-driven VBR mode.
-	// It is not admitted by NewEncoder yet.
+	// EncoderRateControlVBR is an exported control value for callers that mirror
+	// a broader encoder surface; NewEncoder returns ErrUnsupported for it.
 	EncoderRateControlVBR
 	EncoderRateControlConstantQP
 )
 
 // EncoderPreset selects speed/quality tradeoff policy.
 //
-// NewEncoder currently admits EncoderPresetRealtime only. Balanced and Quality
-// are exported control values for the broader API surface, and NewEncoder
-// returns ErrUnsupported for them until they drive mode-decision work.
+// NewEncoder admits EncoderPresetRealtime. Balanced and Quality are exported
+// control values for the broader API surface; NewEncoder returns ErrUnsupported
+// while they remain outside the admitted mode-decision subset.
 type EncoderPreset uint8
 
 const (
@@ -145,7 +145,7 @@ type EncoderColorConfig struct {
 //
 // Start from DefaultRealtimeEncoderConfig and override the fields needed by the
 // integration. DefaultEncoderConfig remains as a compatibility alias. NewEncoder
-// and Validate normalize derived defaults and reject invalid or not-yet-admitted
+// and Validate normalize derived defaults and reject invalid or unadmitted
 // controls. Crop and Color are encoded in SPS/VUI headers from this config;
 // per-frame Color is validated but does not rewrite output headers.
 type EncoderConfig struct {
@@ -1852,7 +1852,8 @@ func (e *Encoder) SetSPSPPSBeforeIDR(enabled bool) error {
 
 // SetIntraRefresh enables or disables intra refresh.
 //
-// Enabling intra refresh is not admitted yet and returns ErrUnsupported.
+// Enabling intra refresh is outside the admitted encoder subset and returns
+// ErrUnsupported.
 // Disabling it is accepted as an explicit no-op for callers that mirror a
 // runtime control surface. Invalid updates leave the encoder configuration and
 // coding state unchanged.
@@ -1861,7 +1862,7 @@ func (e *Encoder) SetIntraRefresh(enabled bool) error {
 		return encoderInvalid("nil encoder")
 	}
 	if enabled {
-		return encoderUnsupported("intra refresh is planned but not admitted yet")
+		return encoderUnsupported("intra refresh is outside the admitted encoder subset")
 	}
 	cfg := e.cfg
 	cfg.IntraRefresh = false
@@ -3587,7 +3588,7 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	switch cfg.Profile {
 	case EncoderProfileConstrainedBaseline, EncoderProfileBaseline:
 	case EncoderProfileMain, EncoderProfileHigh:
-		return cfg, encoderUnsupported("Main and High encoder profiles are planned but not admitted yet")
+		return cfg, encoderUnsupported("Main and High encoder profiles are outside the admitted encoder subset")
 	default:
 		return cfg, encoderInvalid("unknown encoder profile")
 	}
@@ -3634,7 +3635,7 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	switch cfg.RateControl {
 	case EncoderRateControlCBR, EncoderRateControlConstantQP:
 	case EncoderRateControlVBR:
-		return cfg, encoderUnsupported("VBR rate control is planned but not admitted until it drives encoder quality decisions")
+		return cfg, encoderUnsupported("VBR rate control is outside the admitted encoder quality-decision subset")
 	default:
 		return cfg, encoderInvalid("unknown rate-control mode")
 	}
@@ -3668,7 +3669,7 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	switch cfg.Preset {
 	case EncoderPresetRealtime:
 	case EncoderPresetBalanced, EncoderPresetQuality:
-		return cfg, encoderUnsupported("non-realtime presets are planned but not admitted until they drive encoder mode decisions")
+		return cfg, encoderUnsupported("non-realtime presets are outside the admitted encoder mode-decision subset")
 	default:
 		return cfg, encoderInvalid("unknown encoder preset")
 	}
@@ -3709,7 +3710,7 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		return cfg, encoderInvalid("IDR interval must be less than or equal to GOP size")
 	}
 	if cfg.IntraRefresh {
-		return cfg, encoderUnsupported("intra refresh is planned but not admitted yet")
+		return cfg, encoderUnsupported("intra refresh is outside the admitted encoder subset")
 	}
 	if cfg.OutputFormat == 0 {
 		cfg.OutputFormat = EncoderOutputRTP

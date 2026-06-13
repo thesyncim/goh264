@@ -271,7 +271,7 @@ destination unchanged on invalid or overflowed-destination appends, isolate
 overlapping source/destination appends, and
 `EncodedFrame.Clone` rejection for dropped results that still carry byte, NAL,
 or RTP packet storage, rejects invalid or
-not-yet-admitted realtime controls, validates runtime
+unadmitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
 partial reconfiguration paths, proves invalid frame-rate helper/reconfigure,
 runtime rate, latency/slice, output/header/preset, RTP re-entry payload-size,
