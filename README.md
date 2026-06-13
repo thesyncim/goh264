@@ -423,9 +423,6 @@ must(enc.SetRecoveryPointSEI(true))
 must(enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, false))
 must(enc.SetRTPMetadata(110, 0x11223344))
 must(enc.SetOutputFormat(goh264.EncoderOutputAVC)) // queues an IDR boundary
-enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
-	// Optional per-packet WebRTC metadata hook.
-})
 headers, err = enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 if err != nil {
 	log.Fatal(err)
@@ -581,6 +578,8 @@ pictures carry recovery-point SEI when enabled.
 RTP output covers:
 
 - payload bytes plus complete RTP packet bytes;
+- `SetRTPPacketCallback` per-packet metadata callbacks for RTP output; Annex B
+  and AVC output return data through `EncodedFrame` helpers instead;
 - packetization-mode 0 single-NAL output;
 - packetization-mode 1 FU-A/STAP-A output, including small-payload STAP-A
   fallback to non-aggregated mode-1 packets;

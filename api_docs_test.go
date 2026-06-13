@@ -395,6 +395,7 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 		"err = enc.ValidateFrame",
 		"err = enc.Reset",
 		"common quality, budget",
+		"must(enc.SetOutputFormat(goh264.EncoderOutputAVC)) // queues an IDR boundary\nenc.SetRTPPacketCallback",
 	} {
 		if strings.Contains(readme, forbidden) {
 			t.Fatalf("README.md encoder sample still contains unchecked or overbroad phrase %q", forbidden)
@@ -410,6 +411,7 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 		"admitted control, budget",
 		"`SetDeblockMode`, `SetRTPMaxPayloadSize`, `SetPreset`",
 		"unsupported tools return ErrUnsupported",
+		"`SetRTPPacketCallback` per-packet metadata callbacks for RTP output",
 		"Zero scalar fields in `EncoderReconfigure` mean unchanged",
 		"pointer fields, grouped `Limits`, or dedicated setters",
 		"`EncoderConfig.ExplicitQP=true`",

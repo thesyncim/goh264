@@ -304,6 +304,33 @@ func TestH264RealVectorLaneCoverage(t *testing.T) {
 	}
 }
 
+func TestH264RealVectorFieldMBAFFCoversPacketizedPublicSurfaces(t *testing.T) {
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	const id = "fate/h264-conformance/cavlc-mot-mbaff0-full-b"
+	var entry h264CorpusEntry
+	found := false
+	for _, candidate := range manifest {
+		if candidate.ID == id {
+			entry = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("real-vector manifest missing %s", id)
+	}
+	for _, tag := range []string{"cavlc", "mbaff", "field", "b-slice", "motion"} {
+		if !h264CorpusEntryHasFeatureTag(entry, tag) {
+			t.Fatalf("%s missing feature tag %q", id, tag)
+		}
+	}
+	for _, surface := range []string{"annexb", "avc4", "configured-avc4"} {
+		if !h264CorpusEntryHasSurface(entry, surface) {
+			t.Fatalf("%s missing public decode surface %q", id, surface)
+		}
+	}
+}
+
 func TestH264RealVectorUpstreamFATECoverage(t *testing.T) {
 	if os.Getenv("GOH264_REAL_VECTOR_UPSTREAM_AUDIT") != "1" {
 		t.Skip("set GOH264_REAL_VECTOR_UPSTREAM_AUDIT=1 after scripts/fetch-upstream.sh to audit pinned FFmpeg FATE coverage")
@@ -691,6 +718,15 @@ func testH264CorpusEntries(t *testing.T, manifest string, entries []h264CorpusEn
 func h264CorpusEntryHasSurface(entry h264CorpusEntry, want string) bool {
 	for _, surface := range entry.Surfaces {
 		if surface == want {
+			return true
+		}
+	}
+	return false
+}
+
+func h264CorpusEntryHasFeatureTag(entry h264CorpusEntry, want string) bool {
+	for _, tag := range entry.FeatureTags {
+		if tag == want {
 			return true
 		}
 	}
