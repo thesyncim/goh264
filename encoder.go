@@ -105,7 +105,7 @@ const (
 
 func validEncoderOutputFormat(format EncoderOutputFormat) bool {
 	switch format {
-	case 0, EncoderOutputAnnexB, EncoderOutputAVC, EncoderOutputRTP:
+	case EncoderOutputAnnexB, EncoderOutputAVC, EncoderOutputRTP:
 		return true
 	default:
 		return false
@@ -515,10 +515,6 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 		annexBPrefix := prefix[0] == 0 && prefix[1] == 0 && prefix[2] == 0 && prefix[3] == 1
 		avcPrefix := binary.BigEndian.Uint32(prefix) == uint32(unit.Size)
 		switch frame.OutputFormat {
-		case 0:
-			if !annexBPrefix && !avcPrefix {
-				return nil, ErrInvalidData
-			}
 		case EncoderOutputAnnexB, EncoderOutputRTP:
 			if !annexBPrefix {
 				return nil, ErrInvalidData
@@ -588,7 +584,7 @@ func (frame EncodedFrame) AppendAccessUnitData(dst []byte) ([]byte, error) {
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (frame EncodedFrame) RTPPacketData(index int) ([]byte, error) {
-	if frame.Dropped || (frame.OutputFormat != 0 && frame.OutputFormat != EncoderOutputRTP) ||
+	if frame.Dropped || frame.OutputFormat != EncoderOutputRTP ||
 		len(frame.RTPPackets) > maxEncoderRTPPacketListLen ||
 		index < 0 || index >= len(frame.RTPPackets) {
 		return nil, ErrInvalidData
@@ -612,7 +608,7 @@ func (frame EncodedFrame) AppendRTPPacketData(dst []byte, index int) ([]byte, er
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (frame EncodedFrame) RTPPayloadData(index int) ([]byte, error) {
-	if frame.Dropped || (frame.OutputFormat != 0 && frame.OutputFormat != EncoderOutputRTP) ||
+	if frame.Dropped || frame.OutputFormat != EncoderOutputRTP ||
 		len(frame.RTPPackets) > maxEncoderRTPPacketListLen ||
 		index < 0 || index >= len(frame.RTPPackets) {
 		return nil, ErrInvalidData

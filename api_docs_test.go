@@ -616,6 +616,8 @@ func TestREADMEEncoderRTPDataSurfaceDocumentsPacketBytes(t *testing.T) {
 	readme := string(data)
 	for _, phrase := range []string{
 		"For RTP output",
+		"Caller-constructed `EncodedFrame` values must set `OutputFormat`",
+		"access-unit/RTP helper methods or cloning dropped results",
 		"`EncodedFrame.Data` remains an Annex B access-unit view",
 		"`AccessUnitData`",
 		"`NALData`",

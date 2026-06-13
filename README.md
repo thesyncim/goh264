@@ -546,6 +546,8 @@ with the strongest public API coverage for integration work:
   byte, NAL, or RTP packet storage.
 - `EncodedFrame.OutputFormat` records the emitted result format, including
   dropped frames, so callers do not need to infer format from packet presence.
+  Caller-constructed `EncodedFrame` values must set `OutputFormat` before using
+  access-unit/RTP helper methods or cloning dropped results.
 - For RTP output, `EncodedFrame.Data` remains an Annex B access-unit view for
   `AccessUnitData` and `NALData`; send packet bytes from `RTPPackets`,
   `RTPPacketData`, or `RTPPayloadData`.
