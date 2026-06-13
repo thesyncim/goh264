@@ -8273,131 +8273,19 @@ func TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP(t *testing.T)
 }
 
 func TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs(t *testing.T) {
-	for _, tt := range []struct {
-		name      string
-		configure func(*goh264.EncoderConfig)
-	}{
-		{
-			name: "annexb",
-			configure: func(cfg *goh264.EncoderConfig) {
-				cfg.OutputFormat = goh264.EncoderOutputAnnexB
-				cfg.RTPMaxPayloadSize = 0
-			},
-		},
-		{
-			name: "avc",
-			configure: func(cfg *goh264.EncoderConfig) {
-				cfg.OutputFormat = goh264.EncoderOutputAVC
-				cfg.RTPMaxPayloadSize = 0
-			},
-		},
-		{
-			name: "rtp-mode1",
-			configure: func(cfg *goh264.EncoderConfig) {
-				cfg.OutputFormat = goh264.EncoderOutputRTP
-				cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationNonInterleaved
-				cfg.RTPMaxPayloadSize = 1200
-			},
-		},
-		{
-			name: "rtp-mode0",
-			configure: func(cfg *goh264.EncoderConfig) {
-				cfg.OutputFormat = goh264.EncoderOutputRTP
-				cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
-				cfg.RTPMaxPayloadSize = 1200
-			},
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := goh264.DefaultEncoderConfig(16, 16)
-			cfg.DeblockMode = goh264.EncoderDeblockDisabled
-			cfg.RateControl = goh264.EncoderRateControlConstantQP
-			tt.configure(&cfg)
-			enc, err := goh264.NewEncoder(cfg)
-			if err != nil {
-				t.Fatalf("NewEncoder: %v", err)
-			}
-
-			headers, err := enc.ParameterSets()
-			if err != nil {
-				t.Fatalf("ParameterSets: %v", err)
-			}
-			firstFrame := patternedI420EncoderFrame(16, 16)
-			first, err := enc.Encode(firstFrame)
-			if err != nil {
-				t.Fatalf("Encode first IDR: %v", err)
-			}
-
-			secondFrame := encoderP16x16PixelDeltaResidualFrame(t, cfg, firstFrame, firstFrame.PTS+int64(cfg.RTPTimestampIncrement))
-			second, err := enc.Encode(secondFrame)
-			if err != nil {
-				t.Fatalf("Encode residual-shaped P delta: %v", err)
-			}
-			if second.Dropped || second.IDR || second.KeyFrame {
-				t.Fatalf("residual-shaped P output dropped=%v key=%v idr=%v, want predictive residual P",
-					second.Dropped, second.KeyFrame, second.IDR)
-			}
-			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
-
-			dec := goh264.NewDecoder()
-			var decodedFirst, decodedSecond []*goh264.Frame
-			switch cfg.OutputFormat {
-			case goh264.EncoderOutputAnnexB:
-				decodedFirst, err = dec.DecodeFrames(first.Data)
-				if err != nil {
-					t.Fatalf("DecodeFrames first Annex B: %v", err)
-				}
-				decodedSecond, err = dec.DecodeFrames(second.Data)
-				if err != nil {
-					t.Fatalf("DecodeFrames second Annex B: %v", err)
-				}
-			case goh264.EncoderOutputAVC:
-				if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
-					t.Fatalf("ConfigureAVCC: %v", err)
-				}
-				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
-				if err != nil {
-					t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
-				}
-				decodedSecond, err = dec.DecodeConfiguredAVCFrames(second.Data)
-				if err != nil {
-					t.Fatalf("DecodeConfiguredAVCFrames second: %v", err)
-				}
-			case goh264.EncoderOutputRTP:
-				if cfg.RTPPacketizationMode == goh264.EncoderRTPPacketizationSingleNAL {
-					assertEncoderRTPMode0RawNALPackets(t, second, cfg.RTPMaxPayloadSize)
-				}
-				decodedFirst, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, first.RTPPackets))
-				if err != nil {
-					t.Fatalf("DecodeFrames first RTP: %v", err)
-				}
-				decodedSecond, err = dec.DecodeFrames(annexBFromEncoderRTPPackets(t, second.RTPPackets))
-				if err != nil {
-					t.Fatalf("DecodeFrames second RTP: %v", err)
-				}
-			default:
-				t.Fatalf("unexpected output format %v", cfg.OutputFormat)
-			}
-
-			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
-			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
-			if decodedSecond[0].KeyFrame || decodedSecond[0].SideData.RecoveryPoint != nil {
-				t.Fatalf("residual-shaped P side data key=%v recovery=%+v, want predictive residual frame",
-					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
-			}
-
-			stream := append([]byte(nil), headers.AnnexB...)
-			stream = append(stream, annexBFromEncodedFrame(t, first, cfg.OutputFormat)...)
-			stream = append(stream, annexBFromEncodedFrame(t, second, cfg.OutputFormat)...)
-			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
-			wantStream := appendI420FrameBytes(nil, firstFrame)
-			wantStream = appendI420FrameBytes(wantStream, secondFrame)
-			assertFFmpegRawVideoOracle(t, stream, wantStream)
-		})
-	}
+	testEncoderResidualPUsesResidualAcrossPublicOutputs(t, "residual-shaped P", encoderP16x16PixelDeltaResidualFrame)
 }
 
 func TestEncoderChromaOnlyResidualPUsesResidualAcrossPublicOutputs(t *testing.T) {
+	testEncoderResidualPUsesResidualAcrossPublicOutputs(t, "chroma-only residual P", encoderP16x16ChromaOnlyResidualFrame)
+}
+
+func TestEncoderCombinedResidualPUsesResidualAcrossPublicOutputs(t *testing.T) {
+	testEncoderResidualPUsesResidualAcrossPublicOutputs(t, "combined residual P", encoderP16x16CombinedResidualFrame)
+}
+
+func testEncoderResidualPUsesResidualAcrossPublicOutputs(t *testing.T, label string, buildSecondFrame func(*testing.T, goh264.EncoderConfig, goh264.EncoderFrame, int64) goh264.EncoderFrame) {
+	t.Helper()
 	for _, tt := range []struct {
 		name      string
 		configure func(*goh264.EncoderConfig)
@@ -8453,13 +8341,14 @@ func TestEncoderChromaOnlyResidualPUsesResidualAcrossPublicOutputs(t *testing.T)
 				t.Fatalf("Encode first IDR: %v", err)
 			}
 
-			secondFrame := encoderP16x16ChromaOnlyResidualFrame(t, cfg, firstFrame, firstFrame.PTS+int64(cfg.RTPTimestampIncrement))
+			secondFrame := buildSecondFrame(t, cfg, firstFrame, firstFrame.PTS+int64(cfg.RTPTimestampIncrement))
 			second, err := enc.Encode(secondFrame)
 			if err != nil {
-				t.Fatalf("Encode chroma-only residual P delta: %v", err)
+				t.Fatalf("Encode %s delta: %v", label, err)
 			}
 			if second.Dropped || second.IDR || second.KeyFrame {
-				t.Fatalf("chroma-only residual P output dropped=%v key=%v idr=%v, want predictive residual P",
+				t.Fatalf("%s output dropped=%v key=%v idr=%v, want predictive residual P",
+					label,
 					second.Dropped, second.KeyFrame, second.IDR)
 			}
 			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
@@ -8507,8 +8396,8 @@ func TestEncoderChromaOnlyResidualPUsesResidualAcrossPublicOutputs(t *testing.T)
 			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
 			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
 			if decodedSecond[0].KeyFrame || decodedSecond[0].SideData.RecoveryPoint != nil {
-				t.Fatalf("chroma-only residual P side data key=%v recovery=%+v, want predictive residual frame",
-					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
+				t.Fatalf("%s side data key=%v recovery=%+v, want predictive residual frame",
+					label, decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
 			}
 
 			stream := append([]byte(nil), headers.AnnexB...)
@@ -17554,6 +17443,17 @@ func encoderP16x16ChromaOnlyResidualFrame(t *testing.T, cfg goh264.EncoderConfig
 		LumaCoefficients: [][]h264.EncoderResidualCoefficient{
 			{},
 		},
+		ChromaDCCoeffCb: 2,
+		ChromaDCCoeffCr: -2,
+		ChromaACCoeffCb: 1,
+		ChromaACCoeffCr: -1,
+	})
+}
+
+func encoderP16x16CombinedResidualFrame(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64) goh264.EncoderFrame {
+	t.Helper()
+	return encoderP16x16SyntheticResidualFrame(t, cfg, reference, pts, h264.EncoderI420P16x16ResidualConfig{
+		Coeff:           4,
 		ChromaDCCoeffCb: 2,
 		ChromaDCCoeffCr: -2,
 		ChromaACCoeffCb: 1,

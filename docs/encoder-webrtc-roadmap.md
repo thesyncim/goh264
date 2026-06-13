@@ -233,10 +233,10 @@ exact-P16 edge search.
 Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
-broader residual coding beyond exact luma-DC/chroma-only residual-P, and
-adaptive rate-control feedback remain pending beyond the bounded 8-pixel exact
-macroblock-aligned P16x16 admission, including the per-macroblock exact-vector
-subset.
+broader residual coding beyond exact luma-DC/chroma-only/combined luma-chroma
+residual-P, and adaptive rate-control feedback remain pending beyond the
+bounded 8-pixel exact macroblock-aligned P16x16 admission, including the
+per-macroblock exact-vector subset.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -277,10 +277,10 @@ parse-proved Baseline P IntraPCM writer emits `mb_skip_run=0` plus P-slice
 IntraPCM writers accept explicit
 raster-scan macroblock ranges so public `SliceCount` can emit multiple VCL NALs
 in one access unit.
-Public encoder coverage now pins exact luma-DC and chroma-only residual-P
-admission across Annex B, AVC, RTP mode 1, and RTP mode 0, while broader
-residual-shaped P-frame deltas remain on the recovery-SEI plus P IntraPCM
-fallback boundary.
+Public encoder coverage now pins exact luma-DC, chroma-only, and combined
+luma/chroma residual-P admission across Annex B, AVC, RTP mode 1, and RTP mode
+0, while broader residual-shaped P-frame deltas remain on the recovery-SEI plus
+P IntraPCM fallback boundary.
 
 ## Implementation Order
 
@@ -299,8 +299,9 @@ fallback boundary.
    coding, deblock policy, and rate-control feedback in small oracle-backed
    slices. Done for identical-reference P-skip, exact macroblock-aligned P16x16
    no-residual prediction for frame-wide and per-macroblock integer-pel shifts
-   up to 8 pixels, exact luma-DC and chroma-only residual-P across public
-   Annex B/AVC/RTP outputs, including odd-pixel luma motion only with constant chroma,
+   up to 8 pixels, exact luma-DC, chroma-only, and combined luma/chroma
+   residual-P across public Annex B/AVC/RTP outputs, including odd-pixel luma
+   motion only with constant chroma,
    with enabled/slice-boundary deblock proof including multi-macroblock
    uniform-motion Annex B and mixed per-macroblock fallback across Annex B,
    configured AVC, and RTP,
