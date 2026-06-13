@@ -765,7 +765,9 @@ Production use should be backed by a fresh quality-evidence pass proving:
   with JSON benchmark output plus CPU/heap profiles.
 - `scripts/h264-encoder-quality-evidence.sh` is green for the admitted
   realtime/WebRTC encoder vet, contract, API-surface, bitstream-oracles,
-  residual-boundary, writer, allocation, and benchmark gates.
+  residual-boundary, writer, allocation, and benchmark gates. This runner
+  requires `ffmpeg` for admitted encoder bitstream-oracle rows; set
+  `GOH264_FFMPEG_BIN` when the oracle binary is not named `ffmpeg`.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support stays in the admitted subset until

@@ -18268,9 +18268,16 @@ func assertSTAPANALTypes(t *testing.T, payload []byte, want []uint8) {
 
 func assertFFmpegRawVideoOracle(t *testing.T, annexB []byte, want []byte) {
 	t.Helper()
-	ffmpeg, err := exec.LookPath("ffmpeg")
+	ffmpegName := os.Getenv("GOH264_FFMPEG_BIN")
+	if ffmpegName == "" {
+		ffmpegName = "ffmpeg"
+	}
+	ffmpeg, err := exec.LookPath(ffmpegName)
 	if err != nil {
-		t.Skip("ffmpeg not available")
+		if os.Getenv("GOH264_ENCODER_REQUIRE_FFMPEG") == "1" {
+			t.Fatalf("ffmpeg oracle %q not available for required encoder oracle: %v", ffmpegName, err)
+		}
+		t.Skipf("ffmpeg oracle %q not available", ffmpegName)
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "encoded.h264")

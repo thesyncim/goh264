@@ -150,6 +150,8 @@ quality checklist as one gate: `go vet ./...`, full tests, the external
 encoder control contract, the focused `encoder-bitstream-oracles` gate, the
 explicit `EncodeInto` allocation canary, internal writer/header/SEI slice
 syntax tests, and admitted encoder `-benchmem` rows.
+It requires an `ffmpeg` oracle for admitted encoder bitstream-oracle rows and
+honors `GOH264_FFMPEG_BIN` when the oracle binary is not named `ffmpeg`.
 It writes per-command logs under
 `.artifacts/h264-encoder-quality-evidence/` and fails by default if the
 worktree is dirty.

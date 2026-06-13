@@ -11,6 +11,7 @@ mkdir -p "$out_dir"
 summary="$out_dir/summary.txt"
 bench_pattern="${GOH264_ENCODER_BENCH_PATTERN:-BenchmarkEncode.*I420}"
 bench_time="${GOH264_ENCODER_BENCHTIME:-20x}"
+ffmpeg_bin="${GOH264_FFMPEG_BIN:-ffmpeg}"
 encoder_api_surface_tests='^(TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData|TestEncoderReconfigureZeroScalarFieldsAreNoOps|TestEncoderZeroValueExplicitSettersRejectWithoutMutation|TestEncoderNonRTPConfigsRejectInvalidRTPControls|TestEncoderInvalidRTPControlsRejectForNonRTPOutputsWithoutMutation|TestEncoderReconfigureOutputFormatQueuesIDRBoundary|TestEncoderInvalidRTPSettersPreservePacketState|TestEncoderFrameColorDoesNotOverrideConfigHeaders|TestEncoderValidSetterPreservesPendingIDR|TestEncoderInvalidSetterPreservesPendingIDR|TestEncoderValidReconfigurePreservesPendingIDR|TestEncoderValidOutputReconfigurePreservesPendingIDR|TestEncoderInvalidReconfigurePreservesPendingIDR|TestEncoderInvalidReconfigureWithForceIDRDoesNotQueueIDR|TestEncoderFrameRateInvalidUpdatesPreserveLiveState|TestEncoderSetIntraRefreshEnableIsUnsupportedAndPreservesState|TestEncoderSetIntraRefreshDisablePreservesLiveReference|TestEncoderSetLimitsUpdatesBudgetsAtomically|TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata|TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata|TestEncodedFrameAppendNALAndAccessUnitDataReturnCallerOwnedBytes|TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes|TestEncoderAppendHelpersIsolateOverlappingSource|TestEncoderParameterSetsAVCCReturnsCallerOwnedBytes|TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes|TestEncodedFrameCloneRejectsInvalidMetadata|TestEncoderCheckedCloneHelpersRejectOverflowedPublicStorage|TestEncoderCheckedAppendHelpersRejectOverflowedPublicStorage|TestEncodedFrameOutputHelpersRejectOverflowedPublicStorage)$'
 encoder_bitstream_oracle_tests='^(TestEncoderEncodeAnnexBIDRIntraPCMDecodesThroughLocalAndFFmpeg|TestEncoderEncodeCroppedAnnexBIDRIntraPCMDecodesVisibleFrame|TestEncoderEncodeAVCIDRIntraPCMDecodesThroughConfiguredSurface|TestEncoderEncodeIdenticalSecondFrameUsesPSkipReference|TestEncoderEncodeExactP16x16NoResidualMotion|TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP|TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControls|TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControlsForAVCAndRTP|TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion|TestEncoderEncodePerMacroblockExactP16x16NoResidualMotionForAnnexBAVCRTP|TestEncoderEncodePerMacroblockExactP16x16FallsBackWithDeblockControls|TestEncoderEncodePerMacroblockExactP16x16FallsBackWithDeblockControlsForAVCAndRTP|TestEncoderEncodeOddPixelExactP16x16NoResidualMotionWithConstantChroma|TestEncoderEncodeOddPixelExactP16x16FallsBackWithDeblockControls|TestEncoderEncodeOddPixelExactP16x16FallsBackWithDeblockControlsForAVCAndRTP|TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP|TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma|TestEncoderEncodeChangedSecondFrameUsesPIntraPCM|TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithDefaultDeblock|TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithSliceBoundaryDeblock|TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP|TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs|TestEncoderSliceCountSplitsIDRPSkipAndPIntraPCMAccessUnits|TestEncoderSliceCountFeedsRTPMode1SingleNALPackets|TestEncoderEncodeForceIDRBypassesPSkipReference|TestEncoderEncodeRTPMode1FragmentsIDRAccessUnit|TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets|TestEncoderEncodeRTPMode1STAPADoesNotAggregateChangedPRecoverySEI|TestEncoderEncodeRTPMode0EmitsSingleNALPackets|TestEncoderEncodeRTPMode0EmitsPFrameSingleNALPackets|TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState)$'
 
@@ -52,6 +53,7 @@ run_go_test_gate() {
     printf 'branch=%s\n' "$(git branch --show-current)"
     printf 'date_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'go=%s\n' "$(go version)"
+    printf 'ffmpeg_bin=%s\n' "$ffmpeg_bin"
     printf 'bench_pattern=%s\n' "$bench_pattern"
     printf 'bench_time=%s\n' "$bench_time"
 } >"$summary"
@@ -70,6 +72,20 @@ if [[ "${GOH264_ENCODER_QUALITY_ALLOW_DIRTY:-0}" != "1" ]]; then
     fi
 fi
 printf '\nworktree-clean: pass\n' | tee -a "$summary"
+
+if ! ffmpeg_path="$(command -v "$ffmpeg_bin")"; then
+    {
+        printf '\nffmpeg-oracle: fail\n'
+        printf 'missing ffmpeg binary %q; set GOH264_FFMPEG_BIN to the oracle binary\n' "$ffmpeg_bin"
+    } | tee -a "$summary" >&2
+    exit 1
+fi
+{
+    printf '\nffmpeg-oracle: pass\n'
+    printf 'path=%s\n' "$ffmpeg_path"
+    "$ffmpeg_path" -version | sed -n '1p'
+} | tee -a "$summary"
+export GOH264_ENCODER_REQUIRE_FFMPEG=1
 
 run_gate git-diff-check git diff --check
 run_gate git-diff-cached-check git diff --cached --check
