@@ -293,7 +293,7 @@ type EncoderRTPPacket struct {
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (packet EncoderRTPPacket) PacketData() ([]byte, error) {
-	if len(packet.Data) > maxInt/2 || !encoderRTPPacketHeaderOK(packet.Data) {
+	if len(packet.Data) > maxInt/2 || !encoderRTPPacketHeaderMetadataOK(packet) {
 		return nil, ErrInvalidData
 	}
 	return packet.Data[:len(packet.Data):len(packet.Data)], nil
@@ -316,7 +316,7 @@ func (packet EncoderRTPPacket) AppendPacketData(dst []byte) ([]byte, error) {
 // overwrite the following bytes in the packet backing store.
 func (packet EncoderRTPPacket) PayloadData() ([]byte, error) {
 	if !encoderRTPPacketCloneStorageOK(packet) ||
-		!encoderRTPPacketHeaderOK(packet.Data) || len(packet.Payload) == 0 {
+		!encoderRTPPacketHeaderMetadataOK(packet) || len(packet.Payload) == 0 {
 		return nil, ErrInvalidData
 	}
 	dataStart := unsafeSliceOffset(packet.Data, packet.Payload)
@@ -335,6 +335,19 @@ func (packet EncoderRTPPacket) PayloadData() ([]byte, error) {
 
 func encoderRTPPacketHeaderOK(data []byte) bool {
 	return len(data) >= 12 && data[0] == 0x80
+}
+
+func encoderRTPPacketHeaderMetadataOK(packet EncoderRTPPacket) bool {
+	if !encoderRTPPacketHeaderOK(packet.Data) || packet.PayloadType > 127 {
+		return false
+	}
+	if packet.Data[1]&0x7f != packet.PayloadType ||
+		(packet.Data[1]&0x80 != 0) != packet.Marker {
+		return false
+	}
+	return binary.BigEndian.Uint16(packet.Data[2:4]) == packet.SequenceNumber &&
+		binary.BigEndian.Uint32(packet.Data[4:8]) == packet.Timestamp &&
+		binary.BigEndian.Uint32(packet.Data[8:12]) == packet.SSRC
 }
 
 func validateEncoderRTPPayload(payload []byte) error {

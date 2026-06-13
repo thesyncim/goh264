@@ -626,6 +626,7 @@ func TestREADMEEncoderRTPDataSurfaceDocumentsPacketBytes(t *testing.T) {
 		"`RTPPayloadData`",
 		"Packet-level helpers validate the",
 		"encoder-emitted 12-byte RTP header shape",
+		"exported packet metadata",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md missing RTP data-surface phrase %q", phrase)

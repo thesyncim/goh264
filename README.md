@@ -551,8 +551,8 @@ with the strongest public API coverage for integration work:
 - For RTP output, `EncodedFrame.Data` remains an Annex B access-unit view for
   `AccessUnitData` and `NALData`; send packet bytes from `RTPPackets`,
   `RTPPacketData`, or `RTPPayloadData`. Packet-level helpers validate the
-  encoder-emitted 12-byte RTP header shape before returning packet or payload
-  bytes.
+  encoder-emitted 12-byte RTP header shape and exported packet metadata before
+  returning packet or payload bytes.
 - Overflowed caller-owned `EncodeInto` destination growth is rejected across
   Annex B, AVC, and RTP without consuming queued IDR state or advancing
   RTP/callback state. The same hard-error path preserves P-frame reference and
