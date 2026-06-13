@@ -150,6 +150,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"RTPPacketData",
 		"RTPPayloadData",
 		"AVCC",
+		"AVCCChecked",
 		"Limits",
 		"MaxFrameSizeLimit",
 		"SliceMaxBytesLimit",
@@ -165,6 +166,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}{
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "CloneChecked"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "CloneChecked"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AVCCChecked"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendSPSChecked"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendPPSChecked"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAnnexBChecked"},

@@ -724,11 +724,26 @@ type EncoderParameterSets struct {
 }
 
 // AVCC returns the AVC decoder configuration record form of the parameter sets.
+//
+// For caller-constructed values that need validation, use AVCCChecked.
 func (sets EncoderParameterSets) AVCC() []byte {
-	if len(sets.AVCDecoderConfigurationRecord) == 0 {
+	avcc, err := sets.AVCCChecked()
+	if err != nil {
 		return nil
 	}
-	return sets.AVCDecoderConfigurationRecord[:len(sets.AVCDecoderConfigurationRecord):len(sets.AVCDecoderConfigurationRecord)]
+	return avcc
+}
+
+// AVCCChecked returns the AVC decoder configuration record form of the
+// parameter sets after validating public storage sizes.
+func (sets EncoderParameterSets) AVCCChecked() ([]byte, error) {
+	if len(sets.AVCDecoderConfigurationRecord) > maxInt/2 {
+		return nil, ErrInvalidData
+	}
+	if len(sets.AVCDecoderConfigurationRecord) == 0 {
+		return nil, nil
+	}
+	return sets.AVCDecoderConfigurationRecord[:len(sets.AVCDecoderConfigurationRecord):len(sets.AVCDecoderConfigurationRecord)], nil
 }
 
 // AppendSPS appends a caller-owned copy of the SPS NAL to dst.

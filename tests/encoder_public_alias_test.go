@@ -90,6 +90,7 @@ var _ = (EncoderConfig).RecoveryPointSEIMessage
 
 var _ = (EncoderFrame).Clone
 var _ = (EncoderParameterSets).AVCC
+var _ = (EncoderParameterSets).AVCCChecked
 var _ = (EncoderParameterSets).AppendSPS
 var _ = (EncoderParameterSets).AppendSPSChecked
 var _ = (EncoderParameterSets).AppendPPS

@@ -5449,8 +5449,14 @@ func TestEncoderParameterSetsAVCCReturnsClippedView(t *testing.T) {
 	if got := (goh264.EncoderParameterSets{}).AVCC(); got != nil {
 		t.Fatalf("zero-value AVCC = %x, want nil", got)
 	}
+	if got, err := (goh264.EncoderParameterSets{}).AVCCChecked(); got != nil || err != nil {
+		t.Fatalf("zero-value AVCCChecked = %x/%v, want nil/nil", got, err)
+	}
 	if got := (goh264.EncoderParameterSets{AVCDecoderConfigurationRecord: []byte{}}).AVCC(); got != nil {
 		t.Fatalf("empty AVCC = %x, want nil", got)
+	}
+	if got, err := (goh264.EncoderParameterSets{AVCDecoderConfigurationRecord: []byte{}}).AVCCChecked(); got != nil || err != nil {
+		t.Fatalf("empty AVCCChecked = %x/%v, want nil/nil", got, err)
 	}
 
 	backing := []byte{0x01, 0x42, 0x00, 0x1f, 0xff, 0xee}
@@ -5461,10 +5467,29 @@ func TestEncoderParameterSetsAVCCReturnsClippedView(t *testing.T) {
 	if !bytes.Equal(avcc, backing[:5]) || cap(avcc) != len(avcc) {
 		t.Fatalf("AVCC = %x cap=%d, want clipped avcC bytes", avcc, cap(avcc))
 	}
+	checked, err := headers.AVCCChecked()
+	if err != nil || !bytes.Equal(checked, backing[:5]) || cap(checked) != len(checked) {
+		t.Fatalf("AVCCChecked = %x cap=%d err=%v, want clipped avcC bytes", checked, cap(checked), err)
+	}
 	grown := append(avcc, 0xaa)
 	grown[len(avcc)] ^= 0xff
 	if backing[5] != 0xee {
 		t.Fatalf("appending to AVCC view overwrote caller backing byte: %#x", backing[5])
+	}
+	checkedGrown := append(checked, 0xaa)
+	checkedGrown[len(checked)] ^= 0xff
+	if backing[5] != 0xee {
+		t.Fatalf("appending to AVCCChecked view overwrote caller backing byte: %#x", backing[5])
+	}
+
+	overflow := goh264.EncoderParameterSets{
+		AVCDecoderConfigurationRecord: fakeDecoderRawBytesLen(maxIntForTest/2 + 1),
+	}
+	if got, err := overflow.AVCCChecked(); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+		t.Fatalf("overflowed AVCCChecked = len %d/%v, want nil ErrInvalidData", len(got), err)
+	}
+	if got := overflow.AVCC(); got != nil {
+		t.Fatalf("overflowed AVCC = len %d, want nil", len(got))
 	}
 }
 
@@ -16861,6 +16886,9 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCC"); !ok {
 		t.Fatal("EncoderParameterSets missing AVCC convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AVCCChecked"); !ok {
+		t.Fatal("EncoderParameterSets missing AVCCChecked convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName("AppendSPS"); !ok {
 		t.Fatal("EncoderParameterSets missing AppendSPS convenience method")

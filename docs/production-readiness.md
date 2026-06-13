@@ -290,8 +290,8 @@ payload metadata, and decodes the RTP IDR/P-skip sequence, proves
 Annex B headers, and avcC records accepted by the public decoder parsers,
 with caller mutation/append isolation, deep-owned `EncoderParameterSets.Clone`
 snapshots, and checked `EncoderParameterSets.CloneChecked` storage validation
-plus checked append-source/destination validation proved across repeated helper
-calls,
+plus checked avcC-view and append-source/destination validation proved across
+repeated helper calls,
 proves in-band keyframe, suppressed in-band, out-of-band, and every-IDR header
 modes across Annex B, AVC, and RTP, proves force-IDR, PLI, FIR, and per-frame
 keyframe requests deliver IDR output across those surfaces, proves
