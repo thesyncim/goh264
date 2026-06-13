@@ -409,7 +409,7 @@ func TestBuildEncoderI420P16x16NoResidualSliceWritesPerMacroblockMVDs(t *testing
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesCAVLCMacroblock(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      16,
 		Height:                     16,
 		FrameNum:                   7,
@@ -486,7 +486,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesThroughLocalAndFFmpeg(t *testin
 	if err != nil {
 		t.Fatalf("build IDR reference slice: %v", err)
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      width,
 		Height:                     height,
 		FrameNum:                   1,
@@ -535,7 +535,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockSyntax(t *testing.
 	}
 	wantCoeffs := []int32{1, -2}
 
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   8,
@@ -601,7 +601,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesThroughFrameMacroblockPath(t *t
 		{X: -3, Y: 4},
 	}
 	wantCoeffs := []int32{1, -2}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   9,
@@ -677,7 +677,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockQP(t *testing.T) {
 	}
 	wantCoeffs := []int32{1, -2}
 	wantQPs := []int{22, 24}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   16,
@@ -768,7 +768,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockLumaPositions(t *t
 		int(h264ZigzagScanCAVLC[1]),
 		int(h264ZigzagScanCAVLC[5]),
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   17,
@@ -857,7 +857,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockLumaCoefficients(t
 		{X: 2, Y: -1},
 		{X: -3, Y: 4},
 	}
-	wantLuma := [][]encoderResidualCoefficient{
+	wantLuma := [][]EncoderResidualCoefficient{
 		{
 			{Pos: int(h264ZigzagScanCAVLC[0]), Value: 2},
 			{Pos: int(h264ZigzagScanCAVLC[1]), Value: -3},
@@ -870,7 +870,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockLumaCoefficients(t
 			{Pos: int(h264ZigzagScanCAVLC[6]), Value: 1},
 		},
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   20,
@@ -980,7 +980,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockLumaCoefficients(t
 
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesChromaDCThroughFramePath(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      16,
 		Height:                     16,
 		FrameNum:                   10,
@@ -1061,7 +1061,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDC(t *testin
 		{1, -1},
 		{-1, 1},
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   11,
@@ -1151,7 +1151,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDCPositions(
 		{-1, 1},
 	}
 	wantChromaDCPositions := []int{1, 2}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   19,
@@ -1255,17 +1255,17 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDCCoefficien
 		{X: -3, Y: 4},
 	}
 	wantCoeffs := []int32{1, -2}
-	wantChromaDC := []encoderChromaResidualCoefficients{
+	wantChromaDC := []EncoderChromaResidualCoefficients{
 		{
-			Cb: []encoderResidualCoefficient{{Pos: 0, Value: 2}, {Pos: 1, Value: -1}},
-			Cr: []encoderResidualCoefficient{{Pos: 0, Value: -2}, {Pos: 2, Value: 1}},
+			Cb: []EncoderResidualCoefficient{{Pos: 0, Value: 2}, {Pos: 1, Value: -1}},
+			Cr: []EncoderResidualCoefficient{{Pos: 0, Value: -2}, {Pos: 2, Value: 1}},
 		},
 		{
-			Cb: []encoderResidualCoefficient{{Pos: 0, Value: -3}, {Pos: 1, Value: 1}, {Pos: 3, Value: -1}},
-			Cr: []encoderResidualCoefficient{{Pos: 0, Value: 3}, {Pos: 2, Value: -1}, {Pos: 3, Value: 1}},
+			Cb: []EncoderResidualCoefficient{{Pos: 0, Value: -3}, {Pos: 1, Value: 1}, {Pos: 3, Value: -1}},
+			Cr: []EncoderResidualCoefficient{{Pos: 0, Value: 3}, {Pos: 2, Value: -1}, {Pos: 3, Value: 1}},
 		},
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   22,
@@ -1387,7 +1387,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDCCoefficien
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesChromaACThroughFramePath(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 	chromaACPos := int(h264ZigzagScanCAVLC[1])
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      16,
 		Height:                     16,
 		FrameNum:                   12,
@@ -1472,7 +1472,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaAC(t *testin
 		{1, -1},
 		{-1, 1},
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   13,
@@ -1565,7 +1565,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaACPositions(
 		int(h264ZigzagScanCAVLC[2]),
 		int(h264ZigzagScanCAVLC[6]),
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   18,
@@ -1663,31 +1663,31 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaACCoefficien
 		{X: -3, Y: 4},
 	}
 	wantCoeffs := []int32{1, -2}
-	wantChromaAC := []encoderChromaResidualCoefficients{
+	wantChromaAC := []EncoderChromaResidualCoefficients{
 		{
-			Cb: []encoderResidualCoefficient{
+			Cb: []EncoderResidualCoefficient{
 				{Pos: int(h264ZigzagScanCAVLC[1]), Value: 2},
 				{Pos: int(h264ZigzagScanCAVLC[2]), Value: -1},
 			},
-			Cr: []encoderResidualCoefficient{
+			Cr: []EncoderResidualCoefficient{
 				{Pos: int(h264ZigzagScanCAVLC[1]), Value: -2},
 				{Pos: int(h264ZigzagScanCAVLC[3]), Value: 1},
 			},
 		},
 		{
-			Cb: []encoderResidualCoefficient{
+			Cb: []EncoderResidualCoefficient{
 				{Pos: int(h264ZigzagScanCAVLC[1]), Value: -3},
 				{Pos: int(h264ZigzagScanCAVLC[4]), Value: 1},
 				{Pos: int(h264ZigzagScanCAVLC[5]), Value: -1},
 			},
-			Cr: []encoderResidualCoefficient{
+			Cr: []EncoderResidualCoefficient{
 				{Pos: int(h264ZigzagScanCAVLC[1]), Value: 3},
 				{Pos: int(h264ZigzagScanCAVLC[4]), Value: -1},
 				{Pos: int(h264ZigzagScanCAVLC[6]), Value: 1},
 			},
 		},
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   21,
@@ -1821,7 +1821,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDCAC(t *test
 		{1, -1},
 		{-1, 1},
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   14,
@@ -1914,7 +1914,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesCombinedMultiPlaneResidual(t *t
 		{X: 2, Y: -1},
 		{X: -3, Y: 4},
 	}
-	wantLuma := [][]encoderResidualCoefficient{
+	wantLuma := [][]EncoderResidualCoefficient{
 		{
 			{Pos: int(h264ZigzagScanCAVLC[0]), Value: 2},
 			{Pos: int(h264ZigzagScanCAVLC[1]), Value: -1},
@@ -1925,27 +1925,27 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesCombinedMultiPlaneResidual(t *t
 			{Pos: int(h264ZigzagScanCAVLC[3]), Value: -1},
 		},
 	}
-	wantChromaDC := []encoderChromaResidualCoefficients{
+	wantChromaDC := []EncoderChromaResidualCoefficients{
 		{
-			Cb: []encoderResidualCoefficient{{Pos: 0, Value: 2}, {Pos: 1, Value: -1}},
-			Cr: []encoderResidualCoefficient{{Pos: 0, Value: -2}, {Pos: 2, Value: 1}},
+			Cb: []EncoderResidualCoefficient{{Pos: 0, Value: 2}, {Pos: 1, Value: -1}},
+			Cr: []EncoderResidualCoefficient{{Pos: 0, Value: -2}, {Pos: 2, Value: 1}},
 		},
 		{
-			Cb: []encoderResidualCoefficient{{Pos: 0, Value: -3}, {Pos: 3, Value: 1}},
-			Cr: []encoderResidualCoefficient{{Pos: 0, Value: 3}, {Pos: 1, Value: -1}},
-		},
-	}
-	wantChromaAC := []encoderChromaResidualCoefficients{
-		{
-			Cb: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 2}, {Pos: int(h264ZigzagScanCAVLC[2]), Value: -1}},
-			Cr: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -2}, {Pos: int(h264ZigzagScanCAVLC[3]), Value: 1}},
-		},
-		{
-			Cb: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -3}, {Pos: int(h264ZigzagScanCAVLC[4]), Value: 1}},
-			Cr: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 3}, {Pos: int(h264ZigzagScanCAVLC[5]), Value: -1}},
+			Cb: []EncoderResidualCoefficient{{Pos: 0, Value: -3}, {Pos: 3, Value: 1}},
+			Cr: []EncoderResidualCoefficient{{Pos: 0, Value: 3}, {Pos: 1, Value: -1}},
 		},
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	wantChromaAC := []EncoderChromaResidualCoefficients{
+		{
+			Cb: []EncoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 2}, {Pos: int(h264ZigzagScanCAVLC[2]), Value: -1}},
+			Cr: []EncoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -2}, {Pos: int(h264ZigzagScanCAVLC[3]), Value: 1}},
+		},
+		{
+			Cb: []EncoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -3}, {Pos: int(h264ZigzagScanCAVLC[4]), Value: 1}},
+			Cr: []EncoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 3}, {Pos: int(h264ZigzagScanCAVLC[5]), Value: -1}},
+		},
+	}
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   23,
@@ -2099,7 +2099,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedCombinedMultiPlaneResidua
 		{X: 2, Y: -1},
 		{X: -3, Y: 4},
 	}
-	wantLuma := [][]encoderResidualCoefficient{
+	wantLuma := [][]EncoderResidualCoefficient{
 		{
 			{Pos: int(h264ZigzagScanCAVLC[0]), Value: 2},
 			{Pos: int(h264ZigzagScanCAVLC[1]), Value: -1},
@@ -2110,27 +2110,27 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedCombinedMultiPlaneResidua
 			{Pos: int(h264ZigzagScanCAVLC[4]), Value: -1},
 		},
 	}
-	wantChromaDC := []encoderChromaResidualCoefficients{
+	wantChromaDC := []EncoderChromaResidualCoefficients{
 		{
-			Cb: []encoderResidualCoefficient{{Pos: 0, Value: 2}, {Pos: 1, Value: -1}},
-			Cr: []encoderResidualCoefficient{{Pos: 0, Value: -2}, {Pos: 2, Value: 1}},
+			Cb: []EncoderResidualCoefficient{{Pos: 0, Value: 2}, {Pos: 1, Value: -1}},
+			Cr: []EncoderResidualCoefficient{{Pos: 0, Value: -2}, {Pos: 2, Value: 1}},
 		},
 		{
-			Cb: []encoderResidualCoefficient{{Pos: 0, Value: -3}, {Pos: 3, Value: 1}},
-			Cr: []encoderResidualCoefficient{{Pos: 0, Value: 3}, {Pos: 1, Value: -1}},
-		},
-	}
-	wantChromaAC := []encoderChromaResidualCoefficients{
-		{
-			Cb: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 2}, {Pos: int(h264ZigzagScanCAVLC[2]), Value: -1}},
-			Cr: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -2}, {Pos: int(h264ZigzagScanCAVLC[3]), Value: 1}},
-		},
-		{
-			Cb: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -3}, {Pos: int(h264ZigzagScanCAVLC[4]), Value: 1}},
-			Cr: []encoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 3}, {Pos: int(h264ZigzagScanCAVLC[5]), Value: -1}},
+			Cb: []EncoderResidualCoefficient{{Pos: 0, Value: -3}, {Pos: 3, Value: 1}},
+			Cr: []EncoderResidualCoefficient{{Pos: 0, Value: 3}, {Pos: 1, Value: -1}},
 		},
 	}
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	wantChromaAC := []EncoderChromaResidualCoefficients{
+		{
+			Cb: []EncoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 2}, {Pos: int(h264ZigzagScanCAVLC[2]), Value: -1}},
+			Cr: []EncoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -2}, {Pos: int(h264ZigzagScanCAVLC[3]), Value: 1}},
+		},
+		{
+			Cb: []EncoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: -3}, {Pos: int(h264ZigzagScanCAVLC[4]), Value: 1}},
+			Cr: []EncoderResidualCoefficient{{Pos: int(h264ZigzagScanCAVLC[1]), Value: 3}, {Pos: int(h264ZigzagScanCAVLC[5]), Value: -1}},
+		},
+	}
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      48,
 		Height:                     16,
 		FrameNum:                   24,
@@ -2280,7 +2280,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedCombinedMultiPlaneResidua
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedChromaResidualFramePath(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 	chromaACPos := int(h264ZigzagScanCAVLC[1])
-	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
 		Width:                      32,
 		Height:                     16,
 		FrameNum:                   15,
@@ -2381,7 +2381,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedChromaResidualFramePath(t
 
 func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
-	valid := encoderI420P16x16ResidualConfig{
+	valid := EncoderI420P16x16ResidualConfig{
 		Width:                      16,
 		Height:                     16,
 		InitialQP:                  20,
@@ -2404,6 +2404,12 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 		{name: "bad qp", run: func() error {
 			next := valid
 			next.NextQP = 52
+			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
+			return err
+		}},
+		{name: "bad nal length", run: func() error {
+			next := valid
+			next.NALLengthSize = 5
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
@@ -2473,41 +2479,41 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			next := valid
 			next.Width = 32
 			next.Coeff = 0
-			next.LumaCoefficients = [][]encoderResidualCoefficient{{{Pos: 0, Value: 1}}}
+			next.LumaCoefficients = [][]EncoderResidualCoefficient{{{Pos: 0, Value: 1}}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "empty luma coefficient macroblock", run: func() error {
 			next := valid
 			next.Coeff = 0
-			next.LumaCoefficients = [][]encoderResidualCoefficient{{}}
+			next.LumaCoefficients = [][]EncoderResidualCoefficient{{}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "bad luma coefficient position", run: func() error {
 			next := valid
 			next.Coeff = 0
-			next.LumaCoefficients = [][]encoderResidualCoefficient{{{Pos: 16, Value: 1}}}
+			next.LumaCoefficients = [][]EncoderResidualCoefficient{{{Pos: 16, Value: 1}}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "zero luma coefficient value", run: func() error {
 			next := valid
 			next.Coeff = 0
-			next.LumaCoefficients = [][]encoderResidualCoefficient{{{Pos: 0, Value: 0}}}
+			next.LumaCoefficients = [][]EncoderResidualCoefficient{{{Pos: 0, Value: 0}}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "duplicate luma coefficient position", run: func() error {
 			next := valid
 			next.Coeff = 0
-			next.LumaCoefficients = [][]encoderResidualCoefficient{{{Pos: 1, Value: 1}, {Pos: 1, Value: -1}}}
+			next.LumaCoefficients = [][]EncoderResidualCoefficient{{{Pos: 1, Value: 1}, {Pos: 1, Value: -1}}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "mixed luma coefficient forms", run: func() error {
 			next := valid
-			next.LumaCoefficients = [][]encoderResidualCoefficient{{{Pos: 0, Value: 1}}}
+			next.LumaCoefficients = [][]EncoderResidualCoefficient{{{Pos: 0, Value: 1}}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
@@ -2566,44 +2572,44 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 		{name: "bad chroma dc coefficient count", run: func() error {
 			next := valid
 			next.Width = 32
-			next.ChromaDCCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 0, Value: 1}},
-				Cr: []encoderResidualCoefficient{{Pos: 0, Value: -1}},
+			next.ChromaDCCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 0, Value: 1}},
+				Cr: []EncoderResidualCoefficient{{Pos: 0, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "empty chroma dc coefficient plane", run: func() error {
 			next := valid
-			next.ChromaDCCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 0, Value: 1}},
+			next.ChromaDCCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 0, Value: 1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "bad chroma dc coefficient position", run: func() error {
 			next := valid
-			next.ChromaDCCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 4, Value: 1}},
-				Cr: []encoderResidualCoefficient{{Pos: 0, Value: -1}},
+			next.ChromaDCCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 4, Value: 1}},
+				Cr: []EncoderResidualCoefficient{{Pos: 0, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "zero chroma dc coefficient value", run: func() error {
 			next := valid
-			next.ChromaDCCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 0, Value: 0}},
-				Cr: []encoderResidualCoefficient{{Pos: 0, Value: -1}},
+			next.ChromaDCCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 0, Value: 0}},
+				Cr: []EncoderResidualCoefficient{{Pos: 0, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "duplicate chroma dc coefficient position", run: func() error {
 			next := valid
-			next.ChromaDCCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 0, Value: 1}, {Pos: 0, Value: -1}},
-				Cr: []encoderResidualCoefficient{{Pos: 0, Value: -1}},
+			next.ChromaDCCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 0, Value: 1}, {Pos: 0, Value: -1}},
+				Cr: []EncoderResidualCoefficient{{Pos: 0, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
@@ -2612,9 +2618,9 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			next := valid
 			next.ChromaDCCoeffCb = 1
 			next.ChromaDCCoeffCr = -1
-			next.ChromaDCCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 0, Value: 1}},
-				Cr: []encoderResidualCoefficient{{Pos: 0, Value: -1}},
+			next.ChromaDCCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 0, Value: 1}},
+				Cr: []EncoderResidualCoefficient{{Pos: 0, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
@@ -2642,44 +2648,44 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 		{name: "bad chroma ac coefficient count", run: func() error {
 			next := valid
 			next.Width = 32
-			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 1}},
-				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			next.ChromaACCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 1, Value: 1}},
+				Cr: []EncoderResidualCoefficient{{Pos: 1, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "empty chroma ac coefficient plane", run: func() error {
 			next := valid
-			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 1}},
+			next.ChromaACCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 1, Value: 1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "bad chroma ac coefficient position", run: func() error {
 			next := valid
-			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 0, Value: 1}},
-				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			next.ChromaACCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 0, Value: 1}},
+				Cr: []EncoderResidualCoefficient{{Pos: 1, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "zero chroma ac coefficient value", run: func() error {
 			next := valid
-			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 0}},
-				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			next.ChromaACCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 1, Value: 0}},
+				Cr: []EncoderResidualCoefficient{{Pos: 1, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},
 		{name: "duplicate chroma ac coefficient position", run: func() error {
 			next := valid
-			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 1}, {Pos: 1, Value: -1}},
-				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			next.ChromaACCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 1, Value: 1}, {Pos: 1, Value: -1}},
+				Cr: []EncoderResidualCoefficient{{Pos: 1, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
@@ -2688,9 +2694,9 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 			next := valid
 			next.ChromaACCoeffCb = 1
 			next.ChromaACCoeffCr = -1
-			next.ChromaACCoefficients = []encoderChromaResidualCoefficients{{
-				Cb: []encoderResidualCoefficient{{Pos: 1, Value: 1}},
-				Cr: []encoderResidualCoefficient{{Pos: 1, Value: -1}},
+			next.ChromaACCoefficients = []EncoderChromaResidualCoefficients{{
+				Cb: []EncoderResidualCoefficient{{Pos: 1, Value: 1}},
+				Cr: []EncoderResidualCoefficient{{Pos: 1, Value: -1}},
 			}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err

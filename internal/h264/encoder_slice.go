@@ -3,8 +3,9 @@
 // Source-shaped writer subset for the first H.264 realtime encoder picture
 // path. Slice-header syntax order follows FFmpeg n8.0.1
 // libavcodec/cbs_h264_syntax_template.c slice_header()/dec_ref_pic_marking().
-// The payload is deliberately limited to Baseline CAVLC I_PCM macroblocks so
-// the first IDR path is exact and oracle-friendly before quantized coding lands.
+// The payload remains deliberately bounded: exact I_PCM IDR/P recovery,
+// no-residual P16x16 prediction, and explicitly configured CAVLC residual
+// slices whose syntax is covered by local and FFmpeg oracles.
 
 package h264
 
@@ -77,17 +78,17 @@ type EncoderI420P16x16NoResidualConfig struct {
 	NALLengthSize              int
 }
 
-type encoderResidualCoefficient struct {
+type EncoderResidualCoefficient struct {
 	Pos   int
 	Value int32
 }
 
-type encoderChromaResidualCoefficients struct {
-	Cb []encoderResidualCoefficient
-	Cr []encoderResidualCoefficient
+type EncoderChromaResidualCoefficients struct {
+	Cb []EncoderResidualCoefficient
+	Cr []EncoderResidualCoefficient
 }
 
-type encoderI420P16x16ResidualConfig struct {
+type EncoderI420P16x16ResidualConfig struct {
 	Width  int
 	Height int
 
@@ -105,19 +106,20 @@ type encoderI420P16x16ResidualConfig struct {
 	Coeffs                     []int32
 	CoeffPos                   int
 	CoeffPositions             []int
-	LumaCoefficients           [][]encoderResidualCoefficient
+	LumaCoefficients           [][]EncoderResidualCoefficient
 	ChromaDCCoeffCb            int32
 	ChromaDCCoeffCr            int32
 	ChromaDCCoeffs             [][2]int32
-	ChromaDCCoefficients       []encoderChromaResidualCoefficients
+	ChromaDCCoefficients       []EncoderChromaResidualCoefficients
 	ChromaDCCoeffPos           int
 	ChromaDCCoeffPositions     []int
 	ChromaACCoeffCb            int32
 	ChromaACCoeffCr            int32
 	ChromaACCoeffs             [][2]int32
-	ChromaACCoefficients       []encoderChromaResidualCoefficients
+	ChromaACCoefficients       []EncoderChromaResidualCoefficients
 	ChromaACCoeffPos           int
 	ChromaACCoeffPositions     []int
+	NALLengthSize              int
 }
 
 type EncoderIDRSlice struct {
@@ -202,6 +204,34 @@ func BuildEncoderI420P16x16NoResidualSlice(cfg EncoderI420P16x16NoResidualConfig
 		cfg.NALLengthSize = 4
 	}
 	rbsp, err := EncodeI420P16x16NoResidualSliceRBSP(cfg)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	nal, err := AppendNAL(nil, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	annexB, err := AppendAnnexBNAL(nil, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	avc, err := AppendAVCNAL(nil, cfg.NALLengthSize, 2, NALSlice, rbsp)
+	if err != nil {
+		return EncoderPSlice{}, err
+	}
+	return EncoderPSlice{
+		RBSP:   rbsp,
+		NAL:    nal,
+		AnnexB: annexB,
+		AVC:    avc,
+	}, nil
+}
+
+func BuildEncoderI420P16x16ResidualSlice(cfg EncoderI420P16x16ResidualConfig) (EncoderPSlice, error) {
+	if cfg.NALLengthSize == 0 {
+		cfg.NALLengthSize = 4
+	}
+	rbsp, err := EncodeI420P16x16ResidualSliceRBSP(cfg)
 	if err != nil {
 		return EncoderPSlice{}, err
 	}
@@ -397,7 +427,15 @@ func EncodeI420P16x16NoResidualSliceRBSP(cfg EncoderI420P16x16NoResidualConfig) 
 	return bw.Bytes(), nil
 }
 
-func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps *PPS, sps *SPS) ([]byte, error) {
+func EncodeI420P16x16ResidualSliceRBSP(cfg EncoderI420P16x16ResidualConfig) ([]byte, error) {
+	pps, sps, err := encoderI420P16x16ResidualParameterSets(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return encodeI420P16x16ResidualSliceRBSP(cfg, pps, sps)
+}
+
+func encodeI420P16x16ResidualSliceRBSP(cfg EncoderI420P16x16ResidualConfig, pps *PPS, sps *SPS) ([]byte, error) {
 	if err := validateEncoderI420P16x16ResidualConfig(cfg); err != nil {
 		return nil, err
 	}
@@ -540,6 +578,34 @@ func encodeI420P16x16ResidualSliceRBSP(cfg encoderI420P16x16ResidualConfig, pps 
 	}
 	bw.WriteRBSPTrailingBits()
 	return bw.Bytes(), nil
+}
+
+func encoderI420P16x16ResidualParameterSets(cfg EncoderI420P16x16ResidualConfig) (*PPS, *SPS, error) {
+	spsRBSP, ppsRBSP, err := encodeBaselineParameterSetRBSPs(EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              cfg.Width,
+		Height:             cfg.Height,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          cfg.InitialQP,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	sps, err := DecodeSPS(spsRBSP)
+	if err != nil {
+		return nil, nil, err
+	}
+	var spsList [maxSPSCount]*SPS
+	spsList[sps.SPSID] = sps
+	pps, err := DecodePPS(ppsRBSP, &spsList)
+	if err != nil {
+		return nil, nil, err
+	}
+	return pps, sps, nil
 }
 
 func EncodeI420PSkipSliceRBSP(cfg EncoderI420PSkipConfig) ([]byte, error) {
@@ -775,14 +841,15 @@ func validateEncoderI420P16x16NoResidualConfig(cfg EncoderI420P16x16NoResidualCo
 	return nil
 }
 
-func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig) error {
+func validateEncoderI420P16x16ResidualConfig(cfg EncoderI420P16x16ResidualConfig) error {
 	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width&1 != 0 || cfg.Height&1 != 0 {
 		return ErrInvalidData
 	}
 	if cfg.FrameNum >= 1<<8 ||
 		cfg.InitialQP < 0 || cfg.InitialQP > 51 ||
 		cfg.NextQP < 0 || cfg.NextQP > 51 ||
-		cfg.DisableDeblockingFilterIDC > 2 {
+		cfg.DisableDeblockingFilterIDC > 2 ||
+		cfg.NALLengthSize < 0 || cfg.NALLengthSize > 4 {
 		return ErrInvalidData
 	}
 	if err := validateEncoderI420SliceRange(cfg.Width, cfg.Height, cfg.FirstMBAddr, cfg.MacroblockCount); err != nil {
@@ -925,7 +992,7 @@ func validateEncoderI420P16x16ResidualConfig(cfg encoderI420P16x16ResidualConfig
 	return nil
 }
 
-func validEncoderResidualCoefficients(coeffs []encoderResidualCoefficient, minPos int, maxPos int) bool {
+func validEncoderResidualCoefficients(coeffs []EncoderResidualCoefficient, minPos int, maxPos int) bool {
 	if len(coeffs) == 0 || len(coeffs) > maxPos-minPos || minPos < 0 || maxPos > 16 || minPos >= maxPos {
 		return false
 	}
