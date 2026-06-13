@@ -304,6 +304,108 @@ func TestH264RealVectorLaneCoverage(t *testing.T) {
 	}
 }
 
+func TestH264RealVectorLanePublicSurfaceCoverage(t *testing.T) {
+	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
+	byID := make(map[string]h264CorpusEntry, len(manifest))
+	for _, entry := range manifest {
+		byID[entry.ID] = entry
+	}
+
+	fullConfiguredSurfaces := []string{"annexb", "avc", "configured-avc", "configured-samples", "auto"}
+	inBandAVCSurfaces := []string{"annexb", "avc"}
+	for _, lane := range []struct {
+		name     string
+		id       string
+		tags     []string
+		surfaces []string
+	}{
+		{
+			name:     "implicit weighted B",
+			id:       "fate/h264-conformance/cvwp3-toshiba-e",
+			tags:     []string{"implicit-weight-b", "weighted-bipred"},
+			surfaces: inBandAVCSurfaces,
+		},
+		{
+			name:     "CABAC chroma QP",
+			id:       "fate/h264-conformance/cacqp3-sony-d",
+			tags:     []string{"cabac", "chroma-qp", "multiple-slices"},
+			surfaces: inBandAVCSurfaces,
+		},
+		{
+			name:     "partitioned P",
+			id:       "fate/h264-conformance/camp-mot-frm0-full",
+			tags:     []string{"cabac", "partitioned-p", "motion"},
+			surfaces: fullConfiguredSurfaces,
+		},
+		{
+			name:     "partitioned B",
+			id:       "fate/h264-conformance/cvmp-mot-frm-l31-b",
+			tags:     []string{"cavlc", "partitioned-b", "b-slice", "motion"},
+			surfaces: fullConfiguredSurfaces,
+		},
+		{
+			name:     "PIC-AFF P",
+			id:       "fate/h264-conformance/camp-mot-picaff0-full",
+			tags:     []string{"cabac", "picaff", "field", "motion"},
+			surfaces: fullConfiguredSurfaces,
+		},
+		{
+			name:     "PIC-AFF B",
+			id:       "fate/h264-conformance/cvmp-mot-picaff0-full-b",
+			tags:     []string{"cavlc", "picaff", "field", "b-slice", "motion"},
+			surfaces: fullConfiguredSurfaces,
+		},
+		{
+			name:     "field slice boundary",
+			id:       "fate/h264-conformance/slice2-field-aurora4",
+			tags:     []string{"field", "multiple-slices", "slice-boundary"},
+			surfaces: fullConfiguredSurfaces,
+		},
+		{
+			name:     "high deblock slice boundary",
+			id:       "fate/h264-conformance/frext-hpca-fl-brcm-c",
+			tags:     []string{"high", "cabac", "deblock", "slice-boundary"},
+			surfaces: fullConfiguredSurfaces,
+		},
+		{
+			name:     "high no-deblock slice boundary",
+			id:       "fate/h264-conformance/frext-hpca-flnl-brcm-c",
+			tags:     []string{"high", "cabac", "no-deblock", "slice-boundary"},
+			surfaces: fullConfiguredSurfaces,
+		},
+		{
+			name:     "high10 large NAL",
+			id:       "fate/h264-conformance/frext-pph10i1-panasonic-a",
+			tags:     []string{"high10", "10-bit", "intra"},
+			surfaces: []string{"annexb", "avc4", "configured-avc4"},
+		},
+		{
+			name:     "SPS reinit AVC packet",
+			id:       "fate/h264/reinit-small-422-9-to-small-420-9",
+			tags:     []string{"reinit", "sps-reinit", "chroma-format-change"},
+			surfaces: inBandAVCSurfaces,
+		},
+	} {
+		lane := lane
+		t.Run(lane.name, func(t *testing.T) {
+			entry, ok := byID[lane.id]
+			if !ok {
+				t.Fatalf("real-vector manifest missing %s", lane.id)
+			}
+			for _, tag := range lane.tags {
+				if !h264CorpusEntryHasFeatureTag(entry, tag) {
+					t.Fatalf("%s missing feature tag %q", lane.id, tag)
+				}
+			}
+			for _, surface := range lane.surfaces {
+				if !h264CorpusEntryHasSurface(entry, surface) {
+					t.Fatalf("%s missing public decode surface %q", lane.id, surface)
+				}
+			}
+		})
+	}
+}
+
 func TestH264RealVectorFieldMBAFFCoversPacketizedPublicSurfaces(t *testing.T) {
 	manifest := readH264CorpusManifest(t, defaultH264RealVectorManifest)
 	const id = "fate/h264-conformance/cavlc-mot-mbaff0-full-b"
