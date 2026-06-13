@@ -1,49 +1,35 @@
 # Production Evidence
 
-The decoder remains the broadest and best-covered implemented path.
-Realtime/WebRTC encoder support is in scope, with a tested public control
-contract in `encoder.go`. Encoder
-bitstream generation now has a first admitted 8-bit I420 Constrained Baseline
-IDR/IntraPCM path with Annex B, AVC, RTP packetization-mode 0 single-NAL
-output, and RTP packetization-mode 1 output, plus guarded identical-reference
-CAVLC P-skip, bounded exact macroblock-aligned P16x16 no-residual prediction
-for frame-wide and per-macroblock integer-pel shifts up to 8 pixels, including
-enabled and slice-boundary deblock on multi-macroblock frames, with odd-pixel
-luma motion admitted only with disabled deblock and constant 4:2:0 chroma
-planes, plus guarded odd-pixel and mixed-vector deblock fallback across Annex B,
-configured AVC, RTP reassembly, and RTP packetization-mode 0 single-NAL output,
-and changed-frame P IntraPCM across disabled, enabled, and slice-boundary
-deblock controls. Encoder production gates live in
-`docs/encoder-webrtc-roadmap.md` until broader
-P prediction, residual coding, rate control, remaining packetizer breadth,
-allocation budgets, and oracle evidence land.
-The encoder bitstream-writer residual work is still deliberately bounded, but
-the CAVLC single-level and single-level-plus-trailing-ones residual writers now
-round-trip both short and decoder-supported prefix-14/prefix-15 first-level
-codes, and two-, three-, four-, five-, six-, seven-, eight-, nine-, ten-, eleven-, twelve-, thirteen-, fourteen-, fifteen-, and sixteen-non-trailing-level writers plus a bounded dispatcher including multi-level-plus-trailing-one shapes now round-trip subsequent
-suffix-length transitions plus the totalCoeff>10 first-level suffix transition, before broader residual macroblock admission. Public encoder coverage now also
-pins the current residual boundary: exact luma-DC pixel deltas can emit bounded
-residual-P frames across Annex B, AVC, RTP mode 1, and RTP mode 0, while broader
-residual shapes still use the admitted recovery-SEI plus P IntraPCM fallback.
+| Path | Admitted scope | Evidence shape | Remaining gaps |
+| --- | --- | --- | --- |
+| Decoder | FFmpeg `n8.0.1` H.264 decoder path, public Annex B/AVC/avcC/packet surfaces, raw output, side data, delayed output, selected high-bit-depth and field/MBAFF/PAFF rows | Unit, fixture, public-vector, strict FFmpeg-oracle, fuzz-smoke, and quality-evidence runners | Broader field/MBAFF/PIC-AFF motion and DPB edges, high-bit-depth public corpus breadth, damaged-slice behavior, allocation/performance review |
+| Encoder | Guarded 8-bit I420 Constrained Baseline realtime subset: IDR IntraPCM, identical-reference P-skip, bounded exact P16x16 no-residual, bounded luma-DC residual-P, P IntraPCM recovery, Annex B/AVC/RTP output | Public control contract, internal writer/parser round trips, FFmpeg-backed public bitstream tests, encoder quality-evidence runner | General motion search, broader residual macroblock generation, adaptive rate-control decisions, remaining packetizer/control breadth, allocation/performance review |
 
-Harness-first status:
+The encoder residual writer remains bounded but can serialize configured luma
+coefficient positions across all four luma CBP partitions. Public encoder
+coverage pins exact luma-DC residual-P admission across Annex B, AVC, RTP mode
+1, and RTP mode 0. Broader residual shapes stay on the admitted recovery-SEI
+plus P IntraPCM fallback boundary until their bitstream generation has matching
+oracles.
+
+Harness-first status, with quality gates before timing tools:
 
 ```sh
-GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorFailureLedgerFreshness
-GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorFailureMatrix
-scripts/h264-real-vector-strict.sh      # strict green public-vector oracle
-scripts/h264-real-vector-red-queue.sh   # exits non-zero only while known-red rows remain
-scripts/h264-real-vector-red-each.sh    # per-row red queue report when the ledger is populated
-scripts/h264-real-vector-upstream-audit.sh # pinned FFmpeg H.264 FATE coverage
-scripts/h264-decoder-fuzz-smoke.sh # bounded public decode/packet no-panic fuzz smoke
-scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C vs pure Go and native C+asm vs Go+asm lanes
-scripts/h264-real-vector-quality-alloc.sh # checked-in Go allocation canary budget
-scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder/encoder canary
-scripts/h264-performance-evidence.sh  # local benchstat, JSON, CPU, and heap profile bundle
 scripts/h264-quality-evidence.sh # combined race, decoder, and admitted encoder quality runner
 scripts/h264-decoder-quality-evidence.sh # full decoder quality-evidence runner
 scripts/h264-encoder-quality-evidence.sh # admitted encoder contract/writer/bench runner
 go test ./tests -run TestEncoder # realtime/WebRTC encoder control contract
+scripts/h264-real-vector-strict.sh      # strict green public-vector oracle
+GOH264_REAL_VECTOR_FAILURES=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorFailureLedgerFreshness
+GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorFailureMatrix
+scripts/h264-real-vector-red-queue.sh   # exits non-zero only while known-red rows remain
+scripts/h264-real-vector-red-each.sh    # per-row red queue report when the ledger is populated
+scripts/h264-real-vector-upstream-audit.sh # pinned FFmpeg H.264 FATE coverage
+scripts/h264-decoder-fuzz-smoke.sh # bounded public decode/packet no-panic fuzz smoke
+scripts/h264-real-vector-quality-alloc.sh # checked-in Go allocation canary budget
+scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder/encoder canary
+scripts/h264-performance-evidence.sh  # local benchstat, JSON, CPU, and heap profile bundle
+scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C vs pure Go and native C+asm vs Go+asm lanes
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_RED_QUEUE=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorRedQueue
@@ -116,9 +102,10 @@ timed Go lane; `-max-go-alloc-bytes-per-iter` and
 real-vector benchmark script forwards
 `GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER` and
 `GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER` to those flags.
-`scripts/h264-real-vector-quality-alloc.sh` is the checked-in quality canary:
-it runs the CANL4 public vector with defaults of 64,000,000 Go allocation
-bytes/iteration and 10,000 Go allocations/iteration.
+`scripts/h264-real-vector-quality-alloc.sh` is a coarse checked-in quality
+regression canary, not an allocation target: it runs the CANL4 public vector
+with defaults of 64,000,000 Go allocation bytes/iteration and 10,000 Go
+allocations/iteration.
 `scripts/h264-benchstat-canary.sh` runs the package-level decoder benchmarks
 for one-shot Annex B decode, stateful Annex B access-unit streaming, and isolated
 raw-output export plus

@@ -719,12 +719,12 @@ func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read examples_test.go: %v", err)
 	}
-	for _, removed := range []string{
+	for _, nonCanonical := range []string{
 		statusPhrase("Parse", "AVCC"),
 		statusPhrase("Parse", "AVCDecoderConfigurationRecord"),
 	} {
-		if strings.Contains(string(data), removed) {
-			t.Fatalf("public examples should not use removed decoder avcC API %s", removed)
+		if strings.Contains(string(data), nonCanonical) {
+			t.Fatalf("public examples should use canonical decoder avcC API names instead of %s", nonCanonical)
 		}
 	}
 }

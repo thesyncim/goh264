@@ -25,8 +25,9 @@ allocation/performance evidence.
 | Decoder | Parity-driven port from the pinned FFmpeg path | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Broader field/MBAFF/damaged-edge behavior, fresh artifact evidence, allocation/performance review |
 | Encoder | Guarded realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, bounded pixel-derived residual-P luma DC admission, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual generation, adaptive rate control, wider packetizer/control breadth, oracle-backed bitstream parity, allocation/performance review |
 
-Examples are API smoke tests only. They are not codec quality, bitstream parity,
-acceptance, or performance evidence.
+Examples compiled in `examples_test.go` are API smoke tests only. README
+snippets are API orientation, not codec quality, bitstream parity, acceptance,
+or performance evidence.
 
 ## Capabilities
 
@@ -40,8 +41,9 @@ acceptance, or performance evidence.
   calls; empty decode calls flush delayed output.
 - **Encoder:** realtime/WebRTC integration surface for the guarded Baseline paths
   listed above.
-- **Verification:** the selected public-vector decoder matrix is green with no
-  known-red rows.
+- **Verification:** the checked-in public-vector decoder manifest has 225 green
+  oracle rows and no known-red rows. Rerun the Trust And Verification gates for
+  the current checkout before treating that state as fresh evidence.
 
 ## Worklist
 
@@ -363,10 +365,13 @@ headers, err := cfg.ParameterSets()
 if err != nil {
 	log.Fatal(err)
 }
+_ = headers.AVCC()
 sei, err := cfg.RecoveryPointSEIMessage(0)
 if err != nil {
 	log.Fatal(err)
 }
+_ = sei.AnnexB
+_ = sei.AVC
 
 enc, err := goh264.NewEncoder(cfg)
 if err != nil {
@@ -416,6 +421,8 @@ sei, err = enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
 if err != nil {
 	log.Fatal(err)
 }
+_ = sei.AnnexB
+_ = sei.AVC
 liveCfg := enc.Config()
 y := make([]byte, liveCfg.StrideY*liveCfg.Height)
 cb := make([]byte, liveCfg.StrideCb*(liveCfg.Height/2))
@@ -654,7 +661,67 @@ GOH264_REAL_VECTOR_FRAMEMD5=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 g
 `GOH264_CORPUS_FILTER` accepts feature tags or id fragments such as `field`,
 `direct`, `high10`, `container`, `reinit`, or `mbaff`.
 
+## Trust And Verification
+
+Production use should be backed by a fresh quality-evidence pass proving:
+
+- `scripts/h264-quality-evidence.sh` is green as the combined decoder and
+  admitted-encoder quality gate.
+- `scripts/h264-decoder-quality-evidence.sh` is green, including
+  decoder API-surface and ref-modification gates.
+- `go vet ./...` is green.
+- `go test ./...` is green.
+- `go test -race ./...` is green.
+- `scripts/h264-real-vector-strict.sh` is green.
+- `GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v` is green.
+- `scripts/h264-real-vector-upstream-audit.sh` represents all pinned
+  decoder-facing FFmpeg H.264 FATE sample references in
+  `testdata/h264/realvectors/upstream-inventory.jsonl`, except documented
+  non-decoder exclusions, and quality-doc public-vector counts match the
+  checked-in manifests.
+- `scripts/h264-decoder-fuzz-smoke.sh` is green for the bounded public decoder
+  no-panic fuzz target.
+- Known-red rows, if any, are current in `testdata/h264/realvectors/failures.jsonl`.
+- `scripts/h264-real-vector-quality-alloc.sh` is green with the checked-in Go
+  allocation canary budget.
+- `scripts/h264-benchstat-canary.sh` runs decoder and admitted encoder rows
+  with stable `-benchmem` output for trend comparison. `GOH264_BENCHSTAT_TIME`
+  controls the effective `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is also
+  accepted when `GOH264_BENCHSTAT_TIME` is unset.
+- `scripts/h264-performance-evidence.sh` creates the local performance bundle
+  with JSON benchmark output plus CPU/heap profiles.
+- `scripts/h264-encoder-quality-evidence.sh` is green for the admitted
+  realtime/WebRTC encoder vet, contract, API-surface, bitstream-oracles,
+  residual-boundary, writer, allocation, and benchmark gates. This runner
+  requires `ffmpeg` for admitted encoder bitstream-oracle rows; set
+  `GOH264_FFMPEG_BIN` when the oracle binary is not named `ffmpeg`.
+- Allocation and performance evidence is recorded in
+  [docs/production-readiness.md](docs/production-readiness.md).
+- Encoder support stays in the admitted subset until
+  [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md) has matching
+  broader motion-search P prediction, residual bitstream implementation,
+  rate-control behavior, remaining packetizer breadth, controls, and oracle
+  evidence.
+- The source-truth and translation-ledger docs match the committed tests.
+
+The combined quality-evidence runner writes logs under
+`.artifacts/h264-full-quality-evidence/` by default, drives the race, decoder,
+and admitted encoder runners, and requires a clean worktree unless
+`GOH264_FULL_QUALITY_ALLOW_DIRTY=1` is set for diagnostics.
+The decoder quality-evidence runner writes logs under
+`.artifacts/h264-quality-evidence/` by default and fails while
+`testdata/h264/realvectors/failures.jsonl` contains known-red rows unless
+`GOH264_QUALITY_ALLOW_KNOWN_RED=1` is set for a local diagnostic run. It
+also requires a clean worktree unless `GOH264_QUALITY_ALLOW_DIRTY=1` is set for
+diagnostics.
+The encoder quality-evidence runner writes logs under
+`.artifacts/h264-encoder-quality-evidence/` and likewise requires a clean
+worktree unless `GOH264_ENCODER_QUALITY_ALLOW_DIRTY=1` is set for diagnostics.
+
 ## Performance
+
+Benchmarks are only useful after the Trust And Verification gates for the same
+checkout pass.
 
 `cmd/goh264bench` validates oracle parity before timing selected manifest rows
 and can compare Go against FFmpeg lanes:
@@ -739,63 +806,6 @@ and the evidence artifacts they describe.
 | `docs/high-bitdepth-roadmap.md` | High-bit-depth parity plan |
 | `docs/encoder-webrtc-roadmap.md` | Realtime/WebRTC encoder target, controls, and gates |
 
-## Trust And Verification
-
-Production use should be backed by a fresh quality-evidence pass proving:
-
-- `scripts/h264-quality-evidence.sh` is green as the combined decoder and
-  admitted-encoder quality gate.
-- `scripts/h264-decoder-quality-evidence.sh` is green, including
-  decoder API-surface and ref-modification gates.
-- `go vet ./...` is green.
-- `go test ./...` is green.
-- `go test -race ./...` is green.
-- `scripts/h264-real-vector-strict.sh` is green.
-- `GOH264_REAL_VECTOR_MATRIX=1 GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v` is green.
-- `scripts/h264-real-vector-upstream-audit.sh` represents all pinned
-  decoder-facing FFmpeg H.264 FATE sample references in
-  `testdata/h264/realvectors/upstream-inventory.jsonl`, except documented
-  non-decoder exclusions, and quality-doc public-vector counts match the
-  checked-in manifests.
-- `scripts/h264-decoder-fuzz-smoke.sh` is green for the bounded public decoder
-  no-panic fuzz target.
-- Known-red rows, if any, are current in `testdata/h264/realvectors/failures.jsonl`.
-- `scripts/h264-real-vector-quality-alloc.sh` is green with the checked-in Go
-  allocation canary budget.
-- `scripts/h264-benchstat-canary.sh` runs decoder and admitted encoder rows
-  with stable `-benchmem` output for trend comparison. `GOH264_BENCHSTAT_TIME`
-  controls the effective `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is also
-  accepted when `GOH264_BENCHSTAT_TIME` is unset.
-- `scripts/h264-performance-evidence.sh` creates the local performance bundle
-  with JSON benchmark output plus CPU/heap profiles.
-- `scripts/h264-encoder-quality-evidence.sh` is green for the admitted
-  realtime/WebRTC encoder vet, contract, API-surface, bitstream-oracles,
-  residual-boundary, writer, allocation, and benchmark gates. This runner
-  requires `ffmpeg` for admitted encoder bitstream-oracle rows; set
-  `GOH264_FFMPEG_BIN` when the oracle binary is not named `ffmpeg`.
-- Allocation and performance evidence is recorded in
-  [docs/production-readiness.md](docs/production-readiness.md).
-- Encoder support stays in the admitted subset until
-  [docs/encoder-webrtc-roadmap.md](docs/encoder-webrtc-roadmap.md) has matching
-  broader motion-search P prediction, residual bitstream implementation,
-  rate-control behavior, remaining packetizer breadth, controls, and oracle
-  evidence.
-- The source-truth and translation-ledger docs match the committed tests.
-
-The combined quality-evidence runner writes logs under
-`.artifacts/h264-full-quality-evidence/` by default, drives the race, decoder,
-and admitted encoder runners, and requires a clean worktree unless
-`GOH264_FULL_QUALITY_ALLOW_DIRTY=1` is set for diagnostics.
-The decoder quality-evidence runner writes logs under
-`.artifacts/h264-quality-evidence/` by default and fails while
-`testdata/h264/realvectors/failures.jsonl` contains known-red rows unless
-`GOH264_QUALITY_ALLOW_KNOWN_RED=1` is set for a local diagnostic run. It
-also requires a clean worktree unless `GOH264_QUALITY_ALLOW_DIRTY=1` is set for
-diagnostics.
-The encoder quality-evidence runner writes logs under
-`.artifacts/h264-encoder-quality-evidence/` and likewise requires a clean
-worktree unless `GOH264_ENCODER_QUALITY_ALLOW_DIRTY=1` is set for diagnostics.
-
 ## Contributing
 
 Work in closed topics:
@@ -804,7 +814,7 @@ Work in closed topics:
 - Port the smallest source-shaped FFmpeg behavior that should make it green.
 - Run the focused oracle, then the relevant public-vector gate.
 - Keep known-red rows in `failures.jsonl` until they genuinely match oracle
-  output, then remove them in the same fix commit.
+  output, then update the failure ledger atomically with the fix.
 - Stage only intended files and leave unrelated worktree changes alone.
 
 Good safe-point gates are usually:

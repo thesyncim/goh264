@@ -2,8 +2,8 @@
 
 Decoder scope: FFmpeg `n8.0.1` H.264 decoder path only.
 
-Expanded product scope: realtime/WebRTC H.264 encoder support is planned in
-`docs/encoder-webrtc-roadmap.md`. The public encoder control contract now lives
+Expanded product scope: realtime/WebRTC H.264 encoder support is tracked in
+`docs/encoder-webrtc-roadmap.md`. The public encoder control contract lives
 in `encoder.go` and is tested from the external `tests` package. Encoder
 parameter-set and recovery-point SEI writers follow FFmpeg `n8.0.1`
 `libavcodec/cbs_h264_syntax_template.c` syntax order; recovery-point SEI
@@ -12,14 +12,15 @@ points (`recovery_frame_cnt=0`, exact-match set, broken-link only when B-frame
 chains exist). The admitted encoder bitstream path is a narrow 8-bit I420
 Constrained Baseline subset: IDR IntraPCM, identical-reference CAVLC P-skip,
 bounded exact P16x16 no-residual prediction, changed-frame P IntraPCM recovery
-pictures, Annex B/AVC access-unit output, configured multi-slice output, and
-RTP packetization modes 0 and 1. Slice headers and reference-marking syntax
-follow FFmpeg CBS H.264 ordering; RTP packet header emission follows FFmpeg
-`libavformat/rtpenc.c` `ff_rtp_send_data()` field order and H.264 RTP payload
-boundaries follow `libavformat/rtpenc_h264_hevc.c`. General residual P coding,
-broader motion search, adaptive rate-control feedback, and production encoder
-parity claims remain pending. Encoder work must land behind its own controls,
-oracles, and quality evidence while the decoder production bar stays green.
+pictures, bounded exact luma-DC residual-P admission, Annex B/AVC access-unit
+output, configured multi-slice output, and RTP packetization modes 0 and 1.
+Slice headers and reference-marking syntax follow FFmpeg CBS H.264 ordering;
+RTP packet header emission follows FFmpeg `libavformat/rtpenc.c`
+`ff_rtp_send_data()` field order and H.264 RTP payload boundaries follow
+`libavformat/rtpenc_h264_hevc.c`. Broader residual P coding, broader motion
+search, adaptive rate-control feedback, and broad encoder parity claims remain
+pending. Encoder work must land behind its own controls, oracles, and quality
+evidence while the decoder production bar stays green.
 
 Proved: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
@@ -283,12 +284,14 @@ packaging, AVC decoder configuration records, baseline SPS/PPS syntax with
 P-skip/P16x16 no-residual/P IntraPCM slice syntax via decoder-parser and
 encoded-frame round trips, including per-macroblock MVD syntax for the P16x16
 writer. Public encoder coverage pins exact luma-DC residual-P admission across
-Annex B, AVC, RTP mode 1, and RTP mode 0, while broader residual-shaped P-frame
-deltas remain on the recovery-SEI plus P IntraPCM fallback boundary.
+all 4x4 luma blocks for Annex B, AVC, RTP mode 1, and RTP mode 0, while broader
+residual-shaped P-frame deltas remain on the recovery-SEI plus P IntraPCM
+fallback boundary.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder
-exclusion. The always-on
+exclusion. This is checked-in manifest state; rerun the quality gates for fresh
+current-checkout evidence. The always-on
 `TestH264DecoderTDDContractClassifiesEveryImportedPublicVector` test treats
 that inventory as the decoder TDD backlog: every imported ref must be executable
 in the manifest, documented as an exclusion, or recorded as a known-red
