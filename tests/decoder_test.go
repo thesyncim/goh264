@@ -937,6 +937,35 @@ func TestDecodeAutoBlack16AnnexBAndAVC(t *testing.T) {
 	}
 }
 
+func TestDecodeFramesUnconfiguredRejectsShortAVCLengthSizes(t *testing.T) {
+	data := annexBWithoutNALTypes(t, decodeHexFixture(t, black16AnnexBHex), h264.NALSEI)
+	wantMD5 := []string{"8aaefe0adcea094cfb5161a060bab4e2"}
+
+	for _, nalLengthSize := range []int{1, 2, 3} {
+		nalLengthSize := nalLengthSize
+		t.Run(fmt.Sprintf("length-size-%d", nalLengthSize), func(t *testing.T) {
+			packet := annexBToAVC(t, data, nalLengthSize)
+			frames, err := NewDecoder().DecodeAVCFrames(packet, nalLengthSize)
+			if err != nil {
+				t.Fatalf("DecodeAVCFrames length-size %d: %v", nalLengthSize, err)
+			}
+			assertFrameMD5Strings(t, frames, wantMD5)
+
+			frames, err = NewDecoder().DecodeFrames(packet)
+			if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
+				t.Fatalf("DecodeFrames unconfigured length-size %d = %d frames/%v, want no frames ErrInvalidData",
+					nalLengthSize, len(frames), err)
+			}
+
+			frame, err := NewDecoder().Decode(packet)
+			if !errors.Is(err, ErrInvalidData) || frame != nil {
+				t.Fatalf("Decode unconfigured length-size %d = %+v/%v, want nil ErrInvalidData",
+					nalLengthSize, frame, err)
+			}
+		})
+	}
+}
+
 func TestDecodeAutoAVCConfigurationPacket(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	config, packet := annexBToAVCConfigAndPacket(t, data, 4)
