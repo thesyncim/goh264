@@ -62,6 +62,28 @@ type AVCDecoderConfiguration struct {
 // after parsing an avcC record.
 type AVCConfig = AVCDecoderConfiguration
 
+// InspectAnnexBHeaders parses Annex B parameter sets and returns stream
+// metadata without changing decoder state.
+func InspectAnnexBHeaders(data []byte) (StreamInfo, error) {
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		return StreamInfo{}, err
+	}
+	_, _, info, err := parseHeaderNALUnits(nals, [32]*h264.SPS{}, [256]*h264.PPS{})
+	return info, err
+}
+
+// InspectAVCHeaders parses length-prefixed AVC parameter sets and returns
+// stream metadata without changing decoder state.
+func InspectAVCHeaders(data []byte, nalLengthSize int) (StreamInfo, error) {
+	nals, err := h264.SplitAVCC(data, nalLengthSize)
+	if err != nil {
+		return StreamInfo{}, err
+	}
+	_, _, info, err := parseHeaderNALUnits(nals, [32]*h264.SPS{}, [256]*h264.PPS{})
+	return info, err
+}
+
 // ParseAVCDecoderConfigurationRecord parses an AVC decoder configuration record
 // without changing decoder state.
 //
@@ -919,43 +941,9 @@ func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 	if d == nil {
 		return StreamInfo{}, ErrInvalidData
 	}
-	spsList := d.sps
-	ppsList := d.pps
-	var info StreamInfo
-	haveSPS := false
-	for _, nal := range nals {
-		switch nal.Type {
-		case h264.NALSPS:
-			sps, err := h264.DecodeSPSFromNAL(nal)
-			if err != nil {
-				return StreamInfo{}, err
-			}
-			if sps.SPSID < uint32(len(spsList)) {
-				spsList[sps.SPSID] = sps
-			}
-			if !haveSPS {
-				info = streamInfoFromSPS(sps)
-				haveSPS = true
-			}
-		case h264.NALPPS:
-			pps, err := h264.DecodePPS(nal.RBSP, &spsList)
-			if err != nil {
-				return StreamInfo{}, err
-			}
-			if pps.PPSID < uint32(len(ppsList)) {
-				ppsList[pps.PPSID] = pps
-			}
-		case h264.NALSlice, h264.NALIDRSlice:
-			if _, err := h264.ParseSliceHeader(nal, &ppsList); err != nil {
-				return StreamInfo{}, err
-			}
-		default:
-			continue
-		}
-	}
-
-	if !haveSPS {
-		return StreamInfo{}, ErrInvalidData
+	spsList, ppsList, info, err := parseHeaderNALUnits(nals, d.sps, d.pps)
+	if err != nil {
+		return StreamInfo{}, err
 	}
 	resetDPB := d.parameterSetUpdateNeedsDPBResetForAnySPS(spsList, ppsList)
 	d.sps = spsList
@@ -972,6 +960,46 @@ func (d *Decoder) parseHeaders(nals []h264.NALUnit) (StreamInfo, error) {
 		return StreamInfo{}, err
 	}
 	return info, nil
+}
+
+func parseHeaderNALUnits(nals []h264.NALUnit, spsList [32]*h264.SPS, ppsList [256]*h264.PPS) ([32]*h264.SPS, [256]*h264.PPS, StreamInfo, error) {
+	var info StreamInfo
+	haveSPS := false
+	for _, nal := range nals {
+		switch nal.Type {
+		case h264.NALSPS:
+			sps, err := h264.DecodeSPSFromNAL(nal)
+			if err != nil {
+				return spsList, ppsList, StreamInfo{}, err
+			}
+			if sps.SPSID < uint32(len(spsList)) {
+				spsList[sps.SPSID] = sps
+			}
+			if !haveSPS {
+				info = streamInfoFromSPS(sps)
+				haveSPS = true
+			}
+		case h264.NALPPS:
+			pps, err := h264.DecodePPS(nal.RBSP, &spsList)
+			if err != nil {
+				return spsList, ppsList, StreamInfo{}, err
+			}
+			if pps.PPSID < uint32(len(ppsList)) {
+				ppsList[pps.PPSID] = pps
+			}
+		case h264.NALSlice, h264.NALIDRSlice:
+			if _, err := h264.ParseSliceHeader(nal, &ppsList); err != nil {
+				return spsList, ppsList, StreamInfo{}, err
+			}
+		default:
+			continue
+		}
+	}
+
+	if !haveSPS {
+		return spsList, ppsList, StreamInfo{}, ErrInvalidData
+	}
+	return spsList, ppsList, info, nil
 }
 
 func (d *Decoder) storeAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationRecord) {

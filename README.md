@@ -182,6 +182,7 @@ Choose the entry point by ownership and packet shape:
 | Same stream path plus packet side data such as `NEW_EXTRADATA` | `DecodePacketFrames` |
 | Complete Annex B bytestream with no streaming state needed | `DecodeAnnexBFrames` |
 | Complete length-prefixed AVC packet stream with known NAL length size | `DecodeAVCFrames` |
+| Header metadata without decoder state mutation | `InspectAnnexBHeaders` or `InspectAVCHeaders` |
 | Stored avcC/configured-AVC stream packets | `ConfigureAVCC`, then `DecodeConfiguredAVCFrames` |
 | Exactly one expected output frame | `Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`, `DecodeConfiguredAVC`, or `DecodeAVCC` |
 
@@ -231,11 +232,13 @@ Configure or inspect headers without decoding full frames. The decoder methods
 are stateful: `ParseHeadersAnnexB` stores SPS/PPS state, and `ParseHeadersAVC`
 also stores the AVC NAL length size used by later
 `DecodeConfiguredAVCFrames` calls. Use the package-level inspect functions for
-stateless avcC metadata:
+stateless Annex B, AVC, and avcC metadata:
 
 ```go
 info, err := dec.ParseHeadersAnnexB(data)
-info, err := dec.ParseHeadersAVC(packet, nalLengthSize)
+info, err = dec.ParseHeadersAVC(packet, nalLengthSize)
+info, err = goh264.InspectAnnexBHeaders(data)
+info, err = goh264.InspectAVCHeaders(packet, nalLengthSize)
 cfg, err := goh264.InspectAVCDecoderConfigurationRecord(avcc)
 cfg, err = goh264.InspectAVCC(avcc) // short stateless avcC inspection
 ```

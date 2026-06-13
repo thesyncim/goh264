@@ -514,6 +514,13 @@ func TestParseHeadersAnnexBBlack16(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	stateless, err := InspectAnnexBHeaders(data)
+	if err != nil {
+		t.Fatalf("InspectAnnexBHeaders: %v", err)
+	}
+	if stateless != info {
+		t.Fatalf("InspectAnnexBHeaders = %+v, want stateful parse result %+v", stateless, info)
+	}
 
 	if info.Profile != "Constrained Baseline" {
 		t.Fatalf("profile = %q", info.Profile)
@@ -613,14 +620,29 @@ func TestParseHeadersAVCBlack16(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	statelessAnnex, err := InspectAnnexBHeaders(data)
+	if err != nil {
+		t.Fatalf("InspectAnnexBHeaders: %v", err)
+	}
+	if statelessAnnex != annexInfo {
+		t.Fatalf("InspectAnnexBHeaders = %+v, want ParseHeadersAnnexB result %+v", statelessAnnex, annexInfo)
+	}
 
 	dec := NewDecoder()
-	info, err := dec.ParseHeadersAVC(annexBToAVC(t, data, 4), 4)
+	avcData := annexBToAVC(t, data, 4)
+	info, err := dec.ParseHeadersAVC(avcData, 4)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if info != annexInfo {
 		t.Fatalf("info = %+v, want %+v", info, annexInfo)
+	}
+	statelessAVC, err := InspectAVCHeaders(avcData, 4)
+	if err != nil {
+		t.Fatalf("InspectAVCHeaders: %v", err)
+	}
+	if statelessAVC != annexInfo {
+		t.Fatalf("InspectAVCHeaders = %+v, want ParseHeadersAnnexB result %+v", statelessAVC, annexInfo)
 	}
 }
 
@@ -1539,6 +1561,25 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 	}
 	if statelessRecord.NALLengthSize != 3 || statelessRecord.StreamInfo.Width != 16 || statelessRecord.StreamInfo.Height != 16 {
 		t.Fatalf("package ParseAVCDecoderConfigurationRecord = %+v, want length-size 3 black16 config", statelessRecord)
+	}
+	sets32 := decoderParameterSetNALs(t, 32, 16, 0, 0)
+	headers32AnnexB := appendAnnexBNAL(nil, sets32.SPS)
+	headers32AnnexB = appendAnnexBNAL(headers32AnnexB, sets32.PPS)
+	headerInfo, err := InspectAnnexBHeaders(headers32AnnexB)
+	if err != nil {
+		t.Fatalf("InspectAnnexBHeaders 32x16: %v", err)
+	}
+	if headerInfo.Width != 32 || headerInfo.Height != 16 {
+		t.Fatalf("InspectAnnexBHeaders 32x16 = %+v, want 32x16", headerInfo)
+	}
+	headers32AVC := appendAVCNALUnit(t, nil, sets32.SPS, 4)
+	headers32AVC = appendAVCNALUnit(t, headers32AVC, sets32.PPS, 4)
+	headerInfo, err = InspectAVCHeaders(headers32AVC, 4)
+	if err != nil {
+		t.Fatalf("InspectAVCHeaders 32x16: %v", err)
+	}
+	if headerInfo.Width != 32 || headerInfo.Height != 16 {
+		t.Fatalf("InspectAVCHeaders 32x16 = %+v, want 32x16", headerInfo)
 	}
 
 	got, err := dec.AVCConfig()

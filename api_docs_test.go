@@ -18,6 +18,8 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 
 	decoderType := reflect.TypeOf((*Decoder)(nil))
 	packageDecoderFunctions := map[string]any{
+		"InspectAnnexBHeaders":                 InspectAnnexBHeaders,
+		"InspectAVCHeaders":                    InspectAVCHeaders,
 		"InspectAVCDecoderConfigurationRecord": InspectAVCDecoderConfigurationRecord,
 		"InspectAVCC":                          InspectAVCC,
 	}
@@ -26,6 +28,8 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"DecodePacketFrames",
 		"DecodeAnnexBFrames",
 		"DecodeAVCFrames",
+		"InspectAnnexBHeaders",
+		"InspectAVCHeaders",
 		"ConfigureAVCDecoderConfigurationRecord",
 		"ConfigureAVCC",
 		"InspectAVCDecoderConfigurationRecord",
@@ -491,6 +495,8 @@ func TestPublicCommentsDocumentStateLifecycleBoundaries(t *testing.T) {
 	decoder := string(decoderData)
 	encoder := string(encoderData)
 	for _, phrase := range []string{
+		"InspectAnnexBHeaders parses Annex B parameter sets and returns stream\n// metadata without changing decoder state",
+		"InspectAVCHeaders parses length-prefixed AVC parameter sets and returns\n// stream metadata without changing decoder state",
 		"ParseHeadersAVC parses AVC parameter sets, stores SPS/PPS state and the AVC\n// NAL length size for later DecodeConfiguredAVCFrames calls",
 		"Storing a configuration resets decoder picture state for a new",
 		"ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,\n// resets decoder picture state",
