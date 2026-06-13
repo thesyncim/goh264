@@ -2,7 +2,12 @@
 
 package h264
 
-import "testing"
+import (
+	"bytes"
+	"crypto/md5"
+	"os/exec"
+	"testing"
+)
 
 func TestBuildEncoderI420IntraPCMIDRSliceWritesParseableHeader(t *testing.T) {
 	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
@@ -453,6 +458,72 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesCAVLCMacroblock(t *testing.T) {
 	if payload.bitsLeft() != 0 {
 		t.Fatalf("residual P payload bitsLeft = %d, want 0", payload.bitsLeft())
 	}
+}
+
+func TestEncodeI420P16x16ResidualSliceRBSPDecodesThroughLocalAndFFmpeg(t *testing.T) {
+	const (
+		width     = 16
+		height    = 16
+		initialQP = 20
+	)
+	sets, _, _ := encoderSliceTestParameterSets(t, width, height, initialQP)
+	// The bounded writer admits coefficient levels through its flat-qmul test PPS;
+	// the Annex B stream still carries generated SPS/PPS and is decoded below.
+	writerPPS, writerSPS := encoderResidualSliceTestPPS(initialQP)
+	frame := encoderSliceTestI420(width, height)
+	idr, err := BuildEncoderI420IntraPCMIDRSlice(EncoderI420IntraPCMIDRConfig{
+		Width:                      width,
+		Height:                     height,
+		StrideY:                    width,
+		StrideCb:                   width / 2,
+		StrideCr:                   width / 2,
+		Y:                          frame.y,
+		Cb:                         frame.cb,
+		Cr:                         frame.cr,
+		FrameNum:                   0,
+		IDRPicID:                   0,
+		InitialQP:                  initialQP,
+		DisableDeblockingFilterIDC: 1,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatalf("build IDR reference slice: %v", err)
+	}
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(encoderI420P16x16ResidualConfig{
+		Width:                      width,
+		Height:                     height,
+		FrameNum:                   1,
+		InitialQP:                  initialQP,
+		NextQP:                     initialQP,
+		DisableDeblockingFilterIDC: 1,
+		Coeff:                      4,
+	}, writerPPS, writerSPS)
+	if err != nil {
+		t.Fatalf("encode residual P slice rbsp: %v", err)
+	}
+	residualAnnexB, err := AppendAnnexBNAL(nil, 2, NALSlice, rbsp)
+	if err != nil {
+		t.Fatalf("append residual P slice annexb: %v", err)
+	}
+
+	stream := append(append(append([]byte(nil), sets.AnnexB...), idr.AnnexB...), residualAnnexB...)
+	frames, err := DecodeAnnexBSimpleFrames(stream)
+	if err != nil {
+		t.Fatalf("local decode generated residual stream: %v", err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("local decoded frames = %d, want 2", len(frames))
+	}
+	localRaw := encoderSliceTestAppendDecodedFrameI420(t, nil, frames[0])
+	localRaw = encoderSliceTestAppendDecodedFrameI420(t, localRaw, frames[1])
+	frameRaw := encoderSliceTestFrameRaw(frame)
+	if !bytes.Equal(localRaw[:len(frameRaw)], frameRaw) {
+		t.Fatalf("IDR raw md5 = %x, want %x", md5.Sum(localRaw[:len(frameRaw)]), md5.Sum(frameRaw))
+	}
+	if bytes.Equal(localRaw[:len(frameRaw)], localRaw[len(frameRaw):]) {
+		t.Fatalf("residual P raw frame matched IDR frame md5=%x", md5.Sum(localRaw[:len(frameRaw)]))
+	}
+	assertEncoderSliceFFmpegRawVideoOracle(t, stream, localRaw)
 }
 
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockSyntax(t *testing.T) {
@@ -3079,4 +3150,109 @@ func encoderSliceTestI420(width, height int) encoderSliceTestFrame {
 		frame.cr[i] = byte(i*11 + 13)
 	}
 	return frame
+}
+
+func encoderSliceTestParameterSets(t *testing.T, width int, height int, initialQP int) (EncoderParameterSets, *PPS, *SPS) {
+	t.Helper()
+	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              width,
+		Height:             height,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          initialQP,
+	})
+	if err != nil {
+		t.Fatalf("build parameter sets: %v", err)
+	}
+	nals, err := SplitAnnexB(sets.AnnexB)
+	if err != nil {
+		t.Fatalf("split parameter sets: %v", err)
+	}
+	if len(nals) != 2 || nals[0].Type != NALSPS || nals[1].Type != NALPPS {
+		t.Fatalf("parameter set NALs = %+v, want SPS/PPS", nals)
+	}
+	sps, err := DecodeSPS(nals[0].RBSP)
+	if err != nil {
+		t.Fatalf("decode generated SPS: %v", err)
+	}
+	var spsList [maxSPSCount]*SPS
+	spsList[sps.SPSID] = sps
+	pps, err := DecodePPS(nals[1].RBSP, &spsList)
+	if err != nil {
+		t.Fatalf("decode generated PPS: %v", err)
+	}
+	return sets, pps, sps
+}
+
+func encoderSliceTestFrameRaw(frame encoderSliceTestFrame) []byte {
+	raw := make([]byte, 0, len(frame.y)+len(frame.cb)+len(frame.cr))
+	raw = append(raw, frame.y...)
+	raw = append(raw, frame.cb...)
+	raw = append(raw, frame.cr...)
+	return raw
+}
+
+func encoderSliceTestAppendDecodedFrameI420(t *testing.T, dst []byte, frame *DecodedFrame) []byte {
+	t.Helper()
+	if frame == nil {
+		t.Fatal("decoded frame is nil")
+	}
+	if frame.BitDepthLuma != 8 || frame.BitDepthChroma != 8 || frame.ChromaFormatIDC != 1 {
+		t.Fatalf("decoded format bitdepth/chroma = %d/%d/%d, want 8/8/1",
+			frame.BitDepthLuma, frame.BitDepthChroma, frame.ChromaFormatIDC)
+	}
+	if frame.Width <= 0 || frame.Height <= 0 || frame.Width&1 != 0 || frame.Height&1 != 0 {
+		t.Fatalf("decoded size = %dx%d, want positive even I420", frame.Width, frame.Height)
+	}
+	if frame.LumaStride < frame.Width || frame.ChromaStride < frame.Width/2 {
+		t.Fatalf("decoded strides = %d/%d for size %dx%d", frame.LumaStride, frame.ChromaStride, frame.Width, frame.Height)
+	}
+	if need := (frame.Height-1)*frame.LumaStride + frame.Width; len(frame.Y) < need {
+		t.Fatalf("decoded luma len = %d, need %d", len(frame.Y), need)
+	}
+	chromaWidth := frame.Width / 2
+	chromaHeight := frame.Height / 2
+	if need := (chromaHeight-1)*frame.ChromaStride + chromaWidth; len(frame.Cb) < need || len(frame.Cr) < need {
+		t.Fatalf("decoded chroma lens = %d/%d, need %d", len(frame.Cb), len(frame.Cr), need)
+	}
+	for y := 0; y < frame.Height; y++ {
+		start := y * frame.LumaStride
+		dst = append(dst, frame.Y[start:start+frame.Width]...)
+	}
+	for y := 0; y < chromaHeight; y++ {
+		start := y * frame.ChromaStride
+		dst = append(dst, frame.Cb[start:start+chromaWidth]...)
+	}
+	for y := 0; y < chromaHeight; y++ {
+		start := y * frame.ChromaStride
+		dst = append(dst, frame.Cr[start:start+chromaWidth]...)
+	}
+	return dst
+}
+
+func assertEncoderSliceFFmpegRawVideoOracle(t *testing.T, annexB []byte, want []byte) {
+	t.Helper()
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not available")
+	}
+	cmd := exec.Command(ffmpeg,
+		"-hide_banner", "-loglevel", "error",
+		"-f", "h264", "-i", "pipe:0",
+		"-f", "rawvideo", "-pix_fmt", "yuv420p", "-",
+	)
+	cmd.Stdin = bytes.NewReader(annexB)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	raw, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg rawvideo decode: %v\n%s", err, stderr.String())
+	}
+	if !bytes.Equal(raw, want) {
+		t.Fatalf("ffmpeg raw md5 = %x, want %x", md5.Sum(raw), md5.Sum(want))
+	}
 }
