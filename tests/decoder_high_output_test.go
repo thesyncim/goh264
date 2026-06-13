@@ -572,6 +572,109 @@ func TestFrameAppendRawYUV16UsesCallerBufferWithoutAllocation(t *testing.T) {
 	}
 }
 
+func TestFrameAppendRawYUVIsolatesOverlappingSource(t *testing.T) {
+	t.Run("8-bit", func(t *testing.T) {
+		backing := []byte{0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4, 0xcc, 0xdd}
+		frame := Frame{
+			Width:           2,
+			Height:          2,
+			ChromaFormatIDC: 0,
+			BitDepthLuma:    8,
+			YStride:         2,
+			Y:               backing[4:8],
+		}
+		dst := backing[:4]
+		want := append(append([]byte(nil), dst...), 1, 2, 3, 4, 128, 128)
+		got, err := frame.AppendRawYUV(dst)
+		if err != nil {
+			t.Fatalf("AppendRawYUV: %v", err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("AppendRawYUV = %x, want %x", got, want)
+		}
+		frame.Y[0] = 0xff
+		if !bytes.Equal(got, want) {
+			t.Fatalf("AppendRawYUV output aliases overlapping source after mutation: got %x want %x", got, want)
+		}
+	})
+
+	t.Run("8-bit-bytes-le", func(t *testing.T) {
+		backing := []byte{0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4, 0xcc, 0xdd}
+		frame := Frame{
+			Width:           2,
+			Height:          2,
+			ChromaFormatIDC: 0,
+			BitDepthLuma:    8,
+			YStride:         2,
+			Y:               backing[4:8],
+		}
+		dst := backing[:4]
+		want := append(append([]byte(nil), dst...), 1, 2, 3, 4, 128, 128)
+		got, err := frame.AppendRawYUVBytesLE(dst)
+		if err != nil {
+			t.Fatalf("AppendRawYUVBytesLE: %v", err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("AppendRawYUVBytesLE 8-bit = %x, want %x", got, want)
+		}
+		frame.Y[0] = 0xff
+		if !bytes.Equal(got, want) {
+			t.Fatalf("AppendRawYUVBytesLE 8-bit output aliases overlapping source after mutation: got %x want %x", got, want)
+		}
+	})
+
+	t.Run("high-bit-depth-bytes-le", func(t *testing.T) {
+		samples := []uint16{0xdead, 0xbeef, 1, 2, 3, 4, 0xcccc, 0xdddd}
+		byteBacking := unsafe.Slice((*byte)(unsafe.Pointer(&samples[0])), len(samples)*2)
+		frame := Frame{
+			Width:           2,
+			Height:          2,
+			ChromaFormatIDC: 0,
+			BitDepthLuma:    10,
+			YStride:         2,
+			Y16:             samples[2:6],
+		}
+		dst := byteBacking[:4]
+		want := append(append([]byte(nil), dst...), rawUint16LE([]uint16{1, 2, 3, 4, 512, 512})...)
+		got, err := frame.AppendRawYUVBytesLE(dst)
+		if err != nil {
+			t.Fatalf("AppendRawYUVBytesLE high-bit-depth: %v", err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("AppendRawYUVBytesLE high-bit-depth = %x, want %x", got, want)
+		}
+		frame.Y16[0] = 0x03ff
+		if !bytes.Equal(got, want) {
+			t.Fatalf("AppendRawYUVBytesLE high-bit-depth output aliases overlapping source after mutation: got %x want %x", got, want)
+		}
+	})
+
+	t.Run("high-bit-depth-uint16", func(t *testing.T) {
+		samples := []uint16{0xdead, 0xbeef, 1, 2, 3, 4, 0xcccc, 0xdddd}
+		frame := Frame{
+			Width:           2,
+			Height:          2,
+			ChromaFormatIDC: 0,
+			BitDepthLuma:    10,
+			YStride:         2,
+			Y16:             samples[2:6],
+		}
+		dst := samples[:2]
+		want := append(append([]uint16(nil), dst...), 1, 2, 3, 4, 512, 512)
+		got, err := frame.AppendRawYUV16(dst)
+		if err != nil {
+			t.Fatalf("AppendRawYUV16: %v", err)
+		}
+		if !equalUint16Slices(got, want) {
+			t.Fatalf("AppendRawYUV16 = %v, want %v", got, want)
+		}
+		frame.Y16[0] = 0x03ff
+		if !equalUint16Slices(got, want) {
+			t.Fatalf("AppendRawYUV16 output aliases overlapping source after mutation: got %v want %v", got, want)
+		}
+	})
+}
+
 func TestFrameHighOutputRejectsWrongSurface(t *testing.T) {
 	high := Frame{
 		Width: 2, Height: 2, ChromaFormatIDC: 0,

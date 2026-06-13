@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"unsafe"
 
 	"github.com/thesyncim/goh264/internal/h264"
 )
@@ -1693,7 +1694,9 @@ func avRationalToScaledUint32(data []byte, off int, scale int64) (uint32, bool) 
 // AppendRawYUV appends the visible frame as 8-bit planar YUV.
 //
 // The output order is Y, Cb, then Cr. The returned slice may share backing
-// storage with dst; keep dst unchanged while using the returned bytes.
+// storage with dst; keep dst unchanged while using the returned bytes. If dst's
+// append region overlaps frame plane storage, the output is isolated from the
+// frame planes.
 // High-bit-depth frames return ErrUnsupported.
 func (f *Frame) AppendRawYUV(dst []byte) ([]byte, error) {
 	if f == nil || f.Width <= 0 || f.Height <= 0 {
@@ -1777,8 +1780,10 @@ func (f *Frame) RawYUVSize() (int, error) {
 //
 // The output order is Y, Cb, then Cr. The returned slice may share backing
 // storage with dst; keep dst unchanged while using the returned samples. 8-bit
-// frames return ErrUnsupported.
+// frames return ErrUnsupported. If dst's append region overlaps frame plane
+// storage, the output is isolated from the frame planes.
 func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
+	orig := dst
 	depth, err := f.rawBitDepth()
 	if err != nil {
 		return dst, err
@@ -1790,7 +1795,8 @@ func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 	if err != nil {
 		return dst, err
 	}
-	if _, err := checkedAddInt(len(dst), samples); err != nil {
+	n, err := checkedAddInt(len(dst), samples)
+	if err != nil {
 		return dst, err
 	}
 	chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, err := f.rawYUV16Geometry()
@@ -1801,17 +1807,18 @@ func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 	if err := f.validateRawYUV16Samples(chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, maxSample); err != nil {
 		return dst, err
 	}
+	dst = isolateRawUint16AppendDst(dst, n, f.Y16, f.Cb16, f.Cr16)
 	for y := 0; y < f.Height; y++ {
 		row := (f.CropTop+y)*f.YStride + f.CropLeft
 		dst, err = appendRawUint16Samples(dst, f.Y16[row:row+f.Width], maxSample)
 		if err != nil {
-			return dst, err
+			return orig, err
 		}
 	}
 	if f.ChromaFormatIDC == 0 {
 		chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, 1)
 		if err != nil {
-			return dst, err
+			return orig, err
 		}
 		return appendNeutralRawUint16Samples(dst, chromaWidth*chromaHeight*2, neutralRawChromaSample(depth)), nil
 	}
@@ -1822,14 +1829,14 @@ func (f *Frame) AppendRawYUV16(dst []uint16) ([]uint16, error) {
 		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
 		dst, err = appendRawUint16Samples(dst, f.Cb16[row:row+chromaWidth], maxSample)
 		if err != nil {
-			return dst, err
+			return orig, err
 		}
 	}
 	for y := 0; y < chromaHeight; y++ {
 		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
 		dst, err = appendRawUint16Samples(dst, f.Cr16[row:row+chromaWidth], maxSample)
 		if err != nil {
-			return dst, err
+			return orig, err
 		}
 	}
 	return dst, nil
@@ -1855,8 +1862,10 @@ func (f *Frame) RawYUV16() ([]uint16, error) {
 // The output order is Y, Cb, then Cr. 8-bit frames use one byte per sample;
 // high-bit-depth frames use little-endian uint16 samples. The returned slice may
 // share backing storage with dst; keep dst unchanged while using the returned
-// bytes.
+// bytes. If dst's append region overlaps frame plane storage, the output is
+// isolated from the frame planes.
 func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
+	orig := dst
 	depth, err := f.rawBitDepth()
 	if err != nil {
 		return dst, err
@@ -1865,7 +1874,8 @@ func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
 	if err != nil {
 		return dst, err
 	}
-	if _, err := checkedAddInt(len(dst), size); err != nil {
+	n, err := checkedAddInt(len(dst), size)
+	if err != nil {
 		return dst, err
 	}
 	if depth == 8 {
@@ -1879,17 +1889,18 @@ func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
 	if err := f.validateRawYUV16Samples(chromaWidth, chromaHeight, chromaCropLeft, chromaCropTop, maxSample); err != nil {
 		return dst, err
 	}
+	dst = isolateRawByteAppendDstFromUint16(dst, n, f.Y16, f.Cb16, f.Cr16)
 	for y := 0; y < f.Height; y++ {
 		row := (f.CropTop+y)*f.YStride + f.CropLeft
 		dst, err = appendRawUint16LE(dst, f.Y16[row:row+f.Width], maxSample)
 		if err != nil {
-			return dst, err
+			return orig, err
 		}
 	}
 	if f.ChromaFormatIDC == 0 {
 		chromaWidth, chromaHeight, err := frameChromaSize(f.Width, f.Height, 1)
 		if err != nil {
-			return dst, err
+			return orig, err
 		}
 		return appendNeutralRawUint16LE(dst, chromaWidth*chromaHeight*2, neutralRawChromaSample(depth)), nil
 	}
@@ -1900,14 +1911,14 @@ func (f *Frame) AppendRawYUVBytesLE(dst []byte) ([]byte, error) {
 		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
 		dst, err = appendRawUint16LE(dst, f.Cb16[row:row+chromaWidth], maxSample)
 		if err != nil {
-			return dst, err
+			return orig, err
 		}
 	}
 	for y := 0; y < chromaHeight; y++ {
 		row := (chromaCropTop+y)*f.CStride + chromaCropLeft
 		dst, err = appendRawUint16LE(dst, f.Cr16[row:row+chromaWidth], maxSample)
 		if err != nil {
-			return dst, err
+			return orig, err
 		}
 	}
 	return dst, nil
@@ -1958,6 +1969,27 @@ func (f *Frame) appendRawYUVBytes8(dst []byte) ([]byte, error) {
 			}
 		}
 	}
+	lumaSamples, err := checkedMulInt(f.Width, f.Height)
+	if err != nil {
+		return dst, err
+	}
+	chromaSamples, err := checkedMulInt(chromaWidth, chromaHeight)
+	if err != nil {
+		return dst, err
+	}
+	chromaSamples, err = checkedMulInt(chromaSamples, 2)
+	if err != nil {
+		return dst, err
+	}
+	totalSamples, err := checkedAddInt(lumaSamples, chromaSamples)
+	if err != nil {
+		return dst, err
+	}
+	n, err := checkedAddInt(len(dst), totalSamples)
+	if err != nil {
+		return dst, err
+	}
+	dst = isolateRawByteAppendDstFromBytes(dst, n, f.Y, f.Cb, f.Cr)
 	for y := 0; y < f.Height; y++ {
 		row := (f.CropTop+y)*f.YStride + f.CropLeft
 		dst = append(dst, f.Y[row:row+f.Width]...)
@@ -1977,6 +2009,91 @@ func (f *Frame) appendRawYUVBytes8(dst []byte) ([]byte, error) {
 		dst = append(dst, f.Cr[row:row+chromaWidth]...)
 	}
 	return dst, nil
+}
+
+func isolateRawByteAppendDstFromBytes(dst []byte, n int, sources ...[]byte) []byte {
+	if cap(dst) < n {
+		return dst
+	}
+	outRegion := dst[:n]
+	for _, src := range sources {
+		if byteSlicesOverlap(outRegion, src) {
+			out := make([]byte, len(dst), n)
+			copy(out, dst)
+			return out
+		}
+	}
+	return dst
+}
+
+func isolateRawByteAppendDstFromUint16(dst []byte, n int, sources ...[]uint16) []byte {
+	if cap(dst) < n {
+		return dst
+	}
+	outRegion := dst[:n]
+	for _, src := range sources {
+		if byteAndUint16SlicesOverlap(outRegion, src) {
+			out := make([]byte, len(dst), n)
+			copy(out, dst)
+			return out
+		}
+	}
+	return dst
+}
+
+func isolateRawUint16AppendDst(dst []uint16, n int, sources ...[]uint16) []uint16 {
+	if cap(dst) < n {
+		return dst
+	}
+	outRegion := dst[:n]
+	for _, src := range sources {
+		if uint16SlicesOverlap(outRegion, src) {
+			out := make([]uint16, len(dst), n)
+			copy(out, dst)
+			return out
+		}
+	}
+	return dst
+}
+
+func uint16SlicesOverlap(a []uint16, b []uint16) bool {
+	aStart, aEnd, aOK := uint16SliceByteRange(a)
+	bStart, bEnd, bOK := uint16SliceByteRange(b)
+	return aOK && bOK && byteRangesOverlap(aStart, aEnd, bStart, bEnd)
+}
+
+func byteAndUint16SlicesOverlap(a []byte, b []uint16) bool {
+	aStart, aEnd, aOK := byteSliceByteRange(a)
+	bStart, bEnd, bOK := uint16SliceByteRange(b)
+	return aOK && bOK && byteRangesOverlap(aStart, aEnd, bStart, bEnd)
+}
+
+func byteSliceByteRange(s []byte) (uintptr, uintptr, bool) {
+	if len(s) == 0 {
+		return 0, 0, false
+	}
+	start := uintptr(unsafe.Pointer(&s[0]))
+	end := start + uintptr(len(s))
+	if end < start {
+		return start, ^uintptr(0), true
+	}
+	return start, end, true
+}
+
+func uint16SliceByteRange(s []uint16) (uintptr, uintptr, bool) {
+	if len(s) == 0 {
+		return 0, 0, false
+	}
+	start := uintptr(unsafe.Pointer(&s[0]))
+	end := start + uintptr(len(s))*unsafe.Sizeof(s[0])
+	if end < start {
+		return start, ^uintptr(0), true
+	}
+	return start, end, true
+}
+
+func byteRangesOverlap(aStart uintptr, aEnd uintptr, bStart uintptr, bEnd uintptr) bool {
+	return aStart < bEnd && bStart < aEnd
 }
 
 func (f *Frame) rawBitDepth() (int, error) {

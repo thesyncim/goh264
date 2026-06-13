@@ -738,6 +738,23 @@ func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
 	}
 }
 
+func TestREADMEDecoderRawOutputDocumentsOverlapIsolation(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := strings.Join(strings.Fields(string(data)), " ")
+	for _, phrase := range []string{
+		"`RawYUVBytesLE` returns a caller-owned rawvideo byte buffer",
+		"`RawYUV16` returns a caller-owned uint16 sample buffer",
+		"Raw-output append helpers isolate output when the caller destination overlaps frame plane storage",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md raw-output ownership docs missing %q", phrase)
+		}
+	}
+}
+
 func TestREADMEStateAndOwnershipDocumentsDecoderEncoderBoundaries(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {
