@@ -10,10 +10,11 @@ and FFmpeg-oracle surfaces.
 
 The encoder surface targets realtime/WebRTC integration and admits a guarded
 Constrained Baseline I420 subset: IDR IntraPCM, identical-reference P-skip,
-bounded exact P16x16 no-residual prediction, bounded residual-P candidates,
+bounded exact P16x16 no-residual prediction, bounded residual-P admission for
+exact luma-DC pixel deltas plus small guarded writer candidates,
 changed P IntraPCM recovery frames, AVC/Annex B output, configured multi-slice
 output, and RTP packetization modes 0 and 1. Remaining encoder work includes
-general motion search, pixel-domain residual macroblock generation,
+general motion search, broader residual macroblock generation,
 rate-control decisions, wider packetizer/control breadth, and reviewed
 allocation/performance evidence.
 
@@ -21,9 +22,11 @@ allocation/performance evidence.
 
 | Area | Evidence shape | Covered surfaces | Remaining gaps |
 | --- | --- | --- | --- |
-| Decoder | Parity-driven port from the pinned FFmpeg path | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Broader field/MBAFF/damaged-edge behavior, full selected-gate evidence, allocation/performance review |
-| Encoder | Guarded realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, bounded residual-P candidates, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, pixel-domain residual generation, adaptive rate control, wider packetizer/control breadth, oracle-backed bitstream parity, allocation/performance review |
-| Examples | API smoke tests only | Compile-time public API coverage and minimal usage checks | Codec quality, bitstream parity, acceptance, or performance evidence |
+| Decoder | Parity-driven port from the pinned FFmpeg path | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Broader field/MBAFF/damaged-edge behavior, fresh artifact evidence, allocation/performance review |
+| Encoder | Guarded realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, bounded pixel-derived residual-P luma DC admission, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual generation, adaptive rate control, wider packetizer/control breadth, oracle-backed bitstream parity, allocation/performance review |
+
+Examples are API smoke tests only. They are not codec quality, bitstream parity,
+acceptance, or performance evidence.
 
 ## Capabilities
 
@@ -31,7 +34,7 @@ allocation/performance evidence.
 - **Inputs:** Annex B bytestreams, length-prefixed AVC packets, avcC decoder
   configuration records, packet `NEW_EXTRADATA`, and auto-detected packets.
 - **Output:** decoded Y/Cb/Cr planes, crop metadata, VUI/timing fields,
-  high-bit-depth planes, raw YUV byte/sample helpers, frame cloning, and
+  selected high-bit-depth planes, raw YUV byte/sample helpers, frame cloning, and
   side-data cloning.
 - **State:** streaming decode keeps references and delayed B-frame output across
   calls; empty decode calls flush delayed output.
@@ -42,9 +45,9 @@ allocation/performance evidence.
 
 ## Worklist
 
-The remaining work is mainly quality evidence, API cleanup,
-allocation/performance evidence, and broader encoder coverage. The detailed
-worklist lives in:
+The remaining work is mainly quality evidence, fresh artifact evidence, API
+cleanup, allocation/performance evidence, and broader encoder coverage. The
+detailed worklist lives in:
 
 - [docs/production-readiness.md](docs/production-readiness.md)
 - [docs/source-truth.md](docs/source-truth.md)
@@ -411,16 +414,20 @@ headers, err = enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 if err != nil {
 	log.Fatal(err)
 }
-avcc := headers.AVCC()
+_ = headers.AVCC()
 sei, err = enc.RecoveryPointSEI(0) // Annex B/AVC recovery-point SEI NALs
 if err != nil {
 	log.Fatal(err)
 }
-frame := enc.I420Frame(y, cb, cr, pts)
 liveCfg := enc.Config()
+y := make([]byte, liveCfg.StrideY*liveCfg.Height)
+cb := make([]byte, liveCfg.StrideCb*(liveCfg.Height/2))
+cr := make([]byte, liveCfg.StrideCr*(liveCfg.Height/2))
+pts := int64(0)
+frame := enc.I420Frame(y, cb, cr, pts)
 must(liveCfg.ValidateFrame(frame))
 must(enc.ValidateFrame(frame))
-out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/P IntraPCM
+out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/residual-P/P IntraPCM
 if err != nil {
 	log.Fatal(err)
 }
@@ -457,6 +464,7 @@ owned, err := out.Clone()   // deep-owned snapshot for async retention
 if err != nil {
 	log.Fatal(err)
 }
+_ = owned
 must(enc.Reset()) // clear encoder coding state, keep config/callback
 ```
 

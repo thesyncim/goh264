@@ -275,9 +275,9 @@ parse-proved Baseline P IntraPCM writer emits `mb_skip_run=0` plus P-slice
 IntraPCM writers accept explicit
 raster-scan macroblock ranges so public `SliceCount` can emit multiple VCL NALs
 in one access unit.
-Public encoder coverage now pins residual-shaped P-frame deltas as recovery-SEI
-plus P IntraPCM fallback across Annex B, AVC, RTP mode 1, and RTP mode 0 until
-pixel-domain residual admission is implemented.
+Public encoder coverage now pins exact luma-DC residual-P admission across
+Annex B, AVC, RTP mode 1, and RTP mode 0, while broader residual-shaped P-frame
+deltas remain on the recovery-SEI plus P IntraPCM fallback boundary.
 
 ## Implementation Order
 
