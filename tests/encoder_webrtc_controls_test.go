@@ -8878,6 +8878,155 @@ func TestEncoderSliceMaxBytesRejectsOversizeSliceWithoutAdvancingState(t *testin
 	}
 }
 
+func TestEncoderResidualPBudgetRejectPreservesLiveReference(t *testing.T) {
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			for _, budget := range []struct {
+				name    string
+				lower   func(*goh264.Encoder) error
+				restore func(*goh264.Encoder) error
+			}{
+				{
+					name: "max-frame-size",
+					lower: func(enc *goh264.Encoder) error {
+						return enc.SetMaxFrameSize(1)
+					},
+					restore: func(enc *goh264.Encoder) error {
+						return enc.SetMaxFrameSize(0)
+					},
+				},
+				{
+					name: "slice-max-bytes",
+					lower: func(enc *goh264.Encoder) error {
+						return enc.SetSliceMaxBytes(1)
+					},
+					restore: func(enc *goh264.Encoder) error {
+						return enc.SetSliceMaxBytes(0)
+					},
+				},
+			} {
+				t.Run(budget.name, func(t *testing.T) {
+					cfg := goh264.DefaultEncoderConfig(16, 16)
+					cfg.OutputFormat = format.fmt
+					cfg.DeblockMode = goh264.EncoderDeblockDisabled
+					cfg.RateControl = goh264.EncoderRateControlConstantQP
+					cfg.FrameDrop = goh264.EncoderFrameDropDisabled
+					if format.fmt == goh264.EncoderOutputRTP {
+						cfg.RTPMaxPayloadSize = 1200
+					} else {
+						cfg.RTPMaxPayloadSize = 0
+					}
+
+					probe, err := goh264.NewEncoder(cfg)
+					if err != nil {
+						t.Fatalf("NewEncoder probe: %v", err)
+					}
+					reference := patternedI420EncoderFrame(16, 16)
+					reference.PTS = 0
+					if _, err := probe.Encode(reference); err != nil {
+						t.Fatalf("probe IDR: %v", err)
+					}
+					probePSkipFrame := reference
+					probePSkipFrame.PTS = int64(cfg.RTPTimestampIncrement)
+					probePSkip, err := probe.Encode(probePSkipFrame)
+					if err != nil {
+						t.Fatalf("probe P-skip: %v", err)
+					}
+					pskipBytes := len(probePSkip.Data)
+					if pskipBytes == 0 || probePSkip.IDR || probePSkip.Dropped {
+						t.Fatalf("probe P-skip output dropped=%v idr=%v data=%d, want delivered P-skip",
+							probePSkip.Dropped, probePSkip.IDR, pskipBytes)
+					}
+
+					enc, err := goh264.NewEncoder(cfg)
+					if err != nil {
+						t.Fatalf("NewEncoder: %v", err)
+					}
+					var callbackCalls int
+					enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+						callbackCalls++
+					})
+					first, err := enc.Encode(reference)
+					if err != nil {
+						t.Fatalf("Encode first IDR: %v", err)
+					}
+					if first.Dropped || !first.IDR || enc.PendingIDR() {
+						t.Fatalf("first output dropped=%v idr=%v pending=%v, want delivered IDR",
+							first.Dropped, first.IDR, enc.PendingIDR())
+					}
+					firstPacketCount := len(first.RTPPackets)
+					if format.fmt == goh264.EncoderOutputRTP {
+						if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+							t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+								firstPacketCount, callbackCalls)
+						}
+					} else if firstPacketCount != 0 || callbackCalls != 0 {
+						t.Fatalf("non-RTP first packets/callbacks = %d/%d, want none", firstPacketCount, callbackCalls)
+					}
+
+					residual := encoderP16x16PixelDeltaResidualFrame(t, cfg, reference, int64(cfg.RTPTimestampIncrement))
+					if err := budget.lower(enc); err != nil {
+						t.Fatalf("lower %s: %v", budget.name, err)
+					}
+					rejected, err := enc.Encode(residual)
+					if !errors.Is(err, goh264.ErrInvalidData) {
+						t.Fatalf("Encode residual P under %s error = %v, want ErrInvalidData", budget.name, err)
+					}
+					if rejected.Dropped || len(rejected.Data) != 0 || len(rejected.NALUnits) != 0 || len(rejected.RTPPackets) != 0 {
+						t.Fatalf("rejected residual P output = %+v, want empty output", rejected)
+					}
+					if callbackCalls != firstPacketCount {
+						t.Fatalf("rejected residual P callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+					}
+
+					if err := budget.restore(enc); err != nil {
+						t.Fatalf("restore %s: %v", budget.name, err)
+					}
+					recoveryFrame := reference
+					recoveryFrame.PTS = residual.PTS + int64(cfg.RTPTimestampIncrement)
+					recovered, err := enc.Encode(recoveryFrame)
+					if err != nil {
+						t.Fatalf("Encode after rejected residual P: %v", err)
+					}
+					if recovered.Dropped || recovered.IDR || enc.PendingIDR() || len(recovered.Data) != pskipBytes {
+						t.Fatalf("recovered frame dropped=%v idr=%v pending=%v data=%d, want P-skip size %d",
+							recovered.Dropped, recovered.IDR, enc.PendingIDR(), len(recovered.Data), pskipBytes)
+					}
+					assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
+					stream := annexBFromEncodedFrame(t, first, cfg.OutputFormat)
+					stream = append(stream, annexBFromEncodedFrame(t, recovered, cfg.OutputFormat)...)
+					assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+					decoded, err := goh264.NewDecoder().DecodeFrames(stream)
+					if err != nil {
+						t.Fatalf("Decode recovered stream: %v", err)
+					}
+					if len(decoded) != 2 {
+						t.Fatalf("decoded frames = %d, want 2", len(decoded))
+					}
+					assertDecodedEncoderFrameBytes(t, decoded[:1], appendI420FrameBytes(nil, reference))
+					assertDecodedEncoderFrameBytes(t, decoded[1:], appendI420FrameBytes(nil, recoveryFrame))
+					if format.fmt == goh264.EncoderOutputRTP {
+						assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+						if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+							t.Fatalf("post-recovery callbacks = %d, want %d",
+								callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+						}
+					} else if len(recovered.RTPPackets) != 0 {
+						t.Fatalf("non-RTP recovered packets = %d, want none", len(recovered.RTPPackets))
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
