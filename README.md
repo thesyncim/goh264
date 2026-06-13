@@ -691,7 +691,8 @@ Production use should be backed by a fresh quality-evidence pass proving:
 - `scripts/h264-quality-evidence.sh` is green as the combined decoder and
   admitted-encoder quality gate.
 - `scripts/h264-decoder-quality-evidence.sh` is green, including
-  decoder API-surface gates, ref-modification gates, and native/FFmpeg oracle smoke gates.
+  decoder API-surface gates, decoder output-ownership gates,
+  ref-modification gates, and native/FFmpeg oracle smoke gates.
 - `go vet ./...` is green.
 - `go test ./...` is green.
 - `go test -race ./...` is green.
@@ -714,8 +715,8 @@ Production use should be backed by a fresh quality-evidence pass proving:
 - `scripts/h264-performance-evidence.sh` creates the local performance bundle
   with JSON benchmark output plus CPU/heap profiles.
 - `scripts/h264-encoder-quality-evidence.sh` is green for the admitted
-  realtime/WebRTC encoder vet, contract, API-surface, bitstream-oracles,
-  residual-boundary, writer, allocation, and benchmark gates. This runner
+  realtime/WebRTC encoder vet, contract, API-surface, output-ownership,
+  bitstream-oracles, residual-boundary, writer, allocation, and benchmark gates. This runner
   requires `ffmpeg` for admitted encoder bitstream-oracle rows; set
   `GOH264_FFMPEG_BIN` when the oracle binary is not named `ffmpeg`.
 - Allocation and performance evidence is recorded in

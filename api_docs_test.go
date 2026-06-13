@@ -409,6 +409,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 	script := string(scriptData)
 	for _, phrase := range []string{
 		"API-surface",
+		"output-ownership",
 		"bitstream-oracles",
 		"residual-boundary",
 	} {
@@ -425,6 +426,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"status: fail (missing focused test",
 		"run_go_test_gate encoder-contract ./tests",
 		"run_exact_go_test_gate encoder-api-surfaces ./tests",
+		"run_exact_go_test_gate encoder-output-ownership ./tests",
 		"run_exact_go_test_gate encoder-bitstream-oracles ./tests",
 		"run_go_test_gate encoder-residual-boundary ./tests",
 		"run_go_test_gate encoder-allocation-canary ./tests",
@@ -435,6 +437,8 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"ffmpeg-oracle: pass",
 		"encoder-api-surfaces",
 		"encoder_api_surface_tests",
+		"encoder-output-ownership",
+		"encoder_output_ownership_tests",
 		"encoder_bitstream_oracle_tests",
 		"encoder-bitstream-oracles",
 		"TestEncoderEncodeAnnexBIDRIntraPCMDecodesThroughLocalAndFFmpeg",
@@ -502,6 +506,14 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestCAVLCWriteResidual",
 		"TestWriteCAVLCInterPBoundedMacroblock",
 		"TestEncodeI420P16x16ResidualSliceRBSP",
+		"TestEncoderFrameCloneDeepCopiesInputPlanes",
+		"TestEncoderParameterSetsReturnCallerOwnedSurfaces",
+		"TestEncoderEncodeIntoRTPMode0RejectPreservesCallerBuffer",
+		"TestEncoderDoesNotRetainInputFramePlanes",
+		"TestEncoderEncodeResultsSurviveLaterEncode",
+		"TestEncodedFrameCloneDeepCopiesResultStorage",
+		"TestEncoderRTPPacketsDoNotAliasEncodedFrameData",
+		"TestEncoderRTPPacketCallbackPacketsSurviveLaterEncode",
 	} {
 		if !strings.Contains(script, phrase) {
 			t.Fatalf("encoder quality evidence script missing API-surface gate phrase %q", phrase)
@@ -510,11 +522,13 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 	for _, forbidden := range []string{
 		"run_gate encoder-contract go test",
 		"run_gate encoder-api-surfaces go test",
+		"run_gate encoder-output-ownership go test",
 		"run_gate encoder-bitstream-oracles go test",
 		"run_gate encoder-residual-boundary go test",
 		"run_gate encoder-allocation-canary go test",
 		"run_gate encoder-writers go test",
 		"run_go_test_gate encoder-api-surfaces ./tests",
+		"run_go_test_gate encoder-output-ownership ./tests",
 		"run_go_test_gate encoder-bitstream-oracles ./tests",
 	} {
 		if strings.Contains(script, forbidden) {
@@ -536,6 +550,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	script := string(scriptData)
 	for _, phrase := range []string{
 		"decoder API-surface",
+		"decoder output-ownership gates",
 		"ref-modification gates",
 		"native/FFmpeg oracle smoke gates",
 	} {
@@ -555,6 +570,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"status: fail (missing focused test",
 		"status: fail (oracle test skipped)",
 		"run_exact_go_test_gate decoder-api-surfaces ./tests",
+		"run_exact_go_test_gate decoder-output-ownership ./tests",
 		"run_exact_go_test_gate decoder-ref-modifications ./internal/h264",
 		"run_exact_oracle_go_test_gate decoder-ffmpeg-oracle-smoke ./tests",
 		"run_exact_oracle_go_test_gate decoder-native-oracle-smoke ./internal/h264",
@@ -564,6 +580,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"require_oracle_file .upstream/ffmpeg-n8.0.1/libavcodec/cabac.c",
 		"require_oracle_file .upstream/ffmpeg-n8.0.1/libavcodec/h264idct_template.c",
 		"decoder-api-surfaces",
+		"decoder-output-ownership",
+		"decoder_output_ownership_tests",
 		"decoder-ref-modifications",
 		"decoder-ffmpeg-oracle-smoke",
 		"decoder-native-oracle-smoke",
@@ -594,6 +612,14 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration",
 		"TestSimpleFrameDPBRejectsMissingShortRefModificationTarget",
 		"TestSimpleFrameDPBRejectsMissingLongRefModificationTarget",
+		"TestDecodeConfiguredAVCFramesDoesNotAliasCallerBuffer",
+		"TestDecodePacketFramesDoesNotAliasCallerBuffer",
+		"TestConfigureAVCCDoesNotAliasCallerBuffer",
+		"TestPacketCloneDeepCopiesDataAndSideData",
+		"TestFrameCloneDeepCopiesPlanesAndSideData",
+		"TestDecodeFrameSideDataByteSlicesAreCallerOwned",
+		"TestFrameAppendRawYUVIsolatesOverlappingSource",
+		"TestFrameAppendRawYUVErrorPreservesCallerBuffer",
 		"TestS12MTimecodePackingMatchesNativeFFmpegOracle",
 		"TestFFprobeOracleBlack16",
 		"TestFFmpegFrameMD5OracleBlack16",
@@ -606,8 +632,10 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	}
 	for _, forbidden := range []string{
 		"run_gate decoder-api-surfaces go test",
+		"run_gate decoder-output-ownership go test",
 		"run_gate decoder-ref-modifications go test",
 		"run_go_test_gate decoder-api-surfaces ./tests",
+		"run_go_test_gate decoder-output-ownership ./tests",
 		"run_go_test_gate decoder-ref-modifications ./internal/h264",
 	} {
 		if strings.Contains(script, forbidden) {
