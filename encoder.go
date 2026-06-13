@@ -304,7 +304,7 @@ func (packet EncoderRTPPacket) AppendPacketData(dst []byte) ([]byte, error) {
 	if err != nil {
 		return dst, err
 	}
-	return append(dst, data...), nil
+	return appendEncoderHelperBytes(dst, data)
 }
 
 // PayloadData returns the RTP payload bytes.
@@ -378,7 +378,7 @@ func (packet EncoderRTPPacket) AppendPayloadData(dst []byte) ([]byte, error) {
 	if err != nil {
 		return dst, err
 	}
-	return append(dst, data...), nil
+	return appendEncoderHelperBytes(dst, data)
 }
 
 // Clone returns a deep-owned RTP packet snapshot.
@@ -488,7 +488,7 @@ func (frame EncodedFrame) AppendNALData(dst []byte, index int) ([]byte, error) {
 	if err != nil {
 		return dst, err
 	}
-	return append(dst, data...), nil
+	return appendEncoderHelperBytes(dst, data)
 }
 
 // AccessUnitData returns the encoded access-unit bytes described by NALUnits.
@@ -577,7 +577,7 @@ func (frame EncodedFrame) AppendAccessUnitData(dst []byte) ([]byte, error) {
 	if err != nil {
 		return dst, err
 	}
-	return append(dst, data...), nil
+	return appendEncoderHelperBytes(dst, data)
 }
 
 // RTPPacketData returns the complete RTP packet bytes for RTPPackets[index].
@@ -601,7 +601,7 @@ func (frame EncodedFrame) AppendRTPPacketData(dst []byte, index int) ([]byte, er
 	if err != nil {
 		return dst, err
 	}
-	return append(dst, data...), nil
+	return appendEncoderHelperBytes(dst, data)
 }
 
 // RTPPayloadData returns the RTP payload bytes for RTPPackets[index].
@@ -625,7 +625,7 @@ func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, e
 	if err != nil {
 		return dst, err
 	}
-	return append(dst, data...), nil
+	return appendEncoderHelperBytes(dst, data)
 }
 
 // Clone returns a deep-owned copy of the encoded result.

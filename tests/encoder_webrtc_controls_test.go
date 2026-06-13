@@ -12988,6 +12988,13 @@ func TestEncodedFrameAppendNALAndAccessUnitDataReturnCallerOwnedBytes(t *testing
 	if got, err := (goh264.EncodedFrame{}).AppendAccessUnitData(append([]byte(nil), invalidPrefix...)); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, invalidPrefix) {
 		t.Fatalf("AppendAccessUnitData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
+	overflowDst := fakeDecoderRawBytesLen(maxIntForTest / 2)
+	if got, err := valid.AppendNALData(overflowDst, 0); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
+		t.Fatalf("AppendNALData overflowed dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
+	if got, err := valid.AppendAccessUnitData(overflowDst); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
+		t.Fatalf("AppendAccessUnitData overflowed dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
 }
 
 func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
@@ -13146,6 +13153,13 @@ func TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes(t *testing.T) {
 	if got, err := nonRTP.AppendRTPPayloadData(append([]byte(nil), invalidPrefix...), 0); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, invalidPrefix) {
 		t.Fatalf("AppendRTPPayloadData non-RTP = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
+	overflowDst := fakeDecoderRawBytesLen(maxIntForTest / 2)
+	if got, err := valid.AppendRTPPacketData(overflowDst, 0); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
+		t.Fatalf("AppendRTPPacketData overflowed dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
+	if got, err := valid.AppendRTPPayloadData(overflowDst, 0); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
+		t.Fatalf("AppendRTPPayloadData overflowed dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
 }
 
 func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) {
@@ -13264,6 +13278,14 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 				t.Fatalf("Clone invalid = %+v/%v, want empty ErrInvalidData", got, err)
 			}
 		})
+	}
+
+	overflowDst := fakeDecoderRawBytesLen(maxIntForTest / 2)
+	if got, err := valid.AppendPacketData(overflowDst); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
+		t.Fatalf("AppendPacketData overflowed dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
+	if got, err := valid.AppendPayloadData(overflowDst); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
+		t.Fatalf("AppendPayloadData overflowed dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
 	}
 }
 

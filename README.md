@@ -512,9 +512,9 @@ with the strongest public API coverage for integration work:
   `AppendAnnexBChecked`, `AppendAVCCChecked`, `AppendNALChecked`, and
   `AppendAVCChecked` provide the same storage validation for avcC views and
   caller-managed append buffers.
-  Invalid append calls return the original destination unchanged, and
-  `EncodedFrame.Clone` rejects dropped results that still carry emitted byte,
-  NAL, or RTP packet storage.
+  Invalid or overflowed-destination append calls return the original destination
+  unchanged, and `EncodedFrame.Clone` rejects dropped results that still carry
+  emitted byte, NAL, or RTP packet storage.
 - `EncodedFrame.OutputFormat` records the emitted result format, including
   dropped frames, so callers do not need to infer format from packet presence.
 - For RTP output, `EncodedFrame.Data` remains an Annex B access-unit view for
