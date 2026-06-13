@@ -11,8 +11,7 @@ and FFmpeg-oracle surfaces.
 The encoder surface targets realtime/WebRTC integration and admits a guarded
 Constrained Baseline I420 subset: IDR IntraPCM, identical-reference P-skip,
 bounded exact P16x16 no-residual prediction, bounded residual-P admission for
-exact luma-DC pixel deltas and chroma-only CAVLC residuals plus small guarded
-writer candidates,
+exact luma-DC pixel deltas and chroma-only CAVLC residuals,
 changed P IntraPCM recovery frames, AVC/Annex B output, configured multi-slice
 output, and RTP packetization modes 0 and 1. Remaining encoder work includes
 general motion search, broader residual macroblock generation,
@@ -24,7 +23,7 @@ allocation/performance evidence.
 | Area | Evidence shape | Covered surfaces | Remaining gaps |
 | --- | --- | --- | --- |
 | Decoder | Parity-driven port from the pinned FFmpeg path | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Broader field/MBAFF/damaged-edge behavior, fresh artifact evidence, allocation/performance review |
-| Encoder | Guarded realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, bounded pixel-derived residual-P luma-DC and chroma-only admission, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual generation, adaptive rate control, wider packetizer/control breadth, oracle-backed bitstream parity, allocation/performance review |
+| Encoder | Guarded realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, bounded pixel-derived residual-P luma-DC and chroma-only admission, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual generation, adaptive rate control, wider packetizer/control breadth, broader/full bitstream parity beyond admitted oracle rows, allocation/performance review |
 
 Examples compiled in `examples_test.go` are API smoke tests only. README
 snippets are API orientation, not codec quality, bitstream parity, acceptance,
@@ -183,7 +182,7 @@ Choose the entry point by ownership and packet shape:
 | Stateful stream packets, auto Annex B/configured AVC detection, avcC storage, delayed-output flush | `DecodeFrames` |
 | Same stream path plus packet side data such as `NEW_EXTRADATA` | `DecodePacketFrames` |
 | Complete Annex B bytestream with no streaming state needed | `DecodeAnnexBFrames` |
-| Complete length-prefixed AVC packet stream with known NAL length size | `DecodeAVCFrames` |
+| Complete length-prefixed AVC packet stream with known 1-, 2-, 3-, or 4-byte NAL length size | `DecodeAVCFrames` |
 | Header metadata without decoder state mutation | `InspectAnnexBHeaders` or `InspectAVCHeaders` |
 | Stored avcC/configured-AVC stream packets | `ConfigureAVCC`, then `DecodeConfiguredAVCFrames` |
 | Exactly one expected output frame | `Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`, `DecodeConfiguredAVC`, or `DecodeAVCC` |
@@ -207,7 +206,10 @@ returns that frame with the error. For stream processing, prefer `DecodeFrames` 
 `DecodePacketFrames`; they retain decoder reference state across packets, auto
 detect Annex B versus configured AVC, store avcC records when encountered, and
 flush delayed output when called with empty data. `DecodeConfiguredAVCFrames`
-uses the stored avcC length size directly. `DecodeAnnexBFrames` and
+uses the stored avcC length size directly. Bare length-prefixed AVC packets
+with 1-, 2-, or 3-byte NAL length fields should use `DecodeAVCFrames` or a
+configured-AVC path after `ConfigureAVCC`/`ParseHeadersAVC`; unconfigured
+`DecodeFrames` only auto-sniffs 4-byte AVC. `DecodeAnnexBFrames` and
 `DecodeAVCFrames` are complete-stream helpers for callers that already know the
 format and length-size.
 
@@ -548,8 +550,9 @@ with the strongest public API coverage for integration work:
 
 Emitted frame types in the guarded encoder subset are IDR IntraPCM,
 identical-reference P-skip, exact macroblock-aligned frame-wide or
-per-macroblock P16x16 no-residual, and changed-frame P IntraPCM. Output can be
-split into configured multi-slice VCL NALs. Exact P16x16 is admitted for
+per-macroblock P16x16 no-residual, bounded luma-DC/chroma-only residual-P, and
+changed-frame P IntraPCM. Output can be split into configured multi-slice VCL
+NALs. Exact P16x16 is admitted for
 disabled-deblock frames and for
 chroma-aligned uniform-motion enabled/slice-boundary deblock frames, including
 multi-macroblock frames. Guarded mixed-vector and odd-pixel deblock cases fall
@@ -603,7 +606,7 @@ guarded luma-DC/chroma-only paths, and adaptive rate-control feedback.
 | Area | Status |
 | --- | --- |
 | Annex B bytestream | Supported on green corpus rows |
-| AVC length-prefixed packets | Supported, including explicit NAL length size |
+| AVC length-prefixed packets | Supported, including explicit 1-, 2-, 3-, and 4-byte NAL length sizes |
 | AVC decoder configuration record (`avcC`) | Supported for configured AVC decode |
 | Baseline/Main/High progressive rows | Broad public-vector coverage |
 | High10/High422/High444 | Selected public and generated coverage |
@@ -761,7 +764,7 @@ the oracle-checked benchmark run; `GOH264_BENCH_CPU_PROFILE` and
 `GOH264_BENCH_MEM_PROFILE` forward those paths through the real-vector
 benchmark script.
 For repeated `go test -benchmem` samples covering one-shot Annex B decode,
-stateful Annex B access-unit streaming, isolated raw-output export, and the
+stateful Annex B access-unit streaming, isolated raw-output export, and selected
 admitted realtime encoder IDR/P-frame Annex B/AVC/RTP paths, including RTP
 P-IntraPCM and packetization-mode 0 IDR/P-frame rows, suitable for `benchstat`,
 run:

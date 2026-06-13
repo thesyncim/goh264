@@ -818,6 +818,91 @@ func TestDecodeAVCBlack16Frame(t *testing.T) {
 	}
 }
 
+func TestDecodeAVCOneByteLengthSizePublicSurfaces(t *testing.T) {
+	data := annexBWithoutNALTypes(t, decodeHexFixture(t, black16AnnexBHex), h264.NALSEI)
+	avc := annexBToAVC(t, data, 1)
+	config, packet := annexBToAVCConfigAndPacket(t, data, 1)
+	wantMD5 := []string{"8aaefe0adcea094cfb5161a060bab4e2"}
+
+	frames, err := NewDecoder().DecodeAVCFrames(avc, 1)
+	if err != nil {
+		t.Fatalf("DecodeAVCFrames length-size 1: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, wantMD5)
+
+	dec := NewDecoder()
+	info, err := dec.ParseHeadersAVC(avc, 1)
+	if err != nil {
+		t.Fatalf("ParseHeadersAVC length-size 1: %v", err)
+	}
+	if info.Width != 16 || info.Height != 16 || info.SPSID != 0 {
+		t.Fatalf("ParseHeadersAVC length-size 1 info = %+v, want 16x16 SPS 0", info)
+	}
+	cfg, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after ParseHeadersAVC length-size 1: %v", err)
+	}
+	if cfg.NALLengthSize != 1 || cfg.StreamInfo != info {
+		t.Fatalf("AVCConfig after ParseHeadersAVC = %+v, want length-size 1 info %+v", cfg, info)
+	}
+	frames, err = dec.DecodeConfiguredAVCFrames(packet)
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after ParseHeadersAVC length-size 1: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, wantMD5)
+
+	statelessInfo, err := InspectAVCHeaders(avc, 1)
+	if err != nil {
+		t.Fatalf("InspectAVCHeaders length-size 1: %v", err)
+	}
+	if statelessInfo != info {
+		t.Fatalf("InspectAVCHeaders length-size 1 = %+v, want %+v", statelessInfo, info)
+	}
+
+	statelessConfig, err := InspectAVCC(config)
+	if err != nil {
+		t.Fatalf("InspectAVCC length-size 1: %v", err)
+	}
+	if statelessConfig.NALLengthSize != 1 || statelessConfig.StreamInfo.Width != 16 || statelessConfig.StreamInfo.Height != 16 {
+		t.Fatalf("InspectAVCC length-size 1 = %+v, want 16x16 length-size 1", statelessConfig)
+	}
+
+	dec = NewDecoder()
+	cfg, err = dec.ConfigureAVCC(config)
+	if err != nil {
+		t.Fatalf("ConfigureAVCC length-size 1: %v", err)
+	}
+	if cfg.NALLengthSize != 1 || cfg.StreamInfo != statelessConfig.StreamInfo {
+		t.Fatalf("ConfigureAVCC length-size 1 = %+v, want %+v", cfg, statelessConfig)
+	}
+	frame, err := dec.DecodeConfiguredAVC(packet)
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVC length-size 1: %v", err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, wantMD5)
+
+	dec = NewDecoder()
+	frames, err = dec.DecodeAVCCFrames(config, packet)
+	if err != nil {
+		t.Fatalf("DecodeAVCCFrames length-size 1: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, wantMD5)
+
+	dec = NewDecoder()
+	frames, err = dec.DecodeFrames(config)
+	if err != nil {
+		t.Fatalf("DecodeFrames length-size 1 avcC: %v", err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("DecodeFrames length-size 1 avcC frames = %d, want 0", len(frames))
+	}
+	frames, err = dec.DecodeFrames(packet)
+	if err != nil {
+		t.Fatalf("DecodeFrames configured length-size 1 packet: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, wantMD5)
+}
+
 func TestDecodeAutoBlack16AnnexBAndAVC(t *testing.T) {
 	data := decodeHexFixture(t, black16AnnexBHex)
 	for _, tt := range []struct {
@@ -5521,6 +5606,29 @@ func annexBToAVC(t *testing.T, data []byte, nalLengthSize int) []byte {
 			out = append(out, byte(size>>shift))
 		}
 		out = append(out, nal.Raw...)
+	}
+	return out
+}
+
+func annexBWithoutNALTypes(t *testing.T, data []byte, dropTypes ...h264.NALUnitType) []byte {
+	t.Helper()
+	drop := make(map[h264.NALUnitType]struct{}, len(dropTypes))
+	for _, typ := range dropTypes {
+		drop[typ] = struct{}{}
+	}
+	nals, err := h264.SplitAnnexB(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []byte
+	for _, nal := range nals {
+		if _, ok := drop[nal.Type]; ok {
+			continue
+		}
+		out = appendAnnexBNAL(out, nal.Raw)
+	}
+	if len(out) == 0 {
+		t.Fatal("filtered Annex B stream is empty")
 	}
 	return out
 }

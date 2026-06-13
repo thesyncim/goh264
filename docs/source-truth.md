@@ -282,13 +282,13 @@ Internal writer proof covers raw
 bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL
 packaging, AVC decoder configuration records, baseline SPS/PPS syntax with
-4:2:0 crop-unit emission, recovery-point SEI syntax, and Baseline IDR plus
-P-skip/P16x16 no-residual/P IntraPCM slice syntax via decoder-parser and
-encoded-frame round trips, including per-macroblock MVD syntax for the P16x16
-writer. Public encoder coverage pins exact luma-DC residual-P admission across
-all 4x4 luma blocks for Annex B, AVC, RTP mode 1, and RTP mode 0, while broader
-residual-shaped P-frame deltas remain on the recovery-SEI plus P IntraPCM
-fallback boundary.
+4:2:0 crop-unit emission, recovery-point SEI syntax, and Baseline IDR,
+P-skip, P16x16 no-residual, P16x16 residual, and P IntraPCM slice syntax via
+decoder-parser and encoded-frame round trips, including per-macroblock MVD
+syntax for the P16x16 writer. Public encoder coverage pins exact luma-DC
+residual-P admission across all 4x4 luma blocks plus chroma-only residual-P for
+Annex B, AVC, RTP mode 1, and RTP mode 0, while broader residual-shaped P-frame
+deltas remain on the recovery-SEI plus P IntraPCM fallback boundary.
 
 Public vectors: 226 imported public refs, 225 selected decoder-facing manifest
 rows, 225 green oracle rows, 0 known-red, and one explicit non-decoder

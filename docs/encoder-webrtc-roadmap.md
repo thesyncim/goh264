@@ -233,9 +233,10 @@ exact-P16 edge search.
 Cropped I420 IDR output is
 proved through local decode and FFmpeg rawvideo decode of the cropped visible
 frame. Queued IDR requests still emit IDR, and motion-search prediction,
-residual coding, and adaptive rate-control feedback remain pending beyond the
-bounded 8-pixel exact macroblock-aligned P16x16 admission, including the
-per-macroblock exact-vector subset.
+broader residual coding beyond exact luma-DC/chroma-only residual-P, and
+adaptive rate-control feedback remain pending beyond the bounded 8-pixel exact
+macroblock-aligned P16x16 admission, including the per-macroblock exact-vector
+subset.
 
 Bitstream-writer safe point: `internal/h264/bitwriter.go` now contains the
 source-shaped MSB-first writer primitives for raw bits, unsigned/signed
@@ -298,7 +299,8 @@ fallback boundary.
    coding, deblock policy, and rate-control feedback in small oracle-backed
    slices. Done for identical-reference P-skip, exact macroblock-aligned P16x16
    no-residual prediction for frame-wide and per-macroblock integer-pel shifts
-   up to 8 pixels, including odd-pixel luma motion only with constant chroma,
+   up to 8 pixels, exact luma-DC and chroma-only residual-P across public
+   Annex B/AVC/RTP outputs, including odd-pixel luma motion only with constant chroma,
    with enabled/slice-boundary deblock proof including multi-macroblock
    uniform-motion Annex B and mixed per-macroblock fallback across Annex B,
    configured AVC, and RTP,

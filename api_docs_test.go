@@ -242,7 +242,7 @@ func TestREADMEQualityEvidenceDoesNotTreatExamplesAsParityEvidence(t *testing.T)
 		"Remaining gaps",
 		"Examples",
 		"API smoke tests only",
-		"oracle-backed bitstream parity",
+		"broader/full bitstream parity beyond admitted oracle rows",
 		"acceptance",
 	} {
 		if !strings.Contains(readme, phrase) {
@@ -541,6 +541,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestParseHeadersAnnexBBlack16",
 		"TestParseHeadersAVCBlack16",
 		"TestPackageAVCCParsersDoNotMutateDecoderState",
+		"TestDecodeAVCOneByteLengthSizePublicSurfaces",
 		"TestFrameCloneRejectsOverflowedPublicStorage",
 		"TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage",
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",

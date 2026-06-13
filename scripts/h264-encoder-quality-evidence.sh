@@ -94,7 +94,7 @@ run_gate go-test-all go test ./...
 run_go_test_gate encoder-contract ./tests '^TestEncoder' -count=1 -v
 run_go_test_gate encoder-api-surfaces ./tests "$encoder_api_surface_tests" -count=1 -v
 run_go_test_gate encoder-bitstream-oracles ./tests "$encoder_bitstream_oracle_tests" -count=1 -v
-run_go_test_gate encoder-residual-boundary ./tests '^TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs$' -count=1 -v
+run_go_test_gate encoder-residual-boundary ./tests '^(TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs|TestEncoderChromaOnlyResidualPUsesResidualAcrossPublicOutputs)$' -count=1 -v
 run_go_test_gate encoder-allocation-canary ./tests '^TestEncoderEncodeIntoAllocationCanary$' -count=1 -v
 run_go_test_gate encoder-writers ./internal/h264 '^(TestBitWriter|TestAppendNAL|TestAppendAVC|TestBuildEncoder|TestAppendSEI|TestCAVLCWriteResidual|TestWriteCAVLCInterPBoundedMacroblock|TestEncodeI420P16x16ResidualSliceRBSP)' -count=1 -v
 run_gate encoder-benchmem go test . -run '^$' -bench "$bench_pattern" -benchmem -benchtime "$bench_time"
