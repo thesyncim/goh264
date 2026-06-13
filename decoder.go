@@ -665,10 +665,7 @@ func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
 	if len(pkt.Data) == 0 {
 		return d.FlushDelayedFrames()
 	}
-	for _, side := range pkt.SideData {
-		if side.Type != PacketSideDataNewExtradata {
-			continue
-		}
+	if side, ok := packetSideDataGet(pkt.SideData, PacketSideDataNewExtradata); ok {
 		// h264_decode_frame calls ff_h264_decode_extradata for packet
 		// NEW_EXTRADATA and ignores its return value before decoding buf.
 		_ = d.decodeNewExtradataForPacket(side.Data, pkt.Data)

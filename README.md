@@ -299,8 +299,8 @@ Structured side-data entries are decoded only when their payload validates;
 byte-oriented packet side data such as A53 captions, ICC profile, HDR10+, and
 LCEVC is copied into frame side data for caller-owned retention.
 Duplicate packet side data follows first-entry semantics: empty or malformed
-first active-format, S12M timecode, ICC profile, HDR10+, and LCEVC entries
-suppress later duplicates.
+first `NEW_EXTRADATA`, active-format, S12M timecode, ICC profile, HDR10+, and
+LCEVC entries suppress later duplicates.
 
 ## State And Ownership Boundaries
 

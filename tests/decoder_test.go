@@ -2330,6 +2330,80 @@ func TestDecodePacketFramesNewExtradataAVC(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodePacketFramesDuplicateNewExtradataFirstEntryWins(t *testing.T) {
+	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) != 2 {
+		t.Fatalf("16x16 samples = %d, want 2", len(samples16))
+	}
+
+	dec := NewDecoder()
+	out, err := dec.DecodePacketFrames(Packet{
+		Data:     samples16[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data: samples16[1],
+		SideData: []PacketSideData{
+			{Type: PacketSideDataNewExtradata, Data: config16},
+			{Type: PacketSideDataNewExtradata, Data: config32},
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames duplicate NEW_EXTRADATA P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after duplicate NEW_EXTRADATA: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.Width != 16 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after duplicate NEW_EXTRADATA = %+v, want first 16x16 config", got)
+	}
+}
+
+func TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries(t *testing.T) {
+	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) != 2 {
+		t.Fatalf("16x16 samples = %d, want 2", len(samples16))
+	}
+
+	dec := NewDecoder()
+	out, err := dec.DecodePacketFrames(Packet{
+		Data:     samples16[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data: samples16[1],
+		SideData: []PacketSideData{
+			{Type: PacketSideDataNewExtradata, Data: []byte{1}},
+			{Type: PacketSideDataNewExtradata, Data: config32},
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames malformed first duplicate NEW_EXTRADATA P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after malformed duplicate NEW_EXTRADATA: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.Width != 16 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after malformed duplicate NEW_EXTRADATA = %+v, want previous 16x16 config", got)
+	}
+}
+
 func TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration(t *testing.T) {
 	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
 	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)

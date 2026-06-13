@@ -552,6 +552,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
+		"TestDecodePacketFramesDuplicateNewExtradataFirstEntryWins",
+		"TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries",
 		"TestDecodeFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference",
 		"TestDecodePacketFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference",
 		"TestDecodeConfiguredAVCFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference",
@@ -698,6 +700,8 @@ func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
 		"call `Reset` before storing the new avcC",
 		"PacketSideDataNewExtradata",
 		"uses the same stateful update rule",
+		"Duplicate packet side data follows first-entry semantics",
+		"first `NEW_EXTRADATA`, active-format, S12M timecode",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md decoder avcC state guidance missing %q", phrase)
