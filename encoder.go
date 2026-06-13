@@ -142,9 +142,11 @@ type EncoderColorConfig struct {
 //
 // Start from DefaultRealtimeEncoderConfig and override the fields needed by the
 // integration. DefaultEncoderConfig returns the same realtime template.
-// NewEncoder and Validate normalize derived defaults and reject invalid or
-// unsupported controls. Crop and Color are encoded in SPS/VUI headers from this
-// config; per-frame Color is validated but does not rewrite output headers.
+// NewEncoder applies derived defaults and rejects invalid or unsupported
+// controls. Validate reports whether cfg is accepted without returning the
+// normalized values; Normalize returns the exact validated setup. Crop and Color
+// are encoded in SPS/VUI headers from this config; per-frame Color is validated
+// but does not rewrite output headers.
 // InitialQP, MinQP, and MaxQP accept 0..51. When ExplicitQP is false, zero QP
 // fields select derived defaults during setup normalization; set ExplicitQP when
 // zero is an intentional setup value.

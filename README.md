@@ -329,7 +329,8 @@ Choose the encoder surface by what the caller owns:
 | Need | Use |
 | --- | --- |
 | Start from a supported realtime/WebRTC baseline | `DefaultRealtimeEncoderConfig`; `DefaultEncoderConfig` returns the same template |
-| Validate and see the exact setup before construction | `EncoderConfig.Normalize` or `Validate` |
+| Validate setup before construction | `EncoderConfig.Validate` |
+| View exact setup before construction | `EncoderConfig.Normalize` |
 | Read the exact live setup after accepted setters | `Encoder.Config` |
 | Validate one input frame without mutating encoder state | `EncoderConfig.ValidateFrame` or `Encoder.ValidateFrame` |
 | Generate SPS/PPS or recovery SEI without a live encoder | `EncoderConfig.ParameterSets` or `RecoveryPointSEIMessage` |
@@ -492,6 +493,9 @@ must(enc.Reset()) // clear encoder coding state, keep config/callback
 The admitted encoder contract is deliberately narrow, and these are the pieces
 with the strongest public API coverage for integration work:
 
+- `EncoderConfig.Validate` reports whether setup can be accepted without
+  returning normalized values. Use `EncoderConfig.Normalize` when the caller
+  needs the exact setup.
 - `EncoderConfig.Normalize` exposes the exact validated configuration stored by
   `NewEncoder`.
 - `Encoder.Config` returns the exact normalized live configuration after

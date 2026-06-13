@@ -179,6 +179,33 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}
 }
 
+func TestREADMEEncoderConfigValidationRowsSeparateValidateAndNormalize(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+
+	for _, phrase := range []string{
+		"| Validate and see the exact setup before construction |",
+		"`EncoderConfig.Normalize` or `Validate`",
+	} {
+		if strings.Contains(readme, phrase) {
+			t.Fatalf("README.md couples EncoderConfig.Validate and Normalize in chooser row: %q", phrase)
+		}
+	}
+	for _, phrase := range []string{
+		"| Validate setup before construction | `EncoderConfig.Validate` |",
+		"| View exact setup before construction | `EncoderConfig.Normalize` |",
+		"`EncoderConfig.Validate` reports whether setup can be accepted without\n  returning normalized values",
+		"Use `EncoderConfig.Normalize` when the caller\n  needs the exact setup",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md missing separated EncoderConfig validation phrase %q", phrase)
+		}
+	}
+}
+
 func TestEncoderHelperAPIReturnsErrors(t *testing.T) {
 	errorType := reflect.TypeOf((*error)(nil)).Elem()
 	for _, tt := range []struct {
@@ -871,6 +898,8 @@ func TestPublicCommentsDocumentStateAndOwnershipBoundaries(t *testing.T) {
 	for _, phrase := range []string{
 		"DefaultRealtimeEncoderConfig returns a realtime/WebRTC-oriented 8-bit I420",
 		"DefaultEncoderConfig returns the same realtime template",
+		"NewEncoder applies derived defaults and rejects invalid or unsupported\n// controls",
+		"Validate reports whether cfg is accepted without returning the\n// normalized values; Normalize returns the exact validated setup",
 		"Config returns a copy of the current normalized encoder configuration",
 		"Reset clears encoder coding state while preserving configuration and RTP callback",
 		"After Reset, the next successfully encoded frame starts a fresh sequence",
