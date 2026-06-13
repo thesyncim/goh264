@@ -692,7 +692,6 @@ func TestPublicCommentsDocumentStateAndOwnershipBoundaries(t *testing.T) {
 		"InspectAVCHeaders parses length-prefixed AVC parameter sets and returns\n// stream metadata without changing decoder state",
 		"ParseHeadersAVC parses AVC parameter sets, stores SPS/PPS state and the AVC\n// NAL length size for later DecodeConfiguredAVCFrames calls",
 		"Storing a configuration resets decoder picture state for a new",
-		"ParseAVCC parses an avcC record, stores it for configured-AVC decode calls,\n// resets decoder picture state",
 		"ConfigureAVCC parses an avcC record, stores it for configured-AVC decode\n// calls, resets decoder picture state",
 		"ConfigureAVCC is the short avcC API",
 		"InspectAVCC is the short stateless avcC name",
@@ -720,8 +719,13 @@ func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read examples_test.go: %v", err)
 	}
-	if strings.Contains(string(data), "dec.ParseAVCC(") {
-		t.Fatal("public examples should use ConfigureAVCC for mutating decoder avcC configuration")
+	for _, removed := range []string{
+		statusPhrase("Parse", "AVCC"),
+		statusPhrase("Parse", "AVCDecoderConfigurationRecord"),
+	} {
+		if strings.Contains(string(data), removed) {
+			t.Fatalf("public examples should not use removed decoder avcC API %s", removed)
+		}
 	}
 }
 
@@ -743,8 +747,8 @@ func TestREADMEDecoderAVCCNameMap(t *testing.T) {
 		"`DecodeAVCCFrames`",
 		"Equivalent names",
 		"Single-frame helper",
-		"decoder `ParseAVCC`",
-		"package `ParseAVCC`",
+		"`ConfigureAVCDecoderConfigurationRecord`",
+		"`InspectAVCDecoderConfigurationRecord`",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md decoder avcC name-map table missing %q", phrase)

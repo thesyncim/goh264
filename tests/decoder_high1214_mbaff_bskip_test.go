@@ -96,7 +96,7 @@ func TestDecodeConfiguredAVCHigh1214FrameMBAFFBSkipFramesAcrossSamplesFlush(t *t
 					t.Fatalf("nalLengthSize=%d samples = %d, want IDR/P/B", nalLengthSize, len(samples))
 				}
 				dec := NewDecoder()
-				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 					t.Fatalf("nalLengthSize=%d config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame

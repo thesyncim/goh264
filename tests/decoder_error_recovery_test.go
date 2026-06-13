@@ -19,7 +19,7 @@ func TestDecodeConfiguredAVCFramesRecoversAfterDamagedSlicePacket(t *testing.T) 
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,7 +50,7 @@ func TestDecodeConfiguredAVCFramesDoesNotAliasCallerBuffer(t *testing.T) {
 	firstSample := append([]byte(nil), samples[0]...)
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	frames, err := dec.DecodeConfiguredAVCFrames(firstSample)
@@ -80,7 +80,7 @@ func TestDecodeConfiguredAVCDoesNotAliasCallerBuffer(t *testing.T) {
 	firstSample := append([]byte(nil), samples[0]...)
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	frame, err := dec.DecodeConfiguredAVC(firstSample)
@@ -450,7 +450,7 @@ func TestPacketCloneDeepCopiesDataAndSideData(t *testing.T) {
 	}
 }
 
-func TestParseAVCDecoderConfigurationRecordRejectPreservesStoredConfiguration(t *testing.T) {
+func TestConfigureAVCDecoderConfigurationRecordRejectPreservesStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
 	if len(samples) != 2 {
@@ -458,13 +458,13 @@ func TestParseAVCDecoderConfigurationRecordRejectPreservesStoredConfiguration(t 
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 
 	damagedConfig := append([]byte(nil), config...)
 	damagedConfig = damagedConfig[:len(damagedConfig)-1]
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(damagedConfig); err == nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(damagedConfig); err == nil {
 		t.Fatal("damaged avcC parse returned nil error")
 	}
 
@@ -475,7 +475,7 @@ func TestParseAVCDecoderConfigurationRecordRejectPreservesStoredConfiguration(t 
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
-func TestParseAVCDecoderConfigurationRecordDoesNotAliasCallerBuffer(t *testing.T) {
+func TestConfigureAVCDecoderConfigurationRecordDoesNotAliasCallerBuffer(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
 	if len(samples) != 2 {
@@ -484,8 +484,8 @@ func TestParseAVCDecoderConfigurationRecordDoesNotAliasCallerBuffer(t *testing.T
 	config = append([]byte(nil), config...)
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
-		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
 	}
 	for i := range config {
 		config[i] = 0xff
@@ -713,7 +713,7 @@ func TestDecodeAVCFramesWithConfigurationRecordRejectPreservesStoredConfiguratio
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1101,8 +1101,8 @@ func TestParseHeadersAnnexBRejectPreservesStoredConfiguration(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
-		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
 	}
 
 	damagedHeaders := firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS)
@@ -1126,8 +1126,8 @@ func TestParseHeadersAVCRejectPreservesStoredConfiguration(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
-		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
 	}
 
 	damagedHeaders := annexBToAVC(t, firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS), 4)
@@ -1151,7 +1151,7 @@ func TestDecodeConfiguredAVCFramesRecoversAfterMalformedInBandParameterSets(t *t
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1435,7 +1435,7 @@ func TestDecodeConfiguredAVCFramesReturnsPriorFramesBeforeDamagedSlice(t *testin
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1543,7 +1543,7 @@ func TestDecodeConfiguredAVCReturnsPriorFrameBeforeDamagedSlice(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 

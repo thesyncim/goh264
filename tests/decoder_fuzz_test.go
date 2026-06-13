@@ -80,7 +80,7 @@ func assertDecodePublicSurfacesNoPanic(t testing.TB, data []byte, aux []byte) {
 	})
 	assertNoPanic(t, "DecodeConfiguredAVCFrames", func() {
 		dec := NewDecoder()
-		if _, err := dec.ParseAVCDecoderConfigurationRecord(aux); err == nil {
+		if _, err := dec.ConfigureAVCDecoderConfigurationRecord(aux); err == nil {
 			_, _ = dec.DecodeConfiguredAVCFrames(data)
 			_, _ = dec.FlushDelayedFrames()
 		}

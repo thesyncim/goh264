@@ -234,13 +234,12 @@ Package-level `InspectAnnexBHeaders` and `InspectAVCHeaders` expose stateless
 SPS/PPS stream metadata inspection without touching decoder state.
 Package-level `InspectAVCC` provides the short stateless avcC metadata
 inspection; `InspectAVCDecoderConfigurationRecord` is the equivalent long-form
-name, and package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord`
-parse the same metadata. Damaged configuration rejection leaves an
+name. Damaged configuration rejection leaves an
 existing decoder configuration and delayed-output path usable.
 Malformed standalone AVC decoder configuration records are also guarded: failed
-`ConfigureAVCDecoderConfigurationRecord`, equivalent parse names, and
-auto-detected `DecodeFrames` config updates leave the last stored configuration
-usable for configured AVC decode.
+`ConfigureAVCDecoderConfigurationRecord` calls and auto-detected `DecodeFrames`
+config updates leave the last stored configuration usable for configured AVC
+decode.
 In-band malformed SPS/PPS NALs are also guarded as non-fatal: they do not
 replace the last good parameter sets before the next valid slice on configured
 AVC or mixed configured-AVC/Annex B public decode paths.

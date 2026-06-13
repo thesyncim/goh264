@@ -23,7 +23,7 @@ func TestDecodeConfiguredAVCHigh10RetainsReferenceForResidualP(t *testing.T) {
 	}
 
 	fresh := NewDecoder()
-	if _, err := fresh.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := fresh.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := fresh.DecodeConfiguredAVC(samples[1]); !errors.Is(err, ErrUnsupported) {
@@ -31,7 +31,7 @@ func TestDecodeConfiguredAVCHigh10RetainsReferenceForResidualP(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	first, err := dec.DecodeConfiguredAVC(samples[0])
@@ -55,7 +55,7 @@ func TestDecoderResetClearsHigh10ConfiguredAVCReference(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := dec.DecodeConfiguredAVC(samples[0]); err != nil {
@@ -64,7 +64,7 @@ func TestDecoderResetClearsHigh10ConfiguredAVCReference(t *testing.T) {
 	if err := dec.Reset(); err != nil {
 		t.Fatalf("Reset: %v", err)
 	}
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatalf("reconfigure after reset: %v", err)
 	}
 	if _, err := dec.DecodeConfiguredAVC(samples[1]); !errors.Is(err, ErrUnsupported) {

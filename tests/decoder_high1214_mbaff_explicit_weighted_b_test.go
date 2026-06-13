@@ -355,7 +355,7 @@ func assertDecodeConfiguredAVCHighFrameMBAFFExplicitWeightedBFrames(t *testing.T
 			t.Fatalf("%s nalLengthSize=%d samples = %d, want IDR/P/B", name, nalLengthSize, len(samples))
 		}
 		dec := NewDecoder()
-		if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 			t.Fatalf("%s nalLengthSize=%d config: %v", name, nalLengthSize, err)
 		}
 		var frames []*Frame

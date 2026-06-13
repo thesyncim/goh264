@@ -28,9 +28,7 @@ var (
 
 	InspectAnnexBHeaders                 = goh264.InspectAnnexBHeaders
 	InspectAVCHeaders                    = goh264.InspectAVCHeaders
-	ParseAVCDecoderConfigurationRecord   = goh264.ParseAVCDecoderConfigurationRecord
 	InspectAVCDecoderConfigurationRecord = goh264.InspectAVCDecoderConfigurationRecord
-	ParseAVCC                            = goh264.ParseAVCC
 	InspectAVCC                          = goh264.InspectAVCC
 )
 
@@ -55,8 +53,6 @@ var _ = (*Decoder).DecodeAVCFramesWithConfigurationRecord
 var _ = (*Decoder).DecodeAVCCFrames
 var _ = (*Decoder).ParseHeadersAnnexB
 var _ = (*Decoder).ParseHeadersAVC
-var _ = (*Decoder).ParseAVCDecoderConfigurationRecord
-var _ = (*Decoder).ParseAVCC
 var _ = (*Decoder).AVCConfig
 
 var _ = (PacketSideData).Clone

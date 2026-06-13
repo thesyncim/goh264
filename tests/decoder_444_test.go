@@ -85,7 +85,7 @@ func TestDecodeConfiguredAVCAcrossSamplesHigh444Frames(t *testing.T) {
 			data := decodeHexFixture(t, tt.hex)
 			config, samples := annexBToAVCConfigAndSamples(t, data, 4)
 			dec := NewDecoder()
-			if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 				t.Fatal(err)
 			}
 			for i, sample := range samples {

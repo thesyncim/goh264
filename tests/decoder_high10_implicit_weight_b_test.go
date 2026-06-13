@@ -112,7 +112,7 @@ func TestDecodeConfiguredAVCHigh10ImplicitWeightedBFramesAcrossSamplesFlush(t *t
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame

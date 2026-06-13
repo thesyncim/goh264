@@ -1627,7 +1627,7 @@ func decodeH264CorpusConfiguredSamples(t *testing.T, entry h264CorpusEntry, data
 			if len(out) != 0 {
 				return nil, fmt.Errorf("nal length size %d config produced %d frames", nalLengthSize, len(out))
 			}
-		} else if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+		} else if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 			return nil, fmt.Errorf("nal length size %d config: %w", nalLengthSize, err)
 		}
 		for i, sample := range samples {

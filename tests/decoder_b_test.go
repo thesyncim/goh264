@@ -179,7 +179,7 @@ func TestDecodeConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 
@@ -227,7 +227,7 @@ func TestDecodeConfiguredAVCTestsrcBFramesFlushesOnEmptyPacket(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 
@@ -268,7 +268,7 @@ func TestDecodeConfiguredAVCTestsrcBFrameReturnsDelayedFrameOnEmptyPacket(t *tes
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -292,7 +292,7 @@ func TestDecoderResetClearsDelayedFrames(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
@@ -310,7 +310,7 @@ func TestDecoderResetClearsDelayedFrames(t *testing.T) {
 	if len(out) != 0 {
 		t.Fatalf("FlushDelayedFrames after reset = %d frames, want 0", len(out))
 	}
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatalf("reconfigure after reset: %v", err)
 	}
 	var frames []*Frame
@@ -341,8 +341,8 @@ func TestFlushDelayedFrameReturnsSingleDelayedFrame(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
-		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
 	}
 	var frames []*Frame
 	for i, sample := range samples {
@@ -381,7 +381,7 @@ func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesOnEmptyPacket(t *te
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 
@@ -430,7 +430,7 @@ func TestDecodeAVCWithConfigurationRecordBFrameReturnsDelayedFrameOnEmptyPacket(
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -454,7 +454,7 @@ func TestDecodeAVCFramesWithConfigurationRecordRejectPreservesDelayedFlush(t *te
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -488,7 +488,7 @@ func TestDecodeFramesRejectAVCConfigurationRecordPreservesDelayedFlush(t *testin
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -522,7 +522,7 @@ func TestDecodeRejectAVCConfigurationRecordPreservesDelayedFlush(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -556,7 +556,7 @@ func TestDecodeAVCWithConfigurationRecordRejectPreservesDelayedFlush(t *testing.
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -590,7 +590,7 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	var frames []*Frame
@@ -685,7 +685,7 @@ func TestDecodePacketIgnoresNewExtradataOnSingleFrameFlush(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config4); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config4); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples4 {
@@ -717,7 +717,7 @@ func TestDecodePacketFramesIgnoresMalformedNewExtradataOnFlush(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -760,7 +760,7 @@ func TestDecodePacketIgnoresMalformedNewExtradataOnSingleFrameFlush(t *testing.T
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -869,7 +869,7 @@ func TestDecodeConfiguredAVCBFramesReturnsReorderedPrefixBeforeDamagedSlice(t *t
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1016,7 +1016,7 @@ func TestDecodeConfiguredAVCTestsrcBFramesFlushRetainedReferenceSample(t *testin
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame
@@ -1073,7 +1073,7 @@ func TestParseHeadersPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dec := NewDecoder()
-			if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1108,7 +1108,7 @@ func TestParseHeadersPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 	for _, nalLengthSize := range []int{2, 3, 4} {
 		t.Run(fmt.Sprintf("avc-length%d", nalLengthSize), func(t *testing.T) {
 			dec := NewDecoder()
-			if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1173,7 +1173,7 @@ func TestParseHeadersRejectPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dec := NewDecoder()
-			if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 				t.Fatal(err)
 			}
 

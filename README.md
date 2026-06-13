@@ -250,12 +250,9 @@ configuration, and delayed configured-AVC B-frame output remains available for
 flush after the rejected parse.
 Decoder `ConfigureAVCC` stores the configuration for later configured-AVC
 decode; `ConfigureAVCDecoderConfigurationRecord` is the equivalent long-form
-name, and decoder `ParseAVCDecoderConfigurationRecord` and `ParseAVCC` perform
-the same stateful update. Package-level `InspectAVCC` is the short stateless
-name; `InspectAVCDecoderConfigurationRecord` is the equivalent long-form name,
-and package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` parse
-the same metadata without mutating decoder state. Malformed avcC records,
-including invalid reserved bits or
+name. Package-level `InspectAVCC` is the short stateless name;
+`InspectAVCDecoderConfigurationRecord` is the equivalent long-form name.
+Malformed avcC records, including invalid reserved bits or
 caller-constructed impossible-size inputs, are rejected before replacing the
 previous stored configuration.
 
@@ -263,8 +260,8 @@ avcC name map:
 
 | Need | Primary helper | Equivalent names | Single-frame helper |
 | --- | --- | --- | --- |
-| Stateless avcC metadata inspection | `InspectAVCC` | `InspectAVCDecoderConfigurationRecord`, package `ParseAVCC`, package `ParseAVCDecoderConfigurationRecord` | n/a |
-| Store avcC for configured-AVC streaming | `ConfigureAVCC` | decoder `ConfigureAVCDecoderConfigurationRecord`, decoder `ParseAVCC`, decoder `ParseAVCDecoderConfigurationRecord` | n/a |
+| Stateless avcC metadata inspection | `InspectAVCC` | `InspectAVCDecoderConfigurationRecord` | n/a |
+| Store avcC for configured-AVC streaming | `ConfigureAVCC` | `ConfigureAVCDecoderConfigurationRecord` | n/a |
 | Decode with already stored avcC | `DecodeConfiguredAVCFrames` | n/a | `DecodeConfiguredAVC` |
 | Update avcC, decode one packet, then drain delayed output | `DecodeAVCCFrames` | `DecodeAVCFramesWithConfigurationRecord` | `DecodeAVCC` |
 

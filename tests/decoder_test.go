@@ -294,16 +294,8 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 			_, err := dec.DecodeAVCCFrames([]byte{1}, []byte{0, 0, 0, 1, 0x65})
 			return err
 		}},
-		{name: "ParseAVCDecoderConfigurationRecord", call: func() error {
-			_, err := dec.ParseAVCDecoderConfigurationRecord([]byte{1})
-			return err
-		}},
 		{name: "ConfigureAVCDecoderConfigurationRecord", call: func() error {
 			_, err := dec.ConfigureAVCDecoderConfigurationRecord([]byte{1})
-			return err
-		}},
-		{name: "ParseAVCC", call: func() error {
-			_, err := dec.ParseAVCC([]byte{1})
 			return err
 		}},
 		{name: "ConfigureAVCC", call: func() error {
@@ -995,16 +987,16 @@ func TestAVCCConvenienceAPIsMatchConfigurationRecordBehavior(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	cfg, err := dec.ParseAVCC(config)
+	cfg, err := dec.ConfigureAVCC(config)
 	if err != nil {
-		t.Fatalf("ParseAVCC: %v", err)
+		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	if cfg.NALLengthSize != 4 || cfg.StreamInfo.Width != 16 || cfg.StreamInfo.Height != 16 {
-		t.Fatalf("ParseAVCC config = %+v", cfg)
+		t.Fatalf("ConfigureAVCC config = %+v", cfg)
 	}
 	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
 	if err != nil {
-		t.Fatalf("DecodeConfiguredAVCFrames after ParseAVCC: %v", err)
+		t.Fatalf("DecodeConfiguredAVCFrames after ConfigureAVCC: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 
@@ -1671,16 +1663,16 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	stateful, err := dec.ParseAVCC(config4)
+	stateful, err := dec.ConfigureAVCC(config4)
 	if err != nil {
-		t.Fatalf("stateful ParseAVCC: %v", err)
+		t.Fatalf("stateful ConfigureAVCC: %v", err)
 	}
-	stateless, err := ParseAVCC(config4)
+	stateless, err := InspectAVCC(config4)
 	if err != nil {
-		t.Fatalf("package ParseAVCC: %v", err)
+		t.Fatalf("package InspectAVCC: %v", err)
 	}
 	if stateless != stateful {
-		t.Fatalf("package ParseAVCC = %+v, want stateful result %+v", stateless, stateful)
+		t.Fatalf("package InspectAVCC = %+v, want stateful result %+v", stateless, stateful)
 	}
 	inspected, err := InspectAVCC(config3)
 	if err != nil {
@@ -1695,13 +1687,6 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 	}
 	if inspectedRecord != inspected {
 		t.Fatalf("InspectAVCDecoderConfigurationRecord = %+v, want InspectAVCC result %+v", inspectedRecord, inspected)
-	}
-	statelessRecord, err := ParseAVCDecoderConfigurationRecord(config3)
-	if err != nil {
-		t.Fatalf("package ParseAVCDecoderConfigurationRecord: %v", err)
-	}
-	if statelessRecord.NALLengthSize != 3 || statelessRecord.StreamInfo.Width != 16 || statelessRecord.StreamInfo.Height != 16 {
-		t.Fatalf("package ParseAVCDecoderConfigurationRecord = %+v, want length-size 3 black16 config", statelessRecord)
 	}
 	sets32 := decoderParameterSetNALs(t, 32, 16, 0, 0)
 	headers32AnnexB := appendAnnexBNAL(nil, sets32.SPS)
@@ -1740,10 +1725,8 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 		name string
 		call func([]byte) (AVCConfig, error)
 	}{
-		{name: "ParseAVCC", call: ParseAVCC},
 		{name: "InspectAVCC", call: InspectAVCC},
 		{name: "InspectAVCDecoderConfigurationRecord", call: InspectAVCDecoderConfigurationRecord},
-		{name: "ParseAVCDecoderConfigurationRecord", call: ParseAVCDecoderConfigurationRecord},
 	} {
 		if _, err := tt.call(damaged); err == nil {
 			t.Fatalf("package %s damaged config returned nil error", tt.name)
@@ -1832,13 +1815,13 @@ func TestDecoderConfigureAVCCRejectsMalformedWithoutMutation(t *testing.T) {
 		{
 			name: "parse compatibility long form",
 			call: func(dec *Decoder, data []byte) (AVCConfig, error) {
-				return dec.ParseAVCDecoderConfigurationRecord(data)
+				return dec.ConfigureAVCDecoderConfigurationRecord(data)
 			},
 		},
 		{
 			name: "parse compatibility short form",
 			call: func(dec *Decoder, data []byte) (AVCConfig, error) {
-				return dec.ParseAVCC(data)
+				return dec.ConfigureAVCC(data)
 			},
 		},
 	} {
@@ -1939,9 +1922,7 @@ func TestDecoderAVCCSurfacesRejectOverflowedInputWithoutMutation(t *testing.T) {
 		call func([]byte) (AVCConfig, error)
 	}{
 		{name: "package InspectAVCC", call: InspectAVCC},
-		{name: "package ParseAVCC", call: ParseAVCC},
 		{name: "package InspectAVCDecoderConfigurationRecord", call: InspectAVCDecoderConfigurationRecord},
-		{name: "package ParseAVCDecoderConfigurationRecord", call: ParseAVCDecoderConfigurationRecord},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if _, err := tt.call(overflowedConfig); !errors.Is(err, ErrInvalidData) {
@@ -1959,12 +1940,6 @@ func TestDecoderAVCCSurfacesRejectOverflowedInputWithoutMutation(t *testing.T) {
 		}},
 		{name: "ConfigureAVCC", call: func(dec *Decoder, data []byte) (AVCConfig, error) {
 			return dec.ConfigureAVCC(data)
-		}},
-		{name: "ParseAVCDecoderConfigurationRecord", call: func(dec *Decoder, data []byte) (AVCConfig, error) {
-			return dec.ParseAVCDecoderConfigurationRecord(data)
-		}},
-		{name: "ParseAVCC", call: func(dec *Decoder, data []byte) (AVCConfig, error) {
-			return dec.ParseAVCC(data)
 		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2093,16 +2068,16 @@ func TestDecoderAVCConfigReportsStoredConfiguration(t *testing.T) {
 		t.Fatalf("initial AVCConfig = %+v, %v; want zero config and ErrInvalidData", cfg, err)
 	}
 
-	parsed, err := dec.ParseAVCC(config4)
+	parsed, err := dec.ConfigureAVCC(config4)
 	if err != nil {
-		t.Fatalf("ParseAVCC: %v", err)
+		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	got, err := dec.AVCConfig()
 	if err != nil {
-		t.Fatalf("AVCConfig after ParseAVCC: %v", err)
+		t.Fatalf("AVCConfig after ConfigureAVCC: %v", err)
 	}
 	if got != parsed || got.NALLengthSize != 4 || got.StreamInfo.Width != 16 || got.StreamInfo.Height != 16 {
-		t.Fatalf("AVCConfig after ParseAVCC = %+v, want %+v", got, parsed)
+		t.Fatalf("AVCConfig after ConfigureAVCC = %+v, want %+v", got, parsed)
 	}
 
 	if _, err := dec.DecodeAVCCFrames(config3, samples3[0]); err != nil {
@@ -2147,8 +2122,8 @@ func TestDecoderResetClearsConfiguredAVCAndReusesDecoder(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCC(config); err != nil {
-		t.Fatalf("ParseAVCC: %v", err)
+	if _, err := dec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	if _, err := dec.DecodeConfiguredAVCFrames(samples[0]); err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames before reset: %v", err)
@@ -2252,8 +2227,8 @@ func TestDecodePacketFramesEmptyPacketIgnoresNewExtradata(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config4); err != nil {
-		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config4); err != nil {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
 	}
 	frames, err := dec.DecodePacketFrames(Packet{
 		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config3}},
@@ -2280,8 +2255,8 @@ func TestDecodePacketFramesEmptyPacketIgnoresMalformedNewExtradata(t *testing.T)
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
-		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
 	}
 	damagedConfig := append([]byte(nil), config...)
 	damagedConfig = damagedConfig[:len(damagedConfig)-1]
@@ -2311,8 +2286,8 @@ func TestDecodePacketEmptyPacketIgnoresNewExtradataWithoutDelayedFrame(t *testin
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config4); err != nil {
-		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config4); err != nil {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
 	}
 	frame, err := dec.DecodePacket(Packet{
 		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config3}},
@@ -2339,8 +2314,8 @@ func TestDecodePacketEmptyPacketIgnoresMalformedNewExtradataWithoutDelayedFrame(
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
-		t.Fatalf("ParseAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
 	}
 	damagedConfig := append([]byte(nil), config...)
 	damagedConfig = damagedConfig[:len(damagedConfig)-1]
@@ -4259,12 +4234,12 @@ func TestDecodeAVCTestsrc16High422Frames(t *testing.T) {
 	}
 }
 
-func TestParseAVCDecoderConfigurationRecordCABAC(t *testing.T) {
+func TestConfigureAVCDecoderConfigurationRecordCABAC(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CABACAnnexBHex)
 	config, packet := annexBToAVCConfigAndPacket(t, data, 3)
 
 	dec := NewDecoder()
-	cfg, err := dec.ParseAVCDecoderConfigurationRecord(config)
+	cfg, err := dec.ConfigureAVCDecoderConfigurationRecord(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4408,7 +4383,7 @@ func TestDecodeConfiguredAVCAcrossSamplesRef2Frames(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -4434,7 +4409,7 @@ func TestDecodeConfiguredAVCAcrossSamplesCABACFrames(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -4480,7 +4455,7 @@ func TestDecodeConfiguredAVCAcrossSamplesHigh422Frames(t *testing.T) {
 			}
 
 			dec := NewDecoder()
-			if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 				t.Fatal(err)
 			}
 			for i, sample := range samples {
@@ -5826,7 +5801,7 @@ func decodeConfiguredIPWithRecoveryPoint(t *testing.T, recoveryFrameCount uint32
 	samples[1] = append(appendAVCNALUnit(t, nil, sei, 4), samples[1]...)
 
 	dec := NewDecoder()
-	if _, err := dec.ParseAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
 		t.Fatal(err)
 	}
 	first, err := dec.DecodeConfiguredAVC(samples[0])
