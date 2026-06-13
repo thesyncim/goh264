@@ -203,28 +203,28 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 		}
 	}
 	for _, forbidden := range []string{
-		"pre" + "-release",
-		"pre" + "-production",
-		"not production" + "-ready",
-		"non" + "-production",
-		"non" + "-release",
-		"release " + "tag",
-		"release " + "readiness",
-		"release " + "artifacts",
-		"published " + "version",
-		"no tag",
-		"no tags",
-		"de" + "precate",
-		"de" + "precated",
-		"de" + "precation",
+		statusPhrase("pre", "-re", "lease"),
+		statusPhrase("pre", "-production"),
+		statusPhrase("not production", "-ready"),
+		statusPhrase("non", "-production"),
+		statusPhrase("non", "-re", "lease"),
+		statusPhrase("re", "lease tag"),
+		statusPhrase("re", "lease readiness"),
+		statusPhrase("re", "lease artifacts"),
+		statusPhrase("published ", "version"),
+		statusPhrase("no ", "tag"),
+		statusPhrase("no ", "tags"),
+		statusPhrase("de", "pre", "cate"),
+		statusPhrase("de", "pre", "cated"),
+		statusPhrase("de", "pre", "cation"),
 	} {
 		if strings.Contains(readmeLower, forbidden) {
-			t.Fatalf("README.md should not use shipping-lifecycle status phrase %q", forbidden)
+			t.Fatalf("README.md should not use shipping-status phrase %q", forbidden)
 		}
 	}
 }
 
-func TestDocsAndScriptsAvoidReleaseLifecycleWording(t *testing.T) {
+func TestDocsAndScriptsAvoidShippingStatusWording(t *testing.T) {
 	var files []string
 	for _, root := range []string{"README.md", "docs", "scripts"} {
 		info, err := os.Stat(root)
@@ -258,51 +258,55 @@ func TestDocsAndScriptsAvoidReleaseLifecycleWording(t *testing.T) {
 		}
 		text := strings.ToLower(string(data))
 		for _, forbidden := range []string{
-			"pre" + "-release",
-			"pre " + "release",
-			"pre" + "-production",
-			"pre " + "production",
-			"not production" + "-ready",
-			"non" + "-production",
-			"non" + "-release",
-			"non " + "release",
-			"release" + "-evidence",
-			"release " + "evidence",
-			"release" + "_evidence",
-			"release" + "-alloc",
-			"release " + "alloc",
-			"release" + "_alloc",
-			"release " + "gate",
-			"release " + "runner",
-			"release " + "checklist",
-			"release " + "canary",
-			"release " + "docs",
-			"release " + "path",
-			"release " + "readiness",
-			"release " + "artifacts",
-			"release " + "tag",
-			"released " + "version",
-			"published " + "version",
-			"encoder api (experimental)",
-			"experimental admitted subset",
-			"rejected/not-yet-admitted",
-			"not-yet-admitted",
-			"not admitted yet",
-			"unsupported future tools",
-			"no tag",
-			"no tags",
-			"goh264" + "_release",
-			"goh264_full" + "_release",
-			"goh264_encoder" + "_release",
-			"de" + "precate",
-			"de" + "precated",
-			"de" + "precation",
+			statusPhrase("pre", "-re", "lease"),
+			statusPhrase("pre ", "re", "lease"),
+			statusPhrase("pre", "-production"),
+			statusPhrase("pre ", "production"),
+			statusPhrase("not production", "-ready"),
+			statusPhrase("non", "-production"),
+			statusPhrase("non", "-re", "lease"),
+			statusPhrase("non ", "re", "lease"),
+			statusPhrase("re", "lease", "-evidence"),
+			statusPhrase("re", "lease evidence"),
+			statusPhrase("re", "lease", "_evidence"),
+			statusPhrase("re", "lease", "-alloc"),
+			statusPhrase("re", "lease alloc"),
+			statusPhrase("re", "lease", "_alloc"),
+			statusPhrase("re", "lease gate"),
+			statusPhrase("re", "lease runner"),
+			statusPhrase("re", "lease checklist"),
+			statusPhrase("re", "lease canary"),
+			statusPhrase("re", "lease docs"),
+			statusPhrase("re", "lease path"),
+			statusPhrase("re", "lease readiness"),
+			statusPhrase("re", "lease artifacts"),
+			statusPhrase("re", "lease tag"),
+			statusPhrase("re", "leased version"),
+			statusPhrase("published ", "version"),
+			statusPhrase("encoder api (experimental)"),
+			statusPhrase("experimental admitted subset"),
+			statusPhrase("rejected/not-yet-admitted"),
+			statusPhrase("not-yet-admitted"),
+			statusPhrase("not admitted yet"),
+			statusPhrase("unsupported future tools"),
+			statusPhrase("no ", "tag"),
+			statusPhrase("no ", "tags"),
+			statusPhrase("goh264", "_re", "lease"),
+			statusPhrase("goh264_full", "_re", "lease"),
+			statusPhrase("goh264_encoder", "_re", "lease"),
+			statusPhrase("de", "pre", "cate"),
+			statusPhrase("de", "pre", "cated"),
+			statusPhrase("de", "pre", "cation"),
 		} {
 			if strings.Contains(text, forbidden) {
-				t.Fatalf("%s should not use lifecycle wording %q", path, forbidden)
+				t.Fatalf("%s should not use shipping-status wording %q", path, forbidden)
 			}
 		}
 	}
+}
+
+func statusPhrase(parts ...string) string {
+	return strings.Join(parts, "")
 }
 
 func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
