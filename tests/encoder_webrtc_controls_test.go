@@ -5577,8 +5577,13 @@ func TestEncoderParameterSetsAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 	if want := append(prefix, headers.AVCDecoderConfigurationRecord...); !bytes.Equal(checkedAVCC, want) {
 		t.Fatalf("AppendAVCCChecked = %x, want %x", checkedAVCC, want)
 	}
-	if got := headers.AVCC(); !bytes.Equal(got, headers.AVCDecoderConfigurationRecord) || cap(got) != len(got) {
-		t.Fatalf("AVCC = %x cap=%d, want clipped avcC bytes", got, cap(got))
+	if got := headers.AVCC(); !bytes.Equal(got, headers.AVCDecoderConfigurationRecord) {
+		t.Fatalf("AVCC = %x, want avcC bytes", got)
+	} else {
+		got[0] ^= 0xff
+		if bytes.Equal(got, headers.AVCDecoderConfigurationRecord) {
+			t.Fatal("AVCC returned bytes alias parameter-set storage")
+		}
 	}
 
 	headers.SPS[0] ^= 0xff
@@ -5605,7 +5610,7 @@ func TestEncoderParameterSetsAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 	}
 }
 
-func TestEncoderParameterSetsAVCCReturnsClippedView(t *testing.T) {
+func TestEncoderParameterSetsAVCCReturnsCallerOwnedBytes(t *testing.T) {
 	if got := (goh264.EncoderParameterSets{}).AVCC(); got != nil {
 		t.Fatalf("zero-value AVCC = %x, want nil", got)
 	}
@@ -5624,22 +5629,29 @@ func TestEncoderParameterSetsAVCCReturnsClippedView(t *testing.T) {
 		AVCDecoderConfigurationRecord: backing[:5],
 	}
 	avcc := headers.AVCC()
-	if !bytes.Equal(avcc, backing[:5]) || cap(avcc) != len(avcc) {
-		t.Fatalf("AVCC = %x cap=%d, want clipped avcC bytes", avcc, cap(avcc))
+	if !bytes.Equal(avcc, backing[:5]) {
+		t.Fatalf("AVCC = %x, want avcC bytes", avcc)
 	}
 	checked, err := headers.AVCCChecked()
-	if err != nil || !bytes.Equal(checked, backing[:5]) || cap(checked) != len(checked) {
-		t.Fatalf("AVCCChecked = %x cap=%d err=%v, want clipped avcC bytes", checked, cap(checked), err)
+	if err != nil || !bytes.Equal(checked, backing[:5]) {
+		t.Fatalf("AVCCChecked = %x err=%v, want avcC bytes", checked, err)
+	}
+	avcc[0] ^= 0xff
+	if backing[0] != 0x01 || headers.AVCDecoderConfigurationRecord[0] != 0x01 {
+		t.Fatalf("mutating AVCC bytes changed source backing/header: backing=%#x header=%#x",
+			backing[0], headers.AVCDecoderConfigurationRecord[0])
+	}
+	checked[1] ^= 0xff
+	if backing[1] != 0x42 || headers.AVCDecoderConfigurationRecord[1] != 0x42 {
+		t.Fatalf("mutating AVCCChecked bytes changed source backing/header: backing=%#x header=%#x",
+			backing[1], headers.AVCDecoderConfigurationRecord[1])
 	}
 	grown := append(avcc, 0xaa)
 	grown[len(avcc)] ^= 0xff
-	if backing[5] != 0xee {
-		t.Fatalf("appending to AVCC view overwrote caller backing byte: %#x", backing[5])
-	}
 	checkedGrown := append(checked, 0xaa)
 	checkedGrown[len(checked)] ^= 0xff
 	if backing[5] != 0xee {
-		t.Fatalf("appending to AVCCChecked view overwrote caller backing byte: %#x", backing[5])
+		t.Fatalf("appending to AVCC copies overwrote caller backing byte: %#x", backing[5])
 	}
 
 	overflow := goh264.EncoderParameterSets{

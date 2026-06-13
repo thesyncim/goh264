@@ -426,6 +426,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncodedFrameAppendNALAndAccessUnitDataReturnCallerOwnedBytes",
 		"TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes",
 		"TestEncoderAppendHelpersIsolateOverlappingSource",
+		"TestEncoderParameterSetsAVCCReturnsCallerOwnedBytes",
 		"TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes",
 		"TestEncodedFrameCloneRejectsInvalidMetadata",
 		"TestEncoderCheckedCloneHelpersRejectOverflowedPublicStorage",
