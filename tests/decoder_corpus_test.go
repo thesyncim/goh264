@@ -163,7 +163,7 @@ func TestH264RealVectorRedQueue(t *testing.T) {
 	t.Logf("public-vector red queue lanes: %s", h264CorpusKnownRedLaneSummary(failures))
 	testH264CorpusEntries(t, defaultH264RealVectorFailureManifest, failures)
 	if !t.Failed() {
-		t.Fatalf("public-vector red queue unexpectedly passed; remove fixed row(s) from %s and rerun the matrix", defaultH264RealVectorFailureManifest)
+		t.Fatalf("public-vector red queue unexpectedly passed; update fixed row(s) in %s and rerun the matrix", defaultH264RealVectorFailureManifest)
 	}
 }
 
@@ -506,7 +506,7 @@ func TestH264RealVectorFailureLedgerFreshness(t *testing.T) {
 			assertCorpusBitstreamMD5(t, entry, data)
 			matches, detail := h264CorpusAnnexBMatchesExpectedOracle(t, entry, data)
 			if matches {
-				t.Fatalf("%s: failure-ledger row now matches oracle; remove it from %s", entry.ID, defaultH264RealVectorFailureManifest)
+				t.Fatalf("%s: failure-ledger row now matches oracle; update %s", entry.ID, defaultH264RealVectorFailureManifest)
 			}
 			assertH264CorpusKnownFailureStillCurrent(t, entry, detail)
 			t.Logf("%s: still red: %s", entry.ID, h264CorpusFailureDetail(entry, detail))
@@ -550,7 +550,7 @@ func TestH264RealVectorFailureMatrix(t *testing.T) {
 				knownRed++
 				redRows = append(redRows, failure)
 				if matches {
-					t.Fatalf("%s: known-red row now matches oracle; remove it from %s", entry.ID, defaultH264RealVectorFailureManifest)
+					t.Fatalf("%s: known-red row now matches oracle; update %s", entry.ID, defaultH264RealVectorFailureManifest)
 				}
 				assertH264CorpusKnownFailureStillCurrent(t, failure, detail)
 				t.Logf("known-red: %s", h264CorpusFailureDetail(failure, detail))

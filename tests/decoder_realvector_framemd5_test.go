@@ -66,7 +66,7 @@ func TestH264RealVectorFrameMD5Diagnostics(t *testing.T) {
 					t.Fatalf("%s: first divergent frame %d md5 = %s, want %s", entry.ID, i, got[i], want[i])
 				}
 			}
-			t.Fatalf("%s: frame MD5s matched but failure ledger still records raw MD5 mismatch; remove it from %s",
+			t.Fatalf("%s: frame MD5s matched but failure ledger still records raw MD5 mismatch; update %s",
 				entry.ID, defaultH264RealVectorFailureManifest)
 		})
 	}
@@ -142,7 +142,7 @@ func TestH264RealVectorRawDiffDiagnostics(t *testing.T) {
 					gotFrame.Raw[offset], wantFrame[offset],
 					hex.EncodeToString(gotSum[:]), hex.EncodeToString(wantSum[:]))
 			}
-			t.Fatalf("%s: raw frames matched but failure ledger still records raw MD5 mismatch; remove it from %s",
+			t.Fatalf("%s: raw frames matched but failure ledger still records raw MD5 mismatch; update %s",
 				entry.ID, defaultH264RealVectorFailureManifest)
 		})
 	}
