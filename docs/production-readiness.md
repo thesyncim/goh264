@@ -37,12 +37,12 @@ scripts/h264-real-vector-red-each.sh    # per-row red queue report when the ledg
 scripts/h264-real-vector-upstream-audit.sh # pinned FFmpeg H.264 FATE coverage
 scripts/h264-decoder-fuzz-smoke.sh # bounded public decode/packet no-panic fuzz smoke
 scripts/h264-real-vector-bench.sh canl4 # set GOH264_BENCH_FFMPEG=1 GOH264_BENCH_FAIR_CPU_LANES=1 for pure C vs pure Go and native C+asm vs Go+asm lanes
-scripts/h264-real-vector-release-alloc.sh # checked-in Go allocation canary budget
+scripts/h264-real-vector-quality-alloc.sh # checked-in Go allocation canary budget
 scripts/h264-benchstat-canary.sh      # benchstat-compatible decoder/encoder canary
 scripts/h264-performance-evidence.sh  # local benchstat, JSON, CPU, and heap profile bundle
-scripts/h264-release-evidence.sh # combined race, decoder, and admitted encoder release runner
-scripts/h264-decoder-release-evidence.sh # full decoder release-evidence runner
-scripts/h264-encoder-release-evidence.sh # admitted encoder contract/writer/bench runner
+scripts/h264-quality-evidence.sh # combined race, decoder, and admitted encoder quality runner
+scripts/h264-decoder-quality-evidence.sh # full decoder quality-evidence runner
+scripts/h264-encoder-quality-evidence.sh # admitted encoder contract/writer/bench runner
 go test ./tests -run TestEncoder # realtime/WebRTC encoder control contract
 GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorStrictOracle
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorKnownRedStrict
@@ -68,7 +68,7 @@ or by `testdata/h264/realvectors/exclusions.jsonl` through
 failing decoder-facing row belongs in `failures.jsonl` with a current failure
 signature until it is fixed. The upstream-audit script also verifies the 224
 generated FATE rows against the pinned FFmpeg source and checks that the
-release-doc public-vector counts match the checked-in manifests.
+quality-doc public-vector counts match the checked-in manifests.
 
 Benchmark JSON reports selected/green/known-red counts, backend kind, CPU flags,
 comparison lane, oracle `quality_status`, Go allocation totals plus
@@ -116,7 +116,7 @@ timed Go lane; `-max-go-alloc-bytes-per-iter` and
 real-vector benchmark script forwards
 `GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER` and
 `GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER` to those flags.
-`scripts/h264-real-vector-release-alloc.sh` is the checked-in release canary:
+`scripts/h264-real-vector-quality-alloc.sh` is the checked-in quality canary:
 it runs the CANL4 public vector with defaults of 64,000,000 Go allocation
 bytes/iteration and 10,000 Go allocations/iteration.
 `scripts/h264-benchstat-canary.sh` runs the package-level decoder benchmarks
@@ -126,32 +126,32 @@ the admitted encoder Annex B/AVC/RTP IDR/P-skip/exact-P16
 edge-search/P-IntraPCM and RTP packetization benchmarks with `-benchmem`; its
 output is suitable for `benchstat` trend comparisons. `GOH264_BENCHSTAT_TIME`
 sets the effective `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is accepted as an
-alias when `GOH264_BENCHSTAT_TIME` is unset, and the performance/release
+alias when `GOH264_BENCHSTAT_TIME` is unset, and the performance/quality
 evidence metadata records the effective value.
 `scripts/h264-performance-evidence.sh` writes a local evidence bundle under
 `.artifacts/h264-performance-evidence/` containing benchstat samples, the JSON
 real-vector benchmark report, CPU and heap profiles, and run metadata. Pending:
 checked-in reviewed profile artifacts, larger performance corpus, and
 in-process libavcodec baseline.
-`scripts/h264-release-evidence.sh` is the top-level release gate. It requires a
+`scripts/h264-quality-evidence.sh` is the top-level quality gate. It requires a
 clean worktree by default, writes summary/log output under
-`.artifacts/h264-full-release-evidence/`, runs `go test -race ./...`, and runs
-the decoder release-evidence runner and the admitted encoder release-evidence
+`.artifacts/h264-full-quality-evidence/`, runs `go test -race ./...`, and runs
+the decoder quality-evidence runner and the admitted encoder quality-evidence
 runner into separate child directories.
-`scripts/h264-decoder-release-evidence.sh` runs the decoder release checklist
+`scripts/h264-decoder-quality-evidence.sh` runs the decoder quality checklist
 as one gate and writes per-command logs plus the local performance bundle under
-`.artifacts/h264-release-evidence/`. It includes the repo-wide `go vet ./...`
+`.artifacts/h264-quality-evidence/`. It includes the repo-wide `go vet ./...`
 static correctness gate, focused decoder API-surface checks covering stateless
 header inspection and avcC/reset behavior, and focused ref-modification checks.
 It fails by default if the known-red failure ledger is non-empty or the
 worktree is dirty.
-`scripts/h264-encoder-release-evidence.sh` runs the admitted encoder local
-release checklist as one gate: `go vet ./...`, full tests, the external
+`scripts/h264-encoder-quality-evidence.sh` runs the admitted encoder local
+quality checklist as one gate: `go vet ./...`, full tests, the external
 encoder control contract, the explicit `EncodeInto` allocation canary,
 internal writer/header/SEI slice syntax tests, and admitted encoder `-benchmem`
 rows.
 It writes per-command logs under
-`.artifacts/h264-encoder-release-evidence/` and fails by default if the
+`.artifacts/h264-encoder-quality-evidence/` and fails by default if the
 worktree is dirty.
 
 Public API delayed-output coverage includes AVC configured samples and Annex B
@@ -186,7 +186,7 @@ Malformed-input safety evidence now includes deterministic public-surface
 corruption rows plus `FuzzDecodePublicSurfacesNoPanic`, a bounded fuzz target
 for Annex B, AVC, configured AVC, auto-detect, and packet side-data decode
 surfaces. `scripts/h264-decoder-fuzz-smoke.sh` runs that target for a short
-smoke window and is part of the release-evidence gate. avcC parser/configuration
+smoke window and is part of the quality-evidence gate. avcC parser/configuration
 guards reject invalid reserved bits and caller-constructed impossible-size
 inputs before public decoder state is replaced, and packet `NEW_EXTRADATA`
 keeps treating malformed avcC as non-fatal side data against the last good

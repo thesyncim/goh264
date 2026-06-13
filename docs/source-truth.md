@@ -19,7 +19,7 @@ follow FFmpeg CBS H.264 ordering; RTP packet header emission follows FFmpeg
 boundaries follow `libavformat/rtpenc_h264_hevc.c`. General residual P coding,
 broader motion search, adaptive rate-control feedback, and production encoder
 parity claims remain pending. Encoder work must land behind its own controls,
-oracles, and release evidence while the decoder production bar stays green.
+oracles, and quality evidence while the decoder production bar stays green.
 
 Proved today: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
@@ -273,9 +273,9 @@ across Annex B/AVC/RTP plus RTP mode 0, per-macroblock exact P16x16 across
 Annex B/AVC/RTP plus RTP mode 0, 8-pixel exact-P16 edge search, AVC/RTP changed
 P IntraPCM, RTP STAP-A IDR/changed-P, RTP max-frame-size/late drop paths, and
 RTP packetization-mode 0 IDR/P-frame rows including exact-P16 edge search, with `-benchmem`.
-The combined release-evidence runner also requires repo-wide `go vet ./...` and
+The combined quality-evidence runner also requires repo-wide `go vet ./...` and
 `go test -race ./...`, with allocation canaries kept in the normal non-race
-release path because race instrumentation changes allocation counts.
+quality path because race instrumentation changes allocation counts.
 Internal writer proof covers raw
 bit/Exp-Golomb
 writing, RBSP trailing bits, EBSP emulation-prevention, Annex B/AVC NAL

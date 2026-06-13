@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-timestamp="${GOH264_FULL_RELEASE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}"
-out_dir="${GOH264_FULL_RELEASE_DIR:-$ROOT/.artifacts/h264-full-release-evidence/$timestamp}"
+timestamp="${GOH264_FULL_QUALITY_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}"
+out_dir="${GOH264_FULL_QUALITY_DIR:-$ROOT/.artifacts/h264-full-quality-evidence/$timestamp}"
 mkdir -p "$out_dir"
 
 summary="$out_dir/summary.txt"
@@ -39,34 +39,34 @@ run_env_gate() {
     printf 'encoder_dir=%s\n' "$out_dir/encoder"
 } >"$summary"
 
-printf 'writing full release evidence to %s\n' "$out_dir" >&2
+printf 'writing full quality evidence to %s\n' "$out_dir" >&2
 
-if [[ "${GOH264_FULL_RELEASE_ALLOW_DIRTY:-0}" != "1" ]]; then
+if [[ "${GOH264_FULL_QUALITY_ALLOW_DIRTY:-0}" != "1" ]]; then
     status="$(git status --short)"
     if [[ -n "$status" ]]; then
         {
             printf '\nworktree-clean: failed\n'
             printf '%s\n' "$status"
-            printf 'set GOH264_FULL_RELEASE_ALLOW_DIRTY=1 only for local diagnostics\n'
+            printf 'set GOH264_FULL_QUALITY_ALLOW_DIRTY=1 only for local diagnostics\n'
         } | tee -a "$summary" >&2
         exit 1
     fi
 else
-    export GOH264_RELEASE_ALLOW_DIRTY="${GOH264_RELEASE_ALLOW_DIRTY:-1}"
-    export GOH264_ENCODER_RELEASE_ALLOW_DIRTY="${GOH264_ENCODER_RELEASE_ALLOW_DIRTY:-1}"
+    export GOH264_QUALITY_ALLOW_DIRTY="${GOH264_QUALITY_ALLOW_DIRTY:-1}"
+    export GOH264_ENCODER_QUALITY_ALLOW_DIRTY="${GOH264_ENCODER_QUALITY_ALLOW_DIRTY:-1}"
 fi
 printf '\nworktree-clean: pass\n' | tee -a "$summary"
 
 run_gate go-test-race go test -race ./...
 
-run_env_gate decoder-release-evidence \
-    GOH264_RELEASE_EVIDENCE_DIR="$out_dir/decoder" \
-    GOH264_RELEASE_EVIDENCE_TIMESTAMP="$timestamp" \
-    scripts/h264-decoder-release-evidence.sh
+run_env_gate decoder-quality-evidence \
+    GOH264_QUALITY_EVIDENCE_DIR="$out_dir/decoder" \
+    GOH264_QUALITY_EVIDENCE_TIMESTAMP="$timestamp" \
+    scripts/h264-decoder-quality-evidence.sh
 
-run_env_gate encoder-release-evidence \
-    GOH264_ENCODER_RELEASE_DIR="$out_dir/encoder" \
-    GOH264_ENCODER_RELEASE_TIMESTAMP="$timestamp" \
-    scripts/h264-encoder-release-evidence.sh
+run_env_gate encoder-quality-evidence \
+    GOH264_ENCODER_QUALITY_DIR="$out_dir/encoder" \
+    GOH264_ENCODER_QUALITY_TIMESTAMP="$timestamp" \
+    scripts/h264-encoder-quality-evidence.sh
 
-printf '\nall full release-evidence gates passed\n' | tee -a "$summary"
+printf '\nall full quality-evidence gates passed\n' | tee -a "$summary"

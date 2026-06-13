@@ -4,12 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-timestamp="${GOH264_RELEASE_EVIDENCE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}"
-out_dir="${GOH264_RELEASE_EVIDENCE_DIR:-$ROOT/.artifacts/h264-release-evidence/$timestamp}"
+timestamp="${GOH264_QUALITY_EVIDENCE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}"
+out_dir="${GOH264_QUALITY_EVIDENCE_DIR:-$ROOT/.artifacts/h264-quality-evidence/$timestamp}"
 mkdir -p "$out_dir"
 
 summary="$out_dir/summary.txt"
-filter="${GOH264_RELEASE_PERF_FILTER:-canl4}"
+filter="${GOH264_QUALITY_PERF_FILTER:-canl4}"
 benchstat_time="${GOH264_BENCHSTAT_TIME:-${GOH264_BENCHSTAT_BENCHTIME:-100ms}}"
 export GOH264_BENCHSTAT_TIME="$benchstat_time"
 
@@ -58,21 +58,21 @@ run_go_test_gate() {
     printf 'date_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'go=%s\n' "$(go version)"
     printf 'corpus_cache=%s\n' "${GOH264_CORPUS_CACHE:-/tmp/goh264-fate-probe-cache}"
-    printf 'release_perf_filter=%s\n' "$filter"
-    printf 'release_alloc_filter=%s\n' "${GOH264_RELEASE_ALLOC_FILTER:-canl4}"
+    printf 'quality_perf_filter=%s\n' "$filter"
+    printf 'quality_alloc_filter=%s\n' "${GOH264_QUALITY_ALLOC_FILTER:-canl4}"
     printf 'benchstat_pattern=%s\n' "${GOH264_BENCHSTAT_PATTERN:-Benchmark(Decode.*AnnexBHigh10IDRP|FrameAppendRawYUVBytesLEHigh10IDRP|Encode.*I420)}"
     printf 'benchstat_time=%s\n' "$GOH264_BENCHSTAT_TIME"
 } >"$summary"
 
-printf 'writing decoder release evidence to %s\n' "$out_dir" >&2
+printf 'writing decoder quality evidence to %s\n' "$out_dir" >&2
 
-if [[ "${GOH264_RELEASE_ALLOW_DIRTY:-0}" != "1" ]]; then
+if [[ "${GOH264_QUALITY_ALLOW_DIRTY:-0}" != "1" ]]; then
     status="$(git status --short)"
     if [[ -n "$status" ]]; then
         {
             printf '\nworktree-clean: failed\n'
             printf '%s\n' "$status"
-            printf 'set GOH264_RELEASE_ALLOW_DIRTY=1 only for local diagnostics\n'
+            printf 'set GOH264_QUALITY_ALLOW_DIRTY=1 only for local diagnostics\n'
         } | tee -a "$summary" >&2
         exit 1
     fi
@@ -86,8 +86,8 @@ run_gate go-test-all go test ./...
 run_go_test_gate decoder-api-surfaces ./tests '^(TestParseHeadersAnnexBBlack16|TestParseHeadersAVCBlack16|TestPackageAVCCParsersDoNotMutateDecoderState|TestFrameCloneRejectsOverflowedPublicStorage|TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage|TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference|TestParseHeadersAVCIncompatibleHeadersDoNotUseStalePFrameReference|TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset|TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration|TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset|TestDecodeFramesStandaloneMultiSPSConfigurationResetsForNonFirstActiveSPS|TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecodePacketFramesAnnexBMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecoderAVCConfigUsesAVCCFirstSPSForMultiSPSConfiguration|TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration)$' -count=1 -v
 run_go_test_gate decoder-ref-modifications ./internal/h264 '^(TestSimpleFrameDPBRejectsMissingShortRefModificationTarget|TestSimpleFrameDPBRejectsMissingLongRefModificationTarget|TestSimpleFrameDPBReordersShortRefs|TestSimpleFrameDPBReordersLongRefs)$' -count=1 -v
 
-if [[ -s testdata/h264/realvectors/failures.jsonl && "${GOH264_RELEASE_ALLOW_KNOWN_RED:-0}" != "1" ]]; then
-    printf '\nknown-red-failures: testdata/h264/realvectors/failures.jsonl is not empty; set GOH264_RELEASE_ALLOW_KNOWN_RED=1 only for local diagnostics\n' | tee -a "$summary" >&2
+if [[ -s testdata/h264/realvectors/failures.jsonl && "${GOH264_QUALITY_ALLOW_KNOWN_RED:-0}" != "1" ]]; then
+    printf '\nknown-red-failures: testdata/h264/realvectors/failures.jsonl is not empty; set GOH264_QUALITY_ALLOW_KNOWN_RED=1 only for local diagnostics\n' | tee -a "$summary" >&2
     exit 1
 fi
 printf '\nknown-red-failures: none\n' | tee -a "$summary"
@@ -105,11 +105,11 @@ run_env_gate real-vector-matrix \
 run_gate real-vector-strict scripts/h264-real-vector-strict.sh
 run_gate real-vector-upstream-audit scripts/h264-real-vector-upstream-audit.sh
 run_gate decoder-fuzz-smoke scripts/h264-decoder-fuzz-smoke.sh
-run_gate release-allocation-canary scripts/h264-real-vector-release-alloc.sh
+run_gate quality-allocation-canary scripts/h264-real-vector-quality-alloc.sh
 run_gate benchstat-canary scripts/h264-benchstat-canary.sh
 
 run_env_gate performance-evidence \
     GOH264_PERF_DIR="$out_dir/performance-bundle" \
     scripts/h264-performance-evidence.sh "$filter"
 
-printf '\nall decoder release-evidence gates passed\n' | tee -a "$summary"
+printf '\nall decoder quality-evidence gates passed\n' | tee -a "$summary"

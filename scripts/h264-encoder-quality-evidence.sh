@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-timestamp="${GOH264_ENCODER_RELEASE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}"
-out_dir="${GOH264_ENCODER_RELEASE_DIR:-$ROOT/.artifacts/h264-encoder-release-evidence/$timestamp}"
+timestamp="${GOH264_ENCODER_QUALITY_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}"
+out_dir="${GOH264_ENCODER_QUALITY_DIR:-$ROOT/.artifacts/h264-encoder-quality-evidence/$timestamp}"
 mkdir -p "$out_dir"
 
 summary="$out_dir/summary.txt"
@@ -54,15 +54,15 @@ run_go_test_gate() {
     printf 'bench_time=%s\n' "$bench_time"
 } >"$summary"
 
-printf 'writing encoder release evidence to %s\n' "$out_dir" >&2
+printf 'writing encoder quality evidence to %s\n' "$out_dir" >&2
 
-if [[ "${GOH264_ENCODER_RELEASE_ALLOW_DIRTY:-0}" != "1" ]]; then
+if [[ "${GOH264_ENCODER_QUALITY_ALLOW_DIRTY:-0}" != "1" ]]; then
     status="$(git status --short)"
     if [[ -n "$status" ]]; then
         {
             printf '\nworktree-clean: failed\n'
             printf '%s\n' "$status"
-            printf 'set GOH264_ENCODER_RELEASE_ALLOW_DIRTY=1 only for local diagnostics\n'
+            printf 'set GOH264_ENCODER_QUALITY_ALLOW_DIRTY=1 only for local diagnostics\n'
         } | tee -a "$summary" >&2
         exit 1
     fi
@@ -80,4 +80,4 @@ run_go_test_gate encoder-allocation-canary ./tests '^TestEncoderEncodeIntoAlloca
 run_go_test_gate encoder-writers ./internal/h264 '^(TestBitWriter|TestAppendNAL|TestAppendAVC|TestBuildEncoder|TestAppendSEI|TestCAVLCWriteResidual|TestWriteCAVLCInterPBoundedMacroblock|TestEncodeI420P16x16ResidualSliceRBSP)' -count=1 -v
 run_gate encoder-benchmem go test . -run '^$' -bench "$bench_pattern" -benchmem -benchtime "$bench_time"
 
-printf '\nall encoder release-evidence gates passed\n' | tee -a "$summary"
+printf '\nall encoder quality-evidence gates passed\n' | tee -a "$summary"

@@ -630,7 +630,7 @@ What those gates mean:
 - `h264-real-vector-upstream-audit.sh` fetches the pinned FFmpeg source and
   verifies that the checked-in inventory still matches all decoder-facing
   upstream H.264 FATE sample references, except documented non-decoder rows,
-  and that public-vector count claims in the release docs match the checked-in
+  and that public-vector count claims in the quality docs match the checked-in
   manifests.
   Normal `go test ./tests` also checks that every imported public ref is either
   represented by the manifest or listed in the exclusion file.
@@ -696,7 +696,7 @@ Use `GOH264_BENCHSTAT_COUNT` and `GOH264_BENCHSTAT_TIME` to control sample
 count and `-benchtime`; `GOH264_BENCHSTAT_BENCHTIME` is accepted as a
 compatibility alias when `GOH264_BENCHSTAT_TIME` is unset.
 
-To create a local release-evidence bundle with benchstat samples, the JSON
+To create a local quality-evidence bundle with benchstat samples, the JSON
 real-vector benchmark report, CPU/heap profiles, and run metadata:
 
 ```sh
@@ -736,13 +736,13 @@ artifacts.
 
 ## Trust And Verification
 
-Released version: none yet.
+Published version: none yet.
 
-No tag should be treated as production until a release-evidence pass proves:
+No tag should be treated as production until a quality-evidence pass proves:
 
-- `scripts/h264-release-evidence.sh` is green as the combined decoder and
-  admitted-encoder release gate.
-- `scripts/h264-decoder-release-evidence.sh` is green, including
+- `scripts/h264-quality-evidence.sh` is green as the combined decoder and
+  admitted-encoder quality gate.
+- `scripts/h264-decoder-quality-evidence.sh` is green, including
   decoder API-surface and ref-modification gates.
 - `go vet ./...` is green.
 - `go test ./...` is green.
@@ -752,12 +752,12 @@ No tag should be treated as production until a release-evidence pass proves:
 - `scripts/h264-real-vector-upstream-audit.sh` still represents all pinned
   decoder-facing FFmpeg H.264 FATE sample references in
   `testdata/h264/realvectors/upstream-inventory.jsonl`, except documented
-  non-decoder exclusions, and release-doc public-vector counts match the
+  non-decoder exclusions, and quality-doc public-vector counts match the
   checked-in manifests.
 - `scripts/h264-decoder-fuzz-smoke.sh` is green for the bounded public decoder
   no-panic fuzz target.
 - Known-red rows, if any, are current in `testdata/h264/realvectors/failures.jsonl`.
-- `scripts/h264-real-vector-release-alloc.sh` is green with the checked-in Go
+- `scripts/h264-real-vector-quality-alloc.sh` is green with the checked-in Go
   allocation canary budget.
 - `scripts/h264-benchstat-canary.sh` runs decoder and admitted encoder rows
   with stable `-benchmem` output for trend comparison. `GOH264_BENCHSTAT_TIME`
@@ -765,7 +765,7 @@ No tag should be treated as production until a release-evidence pass proves:
   accepted as an unset-time alias.
 - `scripts/h264-performance-evidence.sh` creates the local performance bundle
   with JSON benchmark output plus CPU/heap profiles.
-- `scripts/h264-encoder-release-evidence.sh` is green for the admitted
+- `scripts/h264-encoder-quality-evidence.sh` is green for the admitted
   realtime/WebRTC encoder vet, contract, API-surface, residual-boundary,
   writer, allocation, and benchmark gates.
 - Allocation and performance evidence is recorded in
@@ -777,19 +777,19 @@ No tag should be treated as production until a release-evidence pass proves:
   evidence.
 - The source-truth and translation-ledger docs match the committed tests.
 
-The combined release-evidence runner writes logs under
-`.artifacts/h264-full-release-evidence/` by default, drives the race, decoder,
+The combined quality-evidence runner writes logs under
+`.artifacts/h264-full-quality-evidence/` by default, drives the race, decoder,
 and admitted encoder runners, and requires a clean worktree unless
-`GOH264_FULL_RELEASE_ALLOW_DIRTY=1` is set for diagnostics.
-The decoder release-evidence runner writes logs under
-`.artifacts/h264-release-evidence/` by default and fails while
+`GOH264_FULL_QUALITY_ALLOW_DIRTY=1` is set for diagnostics.
+The decoder quality-evidence runner writes logs under
+`.artifacts/h264-quality-evidence/` by default and fails while
 `testdata/h264/realvectors/failures.jsonl` contains known-red rows unless
-`GOH264_RELEASE_ALLOW_KNOWN_RED=1` is set for a local diagnostic run. It
-also requires a clean worktree unless `GOH264_RELEASE_ALLOW_DIRTY=1` is set for
+`GOH264_QUALITY_ALLOW_KNOWN_RED=1` is set for a local diagnostic run. It
+also requires a clean worktree unless `GOH264_QUALITY_ALLOW_DIRTY=1` is set for
 diagnostics.
-The encoder release-evidence runner writes logs under
-`.artifacts/h264-encoder-release-evidence/` and likewise requires a clean
-worktree unless `GOH264_ENCODER_RELEASE_ALLOW_DIRTY=1` is set for diagnostics.
+The encoder quality-evidence runner writes logs under
+`.artifacts/h264-encoder-quality-evidence/` and likewise requires a clean
+worktree unless `GOH264_ENCODER_QUALITY_ALLOW_DIRTY=1` is set for diagnostics.
 
 ## Contributing
 

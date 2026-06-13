@@ -4,6 +4,7 @@ package goh264
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -219,6 +220,78 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 	}
 }
 
+func TestDocsAndScriptsAvoidReleaseLifecycleWording(t *testing.T) {
+	var files []string
+	for _, root := range []string{"README.md", "docs", "scripts"} {
+		info, err := os.Stat(root)
+		if err != nil {
+			t.Fatalf("stat %s: %v", root, err)
+		}
+		if !info.IsDir() {
+			files = append(files, root)
+			continue
+		}
+		err = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			if strings.HasSuffix(path, ".md") || strings.HasSuffix(path, ".sh") {
+				files = append(files, path)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", root, err)
+		}
+	}
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := strings.ToLower(string(data))
+		for _, forbidden := range []string{
+			"pre" + "-release",
+			"pre " + "release",
+			"pre" + "-production",
+			"pre " + "production",
+			"not production" + "-ready",
+			"non" + "-production",
+			"non" + "-release",
+			"non " + "release",
+			"release" + "-evidence",
+			"release " + "evidence",
+			"release" + "_evidence",
+			"release" + "-alloc",
+			"release " + "alloc",
+			"release" + "_alloc",
+			"release " + "gate",
+			"release " + "runner",
+			"release " + "checklist",
+			"release " + "canary",
+			"release " + "docs",
+			"release " + "path",
+			"release " + "readiness",
+			"release " + "artifacts",
+			"release " + "tag",
+			"released " + "version",
+			"goh264" + "_release",
+			"goh264_full" + "_release",
+			"goh264_encoder" + "_release",
+			"de" + "precate",
+			"de" + "precated",
+			"de" + "precation",
+		} {
+			if strings.Contains(text, forbidden) {
+				t.Fatalf("%s should not use lifecycle wording %q", path, forbidden)
+			}
+		}
+	}
+}
+
 func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {
@@ -256,14 +329,14 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 	}
 }
 
-func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
+func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 	readmeData, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatalf("read README.md: %v", err)
 	}
-	scriptData, err := os.ReadFile("scripts/h264-encoder-release-evidence.sh")
+	scriptData, err := os.ReadFile("scripts/h264-encoder-quality-evidence.sh")
 	if err != nil {
-		t.Fatalf("read encoder release evidence script: %v", err)
+		t.Fatalf("read encoder quality evidence script: %v", err)
 	}
 	readme := string(readmeData)
 	script := string(scriptData)
@@ -272,7 +345,7 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"residual-boundary",
 	} {
 		if !strings.Contains(readme, phrase) {
-			t.Fatalf("README.md encoder release evidence text missing %q", phrase)
+			t.Fatalf("README.md encoder quality evidence text missing %q", phrase)
 		}
 	}
 	for _, phrase := range []string{
@@ -308,7 +381,7 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncodeI420P16x16ResidualSliceRBSP",
 	} {
 		if !strings.Contains(script, phrase) {
-			t.Fatalf("encoder release evidence script missing API-surface gate phrase %q", phrase)
+			t.Fatalf("encoder quality evidence script missing API-surface gate phrase %q", phrase)
 		}
 	}
 	for _, forbidden := range []string{
@@ -319,19 +392,19 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"run_gate encoder-writers go test",
 	} {
 		if strings.Contains(script, forbidden) {
-			t.Fatalf("encoder release evidence script should preflight focused gate %q", forbidden)
+			t.Fatalf("encoder quality evidence script should preflight focused gate %q", forbidden)
 		}
 	}
 }
 
-func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
+func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	readmeData, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatalf("read README.md: %v", err)
 	}
-	scriptData, err := os.ReadFile("scripts/h264-decoder-release-evidence.sh")
+	scriptData, err := os.ReadFile("scripts/h264-decoder-quality-evidence.sh")
 	if err != nil {
-		t.Fatalf("read decoder release evidence script: %v", err)
+		t.Fatalf("read decoder quality evidence script: %v", err)
 	}
 	readme := string(readmeData)
 	script := string(scriptData)
@@ -340,7 +413,7 @@ func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"ref-modification gates",
 	} {
 		if !strings.Contains(readme, phrase) {
-			t.Fatalf("README.md decoder release evidence text missing %q", phrase)
+			t.Fatalf("README.md decoder quality evidence text missing %q", phrase)
 		}
 	}
 	for _, phrase := range []string{
@@ -371,7 +444,7 @@ func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestSimpleFrameDPBRejectsMissingLongRefModificationTarget",
 	} {
 		if !strings.Contains(script, phrase) {
-			t.Fatalf("decoder release evidence script missing focused gate phrase %q", phrase)
+			t.Fatalf("decoder quality evidence script missing focused gate phrase %q", phrase)
 		}
 	}
 	for _, forbidden := range []string{
@@ -379,7 +452,7 @@ func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"run_gate decoder-ref-modifications go test",
 	} {
 		if strings.Contains(script, forbidden) {
-			t.Fatalf("decoder release evidence script should preflight focused gate %q", forbidden)
+			t.Fatalf("decoder quality evidence script should preflight focused gate %q", forbidden)
 		}
 	}
 }
