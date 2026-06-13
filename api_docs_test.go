@@ -19,10 +19,9 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 
 	decoderType := reflect.TypeOf((*Decoder)(nil))
 	packageDecoderFunctions := map[string]any{
-		"InspectAnnexBHeaders":                 InspectAnnexBHeaders,
-		"InspectAVCHeaders":                    InspectAVCHeaders,
-		"InspectAVCDecoderConfigurationRecord": InspectAVCDecoderConfigurationRecord,
-		"InspectAVCC":                          InspectAVCC,
+		"InspectAnnexBHeaders": InspectAnnexBHeaders,
+		"InspectAVCHeaders":    InspectAVCHeaders,
+		"InspectAVCC":          InspectAVCC,
 	}
 	for _, name := range []string{
 		"DecodeFrames",
@@ -31,9 +30,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"DecodeAVCFrames",
 		"InspectAnnexBHeaders",
 		"InspectAVCHeaders",
-		"ConfigureAVCDecoderConfigurationRecord",
 		"ConfigureAVCC",
-		"InspectAVCDecoderConfigurationRecord",
 		"InspectAVCC",
 		"DecodeConfiguredAVCFrames",
 		"Decode",
@@ -691,10 +688,8 @@ func TestPublicCommentsDocumentStateAndOwnershipBoundaries(t *testing.T) {
 		"InspectAnnexBHeaders parses Annex B parameter sets and returns stream\n// metadata without changing decoder state",
 		"InspectAVCHeaders parses length-prefixed AVC parameter sets and returns\n// stream metadata without changing decoder state",
 		"ParseHeadersAVC parses AVC parameter sets, stores SPS/PPS state and the AVC\n// NAL length size for later DecodeConfiguredAVCFrames calls",
-		"Storing a configuration resets decoder picture state for a new",
 		"ConfigureAVCC parses an avcC record, stores it for configured-AVC decode\n// calls, resets decoder picture state",
-		"ConfigureAVCC is the short avcC API",
-		"InspectAVCC is the short stateless avcC name",
+		"InspectAVCC parses avcC metadata without changing decoder state",
 		"DecodeAVCCFrames updates the stored AVC configuration from an avcC record,\n// decodes data with that configuration, and drains delayed frames",
 	} {
 		if !strings.Contains(decoder, phrase) {
@@ -722,6 +717,10 @@ func TestPublicExamplesUsePreferredDecoderAVCCConfigurationName(t *testing.T) {
 	for _, nonCanonical := range []string{
 		statusPhrase("Parse", "AVCC"),
 		statusPhrase("Parse", "AVCDecoderConfigurationRecord"),
+		statusPhrase("Inspect", "AVCDecoderConfigurationRecord"),
+		statusPhrase("Configure", "AVCDecoderConfigurationRecord"),
+		statusPhrase("Decode", "AVCWithConfigurationRecord"),
+		statusPhrase("Decode", "AVCFramesWithConfigurationRecord"),
 	} {
 		if strings.Contains(string(data), nonCanonical) {
 			t.Fatalf("public examples should use canonical decoder avcC API names instead of %s", nonCanonical)
@@ -745,10 +744,8 @@ func TestREADMEDecoderAVCCNameMap(t *testing.T) {
 		"`DecodeConfiguredAVCFrames`",
 		"Update avcC, decode one packet, then drain delayed output",
 		"`DecodeAVCCFrames`",
-		"Equivalent names",
+		"| Need | Helper | Single-frame helper |",
 		"Single-frame helper",
-		"`ConfigureAVCDecoderConfigurationRecord`",
-		"`InspectAVCDecoderConfigurationRecord`",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md decoder avcC name-map table missing %q", phrase)

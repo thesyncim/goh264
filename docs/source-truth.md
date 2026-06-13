@@ -112,8 +112,7 @@ compressed packet input ownership across configured AVC and Annex B delayed
 B-frame output,
 package-level `InspectAnnexBHeaders`/`InspectAVCHeaders` stream metadata
 inspection without decoder-state mutation,
-package-level `InspectAVCC`/`InspectAVCDecoderConfigurationRecord` metadata
-inspection without decoder-state mutation,
+package-level `InspectAVCC` metadata inspection without decoder-state mutation,
 malformed standalone AVC decoder configuration records preserving the last
 stored configured-AVC state,
 malformed AVC/Annex B `NEW_EXTRADATA` non-fatal packet-side-data guards,

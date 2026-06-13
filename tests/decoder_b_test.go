@@ -159,7 +159,7 @@ func TestDecodeConfiguredAVCTestsrcBFrames(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			data := tt.decode(t)
 			config, packet := annexBToAVCConfigAndPacket(t, data, 4)
-			frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+			frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -179,7 +179,7 @@ func TestDecodeConfiguredAVCTestsrcBFramesAcrossSamplesFlush(t *testing.T) {
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 
@@ -227,7 +227,7 @@ func TestDecodeConfiguredAVCTestsrcBFramesFlushesOnEmptyPacket(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 
@@ -268,7 +268,7 @@ func TestDecodeConfiguredAVCTestsrcBFrameReturnsDelayedFrameOnEmptyPacket(t *tes
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -292,7 +292,7 @@ func TestDecoderResetClearsDelayedFrames(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
@@ -310,7 +310,7 @@ func TestDecoderResetClearsDelayedFrames(t *testing.T) {
 	if len(out) != 0 {
 		t.Fatalf("FlushDelayedFrames after reset = %d frames, want 0", len(out))
 	}
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatalf("reconfigure after reset: %v", err)
 	}
 	var frames []*Frame
@@ -341,8 +341,8 @@ func TestFlushDelayedFrameReturnsSingleDelayedFrame(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	var frames []*Frame
 	for i, sample := range samples {
@@ -370,7 +370,7 @@ func TestFlushDelayedFrameReturnsSingleDelayedFrame(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesOnEmptyPacket(t *testing.T) {
+func TestDecodeAVCCFramesBFramesFlushesOnEmptyPacket(t *testing.T) {
 	for _, tt := range bFrameFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := tt.decode(t)
@@ -381,7 +381,7 @@ func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesOnEmptyPacket(t *te
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 
@@ -393,14 +393,14 @@ func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesOnEmptyPacket(t *te
 					}
 					frames = append(frames, out...)
 				}
-				out, err := dec.DecodeAVCFramesWithConfigurationRecord(config, nil)
+				out, err := dec.DecodeAVCCFrames(config, nil)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d empty configuration-record AVC packet flush: %v", nalLengthSize, err)
 				}
 				frames = append(frames, out...)
 				assertFrameMD5Strings(t, frames, tt.want)
 
-				out, err = dec.DecodeAVCFramesWithConfigurationRecord(config, nil)
+				out, err = dec.DecodeAVCCFrames(config, nil)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d second empty configuration-record AVC packet flush: %v", nalLengthSize, err)
 				}
@@ -422,7 +422,7 @@ func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesOnEmptyPacket(t *te
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordBFrameReturnsDelayedFrameOnEmptyPacket(t *testing.T) {
+func TestDecodeAVCCBFrameReturnsDelayedFrameOnEmptyPacket(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
 	if len(samples) != 3 {
@@ -430,7 +430,7 @@ func TestDecodeAVCWithConfigurationRecordBFrameReturnsDelayedFrameOnEmptyPacket(
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -439,14 +439,14 @@ func TestDecodeAVCWithConfigurationRecordBFrameReturnsDelayedFrameOnEmptyPacket(
 		}
 	}
 
-	frame, err := dec.DecodeAVCWithConfigurationRecord(config, nil)
+	frame, err := dec.DecodeAVCC(config, nil)
 	if err != nil {
 		t.Fatalf("single-frame empty configuration-record AVC packet flush: %v", err)
 	}
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"aa778b981f96d21489196f6a0faa0959"})
 }
 
-func TestDecodeAVCFramesWithConfigurationRecordRejectPreservesDelayedFlush(t *testing.T) {
+func TestDecodeAVCCFramesRejectPreservesDelayedFlush(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
 	if len(samples) != 3 {
@@ -454,7 +454,7 @@ func TestDecodeAVCFramesWithConfigurationRecordRejectPreservesDelayedFlush(t *te
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -465,7 +465,7 @@ func TestDecodeAVCFramesWithConfigurationRecordRejectPreservesDelayedFlush(t *te
 
 	damagedConfig := append([]byte(nil), config...)
 	damagedConfig = damagedConfig[:len(damagedConfig)-1]
-	out, err := dec.DecodeAVCFramesWithConfigurationRecord(damagedConfig, nil)
+	out, err := dec.DecodeAVCCFrames(damagedConfig, nil)
 	if err == nil {
 		t.Fatal("malformed configuration-record empty AVC packet flush returned nil error")
 	}
@@ -488,7 +488,7 @@ func TestDecodeFramesRejectAVCConfigurationRecordPreservesDelayedFlush(t *testin
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -522,7 +522,7 @@ func TestDecodeRejectAVCConfigurationRecordPreservesDelayedFlush(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -548,7 +548,7 @@ func TestDecodeRejectAVCConfigurationRecordPreservesDelayedFlush(t *testing.T) {
 	assertFrameMD5Strings(t, out, []string{"aa778b981f96d21489196f6a0faa0959"})
 }
 
-func TestDecodeAVCWithConfigurationRecordRejectPreservesDelayedFlush(t *testing.T) {
+func TestDecodeAVCCRejectPreservesDelayedFlush(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
 	if len(samples) != 3 {
@@ -556,7 +556,7 @@ func TestDecodeAVCWithConfigurationRecordRejectPreservesDelayedFlush(t *testing.
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -567,7 +567,7 @@ func TestDecodeAVCWithConfigurationRecordRejectPreservesDelayedFlush(t *testing.
 
 	damagedConfig := append([]byte(nil), config...)
 	damagedConfig = damagedConfig[:len(damagedConfig)-1]
-	frame, err := dec.DecodeAVCWithConfigurationRecord(damagedConfig, nil)
+	frame, err := dec.DecodeAVCC(damagedConfig, nil)
 	if err == nil {
 		t.Fatal("single-frame malformed configuration-record empty AVC packet flush returned nil error")
 	}
@@ -590,7 +590,7 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	var frames []*Frame
@@ -685,7 +685,7 @@ func TestDecodePacketIgnoresNewExtradataOnSingleFrameFlush(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config4); err != nil {
+	if _, err := dec.ConfigureAVCC(config4); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples4 {
@@ -717,7 +717,7 @@ func TestDecodePacketFramesIgnoresMalformedNewExtradataOnFlush(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -760,7 +760,7 @@ func TestDecodePacketIgnoresMalformedNewExtradataOnSingleFrameFlush(t *testing.T
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	for i, sample := range samples {
@@ -869,7 +869,7 @@ func TestDecodeConfiguredAVCBFramesReturnsReorderedPrefixBeforeDamagedSlice(t *t
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 
@@ -897,7 +897,7 @@ func TestDecodeConfiguredAVCBFramesReturnsReorderedPrefixBeforeDamagedSlice(t *t
 	})
 }
 
-func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesReorderedPrefixBeforeDamagedSlice(t *testing.T) {
+func TestDecodeAVCCFramesBFramesFlushesReorderedPrefixBeforeDamagedSlice(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
 	if len(samples) != 3 {
@@ -907,7 +907,7 @@ func TestDecodeAVCFramesWithConfigurationRecordBFramesFlushesReorderedPrefixBefo
 	packet := append([]byte(nil), samples[0]...)
 	packet = append(packet, samples[1]...)
 	packet = append(packet, truncateFirstVCLAVCPayload(t, samples[2], 4)...)
-	frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+	frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 	if err == nil {
 		t.Fatal("one-shot delayed B valid+damaged packet returned nil error")
 	}
@@ -1016,7 +1016,7 @@ func TestDecodeConfiguredAVCTestsrcBFramesFlushRetainedReferenceSample(t *testin
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame
@@ -1073,7 +1073,7 @@ func TestParseHeadersPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dec := NewDecoder()
-			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCC(config); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1108,7 +1108,7 @@ func TestParseHeadersPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 	for _, nalLengthSize := range []int{2, 3, 4} {
 		t.Run(fmt.Sprintf("avc-length%d", nalLengthSize), func(t *testing.T) {
 			dec := NewDecoder()
-			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCC(config); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1173,7 +1173,7 @@ func TestParseHeadersRejectPreservesDelayedConfiguredAVCFlush(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dec := NewDecoder()
-			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCC(config); err != nil {
 				t.Fatal(err)
 			}
 

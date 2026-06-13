@@ -72,12 +72,12 @@ func TestDecodeAVCTestsrc32High444DeblockFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh444DeblockFrames(t *testing.T) {
+func TestDecodeAVCCHigh444DeblockFrames(t *testing.T) {
 	for _, tt := range high444DeblockFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := decodeHexFixture(t, tt.hex)
 			config, packet := annexBToAVCConfigAndPacket(t, data, 4)
-			frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+			frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -92,7 +92,7 @@ func TestDecodeConfiguredAVCAcrossSamplesHigh444DeblockFrames(t *testing.T) {
 			data := decodeHexFixture(t, tt.hex)
 			config, samples := annexBToAVCConfigAndSamples(t, data, 4)
 			dec := NewDecoder()
-			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCC(config); err != nil {
 				t.Fatal(err)
 			}
 			for i, sample := range samples {

@@ -170,13 +170,13 @@ func TestDecodeAVCHigh12IntraPCMFrame(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12IntraPCMFrame(t *testing.T) {
+func TestDecodeAVCCHigh12IntraPCMFrame(t *testing.T) {
 	data := readHigh12IntraPCMFixture(t)
 	assertHigh12IntraPCMFixtureSyntax(t, data)
 
 	for _, nalLengthSize := range []int{2, 3, 4} {
 		config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-		frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+		frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 		if err != nil {
 			t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 		}
@@ -278,7 +278,7 @@ func TestDecodeAVCHigh12High14Intra16x16NoResidualFrame(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12High14Intra16x16NoResidualFrame(t *testing.T) {
+func TestDecodeAVCCHigh12High14Intra16x16NoResidualFrame(t *testing.T) {
 	for _, tt := range highIntra16x16NoResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highIntra16x16NoResidualFixture(tt.bitDepth)
@@ -286,7 +286,7 @@ func TestDecodeAVCWithConfigurationRecordHigh12High14Intra16x16NoResidualFrame(t
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
@@ -398,7 +398,7 @@ func TestDecodeAVCHigh12High14Intra16x16ResidualFrame(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12High14Intra16x16ResidualFrame(t *testing.T) {
+func TestDecodeAVCCHigh12High14Intra16x16ResidualFrame(t *testing.T) {
 	for _, tt := range highIntra16x16ResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highIntra16x16ResidualFixture(tt.bitDepth, tt.payloadBits)
@@ -406,7 +406,7 @@ func TestDecodeAVCWithConfigurationRecordHigh12High14Intra16x16ResidualFrame(t *
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
@@ -518,7 +518,7 @@ func TestDecodeAVCHigh12High14InterNoResidualFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12High14InterNoResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh12High14InterNoResidualFrames(t *testing.T) {
 	for _, tt := range highInterNoResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highInterNoResidualFixture(tt.bitDepth, tt.payloadBits)
@@ -526,7 +526,7 @@ func TestDecodeAVCWithConfigurationRecordHigh12High14InterNoResidualFrames(t *te
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
@@ -640,7 +640,7 @@ func TestDecodeAVCHigh12High14InterP16x16ResidualFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12High14InterP16x16ResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh12High14InterP16x16ResidualFrames(t *testing.T) {
 	for _, tt := range highInterP16x16ResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highInterP16x16ResidualFixture(tt.bitDepth)
@@ -648,7 +648,7 @@ func TestDecodeAVCWithConfigurationRecordHigh12High14InterP16x16ResidualFrames(t
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
@@ -762,7 +762,7 @@ func TestDecodeAVCHigh12High14InterP16x16LumaChromaResidualFrames(t *testing.T) 
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12High14InterP16x16LumaChromaResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh12High14InterP16x16LumaChromaResidualFrames(t *testing.T) {
 	for _, tt := range highInterP16x16LumaChromaResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highInterP16x16LumaChromaResidualFixture(tt.bitDepth)
@@ -770,7 +770,7 @@ func TestDecodeAVCWithConfigurationRecordHigh12High14InterP16x16LumaChromaResidu
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
@@ -884,7 +884,7 @@ func TestDecodeAVCHigh12High14InterP16x8LumaChromaResidualFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12High14InterP16x8LumaChromaResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh12High14InterP16x8LumaChromaResidualFrames(t *testing.T) {
 	for _, tt := range highInterP16x8LumaChromaResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highInterP16x8LumaChromaResidualFixture(tt.bitDepth)
@@ -892,7 +892,7 @@ func TestDecodeAVCWithConfigurationRecordHigh12High14InterP16x8LumaChromaResidua
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
@@ -1008,7 +1008,7 @@ func TestDecodeAVCHigh12High14InterP8x16LumaChromaResidualFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12High14InterP8x16LumaChromaResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh12High14InterP8x16LumaChromaResidualFrames(t *testing.T) {
 	for _, tt := range highInterP8x16LumaChromaResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highInterP8x16LumaChromaResidualFixture(tt.bitDepth)
@@ -1016,7 +1016,7 @@ func TestDecodeAVCWithConfigurationRecordHigh12High14InterP8x16LumaChromaResidua
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
@@ -1132,7 +1132,7 @@ func TestDecodeAVCHigh12High14InterP8x8LumaChromaResidualFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12High14InterP8x8LumaChromaResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh12High14InterP8x8LumaChromaResidualFrames(t *testing.T) {
 	for _, tt := range highInterP8x8LumaChromaResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highInterP8x8LumaChromaResidualFixture(tt.bitDepth)
@@ -1140,7 +1140,7 @@ func TestDecodeAVCWithConfigurationRecordHigh12High14InterP8x8LumaChromaResidual
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}

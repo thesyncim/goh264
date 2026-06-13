@@ -72,9 +72,9 @@ func TestDecodeConfiguredAVCHigh10PartitionedPFrames(t *testing.T) {
 			assertHigh10PartitionedPFixtureSyntax(t, data, tt)
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
-					t.Fatalf("nalLengthSize=%d: DecodeAVCFramesWithConfigurationRecord: %v", nalLengthSize, err)
+					t.Fatalf("nalLengthSize=%d: DecodeAVCCFrames: %v", nalLengthSize, err)
 				}
 				assertHigh10PartitionedPFrames(t, frames, tt)
 			}
@@ -94,7 +94,7 @@ func TestDecodeConfiguredSamplesHigh10PartitionedPFlush(t *testing.T) {
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame

@@ -1600,7 +1600,7 @@ func decodeH264CorpusConfiguredAVCSurface(t *testing.T, entry h264CorpusEntry, d
 	var final []*Frame
 	for _, nalLengthSize := range nalLengthSizes {
 		config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-		frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+		frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 		if err != nil {
 			return nil, fmt.Errorf("nal length size %d: %w", nalLengthSize, err)
 		}
@@ -1627,7 +1627,7 @@ func decodeH264CorpusConfiguredSamples(t *testing.T, entry h264CorpusEntry, data
 			if len(out) != 0 {
 				return nil, fmt.Errorf("nal length size %d config produced %d frames", nalLengthSize, len(out))
 			}
-		} else if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		} else if _, err := dec.ConfigureAVCC(config); err != nil {
 			return nil, fmt.Errorf("nal length size %d config: %w", nalLengthSize, err)
 		}
 		for i, sample := range samples {

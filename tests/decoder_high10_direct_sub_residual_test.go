@@ -110,7 +110,7 @@ func TestDecodeConfiguredAVCHigh10DirectSubResidualCAVLCFramesAcrossSamplesFlush
 		}
 
 		dec := NewDecoder()
-		if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		if _, err := dec.ConfigureAVCC(config); err != nil {
 			t.Fatalf("nalLengthSize=%d config: %v", nalLengthSize, err)
 		}
 		var frames []*Frame
@@ -140,7 +140,7 @@ func TestDecodeConfiguredAVCHigh10DirectSubResidualCABACFramesAcrossSamplesFlush
 		}
 
 		dec := NewDecoder()
-		if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		if _, err := dec.ConfigureAVCC(config); err != nil {
 			t.Fatalf("nalLengthSize=%d config: %v", nalLengthSize, err)
 		}
 		var frames []*Frame

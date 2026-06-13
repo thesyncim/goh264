@@ -77,7 +77,7 @@ func TestDecodeAVCHigh1214FrameMBAFFIntraPCMFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFIntraPCMFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFIntraPCMFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFIntraPCMCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFIntraPCMFixture(tt.bitDepth)
@@ -85,7 +85,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFIntraPCMFrames(t *tes
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF IntraPCM configured AVC: %v", nalLengthSize, tt.name, err)
 				}

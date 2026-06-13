@@ -773,7 +773,7 @@ func TestDecodeAVCHigh1214FrameMBAFFFrameCodedPLumaChromaResidualFrames(t *testi
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPSkipNoResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFPSkipNoResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFPSkipNoResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFPSkipNoResidualFixture(tt.bitDepth)
@@ -781,7 +781,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPSkipNoResidualFrames
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P-skip configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -791,7 +791,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPSkipNoResidualFrames
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16NoResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFP16x16NoResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFP16x16NoResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFP16x16NoResidualFixture(tt.bitDepth)
@@ -799,7 +799,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16NoResidualFrame
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P16x16 configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -809,7 +809,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16NoResidualFrame
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16LumaResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFP16x16LumaResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFP16x16LumaResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFP16x16LumaResidualFixture(tt.bitDepth)
@@ -817,7 +817,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16LumaResidualFra
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P16x16 luma-residual configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -827,7 +827,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16LumaResidualFra
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameP16x16NoResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFFrameP16x16NoResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFFrameP16x16NoResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFFrameP16x16NoResidualFixture(tt.bitDepth)
@@ -835,7 +835,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameP16x16NoResidual
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF frame-coded P16x16 no-residual configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -845,7 +845,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameP16x16NoResidual
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameP16x16LumaResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFFrameP16x16LumaResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFFrameP16x16LumaResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFFrameP16x16LumaResidualFixture(tt.bitDepth)
@@ -853,7 +853,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameP16x16LumaResidu
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF frame-coded P16x16 luma-residual configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -863,7 +863,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameP16x16LumaResidu
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16DeblockFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFP16x16DeblockFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFP16x16DeblockCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFP16x16DeblockFixture(tt)
@@ -871,7 +871,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16DeblockFrames(t
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P16x16 deblock configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -881,7 +881,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16DeblockFrames(t
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPDeblockFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFPartitionedPDeblockFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFPartitionedPDeblockCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFPartitionedPDeblockFixture(tt)
@@ -889,7 +889,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPDeblockFr
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF partitioned P deblock configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -899,7 +899,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPDeblockFr
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPSparseResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFPartitionedPSparseResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFPartitionedPSparseResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFPartitionedPSparseResidualFixture(tt.bitDepth, tt.payloadBits)
@@ -907,7 +907,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPSparseRes
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF partitioned P sparse-residual configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -917,7 +917,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPSparseRes
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16LumaChromaResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFP16x16LumaChromaResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFP16x16LumaChromaResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFP16x16LumaChromaResidualFixture(tt.bitDepth)
@@ -925,7 +925,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16LumaChromaResid
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF P16x16 luma+chroma-residual configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -935,7 +935,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFP16x16LumaChromaResid
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPLumaChromaResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFPartitionedPLumaChromaResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFPartitionedPLumaChromaResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFPartitionedPLumaChromaResidualFixture(tt.bitDepth, tt.payloadBits)
@@ -943,7 +943,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPLumaChrom
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF partitioned P luma+chroma-residual configured AVC: %v", nalLengthSize, tt.name, err)
 				}
@@ -953,7 +953,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFPartitionedPLumaChrom
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameCodedPLumaChromaResidualFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFFrameCodedPLumaChromaResidualFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFFrameCodedPLumaChromaResidualCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFFrameCodedPLumaChromaResidualFixture(tt.bitDepth, tt.payloadBits)
@@ -961,7 +961,7 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFFrameCodedPLumaChroma
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: decode %s frame-MBAFF frame-coded P luma+chroma-residual configured AVC: %v", nalLengthSize, tt.name, err)
 				}

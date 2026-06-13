@@ -87,7 +87,7 @@ func TestDecodeAVCHigh1214FrameMBAFFExplicitWeightedBFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFExplicitWeightedBFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFExplicitWeightedBFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFExplicitWeightedBSkipCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFExplicitWeightedBSkipFixture(tt)
@@ -95,9 +95,9 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFExplicitWeightedBFram
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
-					t.Fatalf("nalLengthSize=%d: DecodeAVCFramesWithConfigurationRecord: %v", nalLengthSize, err)
+					t.Fatalf("nalLengthSize=%d: DecodeAVCCFrames: %v", nalLengthSize, err)
 				}
 				assertHighFrameMBAFFBSkipFrames(t, frames, tt)
 			}
@@ -110,9 +110,9 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFExplicitWeightedBFram
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
-					t.Fatalf("nalLengthSize=%d: DecodeAVCFramesWithConfigurationRecord: %v", nalLengthSize, err)
+					t.Fatalf("nalLengthSize=%d: DecodeAVCCFrames: %v", nalLengthSize, err)
 				}
 				assertHighFrameMBAFFPartitionedBFrames(t, frames, tt)
 			}
@@ -355,7 +355,7 @@ func assertDecodeConfiguredAVCHighFrameMBAFFExplicitWeightedBFrames(t *testing.T
 			t.Fatalf("%s nalLengthSize=%d samples = %d, want IDR/P/B", name, nalLengthSize, len(samples))
 		}
 		dec := NewDecoder()
-		if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+		if _, err := dec.ConfigureAVCC(config); err != nil {
 			t.Fatalf("%s nalLengthSize=%d config: %v", name, nalLengthSize, err)
 		}
 		var frames []*Frame

@@ -72,9 +72,9 @@ func TestDecodeConfiguredAVCHigh10SliceBoundaryDeblockFrames(t *testing.T) {
 			assertHigh10SliceBoundaryDeblockFixtureSyntax(t, data, tt)
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
-					t.Fatalf("nalLengthSize=%d: DecodeAVCFramesWithConfigurationRecord: %v", nalLengthSize, err)
+					t.Fatalf("nalLengthSize=%d: DecodeAVCCFrames: %v", nalLengthSize, err)
 				}
 				assertHigh10SliceBoundaryDeblockFrames(t, frames, tt)
 			}
@@ -93,7 +93,7 @@ func TestDecodeConfiguredAccessUnitSamplesHigh10SliceBoundaryDeblockFrames(t *te
 					t.Fatalf("nalLengthSize=%d: samples = %d, want %d", nalLengthSize, len(samples), len(tt.frameMD5))
 				}
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame

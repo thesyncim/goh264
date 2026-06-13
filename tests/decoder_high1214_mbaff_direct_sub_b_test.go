@@ -68,7 +68,7 @@ func TestDecodeAVCHigh1214FrameMBAFFDirectSubBFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFDirectSubBFrames(t *testing.T) {
+func TestDecodeAVCCHigh1214FrameMBAFFDirectSubBFrames(t *testing.T) {
 	for _, tt := range highFrameMBAFFDirectSubBCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := highFrameMBAFFDirectSubBFixture(tt)
@@ -76,9 +76,9 @@ func TestDecodeAVCWithConfigurationRecordHigh1214FrameMBAFFDirectSubBFrames(t *t
 
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
-					t.Fatalf("nalLengthSize=%d: DecodeAVCFramesWithConfigurationRecord: %v", nalLengthSize, err)
+					t.Fatalf("nalLengthSize=%d: DecodeAVCCFrames: %v", nalLengthSize, err)
 				}
 				assertHighFrameMBAFFDirectSubBFrames(t, frames, tt)
 			}
@@ -98,7 +98,7 @@ func TestDecodeConfiguredAVCHigh1214FrameMBAFFDirectSubBFramesAcrossSamplesFlush
 					t.Fatalf("nalLengthSize=%d samples = %d, want IDR/P/B", nalLengthSize, len(samples))
 				}
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame

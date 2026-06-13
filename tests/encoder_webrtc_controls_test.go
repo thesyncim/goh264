@@ -3151,8 +3151,8 @@ func TestEncoderReconfigureSwitchesOutputFormatToAVCForForcedIDR(t *testing.T) {
 		t.Fatalf("ParameterSets: %v", err)
 	}
 	dec := goh264.NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+	if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	decodedSecond, err := dec.DecodeConfiguredAVCFrames(second.Data)
 	if err != nil {
@@ -3219,8 +3219,8 @@ func TestEncoderReconfigureSwitchesOutputFormatFromAVCToRTPForForcedIDR(t *testi
 		t.Fatalf("ParameterSets: %v", err)
 	}
 	avcDec := goh264.NewDecoder()
-	if _, err := avcDec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+	if _, err := avcDec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	decodedFirst, err := avcDec.DecodeConfiguredAVCFrames(first.Data)
 	if err != nil {
@@ -5247,9 +5247,9 @@ func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 		t.Fatalf("Annex B stream info = %+v", info)
 	}
 
-	avcc, err := goh264.NewDecoder().ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord)
+	avcc, err := goh264.NewDecoder().ConfigureAVCC(headers.AVCDecoderConfigurationRecord)
 	if err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	if !bytes.Equal(headers.AVCC(), headers.AVCDecoderConfigurationRecord) {
 		t.Fatalf("AVCC() = %x, want %x", headers.AVCC(), headers.AVCDecoderConfigurationRecord)
@@ -5440,8 +5440,8 @@ func TestEncoderParameterSetsReturnCallerOwnedSurfaces(t *testing.T) {
 	if _, err := goh264.NewDecoder().ParseHeadersAnnexB(again.AnnexB); err != nil {
 		t.Fatalf("ParseHeadersAnnexB regenerated headers: %v", err)
 	}
-	if _, err := goh264.NewDecoder().ConfigureAVCDecoderConfigurationRecord(again.AVCDecoderConfigurationRecord); err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord regenerated headers: %v", err)
+	if _, err := goh264.NewDecoder().ConfigureAVCC(again.AVCDecoderConfigurationRecord); err != nil {
+		t.Fatalf("ConfigureAVCC regenerated headers: %v", err)
 	}
 }
 
@@ -5605,8 +5605,8 @@ func TestEncoderParameterSetsAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 	if _, err := goh264.NewDecoder().ParseHeadersAnnexB(annexB[len(prefix):]); err != nil {
 		t.Fatalf("ParseHeadersAnnexB appended AnnexB: %v", err)
 	}
-	if _, err := goh264.NewDecoder().ConfigureAVCDecoderConfigurationRecord(avcc[len(prefix):]); err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord appended avcC: %v", err)
+	if _, err := goh264.NewDecoder().ConfigureAVCC(avcc[len(prefix):]); err != nil {
+		t.Fatalf("ConfigureAVCC appended avcC: %v", err)
 	}
 }
 
@@ -5705,8 +5705,8 @@ func TestEncoderParameterSetsSurviveLaterParameterSetCall(t *testing.T) {
 	if _, err := goh264.NewDecoder().ParseHeadersAnnexB(first.AnnexB); err != nil {
 		t.Fatalf("ParseHeadersAnnexB first headers after later mutation: %v", err)
 	}
-	if _, err := goh264.NewDecoder().ConfigureAVCDecoderConfigurationRecord(first.AVCDecoderConfigurationRecord); err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord first headers after later mutation: %v", err)
+	if _, err := goh264.NewDecoder().ConfigureAVCC(first.AVCDecoderConfigurationRecord); err != nil {
+		t.Fatalf("ConfigureAVCC first headers after later mutation: %v", err)
 	}
 }
 
@@ -5916,9 +5916,9 @@ func TestEncoderParameterSetsExposeWebRTCCrop(t *testing.T) {
 			info.Width, info.Height, wantWidth, wantHeight)
 	}
 
-	avcc, err := goh264.NewDecoder().ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord)
+	avcc, err := goh264.NewDecoder().ConfigureAVCC(headers.AVCDecoderConfigurationRecord)
 	if err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	if avcc.StreamInfo.Width != wantWidth || avcc.StreamInfo.Height != wantHeight {
 		t.Fatalf("cropped avcC dimensions = %dx%d, want %dx%d",
@@ -5987,8 +5987,8 @@ func TestEncoderRecoveryPointSEIExposesWebRTCRecoverySignal(t *testing.T) {
 	}
 	samples[1] = append(append([]byte(nil), sei.AVC...), samples[1]...)
 	avcDec := goh264.NewDecoder()
-	if _, err := avcDec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+	if _, err := avcDec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
 	}
 	first, err := avcDec.DecodeConfiguredAVC(samples[0])
 	if err != nil {
@@ -6010,8 +6010,8 @@ func TestEncoderRecoveryPointSEIExposesWebRTCRecoverySignal(t *testing.T) {
 	}
 	samples[1] = append(append([]byte(nil), delayed.AVC...), samples[1][len(sei.AVC):]...)
 	avcDec = goh264.NewDecoder()
-	if _, err := avcDec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
-		t.Fatalf("ConfigureAVCDecoderConfigurationRecord delayed: %v", err)
+	if _, err := avcDec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC delayed: %v", err)
 	}
 	if _, err := avcDec.DecodeConfiguredAVC(samples[0]); err != nil {
 		t.Fatalf("DecodeConfiguredAVC delayed first: %v", err)
@@ -6935,8 +6935,8 @@ func TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP(t *testing.T) {
 				if err != nil {
 					t.Fatalf("ParameterSets: %v", err)
 				}
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-					t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+				if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ConfigureAVCC: %v", err)
 				}
 				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
 				if err != nil {
@@ -7091,8 +7091,8 @@ func TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControlsForAVCAndRTP
 					if err != nil {
 						t.Fatalf("ParameterSets: %v", err)
 					}
-					if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-						t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+					if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+						t.Fatalf("ConfigureAVCC: %v", err)
 					}
 					decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
 					if err != nil {
@@ -7367,8 +7367,8 @@ func TestEncoderEncodePerMacroblockExactP16x16NoResidualMotionForAnnexBAVCRTP(t 
 					t.Fatalf("DecodeFrames second Annex B: %v", err)
 				}
 			case goh264.EncoderOutputAVC:
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-					t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+				if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ConfigureAVCC: %v", err)
 				}
 				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
 				if err != nil {
@@ -7562,8 +7562,8 @@ func TestEncoderEncodePerMacroblockExactP16x16FallsBackWithDeblockControlsForAVC
 				stream := append([]byte(nil), headers.AnnexB...)
 				switch tt.format {
 				case goh264.EncoderOutputAVC:
-					if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-						t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+					if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+						t.Fatalf("ConfigureAVCC: %v", err)
 					}
 					decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
 					if err != nil {
@@ -7910,8 +7910,8 @@ func TestEncoderEncodeOddPixelExactP16x16FallsBackWithDeblockControlsForAVCAndRT
 				stream := append([]byte(nil), headers.AnnexB...)
 				switch tt.format {
 				case goh264.EncoderOutputAVC:
-					if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-						t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+					if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+						t.Fatalf("ConfigureAVCC: %v", err)
 					}
 					decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
 					if err != nil {
@@ -7999,8 +7999,8 @@ func TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP(t *testing
 			stream := append([]byte(nil), headers.AnnexB...)
 			switch tt.format {
 			case goh264.EncoderOutputAVC:
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-					t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+				if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ConfigureAVCC: %v", err)
 				}
 				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
 				if err != nil {
@@ -8096,8 +8096,8 @@ func TestEncoderEncodeOddPixelExactP16x16RequiresConstantChroma(t *testing.T) {
 				}
 				stream = append(append([]byte(nil), first.Data...), second.Data...)
 			case goh264.EncoderOutputAVC:
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-					t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+				if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ConfigureAVCC: %v", err)
 				}
 				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
 				if err != nil {
@@ -8409,8 +8409,8 @@ func TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP(t *testing.T)
 			stream := append([]byte(nil), headers.AnnexB...)
 			switch tt.format {
 			case goh264.EncoderOutputAVC:
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-					t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+				if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ConfigureAVCC: %v", err)
 				}
 				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
 				if err != nil {
@@ -8532,8 +8532,8 @@ func TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs(t *testing.
 					t.Fatalf("DecodeFrames second Annex B: %v", err)
 				}
 			case goh264.EncoderOutputAVC:
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(headers.AVCDecoderConfigurationRecord); err != nil {
-					t.Fatalf("ConfigureAVCDecoderConfigurationRecord: %v", err)
+				if _, err := dec.ConfigureAVCC(headers.AVCDecoderConfigurationRecord); err != nil {
+					t.Fatalf("ConfigureAVCC: %v", err)
 				}
 				decodedFirst, err = dec.DecodeConfiguredAVCFrames(first.Data)
 				if err != nil {

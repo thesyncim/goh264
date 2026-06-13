@@ -53,14 +53,12 @@ type StreamInfo struct {
 	FixedFrameRateFlag             int32
 }
 
-type AVCDecoderConfiguration struct {
+// AVCConfig contains metadata parsed from an avcC record or stored for
+// configured-AVC decoding.
+type AVCConfig struct {
 	NALLengthSize int
 	StreamInfo    StreamInfo
 }
-
-// AVCConfig is the short name for AVC decoder configuration metadata returned
-// after parsing an avcC record.
-type AVCConfig = AVCDecoderConfiguration
 
 // InspectAnnexBHeaders parses Annex B parameter sets and returns stream
 // metadata without changing decoder state.
@@ -84,24 +82,13 @@ func InspectAVCHeaders(data []byte, nalLengthSize int) (StreamInfo, error) {
 	return info, err
 }
 
-// InspectAVCDecoderConfigurationRecord parses AVC decoder configuration
-// metadata without changing decoder state.
-//
-// InspectAVCC is the short stateless avcC name.
-// InspectAVCDecoderConfigurationRecord is the long-form equivalent.
-func InspectAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
+// InspectAVCC parses avcC metadata without changing decoder state.
+func InspectAVCC(data []byte) (AVCConfig, error) {
 	cfg, err := h264.DecodeAVCDecoderConfigurationRecord(data)
 	if err != nil {
-		return AVCDecoderConfiguration{}, err
+		return AVCConfig{}, err
 	}
 	return avcDecoderConfigurationFromH264(cfg)
-}
-
-// InspectAVCC parses avcC metadata without changing decoder state.
-//
-// InspectAVCC is the short stateless name.
-func InspectAVCC(data []byte) (AVCConfig, error) {
-	return InspectAVCDecoderConfigurationRecord(data)
 }
 
 // PacketSideDataType identifies auxiliary packet metadata accepted by Packet.
@@ -743,9 +730,9 @@ func (d *Decoder) DecodeConfiguredAVC(data []byte) (*Frame, error) {
 // DecodeConfiguredAVCFrames decodes a stateful AVC packet using the stored AVC
 // configuration.
 //
-// The stored configuration is set by ConfigureAVCDecoderConfigurationRecord,
-// ConfigureAVCC, or by a prior AVC decoder configuration record passed to
-// DecodeFrames. Passing empty data flushes delayed frames.
+// The stored configuration is set by ConfigureAVCC or by a prior AVC decoder
+// configuration record passed to DecodeFrames. Passing empty data flushes
+// delayed frames.
 func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	if d == nil || d.avcNALLengthSize == 0 {
 		return nil, ErrInvalidData
@@ -788,26 +775,17 @@ func (d *Decoder) FlushDelayedFrame() (*Frame, error) {
 	return singleFrameFromFrames(frames, err)
 }
 
-// DecodeAVCWithConfigurationRecord updates the stored AVC configuration, decodes
-// data, and returns the single output frame.
-func (d *Decoder) DecodeAVCWithConfigurationRecord(config []byte, data []byte) (*Frame, error) {
-	frames, err := d.DecodeAVCFramesWithConfigurationRecord(config, data)
-	return singleFrameFromFrames(frames, err)
-}
-
 // DecodeAVCC updates the stored AVC configuration from an avcC record, decodes
 // data, and returns the single output frame.
 func (d *Decoder) DecodeAVCC(config []byte, data []byte) (*Frame, error) {
-	return d.DecodeAVCWithConfigurationRecord(config, data)
+	frames, err := d.DecodeAVCCFrames(config, data)
+	return singleFrameFromFrames(frames, err)
 }
 
-// DecodeAVCFramesWithConfigurationRecord updates the stored AVC configuration
-// from config and decodes data with that configuration.
-//
-// For non-empty data this helper also drains delayed frames before returning.
-// Passing empty data updates the configuration and flushes existing delayed
-// frames.
-func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []byte) ([]*Frame, error) {
+// DecodeAVCCFrames updates the stored AVC configuration from an avcC record,
+// decodes data with that configuration, and drains delayed frames before
+// returning.
+func (d *Decoder) DecodeAVCCFrames(config []byte, data []byte) ([]*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
 	}
@@ -817,13 +795,6 @@ func (d *Decoder) DecodeAVCFramesWithConfigurationRecord(config []byte, data []b
 	}
 	d.updateAVCDecoderConfigurationForPacket(cfg, data)
 	return d.decodeAVCFramesWithConfig(data, cfg)
-}
-
-// DecodeAVCCFrames updates the stored AVC configuration from an avcC record,
-// decodes data with that configuration, and drains delayed frames before
-// returning.
-func (d *Decoder) DecodeAVCCFrames(config []byte, data []byte) ([]*Frame, error) {
-	return d.DecodeAVCFramesWithConfigurationRecord(config, data)
 }
 
 func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConfigurationRecord) ([]*Frame, error) {
@@ -918,42 +889,29 @@ func (d *Decoder) ParseHeadersAVC(data []byte, nalLengthSize int) (StreamInfo, e
 	return info, nil
 }
 
-// ConfigureAVCDecoderConfigurationRecord parses an AVC decoder configuration
-// record, stores it for configured-AVC decode calls, and returns stream
-// metadata. Storing a configuration resets decoder picture state for a new
-// configured-AVC stream.
-//
-// ConfigureAVCDecoderConfigurationRecord is the long-form mutating name.
-// ConfigureAVCC is the short avcC API.
-func (d *Decoder) ConfigureAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfiguration, error) {
+// ConfigureAVCC parses an avcC record, stores it for configured-AVC decode
+// calls, resets decoder picture state, and returns stream metadata.
+func (d *Decoder) ConfigureAVCC(data []byte) (AVCConfig, error) {
 	if d == nil {
-		return AVCDecoderConfiguration{}, ErrInvalidData
+		return AVCConfig{}, ErrInvalidData
 	}
 	cfg, err := h264.DecodeAVCDecoderConfigurationRecord(data)
 	if err != nil {
-		return AVCDecoderConfiguration{}, err
+		return AVCConfig{}, err
 	}
 	d.storeAVCDecoderConfiguration(cfg)
 	return avcDecoderConfigurationFromH264(cfg)
 }
 
-func avcDecoderConfigurationFromH264(cfg h264.AVCDecoderConfigurationRecord) (AVCDecoderConfiguration, error) {
+func avcDecoderConfigurationFromH264(cfg h264.AVCDecoderConfigurationRecord) (AVCConfig, error) {
 	sps := cfg.SPS[cfg.FirstSPSID]
 	if sps == nil {
-		return AVCDecoderConfiguration{}, ErrInvalidData
+		return AVCConfig{}, ErrInvalidData
 	}
-	return AVCDecoderConfiguration{
+	return AVCConfig{
 		NALLengthSize: cfg.NALLengthSize,
 		StreamInfo:    streamInfoFromSPS(sps),
 	}, nil
-}
-
-// ConfigureAVCC parses an avcC record, stores it for configured-AVC decode
-// calls, resets decoder picture state, and returns stream metadata.
-//
-// ConfigureAVCC is the short mutating name.
-func (d *Decoder) ConfigureAVCC(data []byte) (AVCConfig, error) {
-	return d.ConfigureAVCDecoderConfigurationRecord(data)
 }
 
 // AVCConfig returns the stored avcC/configured-AVC metadata.

@@ -63,7 +63,7 @@ func TestDecodeConfiguredAVCHigh10ChromaDeblockFrames(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			data := readHigh10ChromaDeblockFixture(t, tt)
 			config, packet := annexBToAVCConfigAndPacket(t, data, 4)
-			frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+			frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -81,7 +81,7 @@ func TestDecodeConfiguredAVCSamplesHigh10ChromaDeblockFrames(t *testing.T) {
 				t.Fatalf("samples = %d, want %d", len(samples), len(tt.frameMD5))
 			}
 			dec := NewDecoder()
-			if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+			if _, err := dec.ConfigureAVCC(config); err != nil {
 				t.Fatal(err)
 			}
 			var frames []*Frame

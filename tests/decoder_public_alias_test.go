@@ -26,13 +26,11 @@ var (
 	ErrUnsupported = goh264.ErrUnsupported
 	NewDecoder     = goh264.NewDecoder
 
-	InspectAnnexBHeaders                 = goh264.InspectAnnexBHeaders
-	InspectAVCHeaders                    = goh264.InspectAVCHeaders
-	InspectAVCDecoderConfigurationRecord = goh264.InspectAVCDecoderConfigurationRecord
-	InspectAVCC                          = goh264.InspectAVCC
+	InspectAnnexBHeaders = goh264.InspectAnnexBHeaders
+	InspectAVCHeaders    = goh264.InspectAVCHeaders
+	InspectAVCC          = goh264.InspectAVCC
 )
 
-var _ = (*Decoder).ConfigureAVCDecoderConfigurationRecord
 var _ = (*Decoder).ConfigureAVCC
 var _ = (*Decoder).Reset
 var _ = (*Decoder).Decode
@@ -47,9 +45,7 @@ var _ = (*Decoder).DecodeConfiguredAVC
 var _ = (*Decoder).DecodeConfiguredAVCFrames
 var _ = (*Decoder).FlushDelayedFrames
 var _ = (*Decoder).FlushDelayedFrame
-var _ = (*Decoder).DecodeAVCWithConfigurationRecord
 var _ = (*Decoder).DecodeAVCC
-var _ = (*Decoder).DecodeAVCFramesWithConfigurationRecord
 var _ = (*Decoder).DecodeAVCCFrames
 var _ = (*Decoder).ParseHeadersAnnexB
 var _ = (*Decoder).ParseHeadersAVC
@@ -73,7 +69,6 @@ var _ = (*Frame).RawYUVBytesLE
 type (
 	Decoder                   = goh264.Decoder
 	StreamInfo                = goh264.StreamInfo
-	AVCDecoderConfiguration   = goh264.AVCDecoderConfiguration
 	AVCConfig                 = goh264.AVCConfig
 	PacketSideDataType        = goh264.PacketSideDataType
 	PacketSideData            = goh264.PacketSideData

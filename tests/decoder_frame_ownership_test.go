@@ -12,7 +12,7 @@ func TestDecodeConfiguredAVCFramesOwnPublic8BitPlanes(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	first, err := dec.DecodeConfiguredAVC(samples[0])
@@ -36,7 +36,7 @@ func TestDecodeConfiguredAVCFrameSurvivesLater8BitDecode(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	first, err := dec.DecodeConfiguredAVC(samples[0])
@@ -61,7 +61,7 @@ func TestDecodeConfiguredAVCFramesOwnPublicHigh10Planes(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	first, err := dec.DecodeConfiguredAVC(samples[0])
@@ -85,7 +85,7 @@ func TestDecodeConfiguredAVCFrameSurvivesLaterHigh10Decode(t *testing.T) {
 	}
 
 	dec := NewDecoder()
-	if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+	if _, err := dec.ConfigureAVCC(config); err != nil {
 		t.Fatal(err)
 	}
 	first, err := dec.DecodeConfiguredAVC(samples[0])

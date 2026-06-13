@@ -51,13 +51,13 @@ func TestDecodeAVCHigh12LumaChromaResidualFrame(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh12LumaChromaResidualFrame(t *testing.T) {
+func TestDecodeAVCCHigh12LumaChromaResidualFrame(t *testing.T) {
 	data := readHigh12LumaChromaResidualFixture(t)
 	assertHigh12LumaChromaResidualFixtureSyntax(t, data)
 
 	for _, nalLengthSize := range []int{2, 3, 4} {
 		config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-		frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+		frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 		if err != nil {
 			t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 		}

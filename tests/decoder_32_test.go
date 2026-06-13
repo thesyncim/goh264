@@ -83,7 +83,7 @@ func TestDecodeConfiguredAVCTestsrc32High8x8DCTFrames(t *testing.T) {
 			data := decodeHexFixture(t, tt.hex)
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
@@ -104,7 +104,7 @@ func TestDecodeConfiguredAVCTestsrc32High8x8DCTFramesAcrossSamples(t *testing.T)
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame

@@ -90,16 +90,16 @@ func TestDecodeAVCHigh10WeightedPFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh10WeightedPFrames(t *testing.T) {
+func TestDecodeAVCCHigh10WeightedPFrames(t *testing.T) {
 	for _, tt := range high10WeightedPFixtures() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := decodeHexFixture(t, tt.hex)
 			assertHigh10WeightedPFixtureSyntax(t, data, tt.cabac)
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
-					t.Fatalf("nalLengthSize=%d: DecodeAVCFramesWithConfigurationRecord: %v", nalLengthSize, err)
+					t.Fatalf("nalLengthSize=%d: DecodeAVCCFrames: %v", nalLengthSize, err)
 				}
 				assertHigh10WeightedPFrames(t, frames)
 			}
@@ -119,7 +119,7 @@ func TestDecodeConfiguredAVCAcrossSamplesHigh10WeightedPFrames(t *testing.T) {
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame

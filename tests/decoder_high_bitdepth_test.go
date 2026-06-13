@@ -79,12 +79,12 @@ func TestDecodeAVCHigh10IntraFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh10IntraFrames(t *testing.T) {
+func TestDecodeAVCCHigh10IntraFrames(t *testing.T) {
 	for _, tt := range high10IntraFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := decodeHexFixture(t, tt.hex)
 			config, packet := annexBToAVCConfigAndPacket(t, data, 4)
-			frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+			frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -120,13 +120,13 @@ func TestDecodeAVCHigh10InterFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh10InterFrames(t *testing.T) {
+func TestDecodeAVCCHigh10InterFrames(t *testing.T) {
 	for _, tt := range high10InterFixtureCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := decodeHexFixture(t, tt.hex)
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
 					t.Fatalf("nalLengthSize=%d: %v", nalLengthSize, err)
 				}
@@ -147,7 +147,7 @@ func TestDecodeConfiguredAVCAcrossSamplesHigh10InterFrames(t *testing.T) {
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d: config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame

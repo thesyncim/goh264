@@ -65,16 +65,16 @@ func TestDecodeAVCHigh10DirectBDeblockFrames(t *testing.T) {
 	}
 }
 
-func TestDecodeAVCWithConfigurationRecordHigh10DirectBDeblockFrames(t *testing.T) {
+func TestDecodeAVCCHigh10DirectBDeblockFrames(t *testing.T) {
 	for _, tt := range high10DirectBDeblockFixtures() {
 		t.Run(tt.name, func(t *testing.T) {
 			data := readHigh10DirectBDeblockFixture(t, tt)
 			assertHigh10DirectBDeblockFixtureSyntax(t, data, tt)
 			for _, nalLengthSize := range []int{2, 3, 4} {
 				config, packet := annexBToAVCConfigAndPacket(t, data, nalLengthSize)
-				frames, err := NewDecoder().DecodeAVCFramesWithConfigurationRecord(config, packet)
+				frames, err := NewDecoder().DecodeAVCCFrames(config, packet)
 				if err != nil {
-					t.Fatalf("nalLengthSize=%d: DecodeAVCFramesWithConfigurationRecord: %v", nalLengthSize, err)
+					t.Fatalf("nalLengthSize=%d: DecodeAVCCFrames: %v", nalLengthSize, err)
 				}
 				assertHigh10DirectBDeblockFrames(t, frames, tt)
 			}
@@ -94,7 +94,7 @@ func TestDecodeConfiguredAVCHigh10DirectBDeblockFramesAcrossSamplesFlush(t *test
 				}
 
 				dec := NewDecoder()
-				if _, err := dec.ConfigureAVCDecoderConfigurationRecord(config); err != nil {
+				if _, err := dec.ConfigureAVCC(config); err != nil {
 					t.Fatalf("nalLengthSize=%d config: %v", nalLengthSize, err)
 				}
 				var frames []*Frame

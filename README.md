@@ -192,7 +192,7 @@ Use the format-specific helpers when the packet format is already known:
 ```go
 frames, err := dec.DecodeAnnexBFrames(annexB)          // complete Annex B bytestream
 frames, err := dec.DecodeAVCFrames(packet, lengthSize) // complete length-prefixed AVC packet stream
-cfg, err := dec.ConfigureAVCC(avcc)                    // short form for storing avcC
+cfg, err := dec.ConfigureAVCC(avcc)                    // store avcC for configured AVC
 frames, err := dec.DecodeConfiguredAVCFrames(packet)   // stateful AVC after avcC
 frames, err := dec.DecodeAVCCFrames(avcc, packet)      // update avcC, decode, then drain
 cfg, err = dec.AVCConfig()                             // current configured-AVC metadata
@@ -242,30 +242,28 @@ info, err := dec.ParseHeadersAnnexB(data)
 info, err = dec.ParseHeadersAVC(packet, nalLengthSize)
 info, err = goh264.InspectAnnexBHeaders(data)
 info, err = goh264.InspectAVCHeaders(packet, nalLengthSize)
-cfg, err := goh264.InspectAVCDecoderConfigurationRecord(avcc)
-cfg, err = goh264.InspectAVCC(avcc) // short stateless avcC inspection
+cfg, err := goh264.InspectAVCC(avcc)
 ```
 
 Malformed `ParseHeadersAnnexB` and `ParseHeadersAVC` calls are transactional:
 partially parsed SPS/PPS state is not committed over a previous valid
 configuration, and delayed configured-AVC B-frame output remains available for
 flush after the rejected parse.
-Decoder `ConfigureAVCC` stores the configuration for later configured-AVC
-decode; `ConfigureAVCDecoderConfigurationRecord` is the equivalent long-form
-name. Package-level `InspectAVCC` is the short stateless name;
-`InspectAVCDecoderConfigurationRecord` is the equivalent long-form name.
+Use `ConfigureAVCC` to store avcC metadata for later configured-AVC decode.
+Use package-level `InspectAVCC` when the caller only needs avcC metadata and
+does not want to mutate decoder state.
 Malformed avcC records, including invalid reserved bits or
 caller-constructed impossible-size inputs, are rejected before replacing the
 previous stored configuration.
 
 avcC name map:
 
-| Need | Primary helper | Equivalent names | Single-frame helper |
-| --- | --- | --- | --- |
-| Stateless avcC metadata inspection | `InspectAVCC` | `InspectAVCDecoderConfigurationRecord` | n/a |
-| Store avcC for configured-AVC streaming | `ConfigureAVCC` | `ConfigureAVCDecoderConfigurationRecord` | n/a |
-| Decode with already stored avcC | `DecodeConfiguredAVCFrames` | n/a | `DecodeConfiguredAVC` |
-| Update avcC, decode one packet, then drain delayed output | `DecodeAVCCFrames` | `DecodeAVCFramesWithConfigurationRecord` | `DecodeAVCC` |
+| Need | Helper | Single-frame helper |
+| --- | --- | --- |
+| Stateless avcC metadata inspection | `InspectAVCC` | n/a |
+| Store avcC for configured-AVC streaming | `ConfigureAVCC` | n/a |
+| Decode with already stored avcC | `DecodeConfiguredAVCFrames` | `DecodeConfiguredAVC` |
+| Update avcC, decode one packet, then drain delayed output | `DecodeAVCCFrames` | `DecodeAVCC` |
 
 Packet side-data support mirrors FFmpeg-facing surfaces used by the port:
 
