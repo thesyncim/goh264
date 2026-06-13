@@ -2527,11 +2527,11 @@ func (e *Encoder) p16x16ResidualPlanFromPixelDelta(view encoderFrameView, sliceR
 			return encoderP16x16ResidualPlan{}, false, nil
 		}
 		for mbAddr := r.firstMB; mbAddr < end; mbAddr++ {
-			coeff, ok := encoderP16x16LumaDCCoefficientFromPixels(&e.reference, view, mbAddr, macroblocksPerRow, qmul)
+			coeffs, ok := encoderP16x16LumaDCCoefficientsFromPixels(&e.reference, view, mbAddr, macroblocksPerRow, qmul)
 			if !ok {
 				return encoderP16x16ResidualPlan{}, false, nil
 			}
-			lumaCoefficients[mbAddr] = []h264.EncoderResidualCoefficient{{Pos: 0, Value: coeff}}
+			lumaCoefficients[mbAddr] = coeffs
 		}
 	}
 	return encoderP16x16ResidualPlan{lumaCoefficients: lumaCoefficients}, true, nil
@@ -2584,42 +2584,52 @@ func encoderI420ReferenceChromaMatchesView(ref *encoderReferenceFrame, view enco
 	return true
 }
 
-func encoderP16x16LumaDCCoefficientFromPixels(ref *encoderReferenceFrame, view encoderFrameView, mbAddr int, macroblocksPerRow int, qmul uint32) (int32, bool) {
+func encoderP16x16LumaDCCoefficientsFromPixels(ref *encoderReferenceFrame, view encoderFrameView, mbAddr int, macroblocksPerRow int, qmul uint32) ([]h264.EncoderResidualCoefficient, bool) {
 	if ref == nil || macroblocksPerRow <= 0 || mbAddr < 0 || qmul == 0 {
-		return 0, false
+		return nil, false
 	}
 	mbX := mbAddr % macroblocksPerRow
 	mbY := mbAddr / macroblocksPerRow
 	baseX := mbX << 4
 	baseY := mbY << 4
 	if baseX+16 > view.width || baseY+16 > view.height || len(ref.y) != view.width*view.height {
-		return 0, false
+		return nil, false
 	}
-	delta := 0
-	for y := 0; y < 16; y++ {
-		viewRow := view.y[(baseY+y)*view.strideY+baseX : (baseY+y)*view.strideY+baseX+16]
-		refRow := ref.y[(baseY+y)*view.width+baseX : (baseY+y)*view.width+baseX+16]
-		for x := 0; x < 16; x++ {
-			pixelDelta := int(viewRow[x]) - int(refRow[x])
-			if x < 4 && y < 4 {
+
+	var coeffs []h264.EncoderResidualCoefficient
+	for blockIndex := 0; blockIndex < 16; blockIndex++ {
+		i8x8 := blockIndex >> 2
+		i4x4 := blockIndex & 3
+		blockX := ((i8x8 & 1) << 3) + ((i4x4 & 1) << 2)
+		blockY := ((i8x8 >> 1) << 3) + ((i4x4 >> 1) << 2)
+		delta := 0
+		for y := 0; y < 4; y++ {
+			viewRow := view.y[(baseY+blockY+y)*view.strideY+baseX+blockX : (baseY+blockY+y)*view.strideY+baseX+blockX+4]
+			refRow := ref.y[(baseY+blockY+y)*view.width+baseX+blockX : (baseY+blockY+y)*view.width+baseX+blockX+4]
+			for x := 0; x < 4; x++ {
+				pixelDelta := int(viewRow[x]) - int(refRow[x])
 				if x == 0 && y == 0 {
 					delta = pixelDelta
 					continue
 				}
 				if pixelDelta != delta {
-					return 0, false
+					return nil, false
 				}
-				continue
-			}
-			if pixelDelta != 0 {
-				return 0, false
 			}
 		}
+		if delta == 0 {
+			continue
+		}
+		level, ok := encoderP16x16ResidualLumaDCLevelForPixelDelta(delta, qmul)
+		if !ok {
+			return nil, false
+		}
+		coeffs = append(coeffs, h264.EncoderResidualCoefficient{Pos: blockIndex * 16, Value: level})
 	}
-	if delta == 0 {
-		return 0, false
+	if len(coeffs) == 0 {
+		return nil, false
 	}
-	return encoderP16x16ResidualLumaDCLevelForPixelDelta(delta, qmul)
+	return coeffs, true
 }
 
 func encoderP16x16ResidualLumaDCLevelForPixelDelta(delta int, qmul uint32) (int32, bool) {

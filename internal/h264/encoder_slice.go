@@ -509,6 +509,9 @@ func encodeI420P16x16ResidualSliceRBSP(cfg EncoderI420P16x16ResidualConfig, pps 
 			chromaACPos = cfg.ChromaACCoeffPositions[i]
 		}
 		cbp := 1
+		if len(lumaCoefficients) > 0 {
+			cbp = encoderLumaCBPFromCoefficients(lumaCoefficients[i])
+		}
 		if len(chromaACCoefficients) > 0 || chromaACCb != 0 || chromaACCr != 0 {
 			cbp |= 0x20
 		} else if len(chromaDCCoefficients) > 0 || chromaDCCb != 0 || chromaDCCr != 0 {
@@ -896,7 +899,7 @@ func validateEncoderI420P16x16ResidualConfig(cfg EncoderI420P16x16ResidualConfig
 			return ErrInvalidData
 		}
 		for _, coeffs := range cfg.LumaCoefficients {
-			if !validEncoderResidualCoefficients(coeffs, 0, 16) {
+			if !validEncoderResidualCoefficients(coeffs, 0, 256) {
 				return ErrInvalidData
 			}
 		}
@@ -993,10 +996,10 @@ func validateEncoderI420P16x16ResidualConfig(cfg EncoderI420P16x16ResidualConfig
 }
 
 func validEncoderResidualCoefficients(coeffs []EncoderResidualCoefficient, minPos int, maxPos int) bool {
-	if len(coeffs) == 0 || len(coeffs) > maxPos-minPos || minPos < 0 || maxPos > 16 || minPos >= maxPos {
+	if len(coeffs) == 0 || len(coeffs) > maxPos-minPos || minPos < 0 || maxPos > 256 || minPos >= maxPos {
 		return false
 	}
-	var seen [16]bool
+	var seen [256]bool
 	for _, coeff := range coeffs {
 		if coeff.Pos < minPos || coeff.Pos >= maxPos || coeff.Value == 0 || seen[coeff.Pos] {
 			return false
@@ -1004,6 +1007,14 @@ func validEncoderResidualCoefficients(coeffs []EncoderResidualCoefficient, minPo
 		seen[coeff.Pos] = true
 	}
 	return true
+}
+
+func encoderLumaCBPFromCoefficients(coeffs []EncoderResidualCoefficient) int {
+	cbp := 0
+	for _, coeff := range coeffs {
+		cbp |= 1 << (coeff.Pos / 64)
+	}
+	return cbp
 }
 
 func validateEncoderI420PSkipConfig(cfg EncoderI420PSkipConfig) error {

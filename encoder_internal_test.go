@@ -4,8 +4,11 @@ package goh264
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"unsafe"
+
+	"github.com/thesyncim/goh264/internal/h264"
 )
 
 func TestEncoderEncodeIntoOverflowedP16PlanningDoesNotCommitScratch(t *testing.T) {
@@ -135,19 +138,31 @@ func TestEncoderP16x16ResidualPlanFromPixelDeltaDerivesLumaDC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("p16x16ResidualLumaDCQMul: %v", err)
 	}
-	const wantLevel int32 = 3
-	delta := encoderP16x16ResidualPixelDeltaForDCLevel(wantLevel, qmul)
-	if delta == 0 {
-		t.Fatalf("derived delta for level %d = 0, want visible pixel delta", wantLevel)
+	wantCoeffs := []h264.EncoderResidualCoefficient{
+		{Pos: 16, Value: 3},
+		{Pos: 240, Value: -3},
 	}
-	for y := 0; y < 4; y++ {
-		for x := 0; x < 4; x++ {
-			pos := y*target.StrideY + x
-			v := int(target.Y[pos]) + delta
-			if v < 0 || v > 255 {
-				t.Fatalf("test target luma overflows at %d,%d: %d + %d", x, y, target.Y[pos], delta)
+	for _, want := range []struct {
+		x     int
+		y     int
+		coeff h264.EncoderResidualCoefficient
+	}{
+		{x: 4, y: 0, coeff: wantCoeffs[0]},
+		{x: 12, y: 12, coeff: wantCoeffs[1]},
+	} {
+		delta := encoderP16x16ResidualPixelDeltaForDCLevel(want.coeff.Value, qmul)
+		if delta == 0 {
+			t.Fatalf("derived delta for level %d = 0, want visible pixel delta", want.coeff.Value)
+		}
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				pos := (want.y+y)*target.StrideY + want.x + x
+				v := int(target.Y[pos]) + delta
+				if v < 0 || v > 255 {
+					t.Fatalf("test target luma overflows at %d,%d: %d + %d", want.x+x, want.y+y, target.Y[pos], delta)
+				}
+				target.Y[pos] = byte(v)
 			}
-			target.Y[pos] = byte(v)
 		}
 	}
 	targetView, err := enc.validatedFrameView(target)
@@ -161,11 +176,11 @@ func TestEncoderP16x16ResidualPlanFromPixelDeltaDerivesLumaDC(t *testing.T) {
 	if !ok {
 		t.Fatal("p16x16ResidualPlanFromPixelDelta did not admit representable luma DC delta")
 	}
-	if len(plan.lumaCoefficients) != 1 || len(plan.lumaCoefficients[0]) != 1 {
-		t.Fatalf("luma coefficients = %+v, want one coefficient for one macroblock", plan.lumaCoefficients)
+	if len(plan.lumaCoefficients) != 1 || len(plan.lumaCoefficients[0]) != len(wantCoeffs) {
+		t.Fatalf("luma coefficients = %+v, want one coefficient set for one macroblock", plan.lumaCoefficients)
 	}
-	if got := plan.lumaCoefficients[0][0]; got.Pos != 0 || got.Value != wantLevel {
-		t.Fatalf("luma coefficient = %+v, want pos 0 value %d", got, wantLevel)
+	if got := plan.lumaCoefficients[0]; !reflect.DeepEqual(got, wantCoeffs) {
+		t.Fatalf("luma coefficients = %+v, want %+v", got, wantCoeffs)
 	}
 }
 

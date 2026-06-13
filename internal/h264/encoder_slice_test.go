@@ -9,6 +9,36 @@ import (
 	"testing"
 )
 
+func encoderTestLumaCoefficientCounts(coeffs []EncoderResidualCoefficient) [16]uint8 {
+	var counts [16]uint8
+	for _, coeff := range coeffs {
+		counts[coeff.Pos/16]++
+	}
+	return counts
+}
+
+func encoderTestLumaTableCounts(coeffs []EncoderResidualCoefficient) [16]uint8 {
+	var counts [16]uint8
+	for _, coeff := range coeffs {
+		blockIndex := coeff.Pos / 16
+		i8x8 := blockIndex >> 2
+		i4x4 := blockIndex & 3
+		x4 := ((i8x8 & 1) << 1) + (i4x4 & 1)
+		y4 := ((i8x8 >> 1) << 1) + (i4x4 >> 1)
+		counts[y4*4+x4]++
+	}
+	return counts
+}
+
+func encoderTestLumaCBPTableBits(coeffs []EncoderResidualCoefficient) int {
+	counts := encoderTestLumaCoefficientCounts(coeffs)
+	bits := 0
+	for i, count := range counts {
+		bits |= int(count) << (i >> 2)
+	}
+	return bits
+}
+
 func TestBuildEncoderI420IntraPCMIDRSliceWritesParseableHeader(t *testing.T) {
 	sets, err := BuildEncoderParameterSets(EncoderParameterSetConfig{
 		ProfileIDC:         66,
@@ -859,15 +889,16 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockLumaCoefficients(t
 	}
 	wantLuma := [][]EncoderResidualCoefficient{
 		{
-			{Pos: int(h264ZigzagScanCAVLC[0]), Value: 2},
-			{Pos: int(h264ZigzagScanCAVLC[1]), Value: -3},
-			{Pos: int(h264ZigzagScanCAVLC[2]), Value: 1},
+			{Pos: 0, Value: 2},
+			{Pos: 64, Value: -3},
+			{Pos: 128 + int(h264ZigzagScanCAVLC[1]), Value: 1},
+			{Pos: 255, Value: -1},
 		},
 		{
-			{Pos: int(h264ZigzagScanCAVLC[0]), Value: -2},
-			{Pos: int(h264ZigzagScanCAVLC[4]), Value: 3},
-			{Pos: int(h264ZigzagScanCAVLC[5]), Value: -1},
 			{Pos: int(h264ZigzagScanCAVLC[6]), Value: 1},
+			{Pos: 64 + int(h264ZigzagScanCAVLC[4]), Value: 3},
+			{Pos: 128 + int(h264ZigzagScanCAVLC[5]), Value: -1},
+			{Pos: 255, Value: -2},
 		},
 	}
 	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
@@ -915,8 +946,8 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockLumaCoefficients(t
 		if err != nil {
 			t.Fatalf("decode per-macroblock luma-coefficient residual macroblock[%d]: %v", i, err)
 		}
-		wantCBPTable := len(wantLuma[i])<<12 | 0x1
-		if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 1 ||
+		wantCBPTable := encoderTestLumaCBPTableBits(wantLuma[i])<<12 | 0xf
+		if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 0xf ||
 			got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != wantCBPTable {
 			t.Fatalf("decoded luma-coefficient mb[%d] type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x",
 				i, got.MBType, got.CBP, got.QScale, got.ChromaQP, got.CBPTable)
@@ -931,9 +962,12 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockLumaCoefficients(t
 					i, coeff.Pos, decoded.MB[coeff.Pos], coeff.Value)
 			}
 		}
-		if decoded.NonZeroCountCache[h264Scan8[0]] != uint8(len(wantLuma[i])) {
-			t.Fatalf("decoded luma-coefficient mb[%d] nnz = %d, want %d",
-				i, decoded.NonZeroCountCache[h264Scan8[0]], len(wantLuma[i]))
+		wantCounts := encoderTestLumaCoefficientCounts(wantLuma[i])
+		for blockIndex, wantCount := range wantCounts {
+			if gotCount := decoded.NonZeroCountCache[h264Scan8[blockIndex]]; gotCount != wantCount {
+				t.Fatalf("decoded luma-coefficient mb[%d] nnz[%d] = %d, want %d",
+					i, blockIndex, gotCount, wantCount)
+			}
 		}
 		if err := syntaxTables.writeBackMacroblockTables(i, got.MBType, got.CBPTable, got.QScale, 24); err != nil {
 			t.Fatalf("write back luma-coefficient syntax tables[%d]: %v", i, err)
@@ -961,16 +995,19 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockLumaCoefficients(t
 		if err != nil {
 			t.Fatalf("decode per-macroblock luma-coefficient residual frame macroblock[%d]: %v", mbXY, err)
 		}
-		wantCBPTable := len(wantLuma[mbXY])<<12 | 0x1
-		if got.CBP != 1 || got.CBPTable != wantCBPTable || got.QScale != 23 ||
+		wantCBPTable := encoderTestLumaCBPTableBits(wantLuma[mbXY])<<12 | 0xf
+		if got.CBP != 0xf || got.CBPTable != wantCBPTable || got.QScale != 23 ||
 			m.CBPTable[mbXY] != wantCBPTable || m.QScaleTable[mbXY] != 23 || m.SliceTable[mbXY] != 23 {
 			t.Fatalf("frame luma-coefficient mb[%d] result/table cbp/cbpTable/q = %#x/%#x/%d table %#x/%d/%d",
 				mbXY, got.CBP, got.CBPTable, got.QScale,
 				m.CBPTable[mbXY], m.QScaleTable[mbXY], m.SliceTable[mbXY])
 		}
-		if m.NonZeroCount[mbXY][0] != uint8(len(wantLuma[mbXY])) {
-			t.Fatalf("frame luma-coefficient mb[%d] nnz[0] = %d, want %d",
-				mbXY, m.NonZeroCount[mbXY][0], len(wantLuma[mbXY]))
+		wantCounts := encoderTestLumaTableCounts(wantLuma[mbXY])
+		for blockIndex, wantCount := range wantCounts {
+			if gotCount := m.NonZeroCount[mbXY][blockIndex]; gotCount != wantCount {
+				t.Fatalf("frame luma-coefficient mb[%d] nnz[%d] = %d, want %d",
+					mbXY, blockIndex, gotCount, wantCount)
+			}
 		}
 	}
 	if payload.bitsLeft() != 0 {
@@ -1992,7 +2029,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesCombinedMultiPlaneResidual(t *t
 		if err != nil {
 			t.Fatalf("decode combined multi-plane residual macroblock[%d]: %v", i, err)
 		}
-		wantCBPTable := len(wantLuma[i])<<12 | 0x21
+		wantCBPTable := encoderTestLumaCBPTableBits(wantLuma[i])<<12 | 0x21
 		if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 0x21 ||
 			got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != wantCBPTable {
 			t.Fatalf("decoded combined multi-plane mb[%d] type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x, want cbpTable %#x",
@@ -2073,7 +2110,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesCombinedMultiPlaneResidual(t *t
 		if err != nil {
 			t.Fatalf("decode combined multi-plane residual frame macroblock[%d]: %v", mbXY, err)
 		}
-		wantCBPTable := len(wantLuma[mbXY])<<12 | 0x21
+		wantCBPTable := encoderTestLumaCBPTableBits(wantLuma[mbXY])<<12 | 0x21
 		if got.CBP != 0x21 || got.CBPTable != wantCBPTable || got.QScale != 23 ||
 			m.CBPTable[mbXY] != wantCBPTable || m.QScaleTable[mbXY] != 23 || m.SliceTable[mbXY] != 27 {
 			t.Fatalf("frame combined multi-plane mb[%d] result/table cbp/cbpTable/q = %#x/%#x/%d table %#x/%d/%d, want cbpTable %#x",
@@ -2184,7 +2221,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedCombinedMultiPlaneResidua
 		if err != nil {
 			t.Fatalf("decode ranged combined multi-plane residual macroblock[%d]: %v", i, err)
 		}
-		wantCBPTable := len(wantLuma[i])<<12 | 0x21
+		wantCBPTable := encoderTestLumaCBPTableBits(wantLuma[i])<<12 | 0x21
 		if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 0x21 ||
 			got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) || got.CBPTable != wantCBPTable {
 			t.Fatalf("decoded ranged combined multi-plane mb[%d] type/cbp/q/chroma/cbpTable = %#x/%#x/%d/%v/%#x, want cbpTable %#x",
@@ -2253,7 +2290,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesRangedCombinedMultiPlaneResidua
 			t.Fatalf("decode ranged combined multi-plane residual frame macroblock[%d]: %v", mbXY, err)
 		}
 		i := mbXY - 1
-		wantCBPTable := len(wantLuma[i])<<12 | 0x21
+		wantCBPTable := encoderTestLumaCBPTableBits(wantLuma[i])<<12 | 0x21
 		if got.CBP != 0x21 || got.CBPTable != wantCBPTable || got.QScale != 23 ||
 			m.CBPTable[mbXY] != wantCBPTable || m.QScaleTable[mbXY] != 23 || m.SliceTable[mbXY] != 28 {
 			t.Fatalf("frame ranged combined multi-plane mb[%d] result/table cbp/cbpTable/q = %#x/%#x/%d table %#x/%d/%d, want cbpTable %#x",
@@ -2493,7 +2530,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPRejectsInvalid(t *testing.T) {
 		{name: "bad luma coefficient position", run: func() error {
 			next := valid
 			next.Coeff = 0
-			next.LumaCoefficients = [][]EncoderResidualCoefficient{{{Pos: 16, Value: 1}}}
+			next.LumaCoefficients = [][]EncoderResidualCoefficient{{{Pos: 256, Value: 1}}}
 			_, err := encodeI420P16x16ResidualSliceRBSP(next, pps, sps)
 			return err
 		}},

@@ -17686,8 +17686,10 @@ func encoderP16x16PixelDeltaResidualFrame(t *testing.T, cfg goh264.EncoderConfig
 		InitialQP:                  cfg.InitialQP,
 		NextQP:                     cfg.InitialQP,
 		DisableDeblockingFilterIDC: 1,
-		Coeff:                      3,
-		NALLengthSize:              4,
+		LumaCoefficients: [][]h264.EncoderResidualCoefficient{
+			{{Pos: 240, Value: 3}},
+		},
+		NALLengthSize: 4,
 	})
 	if err != nil {
 		t.Fatalf("BuildEncoderI420P16x16ResidualSlice: %v", err)
