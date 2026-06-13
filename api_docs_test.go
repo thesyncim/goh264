@@ -397,7 +397,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithDefaultDeblock",
 		"TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithSliceBoundaryDeblock",
 		"TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP",
-		"TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs",
+		"TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs",
 		"TestEncoderSliceCountSplitsIDRPSkipAndPIntraPCMAccessUnits",
 		"TestEncoderSliceCountFeedsRTPMode1SingleNALPackets",
 		"TestEncoderEncodeForceIDRBypassesPSkipReference",

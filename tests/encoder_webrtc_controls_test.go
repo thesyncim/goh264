@@ -8452,7 +8452,7 @@ func TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP(t *testing.T)
 	}
 }
 
-func TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs(t *testing.T) {
+func TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		configure func(*goh264.EncoderConfig)
@@ -8491,6 +8491,7 @@ func TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs(t *testi
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := goh264.DefaultEncoderConfig(16, 16)
 			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.RateControl = goh264.EncoderRateControlConstantQP
 			tt.configure(&cfg)
 			enc, err := goh264.NewEncoder(cfg)
 			if err != nil {
@@ -8507,21 +8508,16 @@ func TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs(t *testi
 				t.Fatalf("Encode first IDR: %v", err)
 			}
 
-			secondFrame, err := firstFrame.Clone()
-			if err != nil {
-				t.Fatalf("Clone first frame: %v", err)
-			}
-			secondFrame.Y[5*secondFrame.StrideY+7] ^= 0x33
-			secondFrame.PTS = firstFrame.PTS + int64(cfg.RTPTimestampIncrement)
+			secondFrame := encoderP16x16ResidualCandidateFrame(t, cfg, firstFrame, firstFrame.PTS+int64(cfg.RTPTimestampIncrement))
 			second, err := enc.Encode(secondFrame)
 			if err != nil {
 				t.Fatalf("Encode residual-shaped P delta: %v", err)
 			}
 			if second.Dropped || second.IDR || second.KeyFrame {
-				t.Fatalf("residual-shaped P output dropped=%v key=%v idr=%v, want non-IDR recovery P",
+				t.Fatalf("residual-shaped P output dropped=%v key=%v idr=%v, want predictive residual P",
 					second.Dropped, second.KeyFrame, second.IDR)
 			}
-			assertEncoderNALTypes(t, second.NALUnits, []uint8{6, 1})
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
 
 			dec := goh264.NewDecoder()
 			var decodedFirst, decodedSecond []*goh264.Frame
@@ -8565,10 +8561,8 @@ func TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs(t *testi
 
 			assertDecodedEncoderFrameBytes(t, decodedFirst, appendI420FrameBytes(nil, firstFrame))
 			assertDecodedEncoderFrameBytes(t, decodedSecond, appendI420FrameBytes(nil, secondFrame))
-			if !decodedSecond[0].KeyFrame ||
-				decodedSecond[0].SideData.RecoveryPoint == nil ||
-				decodedSecond[0].SideData.RecoveryPoint.RecoveryFrameCount != 0 {
-				t.Fatalf("residual-shaped P side data key=%v recovery=%+v, want immediate recovery point",
+			if decodedSecond[0].KeyFrame || decodedSecond[0].SideData.RecoveryPoint != nil {
+				t.Fatalf("residual-shaped P side data key=%v recovery=%+v, want predictive residual frame",
 					decodedSecond[0].KeyFrame, decodedSecond[0].SideData.RecoveryPoint)
 			}
 
@@ -17648,6 +17642,108 @@ func clampEncoderTestCoord(v int, limit int) int {
 		return limit - 1
 	}
 	return v
+}
+
+func encoderP16x16ResidualCandidateFrame(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64) goh264.EncoderFrame {
+	t.Helper()
+	sets, err := h264.BuildEncoderParameterSets(h264.EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           cfg.LevelIDC,
+		Width:              cfg.Width,
+		Height:             cfg.Height,
+		FrameRateNum:       cfg.FrameRateNum,
+		FrameRateDen:       cfg.FrameRateDen,
+		MaxReferenceFrames: uint32(cfg.MaxReferenceFrames),
+		InitialQP:          cfg.InitialQP,
+		NALLengthSize:      4,
+	})
+	if err != nil {
+		t.Fatalf("BuildEncoderParameterSets: %v", err)
+	}
+	idr, err := h264.BuildEncoderI420IntraPCMIDRSlice(h264.EncoderI420IntraPCMIDRConfig{
+		Width:                      reference.Width,
+		Height:                     reference.Height,
+		StrideY:                    reference.StrideY,
+		StrideCb:                   reference.StrideCb,
+		StrideCr:                   reference.StrideCr,
+		Y:                          reference.Y,
+		Cb:                         reference.Cb,
+		Cr:                         reference.Cr,
+		FrameNum:                   0,
+		IDRPicID:                   0,
+		InitialQP:                  cfg.InitialQP,
+		DisableDeblockingFilterIDC: 1,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatalf("BuildEncoderI420IntraPCMIDRSlice: %v", err)
+	}
+	residual, err := h264.BuildEncoderI420P16x16ResidualSlice(h264.EncoderI420P16x16ResidualConfig{
+		Width:                      cfg.Width,
+		Height:                     cfg.Height,
+		FrameNum:                   1,
+		InitialQP:                  cfg.InitialQP,
+		NextQP:                     cfg.InitialQP,
+		DisableDeblockingFilterIDC: 1,
+		Coeff:                      4,
+		ChromaDCCoeffCb:            2,
+		ChromaDCCoeffCr:            -2,
+		ChromaACCoeffCb:            1,
+		ChromaACCoeffCr:            -1,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatalf("BuildEncoderI420P16x16ResidualSlice: %v", err)
+	}
+
+	dec := goh264.NewDecoder()
+	firstAU := append(append([]byte(nil), sets.AnnexB...), idr.AnnexB...)
+	if _, err := dec.DecodeFrames(firstAU); err != nil {
+		t.Fatalf("Decode synthetic residual reference: %v", err)
+	}
+	frames, err := dec.DecodeFrames(residual.AnnexB)
+	if err != nil {
+		t.Fatalf("Decode synthetic residual candidate: %v", err)
+	}
+	if len(frames) != 1 {
+		t.Fatalf("synthetic residual frames = %d, want 1", len(frames))
+	}
+	raw, err := frames[0].AppendRawYUV(nil)
+	if err != nil {
+		t.Fatalf("AppendRawYUV synthetic residual candidate: %v", err)
+	}
+	return encoderI420FrameFromRaw(t, cfg, raw, pts)
+}
+
+func encoderI420FrameFromRaw(t *testing.T, cfg goh264.EncoderConfig, raw []byte, pts int64) goh264.EncoderFrame {
+	t.Helper()
+	frame := cfg.I420Frame(
+		make([]byte, cfg.StrideY*cfg.Height),
+		make([]byte, cfg.StrideCb*(cfg.Height/2)),
+		make([]byte, cfg.StrideCr*(cfg.Height/2)),
+		pts,
+	)
+	wantLen := cfg.Width*cfg.Height + 2*(cfg.Width/2)*(cfg.Height/2)
+	if len(raw) != wantLen {
+		t.Fatalf("I420 raw length = %d, want %d", len(raw), wantLen)
+	}
+	pos := 0
+	for y := 0; y < frame.Height; y++ {
+		copy(frame.Y[y*frame.StrideY:y*frame.StrideY+frame.Width], raw[pos:pos+frame.Width])
+		pos += frame.Width
+	}
+	chromaWidth := frame.Width / 2
+	chromaHeight := frame.Height / 2
+	for y := 0; y < chromaHeight; y++ {
+		copy(frame.Cb[y*frame.StrideCb:y*frame.StrideCb+chromaWidth], raw[pos:pos+chromaWidth])
+		pos += chromaWidth
+	}
+	for y := 0; y < chromaHeight; y++ {
+		copy(frame.Cr[y*frame.StrideCr:y*frame.StrideCr+chromaWidth], raw[pos:pos+chromaWidth])
+		pos += chromaWidth
+	}
+	return frame
 }
 
 func appendI420FrameBytes(dst []byte, frame goh264.EncoderFrame) []byte {
