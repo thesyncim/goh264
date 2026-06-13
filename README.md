@@ -256,7 +256,9 @@ compatibility aliases. Package-level `InspectAVCC` is the preferred stateless
 name; `InspectAVCDecoderConfigurationRecord` is the equivalent long-form name,
 and package-level `ParseAVCC` and `ParseAVCDecoderConfigurationRecord` remain
 compatibility aliases that parse the same metadata without mutating decoder
-state.
+state. Malformed avcC records, including invalid reserved bits or
+caller-constructed impossible-size inputs, are rejected before replacing the
+previous stored configuration.
 
 Preferred avcC names:
 

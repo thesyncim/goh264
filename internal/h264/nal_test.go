@@ -4,6 +4,7 @@ package h264
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 )
 
@@ -142,6 +143,33 @@ func TestSplitAVCCRejectsInvalidSize(t *testing.T) {
 				t.Fatal("expected invalid data")
 			}
 		})
+	}
+}
+
+func TestSplitNALHelpersRejectOverflowedInput(t *testing.T) {
+	annexB := []byte{0x00, 0x00, 0x01, 0x67, 0x80}
+	overflowedAnnexB := fakeH264SliceLen(&annexB[0], maxInt/2+1)
+	if _, err := SplitAnnexB(overflowedAnnexB); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("SplitAnnexB overflow error = %v, want ErrInvalidData", err)
+	}
+
+	avc := []byte{0x00, 0x01, 0x67}
+	overflowedAVC := fakeH264SliceLen(&avc[0], maxInt/2+1)
+	if _, err := SplitAVCC(overflowedAVC, 2); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("SplitAVCC overflow error = %v, want ErrInvalidData", err)
+	}
+	if _, _, err := SplitAutoPacket(overflowedAVC, 2); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("SplitAutoPacket overflow error = %v, want ErrInvalidData", err)
+	}
+
+	if uint64(maxInt) > uint64(^uint32(0)) {
+		hugeAVC := fakeH264SliceLen(&avc[0], int(uint64(^uint32(0))+1))
+		if _, err := SplitAVCC(hugeAVC, 2); !errors.Is(err, ErrInvalidData) {
+			t.Fatalf("SplitAVCC 32-bit length overflow error = %v, want ErrInvalidData", err)
+		}
+		if _, _, err := SplitAutoPacket(hugeAVC, 2); !errors.Is(err, ErrInvalidData) {
+			t.Fatalf("SplitAutoPacket 32-bit length overflow error = %v, want ErrInvalidData", err)
+		}
 	}
 }
 

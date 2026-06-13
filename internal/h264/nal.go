@@ -65,6 +65,10 @@ const (
 )
 
 func SplitAnnexB(data []byte) ([]NALUnit, error) {
+	if nalInputTooLarge(data) {
+		return nil, ErrInvalidData
+	}
+
 	var out []NALUnit
 
 	start, prefixLen, ok := findStartCode(data, 0)
@@ -102,7 +106,8 @@ func SplitAnnexB(data []byte) ([]NALUnit, error) {
 
 func DecodeAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfigurationRecord, error) {
 	var cfg AVCDecoderConfigurationRecord
-	if len(data) < 7 || data[0] != 1 {
+	if nalInputTooLarge(data) || len(data) < 7 || data[0] != 1 ||
+		data[4]&0xfc != 0xfc || data[5]&0xe0 != 0xe0 {
 		return cfg, ErrInvalidData
 	}
 
@@ -163,7 +168,8 @@ func DecodeAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfigurationRe
 // accepts standalone avcC records with non-zero profile-compatibility flags,
 // while FFmpeg's frame-path wrapper only probes those packets after extra gates.
 func IsAVCDecoderConfigurationRecord(data []byte) bool {
-	if len(data) < 9 || data[0] != 1 || data[4]&0xfc != 0xfc {
+	if nalInputTooLarge(data) || len(data) < 9 || data[0] != 1 ||
+		data[4]&0xfc != 0xfc || data[5]&0xe0 != 0xe0 {
 		return false
 	}
 	pos := 6
@@ -242,6 +248,9 @@ func SplitAVCC(data []byte, nalLengthSize int) ([]NALUnit, error) {
 	if nalLengthSize < 1 || nalLengthSize > 4 {
 		return nil, ErrInvalidData
 	}
+	if nalInputTooLarge(data) {
+		return nil, ErrInvalidData
+	}
 
 	var out []NALUnit
 	for pos := 0; pos < len(data); {
@@ -280,16 +289,19 @@ func SplitAutoPacket(data []byte, configuredNALLengthSize int) ([]NALUnit, H264P
 	if len(data) == 0 {
 		return nil, 0, ErrInvalidData
 	}
+	if nalInputTooLarge(data) {
+		return nil, 0, ErrInvalidData
+	}
 	if configuredNALLengthSize < 0 || configuredNALLengthSize > 4 {
 		return nil, 0, ErrInvalidData
 	}
 
 	if configuredNALLengthSize == 4 {
-		if len(data) > 8 && be32(data, 0) == 1 && be32(data, 5) > uint32(len(data)) {
+		if len(data) > 8 && be32(data, 0) == 1 && uint64(be32(data, 5)) > uint64(len(data)) {
 			nals, err := SplitAnnexB(data)
 			return nals, H264PacketFormatAnnexB, err
 		}
-		if len(data) > 3 && be32(data, 0) > 1 && be32(data, 0) <= uint32(len(data)) {
+		if len(data) > 3 && be32(data, 0) > 1 && uint64(be32(data, 0)) <= uint64(len(data)) {
 			nals, err := SplitAVCC(data, 4)
 			return nals, H264PacketFormatAVC, err
 		}
@@ -306,7 +318,7 @@ func SplitAutoPacket(data []byte, configuredNALLengthSize int) ([]NALUnit, H264P
 		nals, err := SplitAnnexB(data)
 		return nals, H264PacketFormatAnnexB, err
 	}
-	if len(data) > 3 && be32(data, 0) > 1 && be32(data, 0) <= uint32(len(data)) {
+	if len(data) > 3 && be32(data, 0) > 1 && uint64(be32(data, 0)) <= uint64(len(data)) {
 		nals, err := SplitAVCC(data, 4)
 		return nals, H264PacketFormatAVC, err
 	}
@@ -316,6 +328,10 @@ func SplitAutoPacket(data []byte, configuredNALLengthSize int) ([]NALUnit, H264P
 func looksAnnexB(data []byte) bool {
 	_, _, ok := findStartCode(data, 0)
 	return ok
+}
+
+func nalInputTooLarge(data []byte) bool {
+	return len(data) > maxInt/2 || uint64(len(data)) > uint64(^uint32(0))
 }
 
 func be32(data []byte, off int) uint32 {

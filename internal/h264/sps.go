@@ -285,7 +285,7 @@ func decodeSPS(rbsp []byte, ignoreTruncation bool) (*SPS, error) {
 	if err != nil {
 		return nil, err
 	}
-	if mbWidthMinus1+1 > h264MaxMBWidth || mbHeightMinus1+1 > h264MaxMBHeight {
+	if mbWidthMinus1 >= h264MaxMBWidth || mbHeightMinus1 >= h264MaxMBHeight {
 		return nil, ErrInvalidData
 	}
 	sps.MBWidth = int32(mbWidthMinus1 + 1)
@@ -335,11 +335,15 @@ func decodeSPS(rbsp []byte, ignoreTruncation bool) (*SPS, error) {
 	}
 	deriveNumReorderFrames(sps)
 
-	sps.Width = 16*sps.MBWidth - int32(sps.CropLeft+sps.CropRight)
-	sps.Height = 16*sps.MBHeight - int32(sps.CropTop+sps.CropBottom)
-	if sps.Width <= 0 || sps.Height <= 0 {
+	codedWidth := int64(16) * int64(sps.MBWidth)
+	codedHeight := int64(16) * int64(sps.MBHeight)
+	cropWidth := int64(uint64(sps.CropLeft) + uint64(sps.CropRight))
+	cropHeight := int64(uint64(sps.CropTop) + uint64(sps.CropBottom))
+	if cropWidth >= codedWidth || cropHeight >= codedHeight {
 		return nil, ErrInvalidData
 	}
+	sps.Width = int32(codedWidth - cropWidth)
+	sps.Height = int32(codedHeight - cropHeight)
 
 	return sps, nil
 }
@@ -512,8 +516,8 @@ func decodeCrop(gb *bitReader, sps *SPS) error {
 		return err
 	}
 
-	width := int64(16 * sps.MBWidth)
-	height := int64(16 * sps.MBHeight)
+	width := uint64(16) * uint64(sps.MBWidth)
+	height := uint64(16) * uint64(sps.MBHeight)
 	vsub := uint32(0)
 	if sps.ChromaFormatIDC == 1 {
 		vsub = 1
@@ -522,19 +526,27 @@ func decodeCrop(gb *bitReader, sps *SPS) error {
 	if sps.ChromaFormatIDC == 1 || sps.ChromaFormatIDC == 2 {
 		hsub = 1
 	}
-	stepX := uint32(1) << hsub
-	stepY := uint32(2-uint32(sps.FrameMBSOnlyFlag)) << vsub
+	stepX := uint64(1) << hsub
+	frameMBSFactor := uint64(2)
+	if sps.FrameMBSOnlyFlag != 0 {
+		frameMBSFactor = 1
+	}
+	stepY := frameMBSFactor << vsub
 
-	cropWidth := int64(cropLeft+cropRight) * int64(stepX)
-	cropHeight := int64(cropTop+cropBottom) * int64(stepY)
+	cropLeftScaled := uint64(cropLeft) * stepX
+	cropRightScaled := uint64(cropRight) * stepX
+	cropTopScaled := uint64(cropTop) * stepY
+	cropBottomScaled := uint64(cropBottom) * stepY
+	cropWidth := cropLeftScaled + cropRightScaled
+	cropHeight := cropTopScaled + cropBottomScaled
 	if cropWidth >= width || cropHeight >= height {
 		return ErrInvalidData
 	}
 
-	sps.CropLeft = cropLeft * stepX
-	sps.CropRight = cropRight * stepX
-	sps.CropTop = cropTop * stepY
-	sps.CropBottom = cropBottom * stepY
+	sps.CropLeft = uint32(cropLeftScaled)
+	sps.CropRight = uint32(cropRightScaled)
+	sps.CropTop = uint32(cropTopScaled)
+	sps.CropBottom = uint32(cropBottomScaled)
 	return nil
 }
 

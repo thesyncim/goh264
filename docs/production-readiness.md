@@ -186,7 +186,14 @@ Malformed-input safety evidence now includes deterministic public-surface
 corruption rows plus `FuzzDecodePublicSurfacesNoPanic`, a bounded fuzz target
 for Annex B, AVC, configured AVC, auto-detect, and packet side-data decode
 surfaces. `scripts/h264-decoder-fuzz-smoke.sh` runs that target for a short
-smoke window and is part of the release-evidence gate.
+smoke window and is part of the release-evidence gate. avcC parser/configuration
+guards reject invalid reserved bits and caller-constructed impossible-size
+inputs before public decoder state is replaced, and packet `NEW_EXTRADATA`
+keeps treating malformed avcC as non-fatal side data against the last good
+configuration. Internal SPS admission also rejects crop-offset arithmetic
+overflow before deriving visible dimensions, and Annex B/AVC packet splitters
+reject synthetic inputs beyond the 32-bit NAL length domain before walking the
+buffer.
 
 Damaged-packet recovery evidence includes valid-damaged-valid stateful decode
 guards for configured AVC samples, AVC samples decoded with a configuration

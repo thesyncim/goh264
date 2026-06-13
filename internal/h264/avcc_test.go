@@ -4,6 +4,7 @@ package h264
 
 import (
 	"encoding/hex"
+	"errors"
 	"testing"
 )
 
@@ -67,6 +68,8 @@ func TestDecodeAVCDecoderConfigurationRecordRejectsInvalidData(t *testing.T) {
 		{name: "empty", data: nil},
 		{name: "not avcc", data: append([]byte{0}, avcConfigRecord(t, 4, [][]byte{sps}, [][]byte{pps})[1:]...)},
 		{name: "short", data: []byte{1, 0x42, 0xc0, 0x1e, 0xff, 0xe1}},
+		{name: "bad length-size reserved bits", data: avcConfigRecordWithMutation(t, 4, [][]byte{sps}, [][]byte{pps}, func(data []byte) { data[4] &^= 0x80 })},
+		{name: "bad sps-count reserved bits", data: avcConfigRecordWithMutation(t, 4, [][]byte{sps}, [][]byte{pps}, func(data []byte) { data[5] &^= 0x80 })},
 		{name: "missing pps", data: avcConfigRecord(t, 4, [][]byte{sps}, nil)},
 		{name: "oversized sps", data: []byte{1, 0x42, 0xc0, 0x1e, 0xff, 0xe1, 0xff, 0xff, 0x67}},
 		{name: "wrong pps type", data: avcConfigRecord(t, 4, [][]byte{sps}, [][]byte{sps})},
@@ -76,6 +79,20 @@ func TestDecodeAVCDecoderConfigurationRecordRejectsInvalidData(t *testing.T) {
 				t.Fatal("expected invalid data")
 			}
 		})
+	}
+}
+
+func TestDecodeAVCDecoderConfigurationRecordRejectsOverflowedInput(t *testing.T) {
+	sps := mustHex(t, "6742c01eddec0440000003004000000300a3c58be0")
+	pps := mustHex(t, "68ce0fc8")
+	config := avcConfigRecord(t, 4, [][]byte{sps}, [][]byte{pps})
+	overflowed := fakeH264SliceLen(&config[0], maxInt/2+1)
+
+	if IsAVCDecoderConfigurationRecord(overflowed) {
+		t.Fatal("overflowed avcC config was detected")
+	}
+	if _, err := DecodeAVCDecoderConfigurationRecord(overflowed); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflowed avcC decode error = %v, want ErrInvalidData", err)
 	}
 }
 
@@ -100,6 +117,13 @@ func avcConfigRecord(t *testing.T, nalLengthSize int, spsNals [][]byte, ppsNals 
 		out = appendAVCConfigNAL(t, out, nal)
 	}
 	return out
+}
+
+func avcConfigRecordWithMutation(t *testing.T, nalLengthSize int, spsNals [][]byte, ppsNals [][]byte, mutate func([]byte)) []byte {
+	t.Helper()
+	data := avcConfigRecord(t, nalLengthSize, spsNals, ppsNals)
+	mutate(data)
+	return data
 }
 
 func appendAVCConfigNAL(t *testing.T, dst []byte, nal []byte) []byte {

@@ -1867,6 +1867,219 @@ func TestDecoderConfigureAVCCRejectsMalformedWithoutMutation(t *testing.T) {
 	}
 }
 
+func TestDecoderConfigureAVCCRejectsBadReservedBitsWithoutMutation(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config4, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	config3, _ := annexBToAVCConfigAndSamples(t, data, 3)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	for _, tt := range []struct {
+		name   string
+		mutate func([]byte)
+	}{
+		{name: "length-size reserved bits", mutate: func(data []byte) { data[4] &^= 0x80 }},
+		{name: "sps-count reserved bits", mutate: func(data []byte) { data[5] &^= 0x80 }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			damaged := append([]byte(nil), config3...)
+			tt.mutate(damaged)
+
+			dec := NewDecoder()
+			cfg, err := dec.ConfigureAVCC(config4)
+			if err != nil {
+				t.Fatalf("configure valid avcC: %v", err)
+			}
+			if _, err := dec.ConfigureAVCC(damaged); !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("bad-reserved avcC configure error = %v, want ErrInvalidData", err)
+			}
+			got, err := dec.AVCConfig()
+			if err != nil {
+				t.Fatalf("AVCConfig after bad-reserved avcC configure: %v", err)
+			}
+			if got != cfg {
+				t.Fatalf("AVCConfig after bad-reserved avcC configure = %+v, want previous %+v", got, cfg)
+			}
+			frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+			if err != nil {
+				t.Fatalf("DecodeConfiguredAVCFrames after bad-reserved avcC configure: %v", err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+		})
+	}
+}
+
+func TestDecoderAVCCSurfacesRejectOverflowedInputWithoutMutation(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+	overflowedConfig := fakeDecoderRawSliceLen(&config[0], maxIntForTest/2+1)
+
+	assertStoredConfigAndDecode := func(t *testing.T, dec *Decoder, want AVCConfig) {
+		t.Helper()
+		got, err := dec.AVCConfig()
+		if err != nil {
+			t.Fatalf("AVCConfig after overflowed avcC input: %v", err)
+		}
+		if got != want {
+			t.Fatalf("AVCConfig after overflowed avcC input = %+v, want previous %+v", got, want)
+		}
+		frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+		if err != nil {
+			t.Fatalf("DecodeConfiguredAVCFrames after overflowed avcC input: %v", err)
+		}
+		assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	}
+
+	for _, tt := range []struct {
+		name string
+		call func([]byte) (AVCConfig, error)
+	}{
+		{name: "package InspectAVCC", call: InspectAVCC},
+		{name: "package ParseAVCC", call: ParseAVCC},
+		{name: "package InspectAVCDecoderConfigurationRecord", call: InspectAVCDecoderConfigurationRecord},
+		{name: "package ParseAVCDecoderConfigurationRecord", call: ParseAVCDecoderConfigurationRecord},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := tt.call(overflowedConfig); !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("%s overflowed avcC error = %v, want ErrInvalidData", tt.name, err)
+			}
+		})
+	}
+
+	for _, tt := range []struct {
+		name string
+		call func(*Decoder, []byte) (AVCConfig, error)
+	}{
+		{name: "ConfigureAVCDecoderConfigurationRecord", call: func(dec *Decoder, data []byte) (AVCConfig, error) {
+			return dec.ConfigureAVCDecoderConfigurationRecord(data)
+		}},
+		{name: "ConfigureAVCC", call: func(dec *Decoder, data []byte) (AVCConfig, error) {
+			return dec.ConfigureAVCC(data)
+		}},
+		{name: "ParseAVCDecoderConfigurationRecord", call: func(dec *Decoder, data []byte) (AVCConfig, error) {
+			return dec.ParseAVCDecoderConfigurationRecord(data)
+		}},
+		{name: "ParseAVCC", call: func(dec *Decoder, data []byte) (AVCConfig, error) {
+			return dec.ParseAVCC(data)
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			cfg, err := tt.call(dec, config)
+			if err != nil {
+				t.Fatalf("configure valid avcC: %v", err)
+			}
+			if _, err := tt.call(dec, overflowedConfig); !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("%s overflowed avcC error = %v, want ErrInvalidData", tt.name, err)
+			}
+			assertStoredConfigAndDecode(t, dec, cfg)
+		})
+	}
+
+	for _, tt := range []struct {
+		name string
+		call func(*Decoder, []byte, []byte) ([]*Frame, error)
+	}{
+		{name: "DecodeAVCFramesWithConfigurationRecord", call: func(dec *Decoder, config []byte, packet []byte) ([]*Frame, error) {
+			return dec.DecodeAVCFramesWithConfigurationRecord(config, packet)
+		}},
+		{name: "DecodeAVCCFrames", call: func(dec *Decoder, config []byte, packet []byte) ([]*Frame, error) {
+			return dec.DecodeAVCCFrames(config, packet)
+		}},
+		{name: "DecodeAVCWithConfigurationRecord", call: func(dec *Decoder, config []byte, packet []byte) ([]*Frame, error) {
+			frame, err := dec.DecodeAVCWithConfigurationRecord(config, packet)
+			if frame == nil {
+				return nil, err
+			}
+			return []*Frame{frame}, err
+		}},
+		{name: "DecodeAVCC", call: func(dec *Decoder, config []byte, packet []byte) ([]*Frame, error) {
+			frame, err := dec.DecodeAVCC(config, packet)
+			if frame == nil {
+				return nil, err
+			}
+			return []*Frame{frame}, err
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			cfg, err := dec.ConfigureAVCC(config)
+			if err != nil {
+				t.Fatalf("configure valid avcC: %v", err)
+			}
+			frames, err := tt.call(dec, overflowedConfig, samples[0])
+			if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
+				t.Fatalf("%s overflowed avcC = %d frames/%v, want no frames ErrInvalidData", tt.name, len(frames), err)
+			}
+			assertStoredConfigAndDecode(t, dec, cfg)
+		})
+	}
+
+	for _, tt := range []struct {
+		name string
+		call func(*Decoder, []byte) ([]*Frame, error)
+	}{
+		{name: "DecodeFrames", call: func(dec *Decoder, data []byte) ([]*Frame, error) {
+			return dec.DecodeFrames(data)
+		}},
+		{name: "Decode", call: func(dec *Decoder, data []byte) ([]*Frame, error) {
+			frame, err := dec.Decode(data)
+			if frame == nil {
+				return nil, err
+			}
+			return []*Frame{frame}, err
+		}},
+		{name: "DecodePacketFrames", call: func(dec *Decoder, data []byte) ([]*Frame, error) {
+			return dec.DecodePacketFrames(Packet{Data: data})
+		}},
+		{name: "DecodePacket", call: func(dec *Decoder, data []byte) ([]*Frame, error) {
+			frame, err := dec.DecodePacket(Packet{Data: data})
+			if frame == nil {
+				return nil, err
+			}
+			return []*Frame{frame}, err
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			cfg, err := dec.ConfigureAVCC(config)
+			if err != nil {
+				t.Fatalf("configure valid avcC: %v", err)
+			}
+			frames, err := tt.call(dec, overflowedConfig)
+			if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
+				t.Fatalf("%s overflowed avcC = %d frames/%v, want no frames ErrInvalidData", tt.name, len(frames), err)
+			}
+			assertStoredConfigAndDecode(t, dec, cfg)
+		})
+	}
+
+	dec := NewDecoder()
+	cfg, err := dec.ConfigureAVCC(config)
+	if err != nil {
+		t.Fatalf("configure valid avcC: %v", err)
+	}
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data:     samples[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: overflowedConfig}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames with overflowed NEW_EXTRADATA: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after overflowed NEW_EXTRADATA: %v", err)
+	}
+	if got != cfg {
+		t.Fatalf("AVCConfig after overflowed NEW_EXTRADATA = %+v, want previous %+v", got, cfg)
+	}
+}
+
 func TestDecoderAVCConfigReportsStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config4, samples4 := annexBToAVCConfigAndSamples(t, data, 4)
