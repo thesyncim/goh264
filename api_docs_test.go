@@ -316,6 +316,7 @@ func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestParseHeadersAnnexBBlack16",
 		"TestParseHeadersAVCBlack16",
 		"TestPackageAVCCParsersDoNotMutateDecoderState",
+		"TestFrameCloneRejectsOverflowedPublicStorage",
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",

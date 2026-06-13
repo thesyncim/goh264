@@ -464,6 +464,9 @@ func (f *Frame) Clone() (*Frame, error) {
 	if f == nil {
 		return nil, ErrInvalidData
 	}
+	if !frameCloneStorageOK(f) {
+		return nil, ErrInvalidData
+	}
 	clone := *f
 	clone.Y = cloneByteSlice(f.Y)
 	clone.Cb = cloneByteSlice(f.Cb)
@@ -473,6 +476,39 @@ func (f *Frame) Clone() (*Frame, error) {
 	clone.Cr16 = cloneUint16Slice(f.Cr16)
 	clone.SideData = cloneFrameSideData(f.SideData)
 	return &clone, nil
+}
+
+func frameCloneStorageOK(f *Frame) bool {
+	if len(f.Y) > maxInt/2 || len(f.Cb) > maxInt/2 || len(f.Cr) > maxInt/2 ||
+		len(f.Y16) > maxInt/2 || len(f.Cb16) > maxInt/2 || len(f.Cr16) > maxInt/2 {
+		return false
+	}
+	return frameSideDataCloneStorageOK(f.SideData)
+}
+
+func frameSideDataCloneStorageOK(side FrameSideData) bool {
+	if len(side.UserDataUnregistered) > maxInt/32 {
+		return false
+	}
+	for _, payload := range side.UserDataUnregistered {
+		if len(payload) > maxInt/2 {
+			return false
+		}
+	}
+	if len(side.A53ClosedCaptions) > maxInt/2 ||
+		len(side.S12MTimecodes) > maxInt/4 ||
+		len(side.ICCProfile) > maxInt/2 ||
+		len(side.DynamicHDR10Plus) > maxInt/2 ||
+		len(side.LCEVC) > maxInt/2 {
+		return false
+	}
+	if side.PictureTiming != nil && len(side.PictureTiming.Timecode) > maxInt/32 {
+		return false
+	}
+	if side.ReferenceDisplays != nil && len(side.ReferenceDisplays.Displays) > maxInt/16 {
+		return false
+	}
+	return true
 }
 
 func cloneFrameSideData(src FrameSideData) FrameSideData {

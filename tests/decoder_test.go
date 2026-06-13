@@ -336,6 +336,52 @@ func TestFrameCloneRejectsNilFrame(t *testing.T) {
 	}
 }
 
+func TestFrameCloneRejectsOverflowedPublicStorage(t *testing.T) {
+	fakeByteSlices := func(n int) [][]byte {
+		var payload []byte
+		return fakeDecoderRawSliceLen(&payload, n)
+	}
+	fakeUint32s := func(n int) []uint32 {
+		var v uint32
+		return fakeDecoderRawSliceLen(&v, n)
+	}
+	fakeTimecodes := func(n int) []Timecode {
+		var tc Timecode
+		return fakeDecoderRawSliceLen(&tc, n)
+	}
+	fakeReferenceDisplays := func(n int) []ReferenceDisplay {
+		var display ReferenceDisplay
+		return fakeDecoderRawSliceLen(&display, n)
+	}
+	tests := []struct {
+		name  string
+		frame *Frame
+	}{
+		{name: "y", frame: &Frame{Y: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "cb", frame: &Frame{Cb: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "cr", frame: &Frame{Cr: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "y16", frame: &Frame{Y16: fakeDecoderRawUint16Len(maxIntForTest/2 + 1)}},
+		{name: "cb16", frame: &Frame{Cb16: fakeDecoderRawUint16Len(maxIntForTest/2 + 1)}},
+		{name: "cr16", frame: &Frame{Cr16: fakeDecoderRawUint16Len(maxIntForTest/2 + 1)}},
+		{name: "unregistered-list", frame: &Frame{SideData: FrameSideData{UserDataUnregistered: fakeByteSlices(maxIntForTest/32 + 1)}}},
+		{name: "unregistered-payload", frame: &Frame{SideData: FrameSideData{UserDataUnregistered: [][]byte{fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}}}},
+		{name: "a53-cc", frame: &Frame{SideData: FrameSideData{A53ClosedCaptions: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}}},
+		{name: "s12m", frame: &Frame{SideData: FrameSideData{S12MTimecodes: fakeUint32s(maxIntForTest/4 + 1)}}},
+		{name: "picture-timing-timecode", frame: &Frame{SideData: FrameSideData{PictureTiming: &PictureTiming{Timecode: fakeTimecodes(maxIntForTest/32 + 1)}}}},
+		{name: "icc", frame: &Frame{SideData: FrameSideData{ICCProfile: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}}},
+		{name: "dynamic-hdr10-plus", frame: &Frame{SideData: FrameSideData{DynamicHDR10Plus: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}}},
+		{name: "lcevc", frame: &Frame{SideData: FrameSideData{LCEVC: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}}},
+		{name: "reference-displays", frame: &Frame{SideData: FrameSideData{ReferenceDisplays: &ReferenceDisplaysInfo{Displays: fakeReferenceDisplays(maxIntForTest/16 + 1)}}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, err := tt.frame.Clone(); got != nil || !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("Frame.Clone overflow = %+v/%v, want nil ErrInvalidData", got, err)
+			}
+		})
+	}
+}
+
 func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 	side := FrameSideData{
 		UserDataUnregistered: [][]byte{{1, 2, 3}},

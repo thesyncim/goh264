@@ -155,7 +155,8 @@ func main() {
 `RawYUVBytesLE` returns a caller-owned rawvideo byte buffer for one frame.
 `RawYUV16` returns a caller-owned uint16 sample buffer for high-bit-depth frames.
 `Frame.Clone` returns a deep-owned decoded-frame snapshot, including planes and
-side data; `FrameSideData.Clone` snapshots side data without copying planes.
+side data, and rejects overflowed public frame or side-data storage;
+`FrameSideData.Clone` snapshots side data without copying planes.
 `AppendRawYUV` is available for 8-bit output. `AppendRawYUVBytesLE` handles both
 8-bit and high-bit-depth output, using little-endian samples for 9-bit and
 higher formats. `AppendRawYUV16` is the caller-buffer form for high-bit-depth
@@ -286,7 +287,8 @@ display metadata, content light metadata, display orientation, film grain, ICC
 profile, HDR10+, and LCEVC side data.
 `Packet.Clone`, `PacketSideData.Clone`, `Frame.Clone`, and
 `FrameSideData.Clone` provide deep-owned snapshots for retained packets and
-decoded output metadata.
+decoded output metadata. `Frame.Clone` validates public frame and side-data
+storage before cloning so malformed snapshots are not silently truncated.
 Structured side-data entries are decoded only when their payload validates;
 byte-oriented packet side data such as A53 captions, ICC profile, HDR10+, and
 LCEVC is copied into frame side data for caller-owned retention.
