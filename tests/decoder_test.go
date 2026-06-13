@@ -382,6 +382,79 @@ func TestFrameCloneRejectsOverflowedPublicStorage(t *testing.T) {
 	}
 }
 
+func TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
+	fakePacketSideData := func(n int) []PacketSideData {
+		var side PacketSideData
+		return fakeDecoderRawSliceLen(&side, n)
+	}
+	fakeByteSlices := func(n int) [][]byte {
+		var payload []byte
+		return fakeDecoderRawSliceLen(&payload, n)
+	}
+	fakeUint32s := func(n int) []uint32 {
+		var v uint32
+		return fakeDecoderRawSliceLen(&v, n)
+	}
+	fakeTimecodes := func(n int) []Timecode {
+		var tc Timecode
+		return fakeDecoderRawSliceLen(&tc, n)
+	}
+	fakeReferenceDisplays := func(n int) []ReferenceDisplay {
+		var display ReferenceDisplay
+		return fakeDecoderRawSliceLen(&display, n)
+	}
+
+	overflowSide := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}
+	if got, err := overflowSide.CloneChecked(); got.Type != 0 || got.Data != nil || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("PacketSideData.CloneChecked overflow = %+v/%v, want zero ErrInvalidData", got, err)
+	}
+	if got := overflowSide.Clone(); got.Type != 0 || got.Data != nil {
+		t.Fatalf("PacketSideData.Clone overflow = %+v, want zero value", got)
+	}
+
+	for _, tt := range []struct {
+		name   string
+		packet Packet
+	}{
+		{name: "data", packet: Packet{Data: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "side-list", packet: Packet{SideData: fakePacketSideData(maxIntForTest/32 + 1)}},
+		{name: "side-payload", packet: Packet{SideData: []PacketSideData{overflowSide}}},
+	} {
+		t.Run("packet-"+tt.name, func(t *testing.T) {
+			if got, err := tt.packet.CloneChecked(); got.Data != nil || got.SideData != nil || !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("Packet.CloneChecked overflow = %+v/%v, want zero ErrInvalidData", got, err)
+			}
+			if got := tt.packet.Clone(); got.Data != nil || got.SideData != nil {
+				t.Fatalf("Packet.Clone overflow = %+v, want zero value", got)
+			}
+		})
+	}
+
+	for _, tt := range []struct {
+		name string
+		side FrameSideData
+	}{
+		{name: "unregistered-list", side: FrameSideData{UserDataUnregistered: fakeByteSlices(maxIntForTest/32 + 1)}},
+		{name: "unregistered-payload", side: FrameSideData{UserDataUnregistered: [][]byte{fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}}},
+		{name: "a53-cc", side: FrameSideData{A53ClosedCaptions: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "s12m", side: FrameSideData{S12MTimecodes: fakeUint32s(maxIntForTest/4 + 1)}},
+		{name: "picture-timing-timecode", side: FrameSideData{PictureTiming: &PictureTiming{Timecode: fakeTimecodes(maxIntForTest/32 + 1)}}},
+		{name: "icc", side: FrameSideData{ICCProfile: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "dynamic-hdr10-plus", side: FrameSideData{DynamicHDR10Plus: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "lcevc", side: FrameSideData{LCEVC: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "reference-displays", side: FrameSideData{ReferenceDisplays: &ReferenceDisplaysInfo{Displays: fakeReferenceDisplays(maxIntForTest/16 + 1)}}},
+	} {
+		t.Run("frame-side-data-"+tt.name, func(t *testing.T) {
+			if got, err := tt.side.CloneChecked(); !reflect.DeepEqual(got, FrameSideData{}) || !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("FrameSideData.CloneChecked overflow = %+v/%v, want zero ErrInvalidData", got, err)
+			}
+			if got := tt.side.Clone(); !reflect.DeepEqual(got, FrameSideData{}) {
+				t.Fatalf("FrameSideData.Clone overflow = %+v, want zero value", got)
+			}
+		})
+	}
+}
+
 func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 	side := FrameSideData{
 		UserDataUnregistered: [][]byte{{1, 2, 3}},
@@ -398,6 +471,13 @@ func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 	if !reflect.DeepEqual(clone, side) {
 		t.Fatalf("FrameSideData.Clone = %+v, want %+v", clone, side)
 	}
+	checked, err := side.CloneChecked()
+	if err != nil {
+		t.Fatalf("FrameSideData.CloneChecked: %v", err)
+	}
+	if !reflect.DeepEqual(checked, side) {
+		t.Fatalf("FrameSideData.CloneChecked = %+v, want %+v", checked, side)
+	}
 	if &clone.UserDataUnregistered[0][0] == &side.UserDataUnregistered[0][0] ||
 		&clone.A53ClosedCaptions[0] == &side.A53ClosedCaptions[0] ||
 		&clone.S12MTimecodes[0] == &side.S12MTimecodes[0] ||
@@ -408,10 +488,25 @@ func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 		&clone.ReferenceDisplays.Displays[0] == &side.ReferenceDisplays.Displays[0] {
 		t.Fatal("FrameSideData.Clone aliases source slices")
 	}
+	if &checked.UserDataUnregistered[0][0] == &side.UserDataUnregistered[0][0] ||
+		&checked.A53ClosedCaptions[0] == &side.A53ClosedCaptions[0] ||
+		&checked.S12MTimecodes[0] == &side.S12MTimecodes[0] ||
+		&checked.PictureTiming.Timecode[0] == &side.PictureTiming.Timecode[0] ||
+		&checked.ICCProfile[0] == &side.ICCProfile[0] ||
+		&checked.DynamicHDR10Plus[0] == &side.DynamicHDR10Plus[0] ||
+		&checked.LCEVC[0] == &side.LCEVC[0] ||
+		&checked.ReferenceDisplays.Displays[0] == &side.ReferenceDisplays.Displays[0] {
+		t.Fatal("FrameSideData.CloneChecked aliases source slices")
+	}
 	if clone.PictureTiming == side.PictureTiming ||
 		clone.RecoveryPoint == side.RecoveryPoint ||
 		clone.ReferenceDisplays == side.ReferenceDisplays {
 		t.Fatal("FrameSideData.Clone aliases source pointers")
+	}
+	if checked.PictureTiming == side.PictureTiming ||
+		checked.RecoveryPoint == side.RecoveryPoint ||
+		checked.ReferenceDisplays == side.ReferenceDisplays {
+		t.Fatal("FrameSideData.CloneChecked aliases source pointers")
 	}
 	clone.UserDataUnregistered[0][1] ^= 0xff
 	clone.PictureTiming.Timecode[0].Seconds++

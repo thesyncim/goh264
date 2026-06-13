@@ -60,8 +60,11 @@ var _ = (*Decoder).ParseAVCC
 var _ = (*Decoder).AVCConfig
 
 var _ = (PacketSideData).Clone
+var _ = (PacketSideData).CloneChecked
 var _ = (Packet).Clone
+var _ = (Packet).CloneChecked
 var _ = (FrameSideData).Clone
+var _ = (FrameSideData).CloneChecked
 var _ = (*Frame).Clone
 var _ = (*Frame).RawPixelFormat
 var _ = (*Frame).AppendRawYUV

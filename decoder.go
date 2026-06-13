@@ -154,11 +154,26 @@ type PacketSideData struct {
 }
 
 // Clone returns a deep-owned copy of the packet side-data payload.
+//
+// For caller-constructed values that need validation, use CloneChecked.
 func (side PacketSideData) Clone() PacketSideData {
+	clone, err := side.CloneChecked()
+	if err != nil {
+		return PacketSideData{}
+	}
+	return clone
+}
+
+// CloneChecked returns a deep-owned copy of the packet side-data payload after
+// validating public storage sizes.
+func (side PacketSideData) CloneChecked() (PacketSideData, error) {
+	if len(side.Data) > maxInt/2 {
+		return PacketSideData{}, ErrInvalidData
+	}
 	return PacketSideData{
 		Type: side.Type,
 		Data: cloneByteSlice(side.Data),
-	}
+	}, nil
 }
 
 // Packet is one compressed access unit plus optional packet side data.
@@ -172,18 +187,37 @@ type Packet struct {
 
 // Clone returns a deep-owned copy of the compressed packet and side-data
 // payloads.
+//
+// For caller-constructed values that need validation, use CloneChecked.
 func (pkt Packet) Clone() Packet {
+	clone, err := pkt.CloneChecked()
+	if err != nil {
+		return Packet{}
+	}
+	return clone
+}
+
+// CloneChecked returns a deep-owned copy of the compressed packet and side-data
+// payloads after validating public storage sizes.
+func (pkt Packet) CloneChecked() (Packet, error) {
+	if len(pkt.Data) > maxInt/2 || len(pkt.SideData) > maxInt/32 {
+		return Packet{}, ErrInvalidData
+	}
 	clone := Packet{
 		Data: cloneByteSlice(pkt.Data),
 	}
 	if len(pkt.SideData) == 0 {
-		return clone
+		return clone, nil
 	}
 	clone.SideData = make([]PacketSideData, len(pkt.SideData))
 	for i, side := range pkt.SideData {
-		clone.SideData[i] = side.Clone()
+		sideClone, err := side.CloneChecked()
+		if err != nil {
+			return Packet{}, err
+		}
+		clone.SideData[i] = sideClone
 	}
-	return clone
+	return clone, nil
 }
 
 // FrameSideData contains SEI and packet side-data values attached to a decoded
@@ -217,8 +251,23 @@ type FrameSideData struct {
 }
 
 // Clone returns a deep-owned copy of the decoded frame side data.
+//
+// For caller-constructed values that need validation, use CloneChecked.
 func (side FrameSideData) Clone() FrameSideData {
-	return cloneFrameSideData(side)
+	clone, err := side.CloneChecked()
+	if err != nil {
+		return FrameSideData{}
+	}
+	return clone
+}
+
+// CloneChecked returns a deep-owned copy of the decoded frame side data after
+// validating public storage sizes.
+func (side FrameSideData) CloneChecked() (FrameSideData, error) {
+	if !frameSideDataCloneStorageOK(side) {
+		return FrameSideData{}, ErrInvalidData
+	}
+	return cloneFrameSideData(side), nil
 }
 
 type PictureTiming struct {

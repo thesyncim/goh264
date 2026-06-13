@@ -58,9 +58,12 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		method   string
 	}{
 		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "Clone"},
+		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "CloneChecked"},
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "Clone"},
+		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "CloneChecked"},
 		{typeName: "Frame", typ: reflect.TypeOf((*Frame)(nil)), method: "Clone"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "Clone"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "CloneChecked"},
 	} {
 		if _, ok := tt.typ.MethodByName(tt.method); !ok {
 			t.Fatalf("README decoder ownership names missing %s.%s", tt.typeName, tt.method)
@@ -133,6 +136,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"DefaultRealtimeEncoderConfig",
 		"DefaultEncoderConfig",
 		"Clone",
+		"CloneChecked",
 		"Append",
 		"OutputFormat",
 		"AccessUnitData",
@@ -317,6 +321,7 @@ func TestDecoderReleaseEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestParseHeadersAVCBlack16",
 		"TestPackageAVCCParsersDoNotMutateDecoderState",
 		"TestFrameCloneRejectsOverflowedPublicStorage",
+		"TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage",
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",

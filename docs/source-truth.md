@@ -131,7 +131,8 @@ high-bit-depth luma/chroma sample errors, `RawYUVBytesLE` and `RawYUV16`
 caller-owned convenience output, `RawYUVSize` overflow rejection, and raw-output
 appender no-panic rejection for overflowed caller-constructed frame geometry,
 `Frame.Clone` deep-owned decoded-frame snapshots with overflowed public storage
-rejection and `FrameSideData.Clone` side-data snapshots,
+rejection, checked `Packet.CloneChecked`, `PacketSideData.CloneChecked`, and
+`FrameSideData.CloneChecked` snapshots,
 checked low/high internal motion and reconstruction plane-span overflow rejection,
 public SEI side-data byte-slice ownership against caller mutation,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.

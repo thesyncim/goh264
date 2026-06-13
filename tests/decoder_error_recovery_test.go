@@ -349,16 +349,33 @@ func TestPacketSideDataCloneDeepCopiesPayload(t *testing.T) {
 	if clone.Type != side.Type || !bytes.Equal(clone.Data, side.Data) {
 		t.Fatalf("PacketSideData.Clone = %+v, want byte-identical copy of %+v", clone, side)
 	}
+	checked, err := side.CloneChecked()
+	if err != nil {
+		t.Fatalf("PacketSideData.CloneChecked: %v", err)
+	}
+	if checked.Type != side.Type || !bytes.Equal(checked.Data, side.Data) {
+		t.Fatalf("PacketSideData.CloneChecked = %+v, want byte-identical copy of %+v", checked, side)
+	}
 	if &clone.Data[0] == &side.Data[0] {
 		t.Fatal("PacketSideData.Clone aliases source payload")
+	}
+	if &checked.Data[0] == &side.Data[0] {
+		t.Fatal("PacketSideData.CloneChecked aliases source payload")
 	}
 	side.Data[0] ^= 0xff
 	if bytes.Equal(clone.Data, side.Data) {
 		t.Fatal("mutating source side-data changed clone")
 	}
+	if bytes.Equal(checked.Data, side.Data) {
+		t.Fatal("mutating source side-data changed checked clone")
+	}
 	clone.Data[1] ^= 0xff
 	if clone.Data[1] == side.Data[1] {
 		t.Fatal("mutating cloned side-data changed source")
+	}
+	checked.Data[1] ^= 0xff
+	if checked.Data[1] == side.Data[1] {
+		t.Fatal("mutating checked side-data clone changed source")
 	}
 }
 
@@ -366,6 +383,9 @@ func TestPacketClonePreservesZeroValue(t *testing.T) {
 	var packet Packet
 	if clone := packet.Clone(); clone.Data != nil || clone.SideData != nil {
 		t.Fatalf("zero Packet.Clone = %+v, want zero Packet", clone)
+	}
+	if clone, err := packet.CloneChecked(); err != nil || clone.Data != nil || clone.SideData != nil {
+		t.Fatalf("zero Packet.CloneChecked = %+v/%v, want zero Packet nil error", clone, err)
 	}
 }
 
@@ -385,10 +405,22 @@ func TestPacketCloneDeepCopiesDataAndSideData(t *testing.T) {
 	if !bytes.Equal(clone.Data, packet.Data) || len(clone.SideData) != len(packet.SideData) {
 		t.Fatalf("Packet.Clone = %+v, want byte-identical copy of %+v", clone, packet)
 	}
+	checked, err := packet.CloneChecked()
+	if err != nil {
+		t.Fatalf("Packet.CloneChecked: %v", err)
+	}
+	if !bytes.Equal(checked.Data, packet.Data) || len(checked.SideData) != len(packet.SideData) {
+		t.Fatalf("Packet.CloneChecked = %+v, want byte-identical copy of %+v", checked, packet)
+	}
 	if &clone.Data[0] == &packet.Data[0] ||
 		&clone.SideData[0].Data[0] == &packet.SideData[0].Data[0] ||
 		&clone.SideData[1].Data[0] == &packet.SideData[1].Data[0] {
 		t.Fatal("Packet.Clone aliases source storage")
+	}
+	if &checked.Data[0] == &packet.Data[0] ||
+		&checked.SideData[0].Data[0] == &packet.SideData[0].Data[0] ||
+		&checked.SideData[1].Data[0] == &packet.SideData[1].Data[0] {
+		t.Fatal("Packet.CloneChecked aliases source storage")
 	}
 	packet.Data[0] ^= 0xff
 	packet.SideData[0].Data[0] ^= 0xff
@@ -397,6 +429,11 @@ func TestPacketCloneDeepCopiesDataAndSideData(t *testing.T) {
 		bytes.Equal(clone.SideData[0].Data, packet.SideData[0].Data) ||
 		bytes.Equal(clone.SideData[1].Data, packet.SideData[1].Data) {
 		t.Fatal("mutating source packet changed clone")
+	}
+	if bytes.Equal(checked.Data, packet.Data) ||
+		bytes.Equal(checked.SideData[0].Data, packet.SideData[0].Data) ||
+		bytes.Equal(checked.SideData[1].Data, packet.SideData[1].Data) {
+		t.Fatal("mutating source packet changed checked clone")
 	}
 	frame, err := NewDecoder().DecodePacket(clone)
 	if err != nil {
