@@ -203,9 +203,9 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 	for _, forbidden := range []string{
 		"pre" + "-release",
 		"pre" + "-production",
-		"not production-ready",
-		"non-production",
-		"non-release",
+		"not production" + "-ready",
+		"non" + "-production",
+		"non" + "-release",
 		"release " + "tag",
 		"release " + "readiness",
 		"release " + "artifacts",
