@@ -466,10 +466,7 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesThroughLocalAndFFmpeg(t *testin
 		height    = 16
 		initialQP = 20
 	)
-	sets, _, _ := encoderSliceTestParameterSets(t, width, height, initialQP)
-	// The bounded writer admits coefficient levels through its flat-qmul test PPS;
-	// the Annex B stream still carries generated SPS/PPS and is decoded below.
-	writerPPS, writerSPS := encoderResidualSliceTestPPS(initialQP)
+	sets, pps, sps := encoderSliceTestParameterSets(t, width, height, initialQP)
 	frame := encoderSliceTestI420(width, height)
 	idr, err := BuildEncoderI420IntraPCMIDRSlice(EncoderI420IntraPCMIDRConfig{
 		Width:                      width,
@@ -497,7 +494,11 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesThroughLocalAndFFmpeg(t *testin
 		NextQP:                     initialQP,
 		DisableDeblockingFilterIDC: 1,
 		Coeff:                      4,
-	}, writerPPS, writerSPS)
+		ChromaDCCoeffCb:            2,
+		ChromaDCCoeffCr:            -2,
+		ChromaACCoeffCb:            1,
+		ChromaACCoeffCr:            -1,
+	}, pps, sps)
 	if err != nil {
 		t.Fatalf("encode residual P slice rbsp: %v", err)
 	}

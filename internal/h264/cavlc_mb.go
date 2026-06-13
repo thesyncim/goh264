@@ -454,9 +454,6 @@ func (c *cavlcResidualContext) writeCAVLCInterResidualPayload(bw *BitWriter, pps
 		pps.ChromaQPTable[0][nextQScale],
 		pps.ChromaQPTable[1][nextQScale],
 	}
-	if !cavlcFlatQMul4x4(pps.Dequant4Buffer[3][nextQScale][:]) {
-		return 0, ErrUnsupported
-	}
 	scan, _ := h264CAVLCScansForQScale(sps, nextQScale, mbType&MBTypeInterlaced != 0)
 	ret, err := c.writeCAVLCLumaResidual(bw, scan, mbType, cbp, 0)
 	if err != nil {
@@ -516,9 +513,6 @@ func (c *cavlcResidualContext) writeCAVLCChromaResidual(bw *BitWriter, pps *PPS,
 			if qp > qpMaxNum {
 				return ErrInvalidData
 			}
-			if !cavlcFlatQMul4x4(pps.Dequant4Buffer[chromaIdx+4][qp][:]) {
-				return ErrUnsupported
-			}
 			mbOffset := 16 * (16 + 16*chromaIdx)
 			for i4x4 := 0; i4x4 < 4; i4x4++ {
 				index := 16 + 16*chromaIdx + i4x4
@@ -536,18 +530,6 @@ func (c *cavlcResidualContext) writeCAVLCChromaResidual(bw *BitWriter, pps *PPS,
 	fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[16]), 4, 4, 8, 0)
 	fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[32]), 4, 4, 8, 0)
 	return nil
-}
-
-func cavlcFlatQMul4x4(qmul []uint32) bool {
-	if len(qmul) < 16 {
-		return false
-	}
-	for i := 0; i < 16; i++ {
-		if qmul[i] != 64 {
-			return false
-		}
-	}
-	return true
 }
 
 func cavlcResidualPredIndex(n int) int {

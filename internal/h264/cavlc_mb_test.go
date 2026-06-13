@@ -494,6 +494,48 @@ func TestWriteCAVLCInterResidualPayloadZeroCBPClearsCaches(t *testing.T) {
 	}
 }
 
+func TestWriteCAVLCInterResidualPayloadRoundTripsNonFlatQMul(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+	const qscale = 20
+	chromaACPos := int(h264ZigzagScanCAVLC[1])
+	pps.Dequant4Buffer[3][qscale][0] = 128
+	pps.Dequant4Buffer[4][qscale][chromaACPos] = 128
+	pps.Dequant4Buffer[5][qscale][chromaACPos] = 128
+
+	var writer cavlcResidualContext
+	writer.MB[0] = 2
+	writer.MB[256+chromaACPos] = 2
+	writer.MB[512+chromaACPos] = -2
+
+	var bw BitWriter
+	cbpTable, err := writer.writeCAVLCInterResidualPayload(&bw, pps, sps, MBType16x16|MBTypeP0L0, 0x21, qscale, qscale)
+	if err != nil {
+		t.Fatalf("write non-flat qmul residual payload failed: %v", err)
+	}
+	if cbpTable != 0x1021 {
+		t.Fatalf("non-flat qmul cbpTable = %#x, want 0x1021", cbpTable)
+	}
+
+	var decoded cavlcResidualContext
+	gb := newBitReader(bw.Bytes())
+	gotQScale, gotChromaQP, gotCBPTable, err := decoded.decodeCAVLCResidualPayload(&gb, pps, sps, MBType16x16|MBTypeP0L0, 0x21, qscale)
+	if err != nil {
+		t.Fatalf("decode non-flat qmul residual payload failed: %v", err)
+	}
+	if gotQScale != qscale || gotChromaQP != ([2]uint8{qscale, qscale}) || gotCBPTable != cbpTable {
+		t.Fatalf("decoded non-flat q/chroma/cbp = %d/%v/%#x, want %d/[%d %d]/%#x",
+			gotQScale, gotChromaQP, gotCBPTable, qscale, qscale, qscale, cbpTable)
+	}
+	if decoded.MB[0] != 4 || decoded.MB[256+chromaACPos] != 4 || decoded.MB[512+chromaACPos] != -4 {
+		t.Fatalf("decoded non-flat qmul residuals = %d/%d/%d, want 4/4/-4",
+			decoded.MB[0], decoded.MB[256+chromaACPos], decoded.MB[512+chromaACPos])
+	}
+	if gb.bitPos != bw.BitLen() {
+		t.Fatalf("decoded consumed %d bits, want %d", gb.bitPos, bw.BitLen())
+	}
+}
+
 func TestWriteCAVLCInterResidualPayloadRejectsInvalid(t *testing.T) {
 	pps := cavlcFlatQMulPPS()
 	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
@@ -530,18 +572,6 @@ func TestWriteCAVLCInterResidualPayloadRejectsInvalid(t *testing.T) {
 		}, want: ErrUnsupported},
 		{name: "unsupported chroma", run: func() error {
 			_, err := ctx.writeCAVLCInterResidualPayload(&bw, pps, &SPS{BitDepthLuma: 8, ChromaFormatIDC: 2}, MBType16x16|MBTypeP0L0, 1, 20, 20)
-			return err
-		}, want: ErrUnsupported},
-		{name: "non-flat luma qmul", run: func() error {
-			nextPPS := cavlcFlatQMulPPS()
-			nextPPS.Dequant4Buffer[3][20][0] = 65
-			_, err := ctx.writeCAVLCInterResidualPayload(&bw, nextPPS, sps, MBType16x16|MBTypeP0L0, 1, 20, 20)
-			return err
-		}, want: ErrUnsupported},
-		{name: "non-flat chroma qmul", run: func() error {
-			nextPPS := cavlcFlatQMulPPS()
-			nextPPS.Dequant4Buffer[4][20][0] = 65
-			_, err := ctx.writeCAVLCInterResidualPayload(&bw, nextPPS, sps, MBType16x16|MBTypeP0L0, 0x20, 20, 20)
 			return err
 		}, want: ErrUnsupported},
 		{name: "bad qscale", run: func() error {
