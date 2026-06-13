@@ -12834,6 +12834,108 @@ func TestEncoderRTPMode0OversizeRejectPreservesLiveState(t *testing.T) {
 	}
 }
 
+func TestEncoderResidualPRTPMode0OversizeRejectPreservesLiveReference(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationSingleNAL
+	cfg.RTPMaxPayloadSize = 1200
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RateControl = goh264.EncoderRateControlConstantQP
+	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
+
+	probe, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder probe: %v", err)
+	}
+	reference := patternedI420EncoderFrame(16, 16)
+	reference.PTS = 0
+	if _, err := probe.Encode(reference); err != nil {
+		t.Fatalf("probe IDR: %v", err)
+	}
+	probePSkipFrame := reference
+	probePSkipFrame.PTS = int64(cfg.RTPTimestampIncrement)
+	probePSkip, err := probe.Encode(probePSkipFrame)
+	if err != nil {
+		t.Fatalf("probe P-skip: %v", err)
+	}
+	pskipBytes := len(probePSkip.Data)
+	if pskipBytes == 0 || probePSkip.IDR || probePSkip.Dropped || len(probePSkip.RTPPackets) != 1 {
+		t.Fatalf("probe P-skip output dropped=%v idr=%v data=%d rtp=%d, want one-packet P-skip",
+			probePSkip.Dropped, probePSkip.IDR, pskipBytes, len(probePSkip.RTPPackets))
+	}
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder mode 0: %v", err)
+	}
+	var callbackCalls int
+	enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+		callbackCalls++
+	})
+	first, err := enc.Encode(reference)
+	if err != nil {
+		t.Fatalf("Encode first mode-0 IDR: %v", err)
+	}
+	firstPacketCount := len(first.RTPPackets)
+	if first.Dropped || !first.IDR || firstPacketCount == 0 || callbackCalls != firstPacketCount {
+		t.Fatalf("first output dropped=%v idr=%v packets/callbacks=%d/%d, want RTP IDR callbacks",
+			first.Dropped, first.IDR, firstPacketCount, callbackCalls)
+	}
+
+	if err := enc.SetRTPMaxPayloadSize(2); err != nil {
+		t.Fatalf("lower RTP payload size: %v", err)
+	}
+	residual := encoderP16x16PixelDeltaResidualFrame(t, cfg, reference, int64(cfg.RTPTimestampIncrement))
+	dst, backingBefore := encoderPrefilledCallerBuffer()
+	rejected, err := enc.EncodeInto(dst, residual)
+	if !errors.Is(err, goh264.ErrInvalidData) {
+		t.Fatalf("EncodeInto residual P mode-0 oversize error = %v, want ErrInvalidData", err)
+	}
+	if rejected.Dropped || len(rejected.Data) != 0 || len(rejected.NALUnits) != 0 || len(rejected.RTPPackets) != 0 {
+		t.Fatalf("residual P mode-0 oversize output = %+v, want empty output", rejected)
+	}
+	assertEncoderCallerBufferUnchanged(t, dst, backingBefore)
+	if enc.PendingIDR() {
+		t.Fatal("residual P mode-0 oversize queued unexpected IDR")
+	}
+	if callbackCalls != firstPacketCount {
+		t.Fatalf("residual P mode-0 oversize callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+	}
+
+	if err := enc.SetRTPMaxPayloadSize(1200); err != nil {
+		t.Fatalf("restore RTP payload size: %v", err)
+	}
+	recoveryFrame := reference
+	recoveryFrame.PTS = residual.PTS + int64(cfg.RTPTimestampIncrement)
+	recovered, err := enc.Encode(recoveryFrame)
+	if err != nil {
+		t.Fatalf("Encode after residual P mode-0 oversize: %v", err)
+	}
+	if recovered.Dropped || recovered.IDR || enc.PendingIDR() || len(recovered.Data) != pskipBytes {
+		t.Fatalf("post-residual-oversize output dropped=%v idr=%v pending=%v data=%d, want P-skip size %d",
+			recovered.Dropped, recovered.IDR, enc.PendingIDR(), len(recovered.Data), pskipBytes)
+	}
+	assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
+	assertEncoderRTPMode0RawNALPackets(t, recovered, 1200)
+	assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+	if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+		t.Fatalf("post-residual-oversize callbacks = %d, want %d",
+			callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+	}
+
+	stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, recovered.RTPPackets)...)
+	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+	decoded, err := goh264.NewDecoder().DecodeFrames(stream)
+	if err != nil {
+		t.Fatalf("Decode recovered stream: %v", err)
+	}
+	if len(decoded) != 2 {
+		t.Fatalf("decoded frames = %d, want 2", len(decoded))
+	}
+	assertDecodedEncoderFrameBytes(t, decoded[:1], appendI420FrameBytes(nil, reference))
+	assertDecodedEncoderFrameBytes(t, decoded[1:], appendI420FrameBytes(nil, recoveryFrame))
+}
+
 func TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPPacketizationMode = goh264.EncoderRTPPacketizationNonInterleaved
