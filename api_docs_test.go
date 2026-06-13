@@ -138,6 +138,12 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"Clone",
 		"CloneChecked",
 		"Append",
+		"AppendSPSChecked",
+		"AppendPPSChecked",
+		"AppendAnnexBChecked",
+		"AppendAVCCChecked",
+		"AppendNALChecked",
+		"AppendAVCChecked",
 		"OutputFormat",
 		"AccessUnitData",
 		"NALData",
@@ -159,6 +165,13 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}{
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "CloneChecked"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "CloneChecked"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendSPSChecked"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendPPSChecked"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAnnexBChecked"},
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAVCCChecked"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendNALChecked"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAnnexBChecked"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAVCChecked"},
 	} {
 		if _, ok := tt.typ.MethodByName(tt.method); !ok {
 			t.Fatalf("README encoder ownership names missing %s.%s", tt.typeName, tt.method)
@@ -283,6 +296,7 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes",
 		"TestEncodedFrameCloneRejectsInvalidMetadata",
 		"TestEncoderCheckedCloneHelpersRejectOverflowedPublicStorage",
+		"TestEncoderCheckedAppendHelpersRejectOverflowedPublicStorage",
 		"TestEncodedFrameOutputHelpersRejectOverflowedPublicStorage",
 		"encoder-writers",
 		"TestCAVLCWriteResidual",

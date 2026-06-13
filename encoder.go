@@ -732,23 +732,73 @@ func (sets EncoderParameterSets) AVCC() []byte {
 }
 
 // AppendSPS appends a caller-owned copy of the SPS NAL to dst.
+//
+// For caller-constructed values that need validation, use AppendSPSChecked.
 func (sets EncoderParameterSets) AppendSPS(dst []byte) []byte {
-	return append(dst, sets.SPS...)
+	out, err := sets.AppendSPSChecked(dst)
+	if err != nil {
+		return dst
+	}
+	return out
+}
+
+// AppendSPSChecked appends a caller-owned copy of the SPS NAL to dst after
+// validating public storage sizes. On error, dst is returned unchanged.
+func (sets EncoderParameterSets) AppendSPSChecked(dst []byte) ([]byte, error) {
+	return appendEncoderHelperBytes(dst, sets.SPS)
 }
 
 // AppendPPS appends a caller-owned copy of the PPS NAL to dst.
+//
+// For caller-constructed values that need validation, use AppendPPSChecked.
 func (sets EncoderParameterSets) AppendPPS(dst []byte) []byte {
-	return append(dst, sets.PPS...)
+	out, err := sets.AppendPPSChecked(dst)
+	if err != nil {
+		return dst
+	}
+	return out
+}
+
+// AppendPPSChecked appends a caller-owned copy of the PPS NAL to dst after
+// validating public storage sizes. On error, dst is returned unchanged.
+func (sets EncoderParameterSets) AppendPPSChecked(dst []byte) ([]byte, error) {
+	return appendEncoderHelperBytes(dst, sets.PPS)
 }
 
 // AppendAnnexB appends a caller-owned copy of the Annex B parameter sets to dst.
+//
+// For caller-constructed values that need validation, use AppendAnnexBChecked.
 func (sets EncoderParameterSets) AppendAnnexB(dst []byte) []byte {
-	return append(dst, sets.AnnexB...)
+	out, err := sets.AppendAnnexBChecked(dst)
+	if err != nil {
+		return dst
+	}
+	return out
+}
+
+// AppendAnnexBChecked appends a caller-owned copy of the Annex B parameter sets
+// to dst after validating public storage sizes. On error, dst is returned
+// unchanged.
+func (sets EncoderParameterSets) AppendAnnexBChecked(dst []byte) ([]byte, error) {
+	return appendEncoderHelperBytes(dst, sets.AnnexB)
 }
 
 // AppendAVCC appends a caller-owned copy of the AVC decoder configuration record to dst.
+//
+// For caller-constructed values that need validation, use AppendAVCCChecked.
 func (sets EncoderParameterSets) AppendAVCC(dst []byte) []byte {
-	return append(dst, sets.AVCDecoderConfigurationRecord...)
+	out, err := sets.AppendAVCCChecked(dst)
+	if err != nil {
+		return dst
+	}
+	return out
+}
+
+// AppendAVCCChecked appends a caller-owned copy of the AVC decoder
+// configuration record to dst after validating public storage sizes. On error,
+// dst is returned unchanged.
+func (sets EncoderParameterSets) AppendAVCCChecked(dst []byte) ([]byte, error) {
+	return appendEncoderHelperBytes(dst, sets.AVCDecoderConfigurationRecord)
 }
 
 // Clone returns a deep-owned copy of the parameter-set helper surfaces.
@@ -794,18 +844,54 @@ type EncoderSEI struct {
 }
 
 // AppendNAL appends a caller-owned copy of the SEI NAL to dst.
+//
+// For caller-constructed values that need validation, use AppendNALChecked.
 func (sei EncoderSEI) AppendNAL(dst []byte) []byte {
-	return append(dst, sei.NAL...)
+	out, err := sei.AppendNALChecked(dst)
+	if err != nil {
+		return dst
+	}
+	return out
+}
+
+// AppendNALChecked appends a caller-owned copy of the SEI NAL to dst after
+// validating public storage sizes. On error, dst is returned unchanged.
+func (sei EncoderSEI) AppendNALChecked(dst []byte) ([]byte, error) {
+	return appendEncoderHelperBytes(dst, sei.NAL)
 }
 
 // AppendAnnexB appends a caller-owned copy of the Annex B SEI NAL to dst.
+//
+// For caller-constructed values that need validation, use AppendAnnexBChecked.
 func (sei EncoderSEI) AppendAnnexB(dst []byte) []byte {
-	return append(dst, sei.AnnexB...)
+	out, err := sei.AppendAnnexBChecked(dst)
+	if err != nil {
+		return dst
+	}
+	return out
+}
+
+// AppendAnnexBChecked appends a caller-owned copy of the Annex B SEI NAL to dst
+// after validating public storage sizes. On error, dst is returned unchanged.
+func (sei EncoderSEI) AppendAnnexBChecked(dst []byte) ([]byte, error) {
+	return appendEncoderHelperBytes(dst, sei.AnnexB)
 }
 
 // AppendAVC appends a caller-owned copy of the AVC SEI NAL to dst.
+//
+// For caller-constructed values that need validation, use AppendAVCChecked.
 func (sei EncoderSEI) AppendAVC(dst []byte) []byte {
-	return append(dst, sei.AVC...)
+	out, err := sei.AppendAVCChecked(dst)
+	if err != nil {
+		return dst
+	}
+	return out
+}
+
+// AppendAVCChecked appends a caller-owned copy of the AVC SEI NAL to dst after
+// validating public storage sizes. On error, dst is returned unchanged.
+func (sei EncoderSEI) AppendAVCChecked(dst []byte) ([]byte, error) {
+	return appendEncoderHelperBytes(dst, sei.AVC)
 }
 
 // Clone returns a deep-owned copy of the SEI helper surfaces.
@@ -836,6 +922,17 @@ func encoderSEICloneStorageOK(sei EncoderSEI) bool {
 	return len(sei.NAL) <= maxInt/2 &&
 		len(sei.AnnexB) <= maxInt/2 &&
 		len(sei.AVC) <= maxInt/2
+}
+
+func appendEncoderHelperBytes(dst []byte, src []byte) ([]byte, error) {
+	if len(dst) > maxInt/2 || len(src) > maxInt/2 {
+		return dst, ErrInvalidData
+	}
+	n, err := checkedAddInt(len(dst), len(src))
+	if err != nil || n > maxInt/2 {
+		return dst, ErrInvalidData
+	}
+	return append(dst, src...), nil
 }
 
 // EncoderReconfigure contains optional runtime encoder updates.

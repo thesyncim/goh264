@@ -508,6 +508,9 @@ with the strongest public API coverage for integration work:
   payload helpers have `Append...` forms for caller-owned retention buffers and
   `Clone` forms for async snapshots. `EncoderParameterSets.CloneChecked` and
   `EncoderSEI.CloneChecked` validate public storage sizes before cloning.
+  `AppendSPSChecked`, `AppendPPSChecked`, `AppendAnnexBChecked`,
+  `AppendAVCCChecked`, `AppendNALChecked`, and `AppendAVCChecked` provide the
+  same storage validation for caller-managed append buffers.
   Invalid append calls return the original destination unchanged, and
   `EncodedFrame.Clone` rejects dropped results that still carry emitted byte,
   NAL, or RTP packet storage.

@@ -185,7 +185,7 @@ frame, starts RTP sequence numbers and callbacks from the first emitted packet,
 carries retargeted payload metadata, and decodes the RTP IDR/P-skip sequence,
 caller-owned parameter-set and recovery-point SEI surfaces with mutation/append
 isolation and checked helper-clone storage validation across repeated helper
-calls,
+calls, including checked append-source and destination validation,
 public input/result/callback surface guards for integration-facing encoder
 structs, including I420 frame construction and clipped encoded-result helpers,
 input-frame plane ownership guards proving post-call caller mutation does not
