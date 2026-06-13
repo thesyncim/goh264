@@ -947,7 +947,27 @@ func appendEncoderHelperBytes(dst []byte, src []byte) ([]byte, error) {
 	if err != nil || n > maxInt/2 {
 		return dst, ErrInvalidData
 	}
+	if cap(dst) >= n && byteSlicesOverlap(dst[:n], src) {
+		out := make([]byte, n)
+		copy(out, dst)
+		copy(out[len(dst):], src)
+		return out, nil
+	}
 	return append(dst, src...), nil
+}
+
+func byteSlicesOverlap(a []byte, b []byte) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	aStart := uintptr(unsafe.Pointer(&a[0]))
+	aEnd := aStart + uintptr(len(a)-1)
+	bStart := uintptr(unsafe.Pointer(&b[0]))
+	bEnd := bStart + uintptr(len(b)-1)
+	if aEnd < aStart || bEnd < bStart {
+		return true
+	}
+	return aStart <= bEnd && bStart <= aEnd
 }
 
 // EncoderReconfigure contains optional runtime encoder updates.

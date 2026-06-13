@@ -6166,6 +6166,182 @@ func TestEncoderSEIAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 	}
 }
 
+func TestEncoderAppendHelpersIsolateOverlappingSource(t *testing.T) {
+	type overlapInput struct {
+		dst  []byte
+		src  []byte
+		call func([]byte) ([]byte, error)
+	}
+	tests := []struct {
+		name      string
+		makeInput func() overlapInput
+	}{
+		{
+			name: "parameter sets checked",
+			makeInput: func() overlapInput {
+				backing := []byte{0xde, 0xad, 0x67, 0x42, 0x00, 0xee}
+				sets := goh264.EncoderParameterSets{SPS: backing[2:5]}
+				return overlapInput{
+					dst: backing[:2],
+					src: sets.SPS,
+					call: func(dst []byte) ([]byte, error) {
+						return sets.AppendSPSChecked(dst)
+					},
+				}
+			},
+		},
+		{
+			name: "parameter sets compatibility",
+			makeInput: func() overlapInput {
+				backing := []byte{0xde, 0xad, 0x67, 0x42, 0x00, 0xee}
+				sets := goh264.EncoderParameterSets{SPS: backing[2:5]}
+				return overlapInput{
+					dst: backing[:2],
+					src: sets.SPS,
+					call: func(dst []byte) ([]byte, error) {
+						return sets.AppendSPS(dst), nil
+					},
+				}
+			},
+		},
+		{
+			name: "sei checked",
+			makeInput: func() overlapInput {
+				backing := []byte{0xca, 0xfe, 0x06, 0x06, 0x01, 0xee}
+				sei := goh264.EncoderSEI{NAL: backing[2:5]}
+				return overlapInput{
+					dst: backing[:2],
+					src: sei.NAL,
+					call: func(dst []byte) ([]byte, error) {
+						return sei.AppendNALChecked(dst)
+					},
+				}
+			},
+		},
+		{
+			name: "sei compatibility",
+			makeInput: func() overlapInput {
+				backing := []byte{0xca, 0xfe, 0x06, 0x06, 0x01, 0xee}
+				sei := goh264.EncoderSEI{NAL: backing[2:5]}
+				return overlapInput{
+					dst: backing[:2],
+					src: sei.NAL,
+					call: func(dst []byte) ([]byte, error) {
+						return sei.AppendNAL(dst), nil
+					},
+				}
+			},
+		},
+		{
+			name: "encoded frame nal",
+			makeInput: func() overlapInput {
+				backing := []byte{0xde, 0xad, 0x67, 0x42, 0x00, 0xee}
+				frame := goh264.EncodedFrame{
+					Data: backing,
+					NALUnits: []goh264.EncoderNALUnit{{
+						Type: 7, Offset: 2, Size: 3, KeyFrame: true, ParameterSet: true,
+					}},
+				}
+				return overlapInput{
+					dst: backing[:2],
+					src: backing[2:5],
+					call: func(dst []byte) ([]byte, error) {
+						return frame.AppendNALData(dst, 0)
+					},
+				}
+			},
+		},
+		{
+			name: "encoded frame access unit",
+			makeInput: func() overlapInput {
+				backing := []byte{
+					0xde, 0xad,
+					0, 0, 0, 1, 0x67, 0x42, 0x00,
+					0, 0, 0, 1, 0x68,
+					0xee,
+				}
+				frame := goh264.EncodedFrame{
+					Data: backing,
+					NALUnits: []goh264.EncoderNALUnit{
+						{Type: 7, Offset: 6, Size: 3, KeyFrame: true, ParameterSet: true},
+						{Type: 8, Offset: 13, Size: 1, KeyFrame: true, ParameterSet: true},
+					},
+				}
+				return overlapInput{
+					dst: backing[:2],
+					src: backing[2:14],
+					call: func(dst []byte) ([]byte, error) {
+						return frame.AppendAccessUnitData(dst)
+					},
+				}
+			},
+		},
+		{
+			name: "rtp packet",
+			makeInput: func() overlapInput {
+				backing := []byte{
+					0xde, 0xad,
+					0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd,
+					0x65, 0x88, 0x99,
+					0xee,
+				}
+				packet := goh264.EncoderRTPPacket{
+					Data:    backing[2:17],
+					Payload: backing[14:17],
+				}
+				return overlapInput{
+					dst: backing[:2],
+					src: packet.Data,
+					call: func(dst []byte) ([]byte, error) {
+						return packet.AppendPacketData(dst)
+					},
+				}
+			},
+		},
+		{
+			name: "rtp payload",
+			makeInput: func() overlapInput {
+				backing := []byte{
+					0xde, 0xad,
+					0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd,
+					0x65, 0x88, 0x99,
+					0xee,
+				}
+				packet := goh264.EncoderRTPPacket{
+					Data:    backing[2:17],
+					Payload: backing[14:17],
+				}
+				return overlapInput{
+					dst: backing[:14],
+					src: packet.Payload,
+					call: func(dst []byte) ([]byte, error) {
+						return packet.AppendPayloadData(dst)
+					},
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := tt.makeInput()
+			want := append(append([]byte(nil), input.dst...), input.src...)
+			got, err := input.call(input.dst)
+			if err != nil {
+				t.Fatalf("append helper: %v", err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("append helper = %x, want %x", got, want)
+			}
+			for i := range input.src {
+				input.src[i] ^= 0xff
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("append helper output aliases overlapping source after mutation: got %x want %x", got, want)
+			}
+		})
+	}
+}
+
 func TestEncoderConfigRecoveryPointSEIMatchesEncoderHelper(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPMaxPayloadSize = 0

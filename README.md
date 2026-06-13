@@ -515,8 +515,10 @@ with the strongest public API coverage for integration work:
   `AppendAVCChecked` provide the same storage validation for avcC views and
   caller-managed append buffers.
   Invalid or overflowed-destination append calls return the original destination
-  unchanged, and `EncodedFrame.Clone` rejects dropped results that still carry
-  emitted byte, NAL, or RTP packet storage.
+  unchanged. If a caller-managed append destination overlaps the helper source
+  bytes, the helpers return isolated output storage instead of aliasing the
+  source. `EncodedFrame.Clone` rejects dropped results that still carry emitted
+  byte, NAL, or RTP packet storage.
 - `EncodedFrame.OutputFormat` records the emitted result format, including
   dropped frames, so callers do not need to infer format from packet presence.
 - For RTP output, `EncodedFrame.Data` remains an Annex B access-unit view for
@@ -548,7 +550,8 @@ RTP output currently covers:
 - public `EncodedFrame.RTPPacketData`, `EncodedFrame.RTPPayloadData`, and
   packet-level `EncoderRTPPacket` byte helpers;
 - caller-owned append helpers for access-unit, NAL, RTP packet, and RTP payload
-  bytes, including unchanged destinations on invalid appends;
+  bytes, including isolated overlapping source/destination appends and unchanged
+  destinations on invalid appends;
 - deep-owned `EncodedFrame.Clone` snapshots for retained results, with malformed
   metadata and overflowed public result storage rejected;
 - optional per-packet callback metadata for mode 0/1 IDR/P-frame single-NAL

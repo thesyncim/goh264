@@ -263,7 +263,8 @@ structs, including `EncoderConfig.Normalize`, `EncoderConfig.I420Frame`,
 `EncodedFrame.OutputFormat`, `EncodedFrame.NALData`,
 `EncodedFrame.AccessUnitData`, and packet-level
 `EncoderRTPPacket` byte helpers, including append helpers that leave the caller
-destination unchanged on invalid or overflowed-destination appends and
+destination unchanged on invalid or overflowed-destination appends, isolate
+overlapping source/destination appends, and
 `EncodedFrame.Clone` rejection for dropped results that still carry byte, NAL,
 or RTP packet storage, rejects invalid or
 not-yet-admitted realtime controls, validates runtime
@@ -379,7 +380,8 @@ packet-level `EncoderRTPPacket` helpers, clipped packet payload views over
 packet data, packet storage isolated from `EncodedFrame.Data` including
 caller-backed `EncodeInto` output buffers, unchanged caller append destinations
 on invalid or overflowed-destination access-unit, NAL, RTP packet, and RTP
-payload appends, rejected malformed dropped-result storage in `EncodedFrame.Clone`, shared
+payload appends, isolated overlapping source/destination helper appends,
+rejected malformed dropped-result storage in `EncodedFrame.Clone`, shared
 packet metadata guards for header fields and clipped packet slices, checked
 access-unit and RTP packet storage-size overflow rejection, and optional RTP callback metadata including mode 0/1
 IDR/P-frame single-NAL packets for multi-slice IDR, P-skip, exact P16x16,
