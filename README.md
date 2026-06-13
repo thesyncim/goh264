@@ -740,9 +740,7 @@ artifacts.
 
 ## Trust And Verification
 
-Published version: none yet.
-
-No tag should be treated as production until a quality-evidence pass proves:
+Production use should be backed by a fresh quality-evidence pass proving:
 
 - `scripts/h264-quality-evidence.sh` is green as the combined decoder and
   admitted-encoder quality gate.
@@ -770,8 +768,8 @@ No tag should be treated as production until a quality-evidence pass proves:
 - `scripts/h264-performance-evidence.sh` creates the local performance bundle
   with JSON benchmark output plus CPU/heap profiles.
 - `scripts/h264-encoder-quality-evidence.sh` is green for the admitted
-  realtime/WebRTC encoder vet, contract, API-surface, residual-boundary,
-  writer, allocation, and benchmark gates.
+  realtime/WebRTC encoder vet, contract, API-surface, bitstream-oracles,
+  residual-boundary, writer, allocation, and benchmark gates.
 - Allocation and performance evidence is recorded in
   [docs/production-readiness.md](docs/production-readiness.md).
 - Encoder support stays in the admitted subset until

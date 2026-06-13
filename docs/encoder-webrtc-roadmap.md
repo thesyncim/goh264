@@ -405,8 +405,9 @@ Encoder support stays in the admitted subset until:
 - Encoded streams pass local and FFmpeg decode oracles.
 - WebRTC packetization tests cover every exposed packetization control.
 - Allocation, race, and realtime budget gates are checked into the normal
-  quality evidence. The admitted local vet, contract, writer, allocation, and
-  `-benchmem` rows are now bundled by
+  quality evidence. The admitted local vet, contract, API-surface,
+  bitstream-oracles, residual-boundary, writer, allocation, and `-benchmem`
+  rows are now bundled by
   `scripts/h264-encoder-quality-evidence.sh`; broader production status still
   requires the combined `scripts/h264-quality-evidence.sh` pass plus the
   remaining motion-search, residual, rate-control, and packetizer breadth

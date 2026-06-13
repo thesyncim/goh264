@@ -147,9 +147,9 @@ It fails by default if the known-red failure ledger is non-empty or the
 worktree is dirty.
 `scripts/h264-encoder-quality-evidence.sh` runs the admitted encoder local
 quality checklist as one gate: `go vet ./...`, full tests, the external
-encoder control contract, the explicit `EncodeInto` allocation canary,
-internal writer/header/SEI slice syntax tests, and admitted encoder `-benchmem`
-rows.
+encoder control contract, the focused `encoder-bitstream-oracles` gate, the
+explicit `EncodeInto` allocation canary, internal writer/header/SEI slice
+syntax tests, and admitted encoder `-benchmem` rows.
 It writes per-command logs under
 `.artifacts/h264-encoder-quality-evidence/` and fails by default if the
 worktree is dirty.

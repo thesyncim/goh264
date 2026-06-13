@@ -189,6 +189,7 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 		t.Fatalf("read README.md: %v", err)
 	}
 	readme := string(data)
+	readmeLower := strings.ToLower(readme)
 	for _, phrase := range []string{
 		"still hardening as a complete codec package",
 		"still below quality parity with a production H.264 encoder",
@@ -210,11 +211,14 @@ func TestREADMEQualityStatusDoesNotTreatExamplesAsParityEvidence(t *testing.T) {
 		"release " + "tag",
 		"release " + "readiness",
 		"release " + "artifacts",
+		"published " + "version",
+		"no tag",
+		"no tags",
 		"de" + "precate",
 		"de" + "precated",
 		"de" + "precation",
 	} {
-		if strings.Contains(readme, forbidden) {
+		if strings.Contains(readmeLower, forbidden) {
 			t.Fatalf("README.md should not use shipping-lifecycle status phrase %q", forbidden)
 		}
 	}
@@ -278,6 +282,9 @@ func TestDocsAndScriptsAvoidReleaseLifecycleWording(t *testing.T) {
 			"release " + "artifacts",
 			"release " + "tag",
 			"released " + "version",
+			"published " + "version",
+			"no tag",
+			"no tags",
 			"goh264" + "_release",
 			"goh264_full" + "_release",
 			"goh264_encoder" + "_release",
@@ -342,6 +349,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 	script := string(scriptData)
 	for _, phrase := range []string{
 		"API-surface",
+		"bitstream-oracles",
 		"residual-boundary",
 	} {
 		if !strings.Contains(readme, phrase) {
@@ -354,10 +362,39 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"status: fail (no matching tests)",
 		"run_go_test_gate encoder-contract ./tests",
 		"run_go_test_gate encoder-api-surfaces ./tests",
+		"run_go_test_gate encoder-bitstream-oracles ./tests",
 		"run_go_test_gate encoder-residual-boundary ./tests",
 		"run_go_test_gate encoder-allocation-canary ./tests",
 		"run_go_test_gate encoder-writers ./internal/h264",
 		"encoder-api-surfaces",
+		"encoder_bitstream_oracle_tests",
+		"encoder-bitstream-oracles",
+		"TestEncoderEncodeAnnexBIDRIntraPCMDecodesThroughLocalAndFFmpeg",
+		"TestEncoderEncodeCroppedAnnexBIDRIntraPCMDecodesVisibleFrame",
+		"TestEncoderEncodeAVCIDRIntraPCMDecodesThroughConfiguredSurface",
+		"TestEncoderEncodeIdenticalSecondFrameUsesPSkipReference",
+		"TestEncoderEncodeExactP16x16NoResidualMotion",
+		"TestEncoderEncodeExactP16x16NoResidualMotionForAVCAndRTP",
+		"TestEncoderEncodeExactP16x16NoResidualMotionWithDeblockControls",
+		"TestEncoderEncodeMacroblockAlignedExactP16x16NoResidualMotion",
+		"TestEncoderEncodePerMacroblockExactP16x16NoResidualMotionForAnnexBAVCRTP",
+		"TestEncoderEncodePerMacroblockExactP16x16FallsBackWithDeblockControls",
+		"TestEncoderEncodeOddPixelExactP16x16NoResidualMotionWithConstantChroma",
+		"TestEncoderEncodeOddPixelExactP16x16NoResidualMotionForAVCAndRTP",
+		"TestEncoderEncodeChangedSecondFrameUsesPIntraPCM",
+		"TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithDefaultDeblock",
+		"TestEncoderEncodeChangedSecondFrameUsesPIntraPCMWithSliceBoundaryDeblock",
+		"TestEncoderEncodeChangedPIntraPCMRecoveryPointSEIForAVCAndRTP",
+		"TestEncoderResidualShapedPDeltaRemainsPIntraPCMAcrossPublicOutputs",
+		"TestEncoderSliceCountSplitsIDRPSkipAndPIntraPCMAccessUnits",
+		"TestEncoderSliceCountFeedsRTPMode1SingleNALPackets",
+		"TestEncoderEncodeForceIDRBypassesPSkipReference",
+		"TestEncoderEncodeRTPMode1FragmentsIDRAccessUnit",
+		"TestEncoderEncodeRTPMode1STAPAAggregatesParameterSets",
+		"TestEncoderEncodeRTPMode1STAPADoesNotAggregateChangedPRecoverySEI",
+		"TestEncoderEncodeRTPMode0EmitsSingleNALPackets",
+		"TestEncoderEncodeRTPMode0EmitsPFrameSingleNALPackets",
+		"TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState",
 		"TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData",
 		"TestEncoderReconfigureZeroScalarFieldsAreNoOps",
 		"TestEncoderZeroValueExplicitSettersRejectWithoutMutation",
@@ -388,6 +425,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 	for _, forbidden := range []string{
 		"run_gate encoder-contract go test",
 		"run_gate encoder-api-surfaces go test",
+		"run_gate encoder-bitstream-oracles go test",
 		"run_gate encoder-residual-boundary go test",
 		"run_gate encoder-allocation-canary go test",
 		"run_gate encoder-writers go test",
