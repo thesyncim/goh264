@@ -264,8 +264,9 @@ edge padding and deblock-control syntax kept explicit, plus a parse-proved
 Baseline P-skip writer that emits `mb_skip_run` for the selected slice range
 and a parse-proved Baseline P16x16 no-residual writer that emits explicit
 P_L0_16x16 macroblocks with constant or per-macroblock signed MVD syntax and
-zero CBP. An internal Baseline P16x16 luma/chroma-DC residual slice writer now carries
-per-macroblock signed MVD, nonzero luma coefficient, and bounded per-macroblock Cb/Cr chroma-DC
+zero CBP. An internal Baseline P16x16 luma/chroma residual slice writer now
+carries per-macroblock signed MVD, nonzero luma coefficient, zero-luma
+chroma-only payloads, and bounded per-macroblock Cb/Cr chroma-DC/chroma-AC
 coefficient inputs through parser and CAVLC frame-macroblock decode/writeback
 proof while preserving predicted motion, nonzero-count/CBP tables, and stateful
 `mb_qp_delta` emission across consecutive residual macroblocks. A public decode oracle proves SPS/PPS + IDR IntraPCM + P16x16
@@ -275,9 +276,10 @@ parse-proved Baseline P IntraPCM writer emits `mb_skip_run=0` plus P-slice
 IntraPCM writers accept explicit
 raster-scan macroblock ranges so public `SliceCount` can emit multiple VCL NALs
 in one access unit.
-Public encoder coverage now pins exact luma-DC residual-P admission across
-Annex B, AVC, RTP mode 1, and RTP mode 0, while broader residual-shaped P-frame
-deltas remain on the recovery-SEI plus P IntraPCM fallback boundary.
+Public encoder coverage now pins exact luma-DC and chroma-only residual-P
+admission across Annex B, AVC, RTP mode 1, and RTP mode 0, while broader
+residual-shaped P-frame deltas remain on the recovery-SEI plus P IntraPCM
+fallback boundary.
 
 ## Implementation Order
 

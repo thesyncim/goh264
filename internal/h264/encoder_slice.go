@@ -894,14 +894,25 @@ func validateEncoderI420P16x16ResidualConfig(cfg EncoderI420P16x16ResidualConfig
 	if len(cfg.ChromaACCoeffPositions) > 0 && len(cfg.ChromaACCoeffPositions) != macroblockCount {
 		return ErrInvalidData
 	}
+	hasChromaDC := len(cfg.ChromaDCCoefficients) > 0 || len(cfg.ChromaDCCoeffs) > 0 ||
+		cfg.ChromaDCCoeffCb != 0 || cfg.ChromaDCCoeffCr != 0
+	hasChromaAC := len(cfg.ChromaACCoefficients) > 0 || len(cfg.ChromaACCoeffs) > 0 ||
+		cfg.ChromaACCoeffCb != 0 || cfg.ChromaACCoeffCr != 0
 	if len(cfg.LumaCoefficients) > 0 {
 		if len(cfg.Coeffs) > 0 || len(cfg.CoeffPositions) > 0 || cfg.Coeff != 0 || cfg.CoeffPos != 0 {
 			return ErrInvalidData
 		}
+		hasLumaResidual := false
 		for _, coeffs := range cfg.LumaCoefficients {
-			if !validEncoderResidualCoefficients(coeffs, 0, 256) {
+			if len(coeffs) > 0 {
+				hasLumaResidual = true
+			}
+			if !validEncoderLumaResidualCoefficients(coeffs) {
 				return ErrInvalidData
 			}
+		}
+		if !hasLumaResidual && !hasChromaDC && !hasChromaAC {
+			return ErrInvalidData
 		}
 	} else if len(cfg.CoeffPositions) > 0 {
 		for _, pos := range cfg.CoeffPositions {
@@ -946,8 +957,8 @@ func validateEncoderI420P16x16ResidualConfig(cfg EncoderI420P16x16ResidualConfig
 	} else if (cfg.ChromaDCCoeffCb == 0) != (cfg.ChromaDCCoeffCr == 0) {
 		return ErrInvalidData
 	}
-	hasCompatibilityChromaDC := len(cfg.ChromaDCCoeffs) > 0 || cfg.ChromaDCCoeffCb != 0 || cfg.ChromaDCCoeffCr != 0
-	if !hasCompatibilityChromaDC && (len(cfg.ChromaDCCoeffPositions) > 0 || cfg.ChromaDCCoeffPos != 0) {
+	hasScalarChromaDC := len(cfg.ChromaDCCoeffs) > 0 || cfg.ChromaDCCoeffCb != 0 || cfg.ChromaDCCoeffCr != 0
+	if !hasScalarChromaDC && (len(cfg.ChromaDCCoeffPositions) > 0 || cfg.ChromaDCCoeffPos != 0) {
 		return ErrInvalidData
 	}
 	if len(cfg.ChromaDCCoeffPositions) > 0 {
@@ -979,8 +990,8 @@ func validateEncoderI420P16x16ResidualConfig(cfg EncoderI420P16x16ResidualConfig
 	} else if (cfg.ChromaACCoeffCb == 0) != (cfg.ChromaACCoeffCr == 0) {
 		return ErrInvalidData
 	}
-	hasCompatibilityChromaAC := len(cfg.ChromaACCoeffs) > 0 || cfg.ChromaACCoeffCb != 0 || cfg.ChromaACCoeffCr != 0
-	if !hasCompatibilityChromaAC && (len(cfg.ChromaACCoeffPositions) > 0 || cfg.ChromaACCoeffPos != 0) {
+	hasScalarChromaAC := len(cfg.ChromaACCoeffs) > 0 || cfg.ChromaACCoeffCb != 0 || cfg.ChromaACCoeffCr != 0
+	if !hasScalarChromaAC && (len(cfg.ChromaACCoeffPositions) > 0 || cfg.ChromaACCoeffPos != 0) {
 		return ErrInvalidData
 	}
 	if len(cfg.ChromaACCoeffPositions) > 0 {
@@ -993,6 +1004,13 @@ func validateEncoderI420P16x16ResidualConfig(cfg EncoderI420P16x16ResidualConfig
 		return ErrInvalidData
 	}
 	return nil
+}
+
+func validEncoderLumaResidualCoefficients(coeffs []EncoderResidualCoefficient) bool {
+	if len(coeffs) == 0 {
+		return true
+	}
+	return validEncoderResidualCoefficients(coeffs, 0, 256)
 }
 
 func validEncoderResidualCoefficients(coeffs []EncoderResidualCoefficient, minPos int, maxPos int) bool {

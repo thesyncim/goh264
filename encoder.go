@@ -2041,6 +2041,8 @@ type encoderP16x16ResidualPlan struct {
 var encoderP16x16ResidualCandidates = [...]encoderP16x16ResidualCandidate{
 	{coeff: 4, chromaDCCoeffCb: 2, chromaDCCoeffCr: -2, chromaACCoeffCb: 1, chromaACCoeffCr: -1},
 	{coeff: -4, chromaDCCoeffCb: -2, chromaDCCoeffCr: 2, chromaACCoeffCb: -1, chromaACCoeffCr: 1},
+	{chromaDCCoeffCb: 2, chromaDCCoeffCr: -2, chromaACCoeffCb: 1, chromaACCoeffCr: -1},
+	{chromaDCCoeffCb: -2, chromaDCCoeffCr: 2, chromaACCoeffCb: -1, chromaACCoeffCr: 1},
 	{coeff: 4},
 	{coeff: -4},
 	{coeff: 2},
@@ -2337,6 +2339,10 @@ func (e *Encoder) p16x16ResidualNALs(view encoderFrameView, sliceRanges []encode
 	for _, candidate := range encoderP16x16ResidualCandidates {
 		nals := make([]encoderRawNAL, 0, len(sliceRanges))
 		for _, r := range sliceRanges {
+			var lumaCoefficients [][]h264.EncoderResidualCoefficient
+			if candidate.coeff == 0 {
+				lumaCoefficients = make([][]h264.EncoderResidualCoefficient, r.macroblockCount)
+			}
 			nal, err := buildEncoderI420P16x16ResidualNAL(h264.EncoderI420P16x16ResidualConfig{
 				Width:                      view.width,
 				Height:                     view.height,
@@ -2347,6 +2353,7 @@ func (e *Encoder) p16x16ResidualNALs(view encoderFrameView, sliceRanges []encode
 				FirstMBAddr:                uint32(r.firstMB),
 				MacroblockCount:            uint32(r.macroblockCount),
 				Coeff:                      candidate.coeff,
+				LumaCoefficients:           lumaCoefficients,
 				ChromaDCCoeffCb:            candidate.chromaDCCoeffCb,
 				ChromaDCCoeffCr:            candidate.chromaDCCoeffCr,
 				ChromaACCoeffCb:            candidate.chromaACCoeffCb,

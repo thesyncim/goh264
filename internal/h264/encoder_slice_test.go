@@ -1087,6 +1087,61 @@ func TestEncodeI420P16x16ResidualSliceRBSPDecodesChromaDCThroughFramePath(t *tes
 	}
 }
 
+func TestEncodeI420P16x16ResidualSliceRBSPDecodesChromaOnlyThroughFramePath(t *testing.T) {
+	pps, sps := encoderResidualSliceTestPPS(20)
+	rbsp, err := encodeI420P16x16ResidualSliceRBSP(EncoderI420P16x16ResidualConfig{
+		Width:                      16,
+		Height:                     16,
+		FrameNum:                   10,
+		InitialQP:                  20,
+		NextQP:                     23,
+		DisableDeblockingFilterIDC: 1,
+		LumaCoefficients:           [][]EncoderResidualCoefficient{{}},
+		ChromaDCCoeffCb:            1,
+		ChromaDCCoeffCr:            -1,
+		ChromaACCoeffCb:            1,
+		ChromaACCoeffCr:            -1,
+	}, pps, sps)
+	if err != nil {
+		t.Fatalf("encode chroma-only residual slice rbsp: %v", err)
+	}
+
+	var ppsList [maxPPSCount]*PPS
+	ppsList[0] = pps
+	sh, payload, err := parseSliceHeaderWithPayload(NALUnit{Type: NALSlice, RefIDC: 2, RBSP: rbsp}, &ppsList)
+	if err != nil {
+		t.Fatalf("parse chroma-only residual P slice header: %v", err)
+	}
+	skipRun, err := payload.readUEGolombLong()
+	if err != nil {
+		t.Fatalf("read generated chroma-only residual P skip run: %v", err)
+	}
+	if skipRun != 0 {
+		t.Fatalf("skip run = %d, want 0", skipRun)
+	}
+	var decoded cavlcResidualContext
+	got, err := decoded.decodeCAVLCInterPMacroblock(&payload, pps, sps, int(sh.QScale), [2]uint32{1, 0}, false)
+	if err != nil {
+		t.Fatalf("decode generated chroma-only residual P macroblock: %v", err)
+	}
+	chromaACPos := int(h264ZigzagScanCAVLC[1])
+	if got.MBType != (MBType16x16|MBTypeP0L0) || got.CBP != 0x20 ||
+		got.QScale != 23 || got.ChromaQP != ([2]uint8{23, 23}) {
+		t.Fatalf("decoded chroma-only mb type/cbp/q/chroma = %#x/%#x/%d/%v",
+			got.MBType, got.CBP, got.QScale, got.ChromaQP)
+	}
+	if decoded.MB[0] != 0 ||
+		decoded.MB[256] != 1 || decoded.MB[512] != -1 ||
+		decoded.MB[256+chromaACPos] != 1 || decoded.MB[512+chromaACPos] != -1 {
+		t.Fatalf("decoded residual luma/chroma = %d/%d/%d/%d/%d, want 0/1/-1/1/-1",
+			decoded.MB[0], decoded.MB[256], decoded.MB[512],
+			decoded.MB[256+chromaACPos], decoded.MB[512+chromaACPos])
+	}
+	if payload.bitsLeft() != 0 {
+		t.Fatalf("chroma-only residual payload bitsLeft = %d, want 0", payload.bitsLeft())
+	}
+}
+
 func TestEncodeI420P16x16ResidualSliceRBSPDecodesPerMacroblockChromaDC(t *testing.T) {
 	pps, sps := encoderResidualSliceTestPPS(20)
 	wantMVDs := []EncoderMotionVectorDelta{

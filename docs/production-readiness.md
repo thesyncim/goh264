@@ -3,14 +3,15 @@
 | Path | Admitted scope | Evidence shape | Remaining gaps |
 | --- | --- | --- | --- |
 | Decoder | FFmpeg `n8.0.1` H.264 decoder path, public Annex B/AVC/avcC/packet surfaces, raw output, side data, delayed output, selected high-bit-depth and field/MBAFF/PAFF rows | Unit, fixture, public-vector, strict FFmpeg-oracle, fuzz-smoke, and quality-evidence runners | Broader field/MBAFF/PIC-AFF motion and DPB edges, high-bit-depth public corpus breadth, damaged-slice behavior, allocation/performance review |
-| Encoder | Guarded 8-bit I420 Constrained Baseline realtime subset: IDR IntraPCM, identical-reference P-skip, bounded exact P16x16 no-residual, bounded luma-DC residual-P, P IntraPCM recovery, Annex B/AVC/RTP output | Public control contract, internal writer/parser round trips, FFmpeg-backed public bitstream tests, encoder quality-evidence runner | General motion search, broader residual macroblock generation, adaptive rate-control decisions, remaining packetizer/control breadth, allocation/performance review |
+| Encoder | Guarded 8-bit I420 Constrained Baseline realtime subset: IDR IntraPCM, identical-reference P-skip, bounded exact P16x16 no-residual, bounded luma-DC and chroma-only residual-P, P IntraPCM recovery, Annex B/AVC/RTP output | Public control contract, internal writer/parser round trips, FFmpeg-backed public bitstream tests, encoder quality-evidence runner | General motion search, broader residual macroblock generation, adaptive rate-control decisions, remaining packetizer/control breadth, allocation/performance review |
 
 The encoder residual writer remains bounded but can serialize configured luma
-coefficient positions across all four luma CBP partitions. Public encoder
-coverage pins exact luma-DC residual-P admission across Annex B, AVC, RTP mode
-1, and RTP mode 0. Broader residual shapes stay on the admitted recovery-SEI
-plus P IntraPCM fallback boundary until their bitstream generation has matching
-oracles.
+coefficient positions across all four luma CBP partitions and chroma-only DC/AC
+residual payloads without requiring luma coefficients. Public encoder coverage
+pins exact luma-DC and chroma-only residual-P admission across Annex B, AVC, RTP
+mode 1, and RTP mode 0. Broader residual shapes stay on the admitted
+recovery-SEI plus P IntraPCM fallback boundary until their bitstream generation
+has matching oracles.
 
 Harness-first status, with quality gates before timing tools:
 
@@ -244,8 +245,9 @@ proving delayed output does not retain input packet storage.
 Encoder readiness evidence currently covers the admitted realtime/WebRTC subset:
 runtime controls, parameter-set headers, recovery-point SEI packaging, IDR
 IntraPCM, identical-reference P-skip, bounded exact P16x16 no-residual
-prediction, changed-frame P IntraPCM recovery pictures, Annex B/AVC output, and
-RTP packetization modes 0 and 1:
+prediction, bounded luma-DC and chroma-only residual-P admission, changed-frame
+P IntraPCM recovery pictures, Annex B/AVC output, and RTP packetization modes 0
+and 1:
 `tests/encoder_webrtc_controls_test.go` proves the default WebRTC config,
 guards public input/result/callback surfaces for integration-facing encoder
 structs, including `EncoderConfig.Normalize`, `EncoderConfig.I420Frame`,
@@ -447,11 +449,12 @@ P16x16 no-residual slice syntax including
 per-macroblock MVD emission, with the P16x16 writer and public exact-motion
 encoder path proved through local Annex B decode, FFmpeg rawvideo decode, and
 mixed per-macroblock Annex B/AVC/RTP decode after an IDR reference frame, plus
-an internal Baseline P16x16 luma/chroma-DC residual slice proof for
-per-macroblock signed MVDs, per-macroblock nonzero luma coefficients, bounded per-macroblock
-Cb/Cr chroma-DC coefficients, and consecutive-macroblock `mb_qp_delta` state
+an internal Baseline P16x16 luma/chroma residual slice proof for
+per-macroblock signed MVDs, per-macroblock nonzero luma coefficients,
+zero-luma chroma-only residual payloads, bounded per-macroblock Cb/Cr chroma-DC
+and chroma-AC coefficients, and consecutive-macroblock `mb_qp_delta` state
 through parser, CAVLC frame-macroblock decode, predicted motion writeback, and
 nonzero-count/CBP table writeback.
-Broader motion-search P prediction, public residual macroblock admission,
+Broader motion-search P prediction, broader residual macroblock admission,
 rate-control feedback, broader allocation budgets, and realtime performance
 gates remain pending.

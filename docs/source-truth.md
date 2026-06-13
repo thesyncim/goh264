@@ -12,8 +12,9 @@ points (`recovery_frame_cnt=0`, exact-match set, broken-link only when B-frame
 chains exist). The admitted encoder bitstream path is a narrow 8-bit I420
 Constrained Baseline subset: IDR IntraPCM, identical-reference CAVLC P-skip,
 bounded exact P16x16 no-residual prediction, changed-frame P IntraPCM recovery
-pictures, bounded exact luma-DC residual-P admission, Annex B/AVC access-unit
-output, configured multi-slice output, and RTP packetization modes 0 and 1.
+pictures, bounded exact luma-DC and chroma-only residual-P admission, Annex
+B/AVC access-unit output, configured multi-slice output, and RTP packetization
+modes 0 and 1.
 Slice headers and reference-marking syntax follow FFmpeg CBS H.264 ordering;
 RTP packet header emission follows FFmpeg `libavformat/rtpenc.c`
 `ff_rtp_send_data()` field order and H.264 RTP payload boundaries follow
@@ -146,6 +147,8 @@ generation, cropped visible-frame decode, identical-reference CAVLC P-skip,
 bounded exact macroblock-aligned P16x16 no-residual prediction with
 8-pixel integer-pel search, including mixed per-macroblock vectors and
 odd-pixel luma motion only with disabled deblock and constant 4:2:0 chroma,
+bounded luma-DC and chroma-only residual-P admission across Annex B/configured
+AVC/RTP plus mode-0 packetization with local and FFmpeg rawvideo decode proof,
 Annex B/configured AVC/RTP plus mode-0
 packetization proof for both admitted constant-chroma motion and patterned-chroma
 P IntraPCM fallback, and enabled/slice-boundary deblock proof including

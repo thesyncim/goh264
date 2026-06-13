@@ -11,7 +11,8 @@ and FFmpeg-oracle surfaces.
 The encoder surface targets realtime/WebRTC integration and admits a guarded
 Constrained Baseline I420 subset: IDR IntraPCM, identical-reference P-skip,
 bounded exact P16x16 no-residual prediction, bounded residual-P admission for
-exact luma-DC pixel deltas plus small guarded writer candidates,
+exact luma-DC pixel deltas and chroma-only CAVLC residuals plus small guarded
+writer candidates,
 changed P IntraPCM recovery frames, AVC/Annex B output, configured multi-slice
 output, and RTP packetization modes 0 and 1. Remaining encoder work includes
 general motion search, broader residual macroblock generation,
@@ -23,7 +24,7 @@ allocation/performance evidence.
 | Area | Evidence shape | Covered surfaces | Remaining gaps |
 | --- | --- | --- | --- |
 | Decoder | Parity-driven port from the pinned FFmpeg path | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Broader field/MBAFF/damaged-edge behavior, fresh artifact evidence, allocation/performance review |
-| Encoder | Guarded realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, bounded pixel-derived residual-P luma DC admission, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual generation, adaptive rate control, wider packetizer/control breadth, oracle-backed bitstream parity, allocation/performance review |
+| Encoder | Guarded realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, bounded pixel-derived residual-P luma-DC and chroma-only admission, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual generation, adaptive rate control, wider packetizer/control breadth, oracle-backed bitstream parity, allocation/performance review |
 
 Examples compiled in `examples_test.go` are API smoke tests only. README
 snippets are API orientation, not codec quality, bitstream parity, acceptance,
@@ -594,8 +595,8 @@ output without RTP packets or callbacks before the next valid frame resumes as
 P-skip.
 
 Still outside the admitted subset: motion search beyond the bounded 8-pixel exact
-macroblock-aligned inter path, quantized residual coding, and adaptive
-rate-control feedback.
+macroblock-aligned inter path, broader quantized residual coding beyond the
+guarded luma-DC/chroma-only paths, and adaptive rate-control feedback.
 
 ## Decoder Coverage At A Glance
 
