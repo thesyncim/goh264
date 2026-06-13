@@ -52,6 +52,34 @@ run_go_test_gate() {
     run_gate "$name" go test "$pkg" -run "$pattern" "$@"
 }
 
+run_exact_go_test_gate() {
+    local name="$1"
+    local pkg="$2"
+    local pattern="$3"
+    shift 3
+    if [[ "${pattern:0:2}" != "^(" || "${pattern: -2}" != ")$" ]]; then
+        printf 'run_exact_go_test_gate %s requires an anchored exact-name pattern\n' "$name" | tee -a "$summary" >&2
+        exit 1
+    fi
+    local expected="${pattern:2:${#pattern}-4}"
+    local -a expected_names=()
+    IFS='|' read -r -a expected_names <<<"$expected"
+    local list_log="$out_dir/$name-list.log"
+    {
+        printf '\n== %s-list ==\n' "$name"
+        printf 'command: go test %q -run %q -list %q\n' "$pkg" '^$' "$pattern"
+    } | tee -a "$summary"
+    go test "$pkg" -run '^$' -list "$pattern" 2>&1 | tee "$list_log"
+    for test_name in "${expected_names[@]}"; do
+        if ! grep -Fxq "$test_name" "$list_log"; then
+            printf 'status: fail (missing focused test %s)\n' "$test_name" | tee -a "$summary" >&2
+            exit 1
+        fi
+    done
+    printf 'status: pass\n' | tee -a "$summary"
+    run_gate "$name" go test "$pkg" -run "$pattern" "$@"
+}
+
 {
     printf 'commit=%s\n' "$(git rev-parse HEAD)"
     printf 'branch=%s\n' "$(git branch --show-current)"
@@ -83,8 +111,8 @@ run_gate git-diff-check git diff --check
 run_gate git-diff-cached-check git diff --cached --check
 run_gate go-vet go vet ./...
 run_gate go-test-all go test ./...
-run_go_test_gate decoder-api-surfaces ./tests '^(TestParseHeadersAnnexBBlack16|TestParseHeadersAVCBlack16|TestPackageAVCCParsersDoNotMutateDecoderState|TestDecodeAVCOneByteLengthSizePublicSurfaces|TestFrameCloneRejectsOverflowedPublicStorage|TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage|TestDecodePacketFramesRejectsOverflowedSideDataListWithoutDroppingPacket|TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesDuplicateNewExtradataFirstEntryWins|TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries|TestDecodeFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference|TestDecodePacketFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference|TestDecodeConfiguredAVCFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference|TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference|TestParseHeadersAVCIncompatibleHeadersDoNotUseStalePFrameReference|TestDecodeFramesValidInBandParameterSetsBeforeDamagedSliceUpdateConfigAndRecover|TestValidAVCCBeforeDamagedSliceUpdatesConfigAndRecover|TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset|TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration|TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset|TestDecodeFramesStandaloneMultiSPSConfigurationResetsForNonFirstActiveSPS|TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecodePacketFramesAnnexBMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecoderAVCConfigUsesAVCCFirstSPSForMultiSPSConfiguration|TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration)$' -count=1 -v
-run_go_test_gate decoder-ref-modifications ./internal/h264 '^(TestSimpleFrameDPBRejectsMissingShortRefModificationTarget|TestSimpleFrameDPBRejectsMissingLongRefModificationTarget|TestSimpleFrameDPBReordersShortRefs|TestSimpleFrameDPBReordersLongRefs)$' -count=1 -v
+run_exact_go_test_gate decoder-api-surfaces ./tests '^(TestParseHeadersAnnexBBlack16|TestParseHeadersAVCBlack16|TestPackageAVCCParsersDoNotMutateDecoderState|TestDecodeAVCOneByteLengthSizePublicSurfaces|TestFrameCloneRejectsOverflowedPublicStorage|TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage|TestDecodePacketFramesRejectsOverflowedSideDataListWithoutDroppingPacket|TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference|TestDecodePacketFramesDuplicateNewExtradataFirstEntryWins|TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries|TestDecodeFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference|TestDecodePacketFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference|TestDecodeConfiguredAVCFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference|TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference|TestParseHeadersAVCIncompatibleHeadersDoNotUseStalePFrameReference|TestDecodeFramesValidInBandParameterSetsBeforeDamagedSliceUpdateConfigAndRecover|TestValidAVCCBeforeDamagedSliceUpdatesConfigAndRecover|TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset|TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration|TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset|TestDecodeFramesStandaloneMultiSPSConfigurationResetsForNonFirstActiveSPS|TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecodePacketFramesAnnexBMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset|TestDecoderAVCConfigUsesAVCCFirstSPSForMultiSPSConfiguration|TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration)$' -count=1 -v
+run_exact_go_test_gate decoder-ref-modifications ./internal/h264 '^(TestSimpleFrameDPBRejectsMissingShortRefModificationTarget|TestSimpleFrameDPBRejectsMissingLongRefModificationTarget|TestSimpleFrameDPBReordersShortRefs|TestSimpleFrameDPBReordersLongRefs)$' -count=1 -v
 
 if [[ -s testdata/h264/realvectors/failures.jsonl && "${GOH264_QUALITY_ALLOW_KNOWN_RED:-0}" != "1" ]]; then
     printf '\nknown-red-failures: testdata/h264/realvectors/failures.jsonl is not empty; set GOH264_QUALITY_ALLOW_KNOWN_RED=1 only for local diagnostics\n' | tee -a "$summary" >&2

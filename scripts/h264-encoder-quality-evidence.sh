@@ -48,6 +48,34 @@ run_go_test_gate() {
     run_gate "$name" go test "$pkg" -run "$pattern" "$@"
 }
 
+run_exact_go_test_gate() {
+    local name="$1"
+    local pkg="$2"
+    local pattern="$3"
+    shift 3
+    if [[ "${pattern:0:2}" != "^(" || "${pattern: -2}" != ")$" ]]; then
+        printf 'run_exact_go_test_gate %s requires an anchored exact-name pattern\n' "$name" | tee -a "$summary" >&2
+        exit 1
+    fi
+    local expected="${pattern:2:${#pattern}-4}"
+    local -a expected_names=()
+    IFS='|' read -r -a expected_names <<<"$expected"
+    local list_log="$out_dir/$name-list.log"
+    {
+        printf '\n== %s-list ==\n' "$name"
+        printf 'command: go test %q -run %q -list %q\n' "$pkg" '^$' "$pattern"
+    } | tee -a "$summary"
+    go test "$pkg" -run '^$' -list "$pattern" 2>&1 | tee "$list_log"
+    for test_name in "${expected_names[@]}"; do
+        if ! grep -Fxq "$test_name" "$list_log"; then
+            printf 'status: fail (missing focused test %s)\n' "$test_name" | tee -a "$summary" >&2
+            exit 1
+        fi
+    done
+    printf 'status: pass\n' | tee -a "$summary"
+    run_gate "$name" go test "$pkg" -run "$pattern" "$@"
+}
+
 {
     printf 'commit=%s\n' "$(git rev-parse HEAD)"
     printf 'branch=%s\n' "$(git branch --show-current)"
@@ -92,8 +120,8 @@ run_gate git-diff-cached-check git diff --cached --check
 run_gate go-vet go vet ./...
 run_gate go-test-all go test ./...
 run_go_test_gate encoder-contract ./tests '^TestEncoder' -count=1 -v
-run_go_test_gate encoder-api-surfaces ./tests "$encoder_api_surface_tests" -count=1 -v
-run_go_test_gate encoder-bitstream-oracles ./tests "$encoder_bitstream_oracle_tests" -count=1 -v
+run_exact_go_test_gate encoder-api-surfaces ./tests "$encoder_api_surface_tests" -count=1 -v
+run_exact_go_test_gate encoder-bitstream-oracles ./tests "$encoder_bitstream_oracle_tests" -count=1 -v
 run_go_test_gate encoder-residual-boundary ./tests '^(TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs|TestEncoderChromaOnlyResidualPUsesResidualAcrossPublicOutputs|TestEncoderCombinedResidualPUsesResidualAcrossPublicOutputs)$' -count=1 -v
 run_go_test_gate encoder-allocation-canary ./tests '^TestEncoderEncodeIntoAllocationCanary$' -count=1 -v
 run_go_test_gate encoder-writers ./internal/h264 '^(TestBitWriter|TestAppendNAL|TestAppendAVC|TestBuildEncoder|TestAppendSEI|TestCAVLCWriteResidual|TestWriteCAVLCInterPBoundedMacroblock|TestEncodeI420P16x16ResidualSliceRBSP)' -count=1 -v

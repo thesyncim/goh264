@@ -418,11 +418,14 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 	}
 	for _, phrase := range []string{
 		"run_go_test_gate()",
+		"run_exact_go_test_gate()",
 		"go test \"$pkg\" -list \"$pattern\"",
+		"go test \"$pkg\" -run '^$' -list \"$pattern\"",
 		"status: fail (no matching tests)",
+		"status: fail (missing focused test",
 		"run_go_test_gate encoder-contract ./tests",
-		"run_go_test_gate encoder-api-surfaces ./tests",
-		"run_go_test_gate encoder-bitstream-oracles ./tests",
+		"run_exact_go_test_gate encoder-api-surfaces ./tests",
+		"run_exact_go_test_gate encoder-bitstream-oracles ./tests",
 		"run_go_test_gate encoder-residual-boundary ./tests",
 		"run_go_test_gate encoder-allocation-canary ./tests",
 		"run_go_test_gate encoder-writers ./internal/h264",
@@ -511,6 +514,8 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"run_gate encoder-residual-boundary go test",
 		"run_gate encoder-allocation-canary go test",
 		"run_gate encoder-writers go test",
+		"run_go_test_gate encoder-api-surfaces ./tests",
+		"run_go_test_gate encoder-bitstream-oracles ./tests",
 	} {
 		if strings.Contains(script, forbidden) {
 			t.Fatalf("encoder quality evidence script should preflight focused gate %q", forbidden)
@@ -539,10 +544,13 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	}
 	for _, phrase := range []string{
 		"run_go_test_gate()",
+		"run_exact_go_test_gate()",
 		"go test \"$pkg\" -list \"$pattern\"",
+		"go test \"$pkg\" -run '^$' -list \"$pattern\"",
 		"status: fail (no matching tests)",
-		"run_go_test_gate decoder-api-surfaces ./tests",
-		"run_go_test_gate decoder-ref-modifications ./internal/h264",
+		"status: fail (missing focused test",
+		"run_exact_go_test_gate decoder-api-surfaces ./tests",
+		"run_exact_go_test_gate decoder-ref-modifications ./internal/h264",
 		"decoder-api-surfaces",
 		"decoder-ref-modifications",
 		"TestParseHeadersAnnexBBlack16",
@@ -580,6 +588,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	for _, forbidden := range []string{
 		"run_gate decoder-api-surfaces go test",
 		"run_gate decoder-ref-modifications go test",
+		"run_go_test_gate decoder-api-surfaces ./tests",
+		"run_go_test_gate decoder-ref-modifications ./internal/h264",
 	} {
 		if strings.Contains(script, forbidden) {
 			t.Fatalf("decoder quality evidence script should preflight focused gate %q", forbidden)
