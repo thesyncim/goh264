@@ -9027,6 +9027,165 @@ func TestEncoderResidualPBudgetRejectPreservesLiveReference(t *testing.T) {
 	}
 }
 
+func TestEncoderResidualPLateDropPreservesLiveReference(t *testing.T) {
+	for _, format := range []struct {
+		name string
+		fmt  goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", fmt: goh264.EncoderOutputAnnexB},
+		{name: "avc", fmt: goh264.EncoderOutputAVC},
+		{name: "rtp", fmt: goh264.EncoderOutputRTP},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(128, 128)
+			cfg.OutputFormat = format.fmt
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.RateControl = goh264.EncoderRateControlConstantQP
+			cfg.FrameDrop = goh264.EncoderFrameDropLate
+			cfg.MaxEncodeTimeUS = 10_000_000
+			if format.fmt == goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 1200
+			} else {
+				cfg.RTPMaxPayloadSize = 0
+			}
+
+			probeCfg := cfg
+			probeCfg.FrameDrop = goh264.EncoderFrameDropDisabled
+			probeCfg.MaxEncodeTimeUS = 0
+			probe, err := goh264.NewEncoder(probeCfg)
+			if err != nil {
+				t.Fatalf("NewEncoder probe: %v", err)
+			}
+			reference := patternedI420EncoderFrame(128, 128)
+			reference.PTS = 0
+			if _, err := probe.Encode(reference); err != nil {
+				t.Fatalf("probe IDR: %v", err)
+			}
+			probePSkipFrame := reference
+			probePSkipFrame.PTS = int64(cfg.RTPTimestampIncrement)
+			probePSkip, err := probe.Encode(probePSkipFrame)
+			if err != nil {
+				t.Fatalf("probe P-skip: %v", err)
+			}
+			pskipBytes := len(probePSkip.Data)
+			if pskipBytes == 0 || probePSkip.IDR || probePSkip.Dropped {
+				t.Fatalf("probe P-skip output dropped=%v idr=%v data=%d, want delivered P-skip",
+					probePSkip.Dropped, probePSkip.IDR, pskipBytes)
+			}
+
+			residual := encoderP16x16EveryMacroblockLumaDCResidualFrame(t, cfg, reference, int64(cfg.RTPTimestampIncrement))
+			probeResidualEnc, err := goh264.NewEncoder(probeCfg)
+			if err != nil {
+				t.Fatalf("NewEncoder residual probe: %v", err)
+			}
+			if _, err := probeResidualEnc.Encode(reference); err != nil {
+				t.Fatalf("residual probe IDR: %v", err)
+			}
+			probeResidual, err := probeResidualEnc.Encode(residual)
+			if err != nil {
+				t.Fatalf("probe residual P: %v", err)
+			}
+			if probeResidual.Dropped || probeResidual.IDR {
+				t.Fatalf("probe residual output dropped=%v idr=%v, want delivered P", probeResidual.Dropped, probeResidual.IDR)
+			}
+			assertEncoderNALTypes(t, probeResidual.NALUnits, []uint8{1})
+
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			var callbackCalls int
+			enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+				callbackCalls++
+			})
+			first, err := enc.Encode(reference)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			firstPacketCount := len(first.RTPPackets)
+			if first.Dropped || !first.IDR || enc.PendingIDR() {
+				t.Fatalf("first output dropped=%v idr=%v pending=%v, want delivered IDR",
+					first.Dropped, first.IDR, enc.PendingIDR())
+			}
+			if format.fmt == goh264.EncoderOutputRTP {
+				if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+					t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+						firstPacketCount, callbackCalls)
+				}
+			} else if firstPacketCount != 0 || callbackCalls != 0 {
+				t.Fatalf("non-RTP first packets/callbacks = %d/%d, want none", firstPacketCount, callbackCalls)
+			}
+
+			if err := enc.SetMaxEncodeTimeUS(1); err != nil {
+				t.Fatalf("lower MaxEncodeTimeUS: %v", err)
+			}
+			dst, backingBefore := encoderPrefilledCallerBuffer()
+			dropped, err := enc.EncodeInto(dst, residual)
+			if err != nil {
+				t.Fatalf("EncodeInto late-drop residual P: %v", err)
+			}
+			if !dropped.Dropped || len(dropped.Data) != 0 || len(dropped.NALUnits) != 0 || len(dropped.RTPPackets) != 0 {
+				t.Fatalf("late dropped residual P = %+v, want dropped metadata without output", dropped)
+			}
+			if dropped.PTS != residual.PTS || dropped.DTS != residual.PTS {
+				t.Fatalf("late dropped residual timing pts=%d dts=%d, want %d/%d",
+					dropped.PTS, dropped.DTS, residual.PTS, residual.PTS)
+			}
+			if dropped.RTPTime != first.RTPTime+cfg.RTPTimestampIncrement {
+				t.Fatalf("late dropped residual RTP time = %d, want %d",
+					dropped.RTPTime, first.RTPTime+cfg.RTPTimestampIncrement)
+			}
+			assertEncoderCallerBufferUnchanged(t, dst, backingBefore)
+			if enc.PendingIDR() {
+				t.Fatal("late dropped residual P queued unexpected IDR")
+			}
+			if callbackCalls != firstPacketCount {
+				t.Fatalf("late dropped residual P callbacks = %d, want still %d", callbackCalls, firstPacketCount)
+			}
+
+			if err := enc.SetMaxEncodeTimeUS(10_000_000); err != nil {
+				t.Fatalf("raise MaxEncodeTimeUS: %v", err)
+			}
+			recoveryFrame := reference
+			recoveryFrame.PTS = residual.PTS + int64(cfg.RTPTimestampIncrement)
+			recovered, err := enc.Encode(recoveryFrame)
+			if err != nil {
+				t.Fatalf("Encode after late dropped residual P: %v", err)
+			}
+			if recovered.Dropped || recovered.IDR || enc.PendingIDR() || len(recovered.Data) != pskipBytes {
+				t.Fatalf("recovered frame dropped=%v idr=%v pending=%v data=%d, want P-skip size %d",
+					recovered.Dropped, recovered.IDR, enc.PendingIDR(), len(recovered.Data), pskipBytes)
+			}
+			if recovered.RTPTime != dropped.RTPTime+cfg.RTPTimestampIncrement {
+				t.Fatalf("recovered RTP time = %d, want %d",
+					recovered.RTPTime, dropped.RTPTime+cfg.RTPTimestampIncrement)
+			}
+			assertEncoderNALTypes(t, recovered.NALUnits, []uint8{1})
+			stream := annexBFromEncodedFrame(t, first, cfg.OutputFormat)
+			stream = append(stream, annexBFromEncodedFrame(t, recovered, cfg.OutputFormat)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+			decoded, err := goh264.NewDecoder().DecodeFrames(stream)
+			if err != nil {
+				t.Fatalf("Decode recovered stream: %v", err)
+			}
+			if len(decoded) != 2 {
+				t.Fatalf("decoded frames = %d, want 2", len(decoded))
+			}
+			assertDecodedEncoderFrameBytes(t, decoded[:1], appendI420FrameBytes(nil, reference))
+			assertDecodedEncoderFrameBytes(t, decoded[1:], appendI420FrameBytes(nil, recoveryFrame))
+			if format.fmt == goh264.EncoderOutputRTP {
+				assertRTPPacketMetadata(t, recovered.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, uint16(firstPacketCount))
+			} else if len(recovered.RTPPackets) != 0 {
+				t.Fatalf("non-RTP recovered packets = %d, want none", len(recovered.RTPPackets))
+			}
+			if callbackCalls != firstPacketCount+len(recovered.RTPPackets) {
+				t.Fatalf("post-recovery callbacks = %d, want %d",
+					callbackCalls, firstPacketCount+len(recovered.RTPPackets))
+			}
+		})
+	}
+}
+
 func TestEncoderReconfigureLimitPointersDisableBudgets(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
@@ -17916,6 +18075,57 @@ func encoderP16x16CombinedResidualFrame(t *testing.T, cfg goh264.EncoderConfig, 
 		ChromaACCoeffCb: 1,
 		ChromaACCoeffCr: -1,
 	})
+}
+
+func encoderP16x16EveryMacroblockLumaDCResidualFrame(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64) goh264.EncoderFrame {
+	t.Helper()
+	if cfg.Width%16 != 0 || cfg.Height%16 != 0 {
+		t.Fatalf("every-macroblock residual fixture requires 16x16-aligned config, got %dx%d", cfg.Width, cfg.Height)
+	}
+	if reference.Width != cfg.Width || reference.Height != cfg.Height {
+		t.Fatalf("every-macroblock residual fixture reference is %dx%d, want %dx%d",
+			reference.Width, reference.Height, cfg.Width, cfg.Height)
+	}
+	qmul := encoderP16x16TestLumaDCQMul(t, cfg)
+	macroblocksPerRow := cfg.Width / 16
+	positiveFirst := []int32{3, -3, 2, -2, 1, -1}
+	negativeFirst := []int32{-3, 3, -2, 2, -1, 1}
+	points := make([]encoderP16x16LumaDCResidualPoint, 0, macroblocksPerRow*(cfg.Height/16))
+	for mbY := 0; mbY < cfg.Height/16; mbY++ {
+		for mbX := 0; mbX < macroblocksPerRow; mbX++ {
+			point := encoderP16x16LumaDCResidualPoint{
+				x: mbX*16 + 4 + (mbY%2)*4,
+				y: mbY*16 + 4 + (mbX%2)*4,
+			}
+			levels := positiveFirst
+			if (mbX+mbY)%2 != 0 {
+				levels = negativeFirst
+			}
+			for _, level := range levels {
+				delta := encoderP16x16TestResidualPixelDeltaForDCLevel(level, qmul)
+				valid := delta != 0
+				for y := 0; y < 4 && valid; y++ {
+					for x := 0; x < 4; x++ {
+						pos := (point.y+y)*reference.StrideY + point.x + x
+						v := int(reference.Y[pos]) + delta
+						if v < 0 || v > 255 {
+							valid = false
+							break
+						}
+					}
+				}
+				if valid {
+					point.level = level
+					break
+				}
+			}
+			if point.level == 0 {
+				t.Fatalf("no valid residual level for macroblock %d,%d", mbX, mbY)
+			}
+			points = append(points, point)
+		}
+	}
+	return encoderP16x16LumaDCResidualFrameFromPoints(t, cfg, reference, pts, points)
 }
 
 func encoderP16x16MultiMacroblockLumaDCResidualFrame(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64) goh264.EncoderFrame {
