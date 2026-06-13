@@ -209,6 +209,10 @@ malformed AVC and Annex B extradata as non-fatal side data: the current valid
 packet still decodes against the last good configuration and reference state,
 including when Annex B side data stages a valid foreign SPS before a malformed
 PPS.
+Valid in-band SPS/PPS or valid avcC/packet `NEW_EXTRADATA` followed by a
+damaged VCL is pinned separately: public `AVCConfig` advances to the
+slice-selected 32x32 SPS while the damaged picture still rolls back and the
+next valid packets decode to the raw-MD5 oracle.
 Multi-SPS/PPS avcC and Annex B `NEW_EXTRADATA` updates are guarded as well: the
 DPB reset decision follows the packet's slice-selected PPS/SPS when available,
 so a non-first active SPS cannot reuse references from the previous stream.

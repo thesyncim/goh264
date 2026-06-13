@@ -1170,6 +1170,137 @@ func TestDecodeConfiguredAVCFramesRecoversAfterMalformedInBandParameterSets(t *t
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeFramesValidInBandParameterSetsBeforeDamagedSliceUpdateConfigAndRecover(t *testing.T) {
+	oldData := decodeHexFixture(t, black16IPAnnexBHex)
+	oldConfig, oldSamples := annexBToAVCConfigAndSamples(t, oldData, 4)
+	if len(oldSamples) != 2 {
+		t.Fatalf("old samples = %d, want 2", len(oldSamples))
+	}
+	newData := decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex)
+	newParamSets, _ := annexBParameterSetsAndPacket(t, newData)
+	_, newSamples := annexBToAVCConfigAndSamples(t, newData, 4)
+	if len(newSamples) != 3 {
+		t.Fatalf("new samples = %d, want 3", len(newSamples))
+	}
+
+	dec := NewDecoder()
+	if frames, err := dec.DecodeFrames(oldConfig); err != nil || len(frames) != 0 {
+		t.Fatalf("old config frames=%d err=%v", len(frames), err)
+	}
+	frames, err := dec.DecodeFrames(avcSampleToAnnexB(t, oldSamples[0], 4))
+	if err != nil {
+		t.Fatalf("DecodeFrames old sample: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+
+	damaged := append([]byte(nil), newParamSets...)
+	damaged = append(damaged, truncateFirstVCLAnnexBPayload(t, avcSampleToAnnexB(t, newSamples[0], 4))...)
+	if out, err := dec.DecodeFrames(damaged); err == nil || len(out) != 0 {
+		t.Fatalf("valid in-band parameter sets plus damaged slice frames=%d err=%v, want no frames with error", len(out), err)
+	}
+	assertDecoderAVCConfigGeometry(t, dec, 4, 32, 32)
+
+	var recovered []*Frame
+	for i, sample := range newSamples {
+		frames, err := dec.DecodeFrames(avcSampleToAnnexB(t, sample, 4))
+		if err != nil {
+			t.Fatalf("DecodeFrames recovered new sample[%d]: %v", i, err)
+		}
+		recovered = append(recovered, frames...)
+	}
+	flushed, err := dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("FlushDelayedFrames after recovered new stream: %v", err)
+	}
+	recovered = append(recovered, flushed...)
+	assertFrameMD5Strings(t, recovered, []string{
+		"2a9d9acd3e52356ad072de93fdbaca3d",
+		"96107676801850afd8aed8546397e3bf",
+		"3967b8bfe3a3a8cde4bc22334008eb1f",
+	})
+}
+
+func TestValidAVCCBeforeDamagedSliceUpdatesConfigAndRecover(t *testing.T) {
+	oldData := decodeHexFixture(t, black16IPAnnexBHex)
+	oldConfig, oldSamples := annexBToAVCConfigAndSamples(t, oldData, 4)
+	if len(oldSamples) != 2 {
+		t.Fatalf("old samples = %d, want 2", len(oldSamples))
+	}
+	newData := decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex)
+	newConfig, newSamples := annexBToAVCConfigAndSamples(t, newData, 4)
+	if len(newSamples) != 3 {
+		t.Fatalf("new samples = %d, want 3", len(newSamples))
+	}
+
+	for _, tt := range []struct {
+		name        string
+		damage      func(*Decoder, []byte) ([]*Frame, error)
+		decodeValid func(*Decoder, []byte) ([]*Frame, error)
+	}{
+		{
+			name: "DecodeAVCCFrames",
+			damage: func(dec *Decoder, damaged []byte) ([]*Frame, error) {
+				return dec.DecodeAVCCFrames(newConfig, damaged)
+			},
+			decodeValid: func(dec *Decoder, sample []byte) ([]*Frame, error) {
+				return dec.DecodeConfiguredAVCFrames(sample)
+			},
+		},
+		{
+			name: "DecodePacketFrames NEW_EXTRADATA",
+			damage: func(dec *Decoder, damaged []byte) ([]*Frame, error) {
+				return dec.DecodePacketFrames(Packet{
+					Data:     damaged,
+					SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: newConfig}},
+				})
+			},
+			decodeValid: func(dec *Decoder, sample []byte) ([]*Frame, error) {
+				return dec.DecodePacketFrames(Packet{Data: sample})
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			if _, err := dec.ConfigureAVCC(oldConfig); err != nil {
+				t.Fatalf("ConfigureAVCC old config: %v", err)
+			}
+			frames, err := dec.DecodeConfiguredAVCFrames(oldSamples[0])
+			if err != nil {
+				t.Fatalf("DecodeConfiguredAVCFrames old sample: %v", err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+			assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+
+			damaged := truncateFirstVCLAVCPayload(t, newSamples[0], 4)
+			if out, err := tt.damage(dec, damaged); err == nil || len(out) != 0 {
+				t.Fatalf("%s valid config plus damaged slice frames=%d err=%v, want no frames with error",
+					tt.name, len(out), err)
+			}
+			assertDecoderAVCConfigGeometry(t, dec, 4, 32, 32)
+
+			var recovered []*Frame
+			for i, sample := range newSamples {
+				frames, err := tt.decodeValid(dec, sample)
+				if err != nil {
+					t.Fatalf("%s recovered new sample[%d]: %v", tt.name, i, err)
+				}
+				recovered = append(recovered, frames...)
+			}
+			flushed, err := dec.FlushDelayedFrames()
+			if err != nil {
+				t.Fatalf("%s FlushDelayedFrames after recovered new stream: %v", tt.name, err)
+			}
+			recovered = append(recovered, flushed...)
+			assertFrameMD5Strings(t, recovered, []string{
+				"2a9d9acd3e52356ad072de93fdbaca3d",
+				"96107676801850afd8aed8546397e3bf",
+				"3967b8bfe3a3a8cde4bc22334008eb1f",
+			})
+		})
+	}
+}
+
 func TestDecodeFramesAnnexBRecoversAfterDamagedSlicePacket(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -1508,6 +1639,18 @@ func assertSingleFrameWithDamagedSliceError(t *testing.T, surface string, frame 
 		t.Fatalf("%s valid+damaged packet returned nil frame with error %v", surface, err)
 	}
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func assertDecoderAVCConfigGeometry(t *testing.T, dec *Decoder, nalLengthSize int, width int, height int) {
+	t.Helper()
+	cfg, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig: %v", err)
+	}
+	if cfg.NALLengthSize != nalLengthSize || cfg.StreamInfo.Width != width || cfg.StreamInfo.Height != height {
+		t.Fatalf("AVCConfig = length %d %dx%d, want length %d %dx%d",
+			cfg.NALLengthSize, cfg.StreamInfo.Width, cfg.StreamInfo.Height, nalLengthSize, width, height)
+	}
 }
 
 func truncateFirstVCLAVCPayload(t *testing.T, sample []byte, nalLengthSize int) []byte {

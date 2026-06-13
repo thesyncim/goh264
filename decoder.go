@@ -667,6 +667,7 @@ func (d *Decoder) decodeFrames(data []byte, packetSideData h264.DecodedFrameSide
 	activeSPS := activeSPSFromNALUnits(nals, d.sps, d.pps)
 	frames, err := d.simple.DecodeNALUnitsWithSideData(nals, packetSideData)
 	if err != nil {
+		d.rememberActiveSPS(activeSPS)
 		return framesFromH264WithError(frames, err)
 	}
 	d.rememberActiveSPS(activeSPS)
@@ -778,6 +779,7 @@ func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	activeSPS := activeSPSFromNALUnits(nals, d.sps, d.pps)
 	frames, err := d.simple.DecodeNALUnits(nals)
 	if err != nil {
+		d.rememberActiveSPS(activeSPS)
 		return framesFromH264WithError(frames, err)
 	}
 	d.rememberActiveSPS(activeSPS)
@@ -857,12 +859,14 @@ func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConf
 		frames = append(frames, flushed...)
 	}
 	if decodeErr != nil {
+		d.rememberActiveSPS(activeSPS)
 		if flushErr != nil {
 			decodeErr = fmt.Errorf("%v; flush delayed: %w", decodeErr, flushErr)
 		}
 		return framesFromH264WithError(frames, decodeErr)
 	}
 	if flushErr != nil {
+		d.rememberActiveSPS(activeSPS)
 		return framesFromH264WithError(frames, flushErr)
 	}
 	d.rememberActiveSPS(activeSPS)

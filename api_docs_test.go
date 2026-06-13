@@ -434,6 +434,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference",
 		"TestParseHeadersAVCIncompatibleHeadersDoNotUseStalePFrameReference",
+		"TestDecodeFramesValidInBandParameterSetsBeforeDamagedSliceUpdateConfigAndRecover",
+		"TestValidAVCCBeforeDamagedSliceUpdatesConfigAndRecover",
 		"TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset",
 		"TestDecodeFramesStandaloneMultiSPSConfigurationResetsForNonFirstActiveSPS",
 		"TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset",
