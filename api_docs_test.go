@@ -586,6 +586,28 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	}
 }
 
+func TestDecoderEvidenceDocsNameNewExtradataDuplicateSemantics(t *testing.T) {
+	for _, path := range []string{"docs/production-readiness.md", "docs/source-truth.md"} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := strings.Join(strings.Fields(string(data)), " ")
+		lowerText := strings.ToLower(text)
+		for _, phrase := range []string{
+			"first-entry duplicate packet side-data semantics",
+			"empty or malformed first entries",
+		} {
+			if !strings.Contains(lowerText, phrase) {
+				t.Fatalf("%s missing decoder duplicate side-data evidence phrase %q", path, phrase)
+			}
+		}
+		if !strings.Contains(text, "`NEW_EXTRADATA`") {
+			t.Fatalf("%s missing decoder duplicate side-data evidence phrase %q", path, "`NEW_EXTRADATA`")
+		}
+	}
+}
+
 func TestREADMEEncoderRTPDataSurfaceDocumentsPacketBytes(t *testing.T) {
 	data, err := os.ReadFile("README.md")
 	if err != nil {
