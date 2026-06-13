@@ -291,6 +291,7 @@ func TestEncoderReleaseEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderNonRTPConfigsRejectInvalidRTPControls",
 		"TestEncoderInvalidRTPControlsRejectForNonRTPOutputsWithoutMutation",
 		"TestEncoderReconfigureOutputFormatQueuesIDRBoundary",
+		"TestEncoderInvalidRTPSettersPreservePacketState",
 		"TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata",
 		"TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata",
 		"TestEncodedFrameAppendNALAndAccessUnitDataReturnCallerOwnedBytes",

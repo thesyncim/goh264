@@ -2410,6 +2410,100 @@ func TestEncoderInvalidBundledRTPMetadataUpdatePreservesLiveState(t *testing.T) 
 	}
 }
 
+func TestEncoderInvalidRTPSettersPreservePacketState(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		call    func(*goh264.Encoder) error
+		wantErr error
+	}{
+		{name: "payload size", call: func(enc *goh264.Encoder) error {
+			return enc.SetRTPMaxPayloadSize(2)
+		}, wantErr: goh264.ErrInvalidData},
+		{name: "timestamp increment", call: func(enc *goh264.Encoder) error {
+			return enc.SetRTPTimestampIncrement(0)
+		}, wantErr: goh264.ErrInvalidData},
+		{name: "packetization mode", call: func(enc *goh264.Encoder) error {
+			return enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationMode(99), false)
+		}, wantErr: goh264.ErrInvalidData},
+		{name: "stapa mode0", call: func(enc *goh264.Encoder) error {
+			return enc.SetRTPPacketizationMode(goh264.EncoderRTPPacketizationSingleNAL, true)
+		}, wantErr: goh264.ErrUnsupported},
+		{name: "metadata", call: func(enc *goh264.Encoder) error {
+			return enc.SetRTPMetadata(128, 0x10203040)
+		}, wantErr: goh264.ErrInvalidData},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.RTPMaxPayloadSize = 32
+			cfg.RTPPayloadType = 103
+			cfg.RTPSSRC = 0xaabbccdd
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			var callbackCalls int
+			enc.SetRTPPacketCallback(func(goh264.EncoderRTPPacket, goh264.EncoderRTPPacketMetadata) {
+				callbackCalls++
+			})
+
+			frame := patternedI420EncoderFrame(16, 16)
+			frame.PTS = 0
+			first, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode first IDR: %v", err)
+			}
+			if first.Dropped || !first.IDR || first.RTPTime != 0 {
+				t.Fatalf("first output dropped/id/time = %v/%v/%d, want IDR time 0",
+					first.Dropped, first.IDR, first.RTPTime)
+			}
+			assertEncoderNALTypes(t, first.NALUnits, []uint8{7, 8, 5})
+			firstPacketCount := len(first.RTPPackets)
+			if firstPacketCount == 0 || callbackCalls != firstPacketCount {
+				t.Fatalf("first RTP packets/callbacks = %d/%d, want nonzero matching count",
+					firstPacketCount, callbackCalls)
+			}
+			assertRTPPacketMetadata(t, first.RTPPackets, cfg.RTPPayloadType, cfg.RTPSSRC, 0)
+			assertRTPPacketTimestamps(t, first.RTPPackets, 0)
+			before := enc.Config()
+
+			if err := tt.call(enc); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("%s invalid setter error = %v, want %v", tt.name, err, tt.wantErr)
+			}
+			if got := enc.Config(); got != before {
+				t.Fatalf("%s invalid setter mutated config = %+v, want %+v", tt.name, got, before)
+			}
+			if enc.PendingIDR() {
+				t.Fatalf("%s invalid setter queued unexpected IDR", tt.name)
+			}
+			if callbackCalls != firstPacketCount {
+				t.Fatalf("%s invalid setter callbacks = %d, want still %d",
+					tt.name, callbackCalls, firstPacketCount)
+			}
+
+			second, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode after %s invalid setter: %v", tt.name, err)
+			}
+			if second.Dropped || second.IDR || second.KeyFrame || second.RTPTime != before.RTPTimestampIncrement {
+				t.Fatalf("post-invalid output dropped/id/key/time = %v/%v/%v/%d, want P-skip time %d",
+					second.Dropped, second.IDR, second.KeyFrame, second.RTPTime, before.RTPTimestampIncrement)
+			}
+			assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+			assertRTPPacketMetadata(t, second.RTPPackets, before.RTPPayloadType, before.RTPSSRC, uint16(firstPacketCount))
+			assertRTPPacketTimestamps(t, second.RTPPackets, before.RTPTimestampIncrement)
+			stream := annexBFromEncoderRTPPackets(t, first.RTPPackets)
+			stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+			assertEncoderVCLFrameNums(t, stream, []uint8{5, 1}, []uint32{0, 1})
+			if callbackCalls != firstPacketCount+len(second.RTPPackets) {
+				t.Fatalf("post-invalid callbacks = %d, want %d",
+					callbackCalls, firstPacketCount+len(second.RTPPackets))
+			}
+		})
+	}
+}
+
 func TestEncoderReconfigureInvalidLatencyUpdatesPreserveLiveState(t *testing.T) {
 	for _, format := range []struct {
 		name string
