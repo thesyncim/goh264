@@ -8357,7 +8357,16 @@ func TestEncoderCombinedResidualPUsesResidualAcrossPublicOutputs(t *testing.T) {
 	testEncoderResidualPUsesResidualAcrossPublicOutputs(t, "combined residual P", encoderP16x16CombinedResidualFrame)
 }
 
+func TestEncoderMultiMacroblockLumaDCResidualPUsesResidualAcrossPublicOutputs(t *testing.T) {
+	testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t, "multi-macroblock luma-DC residual P", 32, 16, encoderP16x16MultiMacroblockLumaDCResidualFrame)
+}
+
 func testEncoderResidualPUsesResidualAcrossPublicOutputs(t *testing.T, label string, buildSecondFrame func(*testing.T, goh264.EncoderConfig, goh264.EncoderFrame, int64) goh264.EncoderFrame) {
+	t.Helper()
+	testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t, label, 16, 16, buildSecondFrame)
+}
+
+func testEncoderResidualPUsesResidualAcrossPublicOutputsWithSize(t *testing.T, label string, width int, height int, buildSecondFrame func(*testing.T, goh264.EncoderConfig, goh264.EncoderFrame, int64) goh264.EncoderFrame) {
 	t.Helper()
 	for _, tt := range []struct {
 		name      string
@@ -8395,7 +8404,7 @@ func testEncoderResidualPUsesResidualAcrossPublicOutputs(t *testing.T, label str
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg := goh264.DefaultEncoderConfig(width, height)
 			cfg.DeblockMode = goh264.EncoderDeblockDisabled
 			cfg.RateControl = goh264.EncoderRateControlConstantQP
 			tt.configure(&cfg)
@@ -8408,7 +8417,7 @@ func testEncoderResidualPUsesResidualAcrossPublicOutputs(t *testing.T, label str
 			if err != nil {
 				t.Fatalf("ParameterSets: %v", err)
 			}
-			firstFrame := patternedI420EncoderFrame(16, 16)
+			firstFrame := patternedI420EncoderFrame(width, height)
 			first, err := enc.Encode(firstFrame)
 			if err != nil {
 				t.Fatalf("Encode first IDR: %v", err)
@@ -17618,6 +17627,84 @@ func encoderP16x16CombinedResidualFrame(t *testing.T, cfg goh264.EncoderConfig, 
 		ChromaACCoeffCb: 1,
 		ChromaACCoeffCr: -1,
 	})
+}
+
+func encoderP16x16MultiMacroblockLumaDCResidualFrame(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64) goh264.EncoderFrame {
+	t.Helper()
+	if cfg.Width != 32 || cfg.Height != 16 {
+		t.Fatalf("multi-macroblock residual fixture requires 32x16 config, got %dx%d", cfg.Width, cfg.Height)
+	}
+	target, err := reference.Clone()
+	if err != nil {
+		t.Fatalf("Clone reference: %v", err)
+	}
+	target.PTS = pts
+	qmul := encoderP16x16TestLumaDCQMul(t, cfg)
+	for _, want := range []struct {
+		x     int
+		y     int
+		level int32
+	}{
+		{x: 4, y: 0, level: 3},
+		{x: 12, y: 12, level: -3},
+		{x: 20, y: 4, level: 2},
+		{x: 16, y: 8, level: -2},
+	} {
+		delta := encoderP16x16TestResidualPixelDeltaForDCLevel(want.level, qmul)
+		if delta == 0 {
+			t.Fatalf("derived pixel delta for residual level %d is zero", want.level)
+		}
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				pos := (want.y+y)*target.StrideY + want.x + x
+				v := int(target.Y[pos]) + delta
+				if v < 0 || v > 255 {
+					t.Fatalf("test target luma overflows at %d,%d: %d + %d", want.x+x, want.y+y, target.Y[pos], delta)
+				}
+				target.Y[pos] = byte(v)
+			}
+		}
+	}
+	return target
+}
+
+func encoderP16x16TestLumaDCQMul(t *testing.T, cfg goh264.EncoderConfig) uint32 {
+	t.Helper()
+	sets, err := h264.BuildEncoderParameterSets(h264.EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           cfg.LevelIDC,
+		Width:              cfg.Width,
+		Height:             cfg.Height,
+		FrameRateNum:       cfg.FrameRateNum,
+		FrameRateDen:       cfg.FrameRateDen,
+		MaxReferenceFrames: uint32(cfg.MaxReferenceFrames),
+		InitialQP:          cfg.InitialQP,
+		NALLengthSize:      4,
+	})
+	if err != nil {
+		t.Fatalf("BuildEncoderParameterSets: %v", err)
+	}
+	avcc, err := h264.DecodeAVCDecoderConfigurationRecord(sets.AVCDecoderConfigurationRecord)
+	if err != nil {
+		t.Fatalf("DecodeAVCDecoderConfigurationRecord: %v", err)
+	}
+	for _, pps := range avcc.PPS {
+		if pps != nil {
+			qmul := pps.Dequant4Buffer[3][cfg.InitialQP][0]
+			if qmul == 0 {
+				t.Fatal("luma DC qmul is zero")
+			}
+			return qmul
+		}
+	}
+	t.Fatal("generated parameter sets did not include PPS")
+	return 0
+}
+
+func encoderP16x16TestResidualPixelDeltaForDCLevel(level int32, qmul uint32) int {
+	dequantized := int32(uint32(level)*qmul+32) >> 6
+	return (int(dequantized) + 32) >> 6
 }
 
 func encoderP16x16SyntheticResidualFrame(t *testing.T, cfg goh264.EncoderConfig, reference goh264.EncoderFrame, pts int64, residualCfg h264.EncoderI420P16x16ResidualConfig) goh264.EncoderFrame {

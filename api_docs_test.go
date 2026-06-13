@@ -528,6 +528,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncodedFrameCloneRejectsInvalidMetadata",
 		"TestEncoderChromaOnlyResidualPUsesResidualAcrossPublicOutputs",
 		"TestEncoderCombinedResidualPUsesResidualAcrossPublicOutputs",
+		"TestEncoderMultiMacroblockLumaDCResidualPUsesResidualAcrossPublicOutputs",
 		"TestEncoderHelperClonesRejectOverflowedPublicStorage",
 		"TestEncoderAppendHelpersRejectOverflowedPublicStorage",
 		"TestEncodedFrameOutputHelpersRejectOverflowedPublicStorage",
