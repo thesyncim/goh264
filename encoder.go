@@ -146,7 +146,8 @@ type EncoderColorConfig struct {
 // Start from DefaultRealtimeEncoderConfig and override the fields needed by the
 // integration. DefaultEncoderConfig remains as a compatibility alias. NewEncoder
 // and Validate normalize derived defaults and reject invalid or not-yet-admitted
-// controls.
+// controls. Crop and Color are encoded in SPS/VUI headers from this config;
+// per-frame Color is validated but does not rewrite output headers.
 type EncoderConfig struct {
 	Width        int
 	Height       int
@@ -207,7 +208,8 @@ type EncoderConfig struct {
 // EncoderFrame is one I420 input frame.
 //
 // Encode and EncodeInto read the plane slices during the call and do not retain
-// them after the call returns.
+// them after the call returns. Color is validated as caller-supplied frame
+// metadata; encoded SPS/VUI color metadata comes from EncoderConfig.Color.
 type EncoderFrame struct {
 	Y        []byte
 	Cb       []byte

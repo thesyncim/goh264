@@ -5260,6 +5260,72 @@ func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 	}
 }
 
+func TestEncoderFrameColorDoesNotOverrideConfigHeaders(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.Color.SARNum = 1
+	cfg.Color.SARDen = 1
+	cfg.Color.FullRange = true
+	cfg.Color.ColorPrimaries = 1
+	cfg.Color.ColorTransfer = 1
+	cfg.Color.ColorMatrix = 1
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.Color = goh264.EncoderColorConfig{
+		SARNum:                         4,
+		SARDen:                         3,
+		VideoFormat:                    5,
+		ColorPrimaries:                 9,
+		ColorTransfer:                  16,
+		ColorMatrix:                    9,
+		ChromaSampleLocTypeTopField:    2,
+		ChromaSampleLocTypeBottomField: 2,
+	}
+	if err := enc.ValidateFrame(frame); err != nil {
+		t.Fatalf("ValidateFrame with differing valid frame color: %v", err)
+	}
+
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode with differing valid frame color: %v", err)
+	}
+	assertEncoderNALTypes(t, out.NALUnits, []uint8{7, 8, 5})
+
+	info, err := goh264.NewDecoder().ParseHeadersAnnexB(out.Data)
+	if err != nil {
+		t.Fatalf("ParseHeadersAnnexB: %v", err)
+	}
+	assertEncoderConfigColorMetadata(t, "Annex B headers", info.SARNum, info.SARDen,
+		info.VideoFullRangeFlag, info.ColorPrimaries, info.ColorTransfer, info.ColorMatrix)
+	if info.SARNum == frame.Color.SARNum || info.ColorPrimaries == frame.Color.ColorPrimaries {
+		t.Fatalf("Annex B headers used frame color metadata: %+v", info)
+	}
+
+	decoded, err := goh264.NewDecoder().DecodeAnnexBFrames(out.Data)
+	if err != nil {
+		t.Fatalf("DecodeAnnexBFrames: %v", err)
+	}
+	if len(decoded) != 1 {
+		t.Fatalf("decoded frames = %d, want 1", len(decoded))
+	}
+	assertEncoderConfigColorMetadata(t, "decoded frame", decoded[0].SARNum, decoded[0].SARDen,
+		decoded[0].VideoFullRangeFlag, decoded[0].ColorPrimaries, decoded[0].ColorTransfer, decoded[0].ColorMatrix)
+}
+
+func assertEncoderConfigColorMetadata(t *testing.T, label string, sarNum int32, sarDen int32, fullRange int32, primaries int32, transfer int32, matrix int32) {
+	t.Helper()
+	if sarNum != 1 || sarDen != 1 || fullRange != 1 || primaries != 1 || transfer != 1 || matrix != 1 {
+		t.Fatalf("%s color metadata = sar %d/%d full %d primaries %d transfer %d matrix %d, want config metadata",
+			label, sarNum, sarDen, fullRange, primaries, transfer, matrix)
+	}
+}
+
 func TestEncoderConfigParameterSetsMatchEncoderHelper(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(638, 478)
 	cfg.FrameRateNum = 30000

@@ -365,6 +365,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderInvalidRTPControlsRejectForNonRTPOutputsWithoutMutation",
 		"TestEncoderReconfigureOutputFormatQueuesIDRBoundary",
 		"TestEncoderInvalidRTPSettersPreservePacketState",
+		"TestEncoderFrameColorDoesNotOverrideConfigHeaders",
 		"TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata",
 		"TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata",
 		"TestEncodedFrameAppendNALAndAccessUnitDataReturnCallerOwnedBytes",
@@ -546,6 +547,10 @@ func TestREADMEEncoderDocumentsRealtimeDefaultAndLiveConfig(t *testing.T) {
 		"Read the exact live setup after accepted setters",
 		"`Encoder.Config`",
 		"Encoder.Config` returns the exact normalized live configuration",
+		"`EncoderConfig` owns encoded crop/color metadata",
+		"`EncoderFrame.Color` is",
+		"validated input metadata",
+		"does not rewrite SPS/VUI per frame",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md realtime default/live config docs missing %q", phrase)
