@@ -147,6 +147,9 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}
 
 	for _, name := range []string{
+		"DefaultRTPEncoderConfig",
+		"DefaultAnnexBEncoderConfig",
+		"DefaultAVCEncoderConfig",
 		"DefaultRealtimeEncoderConfig",
 		"DefaultEncoderConfig",
 		"AppendData",
@@ -1258,8 +1261,8 @@ func TestREADMEEncoderDocumentsRealtimeDefaultAndLiveConfig(t *testing.T) {
 	}
 	readme := string(data)
 	for _, phrase := range []string{
-		"supported realtime/WebRTC baseline",
-		"`DefaultRealtimeEncoderConfig`; `DefaultEncoderConfig` returns the same template",
+		"supported RTP, Annex B, or AVC template",
+		"`DefaultRTPEncoderConfig`, `DefaultAnnexBEncoderConfig`, or `DefaultAVCEncoderConfig`; `DefaultRealtimeEncoderConfig` and `DefaultEncoderConfig` return the RTP template",
 		"Read the exact live setup after accepted setters",
 		"`Encoder.Config`",
 		"Encoder.Config` returns the exact normalized live configuration",
@@ -1383,7 +1386,11 @@ func TestPublicCommentsDocumentStateAndOwnershipBoundaries(t *testing.T) {
 		}
 	}
 	for _, phrase := range []string{
+		"Start from DefaultRTPEncoderConfig, DefaultAnnexBEncoderConfig, or\n// DefaultAVCEncoderConfig",
 		"DefaultRealtimeEncoderConfig returns a realtime/WebRTC-oriented 8-bit I420",
+		"DefaultRTPEncoderConfig returns the realtime/WebRTC RTP template",
+		"DefaultAnnexBEncoderConfig returns the realtime 8-bit I420 template with\n// Annex B access-unit output selected",
+		"DefaultAVCEncoderConfig returns the realtime 8-bit I420 template with AVC\n// length-prefixed access-unit output selected",
 		"DefaultEncoderConfig returns the same realtime template",
 		"NewEncoder applies derived defaults and rejects invalid or unsupported\n// controls",
 		"Validate reports whether cfg is accepted without returning the\n// normalized values; Normalize returns the exact validated setup",

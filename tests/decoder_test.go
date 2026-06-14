@@ -227,20 +227,36 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 		name string
 		call func() error
 	}{
-		{name: "Decode", call: func() error {
+		{name: "Decode non-empty", call: func() error {
 			_, err := dec.Decode([]byte{0, 0, 1, 0x65})
 			return err
 		}},
-		{name: "DecodeFrames", call: func() error {
+		{name: "Decode empty", call: func() error {
+			_, err := dec.Decode(nil)
+			return err
+		}},
+		{name: "DecodeFrames non-empty", call: func() error {
 			_, err := dec.DecodeFrames([]byte{0, 0, 1, 0x65})
 			return err
 		}},
-		{name: "DecodePacket", call: func() error {
+		{name: "DecodeFrames empty", call: func() error {
+			_, err := dec.DecodeFrames(nil)
+			return err
+		}},
+		{name: "DecodePacket non-empty", call: func() error {
 			_, err := dec.DecodePacket(Packet{Data: []byte{0, 0, 1, 0x65}})
 			return err
 		}},
-		{name: "DecodePacketFrames", call: func() error {
+		{name: "DecodePacket empty", call: func() error {
+			_, err := dec.DecodePacket(Packet{})
+			return err
+		}},
+		{name: "DecodePacketFrames non-empty", call: func() error {
 			_, err := dec.DecodePacketFrames(Packet{Data: []byte{0, 0, 1, 0x65}})
+			return err
+		}},
+		{name: "DecodePacketFrames empty", call: func() error {
+			_, err := dec.DecodePacketFrames(Packet{})
 			return err
 		}},
 		{name: "DecodeAnnexB", call: func() error {
@@ -259,12 +275,20 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 			_, err := dec.DecodeAVCFrames([]byte{0, 0, 0, 1, 0x65}, 4)
 			return err
 		}},
-		{name: "DecodeConfiguredAVC", call: func() error {
+		{name: "DecodeConfiguredAVC non-empty", call: func() error {
 			_, err := dec.DecodeConfiguredAVC([]byte{0, 0, 0, 1, 0x65})
 			return err
 		}},
-		{name: "DecodeConfiguredAVCFrames", call: func() error {
+		{name: "DecodeConfiguredAVC empty", call: func() error {
+			_, err := dec.DecodeConfiguredAVC(nil)
+			return err
+		}},
+		{name: "DecodeConfiguredAVCFrames non-empty", call: func() error {
 			_, err := dec.DecodeConfiguredAVCFrames([]byte{0, 0, 0, 1, 0x65})
+			return err
+		}},
+		{name: "DecodeConfiguredAVCFrames empty", call: func() error {
+			_, err := dec.DecodeConfiguredAVCFrames(nil)
 			return err
 		}},
 		{name: "FlushDelayedFrames", call: func() error {
@@ -278,28 +302,28 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 		{name: "Reset", call: func() error {
 			return dec.Reset()
 		}},
-		{name: "DecodeAVCC", call: func() error {
+		{name: "DecodeAVCC non-empty", call: func() error {
 			_, err := dec.DecodeAVCC([]byte{1}, []byte{0, 0, 0, 1, 0x65})
 			return err
 		}},
-		{name: "DecodeAVCC", call: func() error {
-			_, err := dec.DecodeAVCC([]byte{1}, []byte{0, 0, 0, 1, 0x65})
+		{name: "DecodeAVCC empty", call: func() error {
+			_, err := dec.DecodeAVCC([]byte{1}, nil)
 			return err
 		}},
-		{name: "DecodeAVCCFrames", call: func() error {
+		{name: "DecodeAVCCFrames non-empty", call: func() error {
 			_, err := dec.DecodeAVCCFrames([]byte{1}, []byte{0, 0, 0, 1, 0x65})
 			return err
 		}},
-		{name: "DecodeAVCCFrames", call: func() error {
-			_, err := dec.DecodeAVCCFrames([]byte{1}, []byte{0, 0, 0, 1, 0x65})
+		{name: "DecodeAVCCFrames empty", call: func() error {
+			_, err := dec.DecodeAVCCFrames([]byte{1}, nil)
 			return err
 		}},
-		{name: "ConfigureAVCC", call: func() error {
+		{name: "ConfigureAVCC invalid record", call: func() error {
 			_, err := dec.ConfigureAVCC([]byte{1})
 			return err
 		}},
-		{name: "ConfigureAVCC", call: func() error {
-			_, err := dec.ConfigureAVCC([]byte{1})
+		{name: "ConfigureAVCC empty record", call: func() error {
+			_, err := dec.ConfigureAVCC(nil)
 			return err
 		}},
 		{name: "AVCConfig", call: func() error {

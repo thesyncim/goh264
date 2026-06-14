@@ -140,8 +140,10 @@ type EncoderColorConfig struct {
 
 // EncoderConfig controls encoder setup.
 //
-// Start from DefaultRealtimeEncoderConfig and override the fields needed by the
-// integration. DefaultEncoderConfig returns the same realtime template.
+// Start from DefaultRTPEncoderConfig, DefaultAnnexBEncoderConfig, or
+// DefaultAVCEncoderConfig and override the fields needed by the integration.
+// DefaultRealtimeEncoderConfig and DefaultEncoderConfig return the same
+// realtime/RTP template.
 // NewEncoder applies derived defaults and rejects invalid or unsupported
 // controls. Validate reports whether cfg is accepted without returning the
 // normalized values; Normalize returns the exact validated setup. Crop and Color
@@ -1393,6 +1395,30 @@ func DefaultRealtimeEncoderConfig(width, height int) EncoderConfig {
 		RTPPayloadType:        96,
 		RTPTimestampIncrement: 3000,
 	}
+}
+
+// DefaultRTPEncoderConfig returns the realtime/WebRTC RTP template for the
+// requested dimensions.
+func DefaultRTPEncoderConfig(width, height int) EncoderConfig {
+	return DefaultRealtimeEncoderConfig(width, height)
+}
+
+// DefaultAnnexBEncoderConfig returns the realtime 8-bit I420 template with
+// Annex B access-unit output selected.
+func DefaultAnnexBEncoderConfig(width, height int) EncoderConfig {
+	cfg := DefaultRealtimeEncoderConfig(width, height)
+	cfg.OutputFormat = EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	return cfg
+}
+
+// DefaultAVCEncoderConfig returns the realtime 8-bit I420 template with AVC
+// length-prefixed access-unit output selected.
+func DefaultAVCEncoderConfig(width, height int) EncoderConfig {
+	cfg := DefaultRealtimeEncoderConfig(width, height)
+	cfg.OutputFormat = EncoderOutputAVC
+	cfg.RTPMaxPayloadSize = 0
+	return cfg
 }
 
 // DefaultEncoderConfig returns the same realtime template as

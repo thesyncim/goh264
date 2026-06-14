@@ -358,7 +358,7 @@ Choose the encoder surface by what the caller owns:
 
 | Need | Use |
 | --- | --- |
-| Start from a supported realtime/WebRTC baseline | `DefaultRealtimeEncoderConfig`; `DefaultEncoderConfig` returns the same template |
+| Start from a supported RTP, Annex B, or AVC template | `DefaultRTPEncoderConfig`, `DefaultAnnexBEncoderConfig`, or `DefaultAVCEncoderConfig`; `DefaultRealtimeEncoderConfig` and `DefaultEncoderConfig` return the RTP template |
 | Validate setup before construction | `EncoderConfig.Validate` |
 | View exact setup before construction | `EncoderConfig.Normalize` |
 | Read the exact live setup after accepted setters | `Encoder.Config` |

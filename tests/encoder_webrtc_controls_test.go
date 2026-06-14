@@ -23,6 +23,9 @@ func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
 	if alias := goh264.DefaultEncoderConfig(640, 480); alias != cfg {
 		t.Fatalf("DefaultEncoderConfig alias differs from DefaultRealtimeEncoderConfig")
 	}
+	if alias := goh264.DefaultRTPEncoderConfig(640, 480); alias != cfg {
+		t.Fatalf("DefaultRTPEncoderConfig alias differs from DefaultRealtimeEncoderConfig")
+	}
 	enc, err := goh264.NewEncoder(cfg)
 	if err != nil {
 		t.Fatalf("NewEncoder default: %v", err)
@@ -66,6 +69,89 @@ func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
 	}
 	if normalized != got {
 		t.Fatalf("Normalize default = %+v, want encoder config %+v", normalized, got)
+	}
+}
+
+func TestEncoderDefaultContainerConfigs(t *testing.T) {
+	tests := []struct {
+		name           string
+		cfg            goh264.EncoderConfig
+		wantFormat     goh264.EncoderOutputFormat
+		wantRTPPayload int
+		wantRTPPackets bool
+	}{
+		{
+			name:           "rtp",
+			cfg:            goh264.DefaultRTPEncoderConfig(16, 16),
+			wantFormat:     goh264.EncoderOutputRTP,
+			wantRTPPayload: 1200,
+			wantRTPPackets: true,
+		},
+		{
+			name:       "annexb",
+			cfg:        goh264.DefaultAnnexBEncoderConfig(16, 16),
+			wantFormat: goh264.EncoderOutputAnnexB,
+		},
+		{
+			name:       "avc",
+			cfg:        goh264.DefaultAVCEncoderConfig(16, 16),
+			wantFormat: goh264.EncoderOutputAVC,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.cfg.OutputFormat != tt.wantFormat {
+				t.Fatalf("raw OutputFormat = %v, want %v", tt.cfg.OutputFormat, tt.wantFormat)
+			}
+			if tt.cfg.RTPMaxPayloadSize != tt.wantRTPPayload {
+				t.Fatalf("raw RTPMaxPayloadSize = %d, want %d", tt.cfg.RTPMaxPayloadSize, tt.wantRTPPayload)
+			}
+			normalized, err := tt.cfg.Normalize()
+			if err != nil {
+				t.Fatalf("Normalize: %v", err)
+			}
+			if normalized.OutputFormat != tt.wantFormat || normalized.RTPMaxPayloadSize != tt.wantRTPPayload {
+				t.Fatalf("normalized output = format %v payload %d, want %v/%d",
+					normalized.OutputFormat, normalized.RTPMaxPayloadSize, tt.wantFormat, tt.wantRTPPayload)
+			}
+
+			enc, err := goh264.NewEncoder(tt.cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			frame := enc.I420Frame(
+				make([]byte, normalized.StrideY*normalized.Height),
+				make([]byte, normalized.StrideCb*(normalized.Height/2)),
+				make([]byte, normalized.StrideCr*(normalized.Height/2)),
+				0,
+			)
+			encoded, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode: %v", err)
+			}
+			if encoded.OutputFormat != tt.wantFormat {
+				t.Fatalf("encoded OutputFormat = %v, want %v", encoded.OutputFormat, tt.wantFormat)
+			}
+			if len(encoded.Data) == 0 {
+				t.Fatal("encoded data is empty")
+			}
+			if tt.wantRTPPackets {
+				if len(encoded.RTPPackets) == 0 {
+					t.Fatal("RTP default emitted no RTP packets")
+				}
+			} else if len(encoded.RTPPackets) != 0 {
+				t.Fatalf("non-RTP default emitted %d RTP packets", len(encoded.RTPPackets))
+			}
+			if tt.wantFormat == goh264.EncoderOutputAnnexB &&
+				!bytes.HasPrefix(encoded.Data, []byte{0, 0, 0, 1}) {
+				t.Fatalf("Annex B default data prefix = % x", encoded.Data[:4])
+			}
+			if tt.wantFormat == goh264.EncoderOutputAVC &&
+				bytes.HasPrefix(encoded.Data, []byte{0, 0, 0, 1}) {
+				t.Fatalf("AVC default emitted Annex B start code prefix")
+			}
+		})
 	}
 }
 

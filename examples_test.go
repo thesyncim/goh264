@@ -10,9 +10,7 @@ import (
 )
 
 func ExampleDecoder_DecodeFrames() {
-	cfg := goh264.DefaultEncoderConfig(16, 16)
-	cfg.OutputFormat = goh264.EncoderOutputAnnexB
-	cfg.RTPMaxPayloadSize = 0
+	cfg := goh264.DefaultAnnexBEncoderConfig(16, 16)
 
 	enc, err := goh264.NewEncoder(cfg)
 	if err != nil {
@@ -40,9 +38,7 @@ func ExampleDecoder_DecodeFrames() {
 }
 
 func ExampleDecoder_DecodeConfiguredAVCFrames() {
-	cfg := goh264.DefaultEncoderConfig(16, 16)
-	cfg.OutputFormat = goh264.EncoderOutputAVC
-	cfg.RTPMaxPayloadSize = 0
+	cfg := goh264.DefaultAVCEncoderConfig(16, 16)
 
 	headers, err := cfg.ParameterSets()
 	if err != nil {
@@ -82,9 +78,7 @@ func ExampleDecoder_DecodeConfiguredAVCFrames() {
 }
 
 func ExampleEncoder_EncodeInto() {
-	cfg := goh264.DefaultEncoderConfig(16, 16)
-	cfg.OutputFormat = goh264.EncoderOutputAnnexB
-	cfg.RTPMaxPayloadSize = 0
+	cfg := goh264.DefaultAnnexBEncoderConfig(16, 16)
 	cfg.MaxEncodeTimeUS = 0
 
 	enc, err := goh264.NewEncoder(cfg)
@@ -118,10 +112,9 @@ func ExampleEncoder_EncodeInto() {
 }
 
 func ExampleEncoder_SetRTPPacketCallback() {
-	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg := goh264.DefaultRTPEncoderConfig(16, 16)
 	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
 	cfg.MaxEncodeTimeUS = 0
-	cfg.RTPMaxPayloadSize = 1200
 
 	enc, err := goh264.NewEncoder(cfg)
 	if err != nil {
