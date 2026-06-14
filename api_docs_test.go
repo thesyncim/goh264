@@ -797,6 +797,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"run_exact_go_test_gate decoder-output-ownership ./tests",
 		"run_exact_go_test_gate decoder-ref-modifications ./internal/h264",
 		"run_exact_go_test_gate decoder-delayed-output ./internal/h264",
+		"run_exact_go_test_gate decoder-public-delayed-output ./tests",
 		"run_exact_oracle_go_test_gate decoder-ffmpeg-oracle-smoke ./tests",
 		"run_exact_oracle_go_test_gate decoder-native-oracle-smoke ./internal/h264",
 		"require_oracle_command ffmpeg",
@@ -809,6 +810,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"decoder_output_ownership_tests",
 		"decoder-ref-modifications",
 		"decoder-delayed-output",
+		"decoder-public-delayed-output",
+		"decoder_public_delayed_output_tests",
 		"decoder-ffmpeg-oracle-smoke",
 		"decoder-native-oracle-smoke",
 		"TestParseHeadersAnnexBBlack16",
@@ -845,6 +848,11 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestSimpleFrameDPBRejectsMissingShortRefModificationTarget",
 		"TestSimpleFrameDPBRejectsMissingLongRefModificationTarget",
 		"TestSimpleDecoderFlushDelayedFrameRejectsMultipleWithoutDraining",
+		"TestDecodeAVCCFramesEmptyPacketIncompatibleConfigPreservesDelayedFlush",
+		"TestDecodeAVCCEmptyPacketIncompatibleConfigPreservesSingleDelayedFlush",
+		"TestDecodePacketFramesRepeatedNewExtradataPreservesDelayedBFrames",
+		"TestDecodeAVCCFramesBFramesFlushesReorderedPrefixBeforeDamagedSlice",
+		"TestParseHeadersRejectPreservesDelayedConfiguredAVCFlush",
 		"TestDecodeConfiguredAVCFramesDoesNotAliasCallerBuffer",
 		"TestDecodePacketFramesDoesNotAliasCallerBuffer",
 		"TestConfigureAVCCDoesNotAliasCallerBuffer",
@@ -878,6 +886,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"run_go_test_gate decoder-output-ownership ./tests",
 		"run_go_test_gate decoder-ref-modifications ./internal/h264",
 		"run_go_test_gate decoder-delayed-output ./internal/h264",
+		"run_go_test_gate decoder-public-delayed-output ./tests",
 	} {
 		if strings.Contains(script, forbidden) {
 			t.Fatalf("decoder quality evidence script should preflight focused gate %q", forbidden)

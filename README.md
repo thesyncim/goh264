@@ -227,8 +227,9 @@ supplied AVC packet, and drains delayed output before returning. Compatible
 in-stream avcC updates retain references; incompatible active SPS changes reset
 picture state before the packet is decoded so prior references are not used
 across the incompatible boundary. Passing an empty AVC packet with a
-configuration record updates the configuration and drains delayed output without
-reporting an invalid packet.
+configuration record drains delayed output before an incompatible configuration
+can reset picture state, then stores the new configuration without reporting an
+invalid packet.
 Use this for ordinary in-stream avcC updates and IDR-bound stream switches. For
 an unrelated stream where the decoder cannot infer the boundary from avcC,
 call `Reset` before storing the new avcC. `PacketSideDataNewExtradata` uses the

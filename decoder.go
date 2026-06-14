@@ -966,8 +966,9 @@ func (d *Decoder) DecodeAVCC(config []byte, data []byte) (*Frame, error) {
 		if err != nil {
 			return nil, err
 		}
+		frame, err := d.FlushDelayedFrame()
 		d.updateAVCDecoderConfigurationForPacket(cfg, data)
-		return d.FlushDelayedFrame()
+		return frame, err
 	}
 	frames, err := d.DecodeAVCCFrames(config, data)
 	return singleFrameFromFrames(frames, err)
@@ -983,6 +984,14 @@ func (d *Decoder) DecodeAVCCFrames(config []byte, data []byte) ([]*Frame, error)
 	cfg, err := h264.DecodeAVCDecoderConfigurationRecord(config)
 	if err != nil {
 		return nil, err
+	}
+	if len(data) == 0 {
+		frames, err := d.FlushDelayedFrames()
+		if err != nil {
+			return frames, err
+		}
+		d.updateAVCDecoderConfigurationForPacket(cfg, data)
+		return frames, nil
 	}
 	d.updateAVCDecoderConfigurationForPacket(cfg, data)
 	return d.decodeAVCFramesWithConfig(data, cfg)

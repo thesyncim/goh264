@@ -480,6 +480,23 @@ func TestDecodeAVCCFramesRejectPreservesDelayedFlush(t *testing.T) {
 	assertFrameMD5Strings(t, out, []string{"aa778b981f96d21489196f6a0faa0959"})
 }
 
+func TestDecodeAVCCFramesEmptyPacketIncompatibleConfigPreservesDelayedFlush(t *testing.T) {
+	dec := decoderWithPendingCAVLCBFrameFlush(t)
+	config32, sample32 := incompatibleCAVLCBFrameConfigAndFirstSample(t)
+
+	out, err := dec.DecodeAVCCFrames(config32, nil)
+	if err != nil {
+		t.Fatalf("incompatible configuration-record empty AVC packet flush: %v", err)
+	}
+	assertFrameMD5Strings(t, out, []string{"aa778b981f96d21489196f6a0faa0959"})
+	assertDecoderStored32x32AVCConfig(t, dec)
+
+	out, err = dec.DecodeConfiguredAVCFrames(sample32)
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after incompatible empty configuration-record flush: %v", err)
+	}
+}
+
 func TestDecodeFramesRejectAVCConfigurationRecordPreservesDelayedFlush(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -580,6 +597,22 @@ func TestDecodeAVCCRejectPreservesDelayedFlush(t *testing.T) {
 		t.Fatalf("FlushDelayedFrames after single-frame malformed configuration record: %v", err)
 	}
 	assertFrameMD5Strings(t, out, []string{"aa778b981f96d21489196f6a0faa0959"})
+}
+
+func TestDecodeAVCCEmptyPacketIncompatibleConfigPreservesSingleDelayedFlush(t *testing.T) {
+	dec := decoderWithPendingCAVLCBFrameFlush(t)
+	config32, sample32 := incompatibleCAVLCBFrameConfigAndFirstSample(t)
+
+	frame, err := dec.DecodeAVCC(config32, nil)
+	if err != nil {
+		t.Fatalf("single-frame incompatible configuration-record empty AVC packet flush: %v", err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"aa778b981f96d21489196f6a0faa0959"})
+	assertDecoderStored32x32AVCConfig(t, dec)
+
+	if _, err := dec.DecodeConfiguredAVCFrames(sample32); err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after single-frame incompatible empty configuration-record flush: %v", err)
+	}
 }
 
 func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
@@ -1232,6 +1265,46 @@ func TestFFmpegFrameMD5OracleTestsrcBFrames(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func decoderWithPendingCAVLCBFrameFlush(t *testing.T) *Decoder {
+	t.Helper()
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("16x16 samples = %d, want 3", len(samples))
+	}
+	dec := NewDecoder()
+	if _, err := dec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC 16x16: %v", err)
+	}
+	for i, sample := range samples {
+		if _, err := dec.DecodeConfiguredAVCFrames(sample); err != nil {
+			t.Fatalf("16x16 sample[%d]: %v", i, err)
+		}
+	}
+	return dec
+}
+
+func incompatibleCAVLCBFrameConfigAndFirstSample(t *testing.T) ([]byte, []byte) {
+	t.Helper()
+	data := decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) == 0 {
+		t.Fatalf("32x32 samples = 0, want at least 1")
+	}
+	return config, samples[0]
+}
+
+func assertDecoderStored32x32AVCConfig(t *testing.T, dec *Decoder) {
+	t.Helper()
+	cfg, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after incompatible empty configuration-record flush: %v", err)
+	}
+	if cfg.NALLengthSize != 4 || cfg.StreamInfo.Width != 32 || cfg.StreamInfo.Height != 32 {
+		t.Fatalf("AVCConfig after incompatible empty configuration-record flush = %+v, want 32x32 length-size 4", cfg)
 	}
 }
 
