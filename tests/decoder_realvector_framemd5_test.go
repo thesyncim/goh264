@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,6 +18,10 @@ import (
 func TestH264RealVectorFrameMD5Diagnostics(t *testing.T) {
 	if os.Getenv("GOH264_REAL_VECTOR_FRAMEMD5") != "1" {
 		t.Skip("set GOH264_REAL_VECTOR_FRAMEMD5=1 to fail selected raw-MD5 known-red vectors at the first divergent frame")
+	}
+	if os.Getenv("GOH264_REAL_VECTOR_FRAMEMD5_MANIFEST") == "1" {
+		h264RealVectorManifestFrameMD5Diagnostics(t)
+		return
 	}
 	ffmpeg := os.Getenv("GOH264_FFMPEG")
 	if ffmpeg == "" {
@@ -76,6 +81,55 @@ func TestH264RealVectorFrameMD5Diagnostics(t *testing.T) {
 		}
 		t.Fatalf("%s: no raw-md5-mismatch known-red rows matched GOH264_CORPUS_FILTER=%q",
 			defaultH264RealVectorFailureManifest, os.Getenv("GOH264_CORPUS_FILTER"))
+	}
+}
+
+func h264RealVectorManifestFrameMD5Diagnostics(t *testing.T) {
+	t.Helper()
+	if len(h264CorpusFilterTokens()) == 0 {
+		t.Fatal("set GOH264_CORPUS_FILTER with GOH264_REAL_VECTOR_FRAMEMD5_MANIFEST=1 to select public-vector rows")
+	}
+	manifest := filterH264CorpusEntries(readH264CorpusManifest(t, defaultH264RealVectorManifest), h264CorpusFilterTokens())
+	if len(manifest) == 0 {
+		t.Fatalf("%s: no manifest entries matched GOH264_CORPUS_FILTER=%q",
+			defaultH264RealVectorManifest, os.Getenv("GOH264_CORPUS_FILTER"))
+	}
+	for _, entry := range manifest {
+		entry := entry
+		t.Run(entry.ID, func(t *testing.T) {
+			validateH264CorpusEntry(t, entry)
+			if entry.Expect != "decode-ok" && entry.Expect != "metadata-ok" {
+				t.Fatalf("%s: frame-MD5 manifest diagnostics support decode-ok and metadata-ok rows, got %q", entry.ID, entry.Expect)
+			}
+			if !h264CorpusEntryHasSurface(entry, "annexb") {
+				t.Fatalf("%s: frame-MD5 manifest diagnostics currently require an annexb surface", entry.ID)
+			}
+			path := materializeH264CorpusEntry(t, defaultH264RealVectorManifest, entry)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			assertCorpusBitstreamMD5(t, entry, data)
+			hashes, err := h264GoAnnexBFrameMD5s(entry, data)
+			if err != nil {
+				t.Fatalf("%s: Go frame-MD5 decode: %v", entry.ID, err)
+			}
+			if len(entry.FrameMD5) != 0 {
+				if len(hashes) != len(entry.FrameMD5) {
+					t.Fatalf("%s: frame-MD5 rows = %d, manifest has %d", entry.ID, len(hashes), len(entry.FrameMD5))
+				}
+				for i := range hashes {
+					if hashes[i] != entry.FrameMD5[i] {
+						t.Fatalf("%s: frame[%d] md5 = %s, manifest has %s", entry.ID, i, hashes[i], entry.FrameMD5[i])
+					}
+				}
+			}
+			encoded, err := json.Marshal(hashes)
+			if err != nil {
+				t.Fatalf("%s: marshal frame_md5: %v", entry.ID, err)
+			}
+			t.Logf("%s frame_md5=%s", entry.ID, encoded)
+		})
 	}
 }
 
@@ -238,19 +292,26 @@ func h264GoAnnexBRawFrames(entry h264CorpusEntry, data []byte) ([]h264RawFrameBy
 	}
 	rawFrames := make([]h264RawFrameBytes, 0, len(frames))
 	for i, frame := range frames {
+		shape, err := h264DiagnosticExpectedFrameShape(entry, i)
+		if err != nil {
+			return nil, err
+		}
+		if shape.Width > 0 && (frame.Width != shape.Width || frame.Height != shape.Height) {
+			return nil, fmt.Errorf("frame[%d] size = %dx%d, want %dx%d", i, frame.Width, frame.Height, shape.Width, shape.Height)
+		}
 		pixFmt, err := frame.RawPixelFormat()
 		if err != nil {
 			return nil, fmt.Errorf("frame[%d] pix_fmt: %w", i, err)
 		}
-		if pixFmt != entry.PixFmt {
-			return nil, fmt.Errorf("frame[%d] pix_fmt = %s, want %s", i, pixFmt, entry.PixFmt)
+		if pixFmt != shape.PixFmt {
+			return nil, fmt.Errorf("frame[%d] pix_fmt = %s, want %s", i, pixFmt, shape.PixFmt)
 		}
 		raw, err := frame.AppendRawYUVBytesLE(nil)
 		if err != nil {
 			return nil, fmt.Errorf("frame[%d] raw yuv: %w", i, err)
 		}
-		if len(raw) != entry.FrameSize {
-			return nil, fmt.Errorf("frame[%d] raw size = %d, want %d", i, len(raw), entry.FrameSize)
+		if len(raw) != shape.FrameSize {
+			return nil, fmt.Errorf("frame[%d] raw size = %d, want %d", i, len(raw), shape.FrameSize)
 		}
 		bytesPerSample, err := frame.BytesPerSample()
 		if err != nil {
@@ -265,6 +326,37 @@ func h264GoAnnexBRawFrames(entry h264CorpusEntry, data []byte) ([]h264RawFrameBy
 		})
 	}
 	return rawFrames, nil
+}
+
+type h264DiagnosticFrameShape struct {
+	Width     int
+	Height    int
+	PixFmt    string
+	FrameSize int
+}
+
+func h264DiagnosticExpectedFrameShape(entry h264CorpusEntry, frameIndex int) (h264DiagnosticFrameShape, error) {
+	switch entry.Expect {
+	case "decode-ok":
+		if entry.PixFmt == "" || entry.FrameSize <= 0 {
+			return h264DiagnosticFrameShape{}, fmt.Errorf("%s: decode-ok entry missing pix_fmt/frame_size", entry.ID)
+		}
+		return h264DiagnosticFrameShape{PixFmt: entry.PixFmt, FrameSize: entry.FrameSize}, nil
+	case "metadata-ok":
+		for _, group := range entry.FrameGroups {
+			if frameIndex >= group.Start && frameIndex < group.Start+group.Count {
+				return h264DiagnosticFrameShape{
+					Width:     group.Width,
+					Height:    group.Height,
+					PixFmt:    group.PixFmt,
+					FrameSize: group.FrameSize,
+				}, nil
+			}
+		}
+		return h264DiagnosticFrameShape{}, fmt.Errorf("%s: no frame group covers frame[%d]", entry.ID, frameIndex)
+	default:
+		return h264DiagnosticFrameShape{}, fmt.Errorf("%s: unsupported expect %q", entry.ID, entry.Expect)
+	}
 }
 
 func h264FirstDifferentByte(a []byte, b []byte) int {

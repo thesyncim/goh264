@@ -35,6 +35,7 @@ GOH264_REAL_VECTOR_STRICT=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264R
 GOH264_REAL_VECTOR_RED=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorKnownRedStrict
 GOH264_REAL_VECTOR_RED_QUEUE=1 GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorRedQueue
 GOH264_REAL_VECTOR_RAWDIFF=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorRawDiffDiagnostics
+GOH264_REAL_VECTOR_FRAMEMD5=1 GOH264_REAL_VECTOR_FRAMEMD5_MANIFEST=1 GOH264_CORPUS_FILTER=reinit GOH264_CORPUS_FETCH=1 go test ./tests -run TestH264RealVectorFrameMD5Diagnostics
 scripts/h264-red-vector.sh mbaff        # exits non-zero at first divergent raw byte
 go run ./cmd/goh264bench -manifest testdata/h264/realvectors/manifest.jsonl -filter canl4 -iters 10 -repeats 5 -warmup 2 -ffmpeg -fair-cpu-lanes -ffmpeg-threads 1 -strict-pix-fmt -json
 ```

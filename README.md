@@ -775,7 +775,7 @@ What those gates mean:
   Normal `go test ./tests` also checks that every imported public ref is either
   represented by the manifest or listed in the exclusion file.
 
-Focused red-lane tools:
+Focused diagnostics:
 
 ```sh
 scripts/h264-real-vector-red-queue.sh field
@@ -783,10 +783,14 @@ scripts/h264-real-vector-red-each.sh
 scripts/h264-red-vector.sh direct
 GOH264_REAL_VECTOR_RAWDIFF=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorRawDiffDiagnostics$' -count=1 -v
 GOH264_REAL_VECTOR_FRAMEMD5=1 GOH264_CORPUS_FILTER=mbaff GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFrameMD5Diagnostics$' -count=1 -v
+GOH264_REAL_VECTOR_FRAMEMD5=1 GOH264_REAL_VECTOR_FRAMEMD5_MANIFEST=1 GOH264_CORPUS_FILTER=reinit GOH264_CORPUS_FETCH=1 go test ./tests -run '^TestH264RealVectorFrameMD5Diagnostics$' -count=1 -v
 ```
 
 `GOH264_CORPUS_FILTER` accepts feature tags or id fragments such as `field`,
 `direct`, `high10`, `container`, `reinit`, or `mbaff`.
+The manifest frame-MD5 mode emits and validates `frame_md5` arrays for selected
+green public-vector rows, including `metadata-ok` rows with per-group frame
+shape changes.
 
 ## Trust And Verification
 
