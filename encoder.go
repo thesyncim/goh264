@@ -798,6 +798,8 @@ func (frame EncodedFrame) validateRTPPacketListMetadata() error {
 	}
 	payloadType := frame.RTPPackets[0].PayloadType
 	ssrc := frame.RTPPackets[0].SSRC
+	inFU := false
+	var fuNALHeader byte
 	for i, packet := range frame.RTPPackets {
 		if packet.Timestamp != frame.RTPTime ||
 			packet.PayloadType != payloadType ||
@@ -811,6 +813,45 @@ func (frame EncodedFrame) validateRTPPacketListMetadata() error {
 				return ErrInvalidData
 			}
 		}
+		if len(packet.Payload) == 0 {
+			return ErrInvalidData
+		}
+		payloadForm := packet.Payload[0] & 0x1f
+		switch payloadForm {
+		case 24:
+			if inFU {
+				return ErrInvalidData
+			}
+		case 28:
+			if len(packet.Payload) < 3 {
+				return ErrInvalidData
+			}
+			fuHeader := packet.Payload[1]
+			start := fuHeader&0x80 != 0
+			end := fuHeader&0x40 != 0
+			nalHeader := (packet.Payload[0] & 0xe0) | (fuHeader & 0x1f)
+			if start {
+				if inFU {
+					return ErrInvalidData
+				}
+				inFU = true
+				fuNALHeader = nalHeader
+			} else {
+				if !inFU || nalHeader != fuNALHeader {
+					return ErrInvalidData
+				}
+			}
+			if end {
+				inFU = false
+			}
+		default:
+			if inFU {
+				return ErrInvalidData
+			}
+		}
+	}
+	if inFU {
+		return ErrInvalidData
 	}
 	return nil
 }

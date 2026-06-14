@@ -915,6 +915,7 @@ func TestREADMEEncoderRTPDataSurfaceDocumentsPacketBytes(t *testing.T) {
 		"`EncodedFrame.Validate` checks public result shape",
 		"frame-level\n  keyframe/IDR metadata",
 		"RTP packet-list metadata",
+		"FU-A fragment\n  start/continuation/end consistency",
 		"access-unit/RTP helper\n  methods, `Validate`, or `Clone`",
 		"RTP results that lack RTP packets",
 		"`EncodedFrame.Data` is retained only as an Annex B access-unit view",

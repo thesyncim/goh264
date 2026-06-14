@@ -15273,6 +15273,36 @@ func TestEncodedFrameValidateRejectsRTPListMetadataMismatches(t *testing.T) {
 			packet.Data[1] &^= 0x80
 		}
 	}
+	makeRTPPacket := func(sequence uint16, marker bool, payload ...byte) goh264.EncoderRTPPacket {
+		data := make([]byte, 12+len(payload))
+		data[0] = 0x80
+		data[1] = 96
+		if marker {
+			data[1] |= 0x80
+		}
+		binary.BigEndian.PutUint16(data[2:4], sequence)
+		binary.BigEndian.PutUint32(data[4:8], 1)
+		binary.BigEndian.PutUint32(data[8:12], 0xaabbccdd)
+		copy(data[12:], payload)
+		return encoderRTPPacketFromTestData(data, data[12:])
+	}
+	validFUAFrame := func() goh264.EncodedFrame {
+		return goh264.EncodedFrame{
+			OutputFormat: goh264.EncoderOutputRTP,
+			Data:         []byte{0, 0, 0, 1, 0x65, 0x88, 0x99},
+			NALUnits:     []goh264.EncoderNALUnit{{Type: 5, Offset: 4, Size: 3, KeyFrame: true}},
+			RTPPackets: []goh264.EncoderRTPPacket{
+				makeRTPPacket(1, false, 0x7c, 0x85, 0x88),
+				makeRTPPacket(2, true, 0x7c, 0x45, 0x99),
+			},
+			KeyFrame: true,
+			IDR:      true,
+			RTPTime:  1,
+		}
+	}
+	if err := validFUAFrame().Validate(); err != nil {
+		t.Fatalf("valid FU-A RTP frame: %v", err)
+	}
 	cloneAndMutate := func(mutate func(*goh264.EncodedFrame)) goh264.EncodedFrame {
 		t.Helper()
 		clone, err := out.Clone()
@@ -15307,6 +15337,41 @@ func TestEncodedFrameValidateRejectsRTPListMetadataMismatches(t *testing.T) {
 		{name: "sequence gap", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
 			setSequence(&frame.RTPPackets[1], frame.RTPPackets[0].SequenceNumber+2)
 		})},
+		{name: "fua continuation without start", frame: func() goh264.EncodedFrame {
+			frame := validFUAFrame()
+			frame.RTPPackets[0] = makeRTPPacket(1, false, 0x7c, 0x05, 0x88)
+			return frame
+		}()},
+		{name: "single nal while fua is open", frame: func() goh264.EncodedFrame {
+			frame := validFUAFrame()
+			frame.RTPPackets[1] = makeRTPPacket(2, true, 0x65, 0x99)
+			return frame
+		}()},
+		{name: "stapa while fua is open", frame: func() goh264.EncodedFrame {
+			frame := validFUAFrame()
+			frame.RTPPackets[1] = makeRTPPacket(2, true, 0x78, 0, 1, 0x67)
+			return frame
+		}()},
+		{name: "fua restart before end", frame: func() goh264.EncodedFrame {
+			frame := validFUAFrame()
+			frame.RTPPackets[1] = makeRTPPacket(2, true, 0x7c, 0x85, 0x99)
+			return frame
+		}()},
+		{name: "fua continuation type mismatch", frame: func() goh264.EncodedFrame {
+			frame := validFUAFrame()
+			frame.RTPPackets[1] = makeRTPPacket(2, true, 0x7c, 0x41, 0x99)
+			return frame
+		}()},
+		{name: "fua continuation nri mismatch", frame: func() goh264.EncodedFrame {
+			frame := validFUAFrame()
+			frame.RTPPackets[1] = makeRTPPacket(2, true, 0x5c, 0x45, 0x99)
+			return frame
+		}()},
+		{name: "unterminated fua", frame: func() goh264.EncodedFrame {
+			frame := validFUAFrame()
+			frame.RTPPackets = []goh264.EncoderRTPPacket{makeRTPPacket(1, true, 0x7c, 0x85, 0x88)}
+			return frame
+		}()},
 		{name: "early marker", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
 			setMarker(&frame.RTPPackets[0], true)
 		})},
