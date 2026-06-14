@@ -14607,6 +14607,14 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 			},
 		},
 		{
+			name: "rtp output without rtp packets",
+			frame: goh264.EncodedFrame{
+				OutputFormat: goh264.EncoderOutputRTP,
+				Data:         []byte{0, 0, 0, 1, 0x65},
+				NALUnits:     []goh264.EncoderNALUnit{{Type: 5, Offset: 4, Size: 1, KeyFrame: true}},
+			},
+		},
+		{
 			name: "non-rtp output with rtp packets",
 			frame: goh264.EncodedFrame{
 				OutputFormat: goh264.EncoderOutputAVC,

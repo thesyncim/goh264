@@ -562,7 +562,8 @@ with the strongest public API coverage for integration work:
   unchanged. If a caller-managed append destination overlaps the helper source
   bytes, the helpers return isolated output storage instead of aliasing the
   source. `EncodedFrame.Clone` rejects dropped results that still carry emitted
-  byte, NAL, or RTP packet storage.
+  byte, NAL, or RTP packet storage, and non-dropped RTP results that lack RTP
+  packets.
 - `EncodedFrame.OutputFormat` records the emitted result format, including
   dropped frames, so callers do not need to infer format from packet presence.
   Caller-constructed `EncodedFrame` values must set `OutputFormat` before using

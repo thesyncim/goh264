@@ -717,6 +717,7 @@ func TestREADMEEncoderRTPDataSurfaceDocumentsPacketBytes(t *testing.T) {
 		"For RTP output",
 		"Caller-constructed `EncodedFrame` values must set `OutputFormat`",
 		"access-unit/RTP helper methods or cloning dropped results",
+		"non-dropped RTP results that lack RTP\n  packets",
 		"`EncodedFrame.Data` is retained only as an Annex B access-unit view",
 		"`AccessUnitData`",
 		"`NALData`",

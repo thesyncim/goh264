@@ -711,6 +711,9 @@ func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 	if _, err := frame.AccessUnitData(); err != nil {
 		return EncodedFrame{}, err
 	}
+	if frame.OutputFormat == EncoderOutputRTP && len(frame.RTPPackets) == 0 {
+		return EncodedFrame{}, ErrInvalidData
+	}
 	for i := range frame.RTPPackets {
 		if _, err := frame.RTPPacketData(i); err != nil {
 			return EncodedFrame{}, err
