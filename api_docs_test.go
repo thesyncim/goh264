@@ -816,7 +816,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecodeAVCOneByteLengthSizePublicSurfaces",
 		"TestFrameCloneRejectsOverflowedPublicStorage",
 		"TestDecoderCloneHelpersRejectOverflowedPublicStorage",
-		"TestDecodePacketFramesRejectsOverflowedSideDataListWithoutDroppingPacket",
+		"TestDecodePacketFramesIgnoresOverflowedSideDataListWithoutDroppingPacket",
 		"TestDecodePacketFramesIgnoresOverflowedPacketSideDataPayloadsWithoutDroppingPacket",
 		"TestDecodePacketFramesOverflowedPacketSideDataPayloadSuppressesLaterDuplicate",
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
@@ -890,7 +890,7 @@ func TestDecoderEvidenceDocsNameNewExtradataDuplicateSemantics(t *testing.T) {
 		lowerText := strings.ToLower(text)
 		for _, phrase := range []string{
 			"first-entry duplicate packet side-data semantics",
-			"empty or malformed first entries",
+			"empty, malformed, or overflowed first entries",
 		} {
 			if !strings.Contains(lowerText, phrase) {
 				t.Fatalf("%s missing decoder duplicate side-data evidence phrase %q", path, phrase)
@@ -1054,7 +1054,10 @@ func TestREADMEDecoderAVCCStatefulSwitchGuidance(t *testing.T) {
 		"PacketSideDataNewExtradata",
 		"uses the same stateful update rule",
 		"Duplicate packet side data follows first-entry semantics",
-		"first `NEW_EXTRADATA`, active-format, S12M timecode",
+		"packet `NEW_EXTRADATA` configuration updates",
+		"scalar active-format and S12M timecode values",
+		"structured layouts",
+		"A53 captions, ICC profile, HDR10+, and LCEVC byte payloads",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md decoder avcC state guidance missing %q", phrase)

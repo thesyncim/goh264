@@ -592,7 +592,7 @@ func TestDecoderCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 	}
 }
 
-func TestDecodePacketFramesRejectsOverflowedSideDataListWithoutDroppingPacket(t *testing.T) {
+func TestDecodePacketFramesIgnoresOverflowedSideDataListWithoutDroppingPacket(t *testing.T) {
 	side := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0x01, 0x02}}
 	frames, err := NewDecoder().DecodePacketFrames(Packet{
 		Data:     decodeHexFixture(t, black16AnnexBHex),

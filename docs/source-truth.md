@@ -124,8 +124,8 @@ malformed in-band SPS/PPS recovery across configured AVC and mixed
 configured-AVC/Annex B public decode surfaces,
 public packet clone helpers and packet side-data byte-slice ownership across delayed B-frame output,
 first-entry duplicate packet side-data semantics for scalar values, structured
-layouts, `NEW_EXTRADATA` configuration updates, and ICC/HDR10+/LCEVC byte
-payloads, including empty or malformed first entries,
+layouts, `NEW_EXTRADATA` configuration updates, and A53/ICC/HDR10+/LCEVC byte
+payloads, including empty, malformed, or overflowed first entries,
 raw-output caller-buffer preservation on invalid 8-bit chroma geometry and
 high-bit-depth luma/chroma sample errors, `RawYUVBytesLE` and `RawYUV16`
 caller-owned convenience output, `RawYUVSize` overflow rejection, and raw-output

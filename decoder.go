@@ -825,7 +825,8 @@ func (d *Decoder) DecodePacket(pkt Packet) (*Frame, error) {
 // PacketSideDataNewExtradata is parsed before packet data and is non-fatal when
 // malformed, leaving the previous configuration in use. Passing an empty packet
 // flushes delayed frames and does not attach packet side data. Side-data lists
-// beyond public storage limits are ignored while packet data still decodes.
+// or payloads beyond public storage limits are ignored while packet data still
+// decodes.
 func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData

@@ -319,9 +319,11 @@ LCEVC is copied into frame side data for caller-owned retention.
 Packet side-data lists or payloads beyond public storage limits are treated as
 malformed packet side data during decode; the compressed packet data still
 decodes.
-Duplicate packet side data follows first-entry semantics: empty or malformed
-first `NEW_EXTRADATA`, active-format, S12M timecode, ICC profile, HDR10+, and
-LCEVC entries suppress later duplicates.
+Duplicate packet side data follows first-entry semantics across packet
+`NEW_EXTRADATA` configuration updates, scalar active-format and S12M timecode
+values, structured layouts, and A53 captions, ICC profile, HDR10+, and
+LCEVC byte payloads. Empty, malformed, or oversized first entries suppress
+later duplicates.
 
 ## State And Ownership Boundaries
 

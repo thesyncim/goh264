@@ -248,9 +248,9 @@ snapshots, and packet side-data byte payloads are copied before delayed B-frame
 storage: mutating caller-owned packet side-data immediately after each decode
 call does not affect immediate or flushed `FrameSideData`.
 First-entry duplicate packet side-data semantics cover scalar values,
-structured layouts, configuration updates, and byte payloads, including empty
-or malformed first entries for `NEW_EXTRADATA`, active-format, and S12M, plus
-empty first ICC, HDR10+, and LCEVC entries that suppress later duplicates.
+structured layouts, configuration updates, and byte payloads. Empty, malformed,
+or overflowed first entries for `NEW_EXTRADATA`, active-format, S12M, A53, ICC,
+HDR10+, and LCEVC suppress later duplicates.
 Configured AVC and Annex B delayed-output guards also overwrite caller-owned
 compressed packet buffers after each decode call before flushing delayed frames,
 proving delayed output does not retain input packet storage.
