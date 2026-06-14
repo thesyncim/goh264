@@ -85,8 +85,8 @@ slicing. Internal low/high motion and
 reconstruction plane-span checks reject overflowed geometry before indexing.
 `Frame.Clone` is guarded as a deep-owned decoded-frame snapshot for 8-bit and
 high-bit-depth planes plus nested side-data slices and pointers, including
-overflowed public frame and side-data storage rejection; `Packet.CloneChecked`,
-`PacketSideData.CloneChecked`, and `FrameSideData.CloneChecked` expose checked
+overflowed public frame and side-data storage rejection; `Packet.Clone`,
+`PacketSideData.Clone`, and `FrameSideData.Clone` expose the same checked
 ownership contracts for caller-constructed packet and side-data values.
 Public SEI `FrameSideData` byte slices are guarded as caller-owned by mutating
 decoded unregistered-user-data, A53, and LCEVC slices and re-decoding the same

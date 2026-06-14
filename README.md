@@ -287,7 +287,7 @@ frames, err := dec.DecodePacketFrames(goh264.Packet{
 	Data:     packet,
 	SideData: sideData,
 })
-ownedPacket, err := (goh264.Packet{Data: packet, SideData: sideData}).CloneChecked()
+ownedPacket, err := (goh264.Packet{Data: packet, SideData: sideData}).Clone()
 if err != nil {
 	log.Fatal(err)
 }
@@ -299,12 +299,10 @@ data such as A53 captions, S12M timecode, stereo 3D, spherical video, mastering
 display metadata, content light metadata, display orientation, film grain, ICC
 profile, HDR10+, and LCEVC side data.
 `Packet.Clone`, `PacketSideData.Clone`, `Frame.Clone`, and
-`FrameSideData.Clone` provide deep-owned snapshots for retained packets and
-decoded output metadata. `Packet.Validate`, `PacketSideData.Validate`,
-`Frame.Validate`, and `FrameSideData.Validate` check public storage before
-handoff or retention. `Packet.CloneChecked`, `PacketSideData.CloneChecked`, and
-`FrameSideData.CloneChecked` use the same checks before cloning so malformed
-snapshots are not silently truncated.
+`FrameSideData.Clone` validate public storage and return deep-owned snapshots
+for retained packets and decoded output metadata. `Packet.Validate`,
+`PacketSideData.Validate`, `Frame.Validate`, and `FrameSideData.Validate` expose
+the same checks for preflight before handoff or retention.
 Structured side-data entries are decoded only when their payload validates;
 byte-oriented packet side data such as A53 captions, ICC profile, HDR10+, and
 LCEVC is copied into frame side data for caller-owned retention.

@@ -132,19 +132,7 @@ type PacketSideData struct {
 	Data []byte
 }
 
-// Clone returns a deep-owned copy of the packet side-data payload.
-//
-// For caller-constructed values that need validation, use CloneChecked.
-func (side PacketSideData) Clone() PacketSideData {
-	clone, err := side.CloneChecked()
-	if err != nil {
-		return PacketSideData{}
-	}
-	return clone
-}
-
-// Validate reports whether side has public storage sizes accepted by checked
-// clone helpers.
+// Validate reports whether side has public storage sizes accepted by Clone.
 func (side PacketSideData) Validate() error {
 	if len(side.Data) > maxInt/2 {
 		return ErrInvalidData
@@ -152,9 +140,9 @@ func (side PacketSideData) Validate() error {
 	return nil
 }
 
-// CloneChecked returns a deep-owned copy of the packet side-data payload after
+// Clone returns a deep-owned copy of the packet side-data payload after
 // validating public storage sizes.
-func (side PacketSideData) CloneChecked() (PacketSideData, error) {
+func (side PacketSideData) Clone() (PacketSideData, error) {
 	if err := side.Validate(); err != nil {
 		return PacketSideData{}, err
 	}
@@ -173,20 +161,7 @@ type Packet struct {
 	SideData []PacketSideData
 }
 
-// Clone returns a deep-owned copy of the compressed packet and side-data
-// payloads.
-//
-// For caller-constructed values that need validation, use CloneChecked.
-func (pkt Packet) Clone() Packet {
-	clone, err := pkt.CloneChecked()
-	if err != nil {
-		return Packet{}
-	}
-	return clone
-}
-
-// Validate reports whether pkt has public storage sizes accepted by checked
-// clone helpers.
+// Validate reports whether pkt has public storage sizes accepted by Clone.
 func (pkt Packet) Validate() error {
 	if len(pkt.Data) > maxInt/2 || len(pkt.SideData) > maxInt/32 {
 		return ErrInvalidData
@@ -199,9 +174,9 @@ func (pkt Packet) Validate() error {
 	return nil
 }
 
-// CloneChecked returns a deep-owned copy of the compressed packet and side-data
+// Clone returns a deep-owned copy of the compressed packet and side-data
 // payloads after validating public storage sizes.
-func (pkt Packet) CloneChecked() (Packet, error) {
+func (pkt Packet) Clone() (Packet, error) {
 	if err := pkt.Validate(); err != nil {
 		return Packet{}, err
 	}
@@ -213,7 +188,7 @@ func (pkt Packet) CloneChecked() (Packet, error) {
 	}
 	clone.SideData = make([]PacketSideData, len(pkt.SideData))
 	for i, side := range pkt.SideData {
-		sideClone, err := side.CloneChecked()
+		sideClone, err := side.Clone()
 		if err != nil {
 			return Packet{}, err
 		}
@@ -252,19 +227,7 @@ type FrameSideData struct {
 	ReferenceDisplays    *ReferenceDisplaysInfo
 }
 
-// Clone returns a deep-owned copy of the decoded frame side data.
-//
-// For caller-constructed values that need validation, use CloneChecked.
-func (side FrameSideData) Clone() FrameSideData {
-	clone, err := side.CloneChecked()
-	if err != nil {
-		return FrameSideData{}
-	}
-	return clone
-}
-
-// Validate reports whether side has public storage sizes accepted by frame
-// clone helpers.
+// Validate reports whether side has public storage sizes accepted by Clone.
 func (side FrameSideData) Validate() error {
 	if !frameSideDataCloneStorageOK(side) {
 		return ErrInvalidData
@@ -272,9 +235,9 @@ func (side FrameSideData) Validate() error {
 	return nil
 }
 
-// CloneChecked returns a deep-owned copy of the decoded frame side data after
+// Clone returns a deep-owned copy of the decoded frame side data after
 // validating public storage sizes.
-func (side FrameSideData) CloneChecked() (FrameSideData, error) {
+func (side FrameSideData) Clone() (FrameSideData, error) {
 	if err := side.Validate(); err != nil {
 		return FrameSideData{}, err
 	}
@@ -531,7 +494,11 @@ func (f *Frame) Clone() (*Frame, error) {
 	clone.Y16 = cloneUint16Slice(f.Y16)
 	clone.Cb16 = cloneUint16Slice(f.Cb16)
 	clone.Cr16 = cloneUint16Slice(f.Cr16)
-	clone.SideData = cloneFrameSideData(f.SideData)
+	sideData, err := f.SideData.Clone()
+	if err != nil {
+		return nil, err
+	}
+	clone.SideData = sideData
 	return &clone, nil
 }
 
