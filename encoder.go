@@ -4442,6 +4442,9 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	if err := validateEncoderRTPControlEnvelope(cfg); err != nil {
 		return cfg, err
 	}
+	if cfg.RTPPayloadType == 0 {
+		cfg.RTPPayloadType = 96
+	}
 	if cfg.OutputFormat == EncoderOutputRTP {
 		if cfg.RTPMaxPayloadSize == 0 {
 			cfg.RTPMaxPayloadSize = 1200
@@ -4451,9 +4454,6 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		}
 		if !cfg.DONDisabled {
 			return cfg, encoderUnsupported("interleaved DON mode is not part of WebRTC RTP packetization")
-		}
-		if cfg.RTPPayloadType == 0 {
-			cfg.RTPPayloadType = 96
 		}
 	}
 	if cfg.RTPTimestampIncrement == 0 {

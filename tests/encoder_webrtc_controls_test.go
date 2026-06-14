@@ -231,6 +231,81 @@ func TestEncoderRTPPayloadTypeZeroSelectsDynamicDefault(t *testing.T) {
 	assertPayloadType(t, out, 96, ssrc)
 }
 
+func TestEncoderRTPPayloadTypeZeroNormalizesForNonRTPOutputs(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		format goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", format: goh264.EncoderOutputAnnexB},
+		{name: "avc", format: goh264.EncoderOutputAVC},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.format
+			cfg.RTPMaxPayloadSize = 0
+			cfg.RTPPayloadType = 0
+			cfg.RTPSSRC = 0x11223344
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+
+			normalized, err := cfg.Normalize()
+			if err != nil {
+				t.Fatalf("Normalize non-RTP payload type zero: %v", err)
+			}
+			if normalized.OutputFormat != tt.format || normalized.RTPPayloadType != 96 {
+				t.Fatalf("normalized output/payload type = %v/%d, want %v/96",
+					normalized.OutputFormat, normalized.RTPPayloadType, tt.format)
+			}
+
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder non-RTP payload type zero: %v", err)
+			}
+			if got := enc.Config(); got.RTPPayloadType != 96 || got.RTPSSRC != cfg.RTPSSRC {
+				t.Fatalf("NewEncoder config payload type/ssrc = %d/%#x, want 96/%#x",
+					got.RTPPayloadType, got.RTPSSRC, cfg.RTPSSRC)
+			}
+			if err := enc.SetRTPMetadata(110, 0x22334455); err != nil {
+				t.Fatalf("SetRTPMetadata nonzero on non-RTP output: %v", err)
+			}
+			if err := enc.SetRTPMetadata(0, 0x33445566); err != nil {
+				t.Fatalf("SetRTPMetadata zero on non-RTP output: %v", err)
+			}
+			if got := enc.Config(); got.RTPPayloadType != 96 || got.RTPSSRC != 0x33445566 {
+				t.Fatalf("SetRTPMetadata zero config payload type/ssrc = %d/%#x, want 96/0x33445566",
+					got.RTPPayloadType, got.RTPSSRC)
+			}
+			payloadType := uint8(111)
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{RTPPayloadType: &payloadType}); err != nil {
+				t.Fatalf("Reconfigure nonzero payload type on non-RTP output: %v", err)
+			}
+			payloadType = 0
+			if err := enc.Reconfigure(goh264.EncoderReconfigure{RTPPayloadType: &payloadType}); err != nil {
+				t.Fatalf("Reconfigure zero payload type on non-RTP output: %v", err)
+			}
+			if got := enc.Config(); got.RTPPayloadType != 96 {
+				t.Fatalf("Reconfigure zero config payload type = %d, want 96", got.RTPPayloadType)
+			}
+			if err := enc.SetOutputFormat(goh264.EncoderOutputRTP); err != nil {
+				t.Fatalf("SetOutputFormat RTP after non-RTP payload default: %v", err)
+			}
+			out, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("Encode RTP after non-RTP payload default: %v", err)
+			}
+			if out.OutputFormat != goh264.EncoderOutputRTP || len(out.RTPPackets) == 0 {
+				t.Fatalf("RTP re-entry output = format %v packets %d, want emitted RTP packets",
+					out.OutputFormat, len(out.RTPPackets))
+			}
+			for i, pkt := range out.RTPPackets {
+				if pkt.PayloadType != 96 || pkt.Data[1]&0x7f != 96 {
+					t.Fatalf("packet[%d] payload type metadata/header = %d/%d, want 96/96",
+						i, pkt.PayloadType, pkt.Data[1]&0x7f)
+				}
+			}
+		})
+	}
+}
+
 func TestEncoderConfigExplicitQPZeroConstructsAndEncodes(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RateControl = goh264.EncoderRateControlConstantQP
