@@ -798,8 +798,10 @@ func (frame EncodedFrame) validateRTPPacketListMetadata() error {
 	}
 	payloadType := frame.RTPPackets[0].PayloadType
 	ssrc := frame.RTPPackets[0].SSRC
+	nalIndex := 0
 	inFU := false
-	var fuNALHeader byte
+	fuNALIndex := -1
+	fuOffset := 0
 	for i, packet := range frame.RTPPackets {
 		if packet.Timestamp != frame.RTPTime ||
 			packet.PayloadType != payloadType ||
@@ -822,6 +824,22 @@ func (frame EncodedFrame) validateRTPPacketListMetadata() error {
 			if inFU {
 				return ErrInvalidData
 			}
+			pos := 1
+			for pos < len(packet.Payload) {
+				if pos+2 > len(packet.Payload) {
+					return ErrInvalidData
+				}
+				size := int(packet.Payload[pos])<<8 | int(packet.Payload[pos+1])
+				pos += 2
+				if size == 0 || pos+size > len(packet.Payload) {
+					return ErrInvalidData
+				}
+				if err := frame.validateRTPPayloadNAL(nalIndex, packet.Payload[pos:pos+size]); err != nil {
+					return err
+				}
+				nalIndex++
+				pos += size
+			}
 		case 28:
 			if len(packet.Payload) < 3 {
 				return ErrInvalidData
@@ -830,30 +848,86 @@ func (frame EncodedFrame) validateRTPPacketListMetadata() error {
 			start := fuHeader&0x80 != 0
 			end := fuHeader&0x40 != 0
 			nalHeader := (packet.Payload[0] & 0xe0) | (fuHeader & 0x1f)
+			fragment := packet.Payload[2:]
 			if start {
 				if inFU {
 					return ErrInvalidData
 				}
-				inFU = true
-				fuNALHeader = nalHeader
-			} else {
-				if !inFU || nalHeader != fuNALHeader {
+				nal, err := frame.rtpPayloadNAL(nalIndex)
+				if err != nil || len(nal) == 0 || nal[0] != nalHeader ||
+					len(fragment) > len(nal)-1 || !bytes.Equal(nal[1:1+len(fragment)], fragment) {
 					return ErrInvalidData
 				}
+				inFU = true
+				fuNALIndex = nalIndex
+				fuOffset = 1 + len(fragment)
+				nalIndex++
+			} else {
+				if !inFU {
+					return ErrInvalidData
+				}
+				nal, err := frame.rtpPayloadNAL(fuNALIndex)
+				if err != nil || len(nal) == 0 || nal[0] != nalHeader ||
+					len(fragment) > len(nal)-fuOffset ||
+					!bytes.Equal(nal[fuOffset:fuOffset+len(fragment)], fragment) {
+					return ErrInvalidData
+				}
+				fuOffset += len(fragment)
 			}
 			if end {
+				nal, err := frame.rtpPayloadNAL(fuNALIndex)
+				if err != nil || fuOffset != len(nal) {
+					return ErrInvalidData
+				}
 				inFU = false
+				fuNALIndex = -1
+				fuOffset = 0
+			} else if inFU {
+				nal, err := frame.rtpPayloadNAL(fuNALIndex)
+				if err != nil || fuOffset >= len(nal) {
+					return ErrInvalidData
+				}
 			}
 		default:
 			if inFU {
 				return ErrInvalidData
 			}
+			if err := frame.validateRTPPayloadNAL(nalIndex, packet.Payload); err != nil {
+				return err
+			}
+			nalIndex++
 		}
 	}
 	if inFU {
 		return ErrInvalidData
 	}
+	if nalIndex != len(frame.NALUnits) {
+		return ErrInvalidData
+	}
 	return nil
+}
+
+func (frame EncodedFrame) validateRTPPayloadNAL(index int, payload []byte) error {
+	nal, err := frame.rtpPayloadNAL(index)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(nal, payload) {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+func (frame EncodedFrame) rtpPayloadNAL(index int) ([]byte, error) {
+	if index < 0 || index >= len(frame.NALUnits) {
+		return nil, ErrInvalidData
+	}
+	unit := frame.NALUnits[index]
+	end, err := frame.validateNALUnitMetadata(unit)
+	if err != nil {
+		return nil, ErrInvalidData
+	}
+	return frame.Data[unit.Offset:end], nil
 }
 
 // Clone returns a deep-owned copy of the encoded result.

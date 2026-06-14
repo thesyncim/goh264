@@ -15300,8 +15300,32 @@ func TestEncodedFrameValidateRejectsRTPListMetadataMismatches(t *testing.T) {
 			RTPTime:  1,
 		}
 	}
+	validSTAPAFrame := func() goh264.EncodedFrame {
+		return goh264.EncodedFrame{
+			OutputFormat: goh264.EncoderOutputRTP,
+			Data: []byte{
+				0, 0, 0, 1, 0x67, 0x11,
+				0, 0, 0, 1, 0x68, 0x22,
+				0, 0, 0, 1, 0x65, 0x33,
+			},
+			NALUnits: []goh264.EncoderNALUnit{
+				{Type: 7, Offset: 4, Size: 2, ParameterSet: true, KeyFrame: true},
+				{Type: 8, Offset: 10, Size: 2, ParameterSet: true, KeyFrame: true},
+				{Type: 5, Offset: 16, Size: 2, KeyFrame: true},
+			},
+			RTPPackets: []goh264.EncoderRTPPacket{
+				makeRTPPacket(1, true, 0x78, 0, 2, 0x67, 0x11, 0, 2, 0x68, 0x22, 0, 2, 0x65, 0x33),
+			},
+			KeyFrame: true,
+			IDR:      true,
+			RTPTime:  1,
+		}
+	}
 	if err := validFUAFrame().Validate(); err != nil {
 		t.Fatalf("valid FU-A RTP frame: %v", err)
+	}
+	if err := validSTAPAFrame().Validate(); err != nil {
+		t.Fatalf("valid STAP-A RTP frame: %v", err)
 	}
 	cloneAndMutate := func(mutate func(*goh264.EncodedFrame)) goh264.EncodedFrame {
 		t.Helper()
@@ -15337,6 +15361,19 @@ func TestEncodedFrameValidateRejectsRTPListMetadataMismatches(t *testing.T) {
 		{name: "sequence gap", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
 			setSequence(&frame.RTPPackets[1], frame.RTPPackets[0].SequenceNumber+2)
 		})},
+		{name: "single nal payload mismatches access unit", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
+			frame.RTPPackets[0].Payload[0] = 0x61
+		})},
+		{name: "stapa payload missing access-unit nal", frame: func() goh264.EncodedFrame {
+			frame := validSTAPAFrame()
+			frame.RTPPackets[0] = makeRTPPacket(1, true, 0x78, 0, 2, 0x67, 0x11, 0, 2, 0x65, 0x33)
+			return frame
+		}()},
+		{name: "fua fragment payload mismatches access unit", frame: func() goh264.EncodedFrame {
+			frame := validFUAFrame()
+			frame.RTPPackets[1] = makeRTPPacket(2, true, 0x7c, 0x45, 0xaa)
+			return frame
+		}()},
 		{name: "fua continuation without start", frame: func() goh264.EncodedFrame {
 			frame := validFUAFrame()
 			frame.RTPPackets[0] = makeRTPPacket(1, false, 0x7c, 0x05, 0x88)
