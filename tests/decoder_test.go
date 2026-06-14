@@ -4234,6 +4234,62 @@ func TestDecodeFrameOneShotSEISideDataIsNotRepeated(t *testing.T) {
 	}
 }
 
+func TestDecodeFramesSEIOnlyPacketAppliesToNextFrame(t *testing.T) {
+	dec := NewDecoder()
+	assertSEIOnlyPacketAppliesToNextFrame(t, dec.DecodeFrames)
+}
+
+func TestDecodePacketFramesSEIOnlyPacketAppliesToNextFrame(t *testing.T) {
+	dec := NewDecoder()
+	assertSEIOnlyPacketAppliesToNextFrame(t, func(data []byte) ([]*Frame, error) {
+		return dec.DecodePacketFrames(Packet{Data: data})
+	})
+}
+
+func assertSEIOnlyPacketAppliesToNextFrame(t *testing.T, decode func([]byte) ([]*Frame, error)) {
+	t.Helper()
+
+	seiOnly := appendAnnexBNAL(nil, decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0d)},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x01, 0x02, 0x03})},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload([]byte{0x7e, 0x01, 0x00, 0x03, 0x02})},
+	))
+
+	frames, err := decode(seiOnly)
+	if err != nil && !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("SEI-only packet = frames %d err %v, want no frames and at most ErrInvalidData", len(frames), err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("SEI-only packet decoded %d frames, want 0", len(frames))
+	}
+
+	frames, err = decode(decodeHexFixture(t, black16AnnexBHex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	first := frames[0].SideData
+	if first.ActiveFormat == nil || first.ActiveFormat.Description != 0x0d {
+		t.Fatalf("first active format = %+v", first.ActiveFormat)
+	}
+	if got, want := first.A53ClosedCaptions, []byte{0x01, 0x02, 0x03}; !bytes.Equal(got, want) {
+		t.Fatalf("first a53 captions = %x, want %x", got, want)
+	}
+	if got, want := first.LCEVC, []byte{0x7e, 0x01, 0x00, 0x03, 0x02}; !bytes.Equal(got, want) {
+		t.Fatalf("first lcevc = %x, want %x", got, want)
+	}
+
+	frames, err = decode(decodeHexFixture(t, black16AnnexBHex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	second := frames[0].SideData
+	if second.ActiveFormat != nil || len(second.A53ClosedCaptions) != 0 || len(second.LCEVC) != 0 {
+		t.Fatalf("second repeated SEI-only packet side data = %+v", second)
+	}
+}
+
 func TestDecodeFrameKeyFrameFlags(t *testing.T) {
 	frames, err := NewDecoder().DecodeAnnexBFrames(decodeHexFixture(t, black16IPAnnexBHex))
 	if err != nil {

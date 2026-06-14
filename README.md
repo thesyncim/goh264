@@ -213,7 +213,8 @@ the queued delayed output remains available to `FlushDelayedFrames`. For stream
 processing, prefer `DecodeFrames` or
 `DecodePacketFrames`; they retain decoder reference state across packets, select
 Annex B or the stored configured-AVC length size, store avcC records when
-encountered, and flush delayed output when called with empty data. `DecodeConfiguredAVCFrames`
+encountered, preserve valid leading SEI from SEI-only packets until the next
+decoded frame, and flush delayed output when called with empty data. `DecodeConfiguredAVCFrames`
 uses the stored avcC length size directly. Bare length-prefixed AVC packets
 with 1-, 2-, or 3-byte NAL length fields should use `DecodeAVCFrames` or a
 configured-AVC path after `ConfigureAVCC`/`ParseHeadersAVC`; unconfigured

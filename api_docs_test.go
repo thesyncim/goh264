@@ -820,6 +820,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecodePacketFramesIgnoresOverflowedSideDataListWithoutDroppingPacket",
 		"TestDecodePacketFramesIgnoresOverflowedPacketSideDataPayloadsWithoutDroppingPacket",
 		"TestDecodePacketFramesOverflowedPacketSideDataPayloadSuppressesLaterDuplicate",
+		"TestDecodeFramesSEIOnlyPacketAppliesToNextFrame",
+		"TestDecodePacketFramesSEIOnlyPacketAppliesToNextFrame",
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",

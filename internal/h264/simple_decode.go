@@ -169,7 +169,6 @@ func (d *SimpleDecoder) DecodeNALUnitsWithSideData(nals []NALUnit, packetSideDat
 	if d == nil {
 		return nil, ErrInvalidData
 	}
-	d.sei.Reset()
 	return decodeSimpleNALUnitsWithDecoderState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, &d.st, packetSideData, false)
 }
 
