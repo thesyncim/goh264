@@ -318,6 +318,9 @@ func TestEncoderFrameCloneDeepCopiesInputPlanes(t *testing.T) {
 	frame.ForceIDR = true
 	frame.Color.FullRange = true
 
+	if err := frame.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
 	clone, err := frame.Clone()
 	if err != nil {
 		t.Fatalf("Clone: %v", err)
@@ -362,6 +365,27 @@ func TestEncoderFrameCloneDeepCopiesInputPlanes(t *testing.T) {
 	}
 	if _, err := enc.Encode(clone); err != nil {
 		t.Fatalf("Encode cloned input: %v", err)
+	}
+}
+
+func TestEncoderFrameValidateAndCloneRejectOverflowedPlanes(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		frame goh264.EncoderFrame
+	}{
+		{name: "luma", frame: goh264.EncoderFrame{Y: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "cb", frame: goh264.EncoderFrame{Cb: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{name: "cr", frame: goh264.EncoderFrame{Cr: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.frame.Validate(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Validate overflow = %v, want ErrInvalidData", err)
+			}
+			got, err := tt.frame.Clone()
+			if !errors.Is(err, goh264.ErrInvalidData) || len(got.Y) != 0 || len(got.Cb) != 0 || len(got.Cr) != 0 {
+				t.Fatalf("Clone overflow = %+v/%v, want zero ErrInvalidData", got, err)
+			}
+		})
 	}
 }
 

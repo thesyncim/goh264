@@ -323,6 +323,9 @@ LCEVC entries suppress later duplicates.
 
 ## State And Ownership Boundaries
 
+`Decoder` and `Encoder` values are stateful per stream. Use one instance per
+concurrent stream, or protect shared instances with external synchronization.
+
 | Surface | State behavior |
 | --- | --- |
 | `Decoder.DecodeFrames` / `DecodePacketFrames` | Retain decoder references and delayed output across stream packets; empty input flushes delayed frames. |
@@ -349,6 +352,7 @@ Choose the encoder surface by what the caller owns:
 | View exact setup before construction | `EncoderConfig.Normalize` |
 | Read the exact live setup after accepted setters | `Encoder.Config` |
 | Validate one input frame without mutating encoder state | `EncoderConfig.ValidateFrame` or `Encoder.ValidateFrame` |
+| Validate input-frame retention storage | `EncoderFrame.Validate` |
 | Generate SPS/PPS or recovery SEI without a live encoder | `EncoderConfig.ParameterSets` or `EncoderConfig.RecoveryPointSEIMessage` |
 | Encode with encoder-owned result storage | `Encode` |
 | Encode into caller-owned result byte storage where supported | `EncodeInto` |
@@ -560,8 +564,10 @@ with the strongest public API coverage for integration work:
   to apply. `FrameRateNum`/`FrameRateDen` and `Width`/`Height` must be supplied
   as pairs. When `Limits` is non-nil, it is applied after the individual budget
   fields and their pointer zero-value forms.
-- `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
-  async handoff.
+- `EncoderFrame.Validate` checks input-frame plane storage before retention;
+  `EncoderFrame.Clone` uses the same checks and returns a deep-owned input
+  snapshot for retry queues or async handoff. Use `EncoderConfig.ValidateFrame`
+  or `Encoder.ValidateFrame` for config-specific encode-shape validation.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
   payload helpers have explicit append forms for caller-owned retention buffers
   and `Clone` forms for async snapshots. `EncoderParameterSets.Validate` and

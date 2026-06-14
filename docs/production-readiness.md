@@ -262,7 +262,8 @@ RTP packetization modes 0 and 1:
 guards public input/result/callback surfaces for integration-facing encoder
 structs, including `EncoderConfig.Normalize`, `EncoderConfig.I420Frame`,
 `EncoderConfig.ValidateFrame`, `EncoderConfig.ParameterSets`,
-`EncoderConfig.RecoveryPointSEIMessage`, `EncoderFrame.Clone`, `Encoder.I420Frame`, `Encoder.ValidateFrame`,
+`EncoderConfig.RecoveryPointSEIMessage`, `EncoderFrame.Validate`,
+`EncoderFrame.Clone`, `Encoder.I420Frame`, `Encoder.ValidateFrame`,
 `EncodedFrame.OutputFormat`, `EncodedFrame.NALData`,
 `EncodedFrame.AccessUnitData`, and packet-level
 `EncoderRTPPacket` byte helpers, including append helpers that leave the caller

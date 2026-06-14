@@ -233,14 +233,25 @@ type EncoderFrame struct {
 // The cloned planes are independent from frame and safe to retain after the
 // original caller-owned buffers are reused.
 func (frame EncoderFrame) Clone() (EncoderFrame, error) {
-	if len(frame.Y) > maxInt/2 || len(frame.Cb) > maxInt/2 || len(frame.Cr) > maxInt/2 {
-		return EncoderFrame{}, ErrInvalidData
+	if err := frame.Validate(); err != nil {
+		return EncoderFrame{}, err
 	}
 	clone := frame
 	clone.Y = cloneByteSlice(frame.Y)
 	clone.Cb = cloneByteSlice(frame.Cb)
 	clone.Cr = cloneByteSlice(frame.Cr)
 	return clone, nil
+}
+
+// Validate reports whether frame has public storage sizes accepted by Clone.
+//
+// Use EncoderConfig.ValidateFrame or Encoder.ValidateFrame to validate that the
+// frame geometry and plane lengths can be encoded by a specific configuration.
+func (frame EncoderFrame) Validate() error {
+	if len(frame.Y) > maxInt/2 || len(frame.Cb) > maxInt/2 || len(frame.Cr) > maxInt/2 {
+		return ErrInvalidData
+	}
+	return nil
 }
 
 // I420Frame returns an EncoderFrame populated from cfg dimensions, strides,

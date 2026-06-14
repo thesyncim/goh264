@@ -88,6 +88,7 @@ var _ = (EncoderConfig).I420Frame
 var _ = (EncoderConfig).ParameterSets
 var _ = (EncoderConfig).RecoveryPointSEIMessage
 
+var _ = (EncoderFrame).Validate
 var _ = (EncoderFrame).Clone
 var _ = (EncoderParameterSets).AVCC
 var _ = (EncoderParameterSets).AppendSPS

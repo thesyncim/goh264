@@ -18,10 +18,10 @@ output, and RTP packetization modes 0 and 1.
 Slice headers and reference-marking syntax follow FFmpeg CBS H.264 ordering;
 RTP packet header emission follows FFmpeg `libavformat/rtpenc.c`
 `ff_rtp_send_data()` field order and H.264 RTP payload boundaries follow
-`libavformat/rtpenc_h264_hevc.c`. Broader residual P coding, broader motion
-search, adaptive rate-control feedback, and broad encoder parity claims remain
-pending. Encoder work must land behind its own controls, oracles, and quality
-evidence while the decoder production bar stays green.
+`libavformat/rtpenc_h264_hevc.c`. Outside the current encoder contract:
+broader residual P coding, broader motion search, adaptive rate-control
+feedback, and broad encoder parity claims require dedicated controls, oracles,
+and quality evidence while the decoder production bar stays green.
 
 Proved: progressive Annex B/AVC IDR/P/B subsets, selected High10/High12/High14
 fixtures including public High10/High422 intra conformance and High10 unweighted 4:2:2/4:4:4 I/P chroma
@@ -164,7 +164,7 @@ recovery pictures, forced-keyframe IDR, FFmpeg rawvideo decode,
 runtime resolution reset that rejects stale-size frames without consuming the
 queued IDR before emitting/decoding a new-size IDR and resuming P-skip
 references at the new dimensions,
-public encoder frame preflight, invalid frame-rate helper/reconfigure plus invalid runtime rate,
+public encoder frame storage validation and encode-shape preflight, invalid frame-rate helper/reconfigure plus invalid runtime rate,
 latency/slice, output/header/preset, RTP re-entry payload-size, and
 packetization updates that leave config, queued-IDR state, RTP cadence, packets,
 callbacks, and rejected bundled ForceIDR requests intact,
@@ -194,7 +194,8 @@ caller-owned parameter-set and recovery-point SEI surfaces with mutation/append
 isolation and helper-clone storage validation across repeated helper calls,
 including avcC-view, append-source, and destination validation,
 public input/result/callback surface guards for integration-facing encoder
-structs, including I420 frame construction and clipped encoded-result helpers,
+structs, including `EncoderFrame.Validate`, I420 frame construction, and
+clipped encoded-result helpers,
 input-frame plane ownership guards proving post-call caller mutation does not
 change the next Annex B, AVC, or RTP encode,
 returned `Encode` result lifetime guards across later Annex B, AVC, and RTP
