@@ -6307,7 +6307,8 @@ func TestEncoderAppendHelpersIsolateOverlappingSource(t *testing.T) {
 			makeInput: func() overlapInput {
 				backing := []byte{0xde, 0xad, 0x67, 0x42, 0x00, 0xee}
 				frame := goh264.EncodedFrame{
-					Data: backing,
+					OutputFormat: goh264.EncoderOutputAnnexB,
+					Data:         backing,
 					NALUnits: []goh264.EncoderNALUnit{{
 						Type: 7, Offset: 2, Size: 3, KeyFrame: true, ParameterSet: true,
 					}},
@@ -13808,8 +13809,11 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		Data:         []byte{0, 0, 0, 2, 0x67, 0x42},
 		NALUnits:     []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 2, KeyFrame: true, ParameterSet: true}},
 	}
+	packetData := []byte{0x80, 0xe0, 0, 1, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd, 0x67}
+	validRTPPacket := encoderRTPPacketFromTestData(packetData, packetData[12:])
 	rtp := annexB
 	rtp.OutputFormat = goh264.EncoderOutputRTP
+	rtp.RTPPackets = []goh264.EncoderRTPPacket{validRTPPacket}
 	for _, tt := range []struct {
 		name  string
 		frame goh264.EncodedFrame
@@ -13840,6 +13844,8 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "type mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 8, Offset: 4, Size: 3}}}, index: 0},
 		{name: "parameter-set flag mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, KeyFrame: true}}}, index: 0},
 		{name: "keyframe flag mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, ParameterSet: true}}}, index: 0},
+		{name: "rtp output without rtp packets", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, Data: annexB.Data, NALUnits: annexB.NALUnits}, index: 0},
+		{name: "annexb output with rtp packets", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: annexB.Data, NALUnits: annexB.NALUnits, RTPPackets: []goh264.EncoderRTPPacket{validRTPPacket}}, index: 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if got, err := tt.frame.NALData(tt.index); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
@@ -13864,9 +13870,12 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "parameter-set flag mismatch", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, KeyFrame: true}}}},
 		{name: "keyframe flag mismatch", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 3, ParameterSet: true}}}},
 		{name: "annexb frame with avc prefix", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: avc.Data, NALUnits: avc.NALUnits}},
-		{name: "rtp frame with avc prefix", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, Data: avc.Data, NALUnits: avc.NALUnits}},
+		{name: "rtp frame with avc prefix", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, Data: avc.Data, NALUnits: avc.NALUnits, RTPPackets: []goh264.EncoderRTPPacket{validRTPPacket}}},
 		{name: "avc frame with annexb prefix", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAVC, Data: annexB.Data, NALUnits: annexB.NALUnits}},
 		{name: "unknown output format", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputFormat(99), Data: valid.Data, NALUnits: valid.NALUnits}},
+		{name: "rtp output without rtp packets", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, Data: annexB.Data, NALUnits: annexB.NALUnits}},
+		{name: "annexb output with rtp packets", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: annexB.Data, NALUnits: annexB.NALUnits, RTPPackets: []goh264.EncoderRTPPacket{validRTPPacket}}},
+		{name: "avc output with rtp packets", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAVC, Data: avc.Data, NALUnits: avc.NALUnits, RTPPackets: []goh264.EncoderRTPPacket{validRTPPacket}}},
 		{
 			name: "gap between nal units",
 			frame: goh264.EncodedFrame{
@@ -14130,6 +14139,9 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 	if got, err := valid.PayloadData(); err != nil || !bytes.Equal(got, []byte{0x65, 0x88, 0x99}) || cap(got) != len(got) {
 		t.Fatalf("PayloadData = %x cap=%d err=%v, want clipped payload bytes", got, cap(got), err)
 	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
 
 	packetPrefix := []byte{0xde, 0xad}
 	packetCopy, err := valid.AppendPacketData(append([]byte(nil), packetPrefix...))
@@ -14253,6 +14265,9 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 			}
 			if got, err := tt.packet.Clone(); !errors.Is(err, goh264.ErrInvalidData) || got.Data != nil || got.Payload != nil {
 				t.Fatalf("Clone invalid = %+v/%v, want empty ErrInvalidData", got, err)
+			}
+			if err := tt.packet.Validate(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Validate invalid = %v, want ErrInvalidData", err)
 			}
 		})
 	}
@@ -14415,6 +14430,9 @@ func TestEncodedFrameCloneDeepCopiesResultStorage(t *testing.T) {
 			out, err := enc.EncodeInto(dst, patternedI420EncoderFrame(16, 16))
 			if err != nil {
 				t.Fatalf("EncodeInto: %v", err)
+			}
+			if err := out.Validate(); err != nil {
+				t.Fatalf("Validate encoded result: %v", err)
 			}
 			clone, err := out.Clone()
 			if err != nil {
@@ -14780,6 +14798,9 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 				got.KeyFrame || got.IDR || got.PTS != 0 || got.DTS != 0 || got.RTPTime != 0 || got.Dropped {
 				t.Fatalf("Clone invalid = %+v/%v, want zero ErrInvalidData", got, err)
 			}
+			if err := tt.frame.Validate(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Validate invalid = %v, want ErrInvalidData", err)
+			}
 		})
 	}
 	dropped := goh264.EncodedFrame{
@@ -14791,6 +14812,9 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 	clone, err := dropped.Clone()
 	if err != nil {
 		t.Fatalf("Clone dropped: %v", err)
+	}
+	if err := dropped.Validate(); err != nil {
+		t.Fatalf("Validate dropped: %v", err)
 	}
 	if !clone.Dropped || !clone.KeyFrame || !clone.IDR || clone.OutputFormat != goh264.EncoderOutputRTP ||
 		len(clone.Data) != 0 || len(clone.NALUnits) != 0 || len(clone.RTPPackets) != 0 {
@@ -17942,7 +17966,7 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 		}
 	}
 	for _, method := range []string{
-		"PacketData", "AppendPacketData", "PayloadData", "AppendPayloadData", "Clone",
+		"PacketData", "AppendPacketData", "PayloadData", "AppendPayloadData", "Validate", "Clone",
 	} {
 		if _, ok := reflect.TypeOf(goh264.EncoderRTPPacket{}).MethodByName(method); !ok {
 			t.Fatalf("EncoderRTPPacket missing %s convenience method", method)
@@ -17977,6 +18001,9 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AppendRTPPayloadData"); !ok {
 		t.Fatal("EncodedFrame missing AppendRTPPayloadData convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("Validate"); !ok {
+		t.Fatal("EncodedFrame missing Validate convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("Clone"); !ok {
 		t.Fatal("EncodedFrame missing Clone convenience method")

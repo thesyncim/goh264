@@ -561,22 +561,24 @@ with the strongest public API coverage for integration work:
   Invalid or overflowed-destination append calls return the original destination
   unchanged. If a caller-managed append destination overlaps the helper source
   bytes, the helpers return isolated output storage instead of aliasing the
-  source. `EncodedFrame.Clone` rejects dropped results that still carry emitted
-  byte, NAL, or RTP packet storage, and non-dropped RTP results that lack RTP
-  packets.
+  source. `EncodedFrame.Validate` checks public result shape before retention or
+  async handoff. `EncodedFrame.Clone` uses the same checks and rejects dropped
+  results that still carry emitted byte, NAL, or RTP packet storage, non-RTP
+  results that carry RTP packets, and RTP results that lack RTP packets.
 - `EncodedFrame.OutputFormat` records the emitted result format, including
   dropped frames, so callers do not need to infer format from packet presence.
-  Caller-constructed `EncodedFrame` values must set `OutputFormat` before using
-  access-unit/RTP helper methods or cloning dropped results.
+  Caller-constructed `EncodedFrame` values must set `OutputFormat` and keep RTP
+  packet storage matched to that format before using access-unit/RTP helper
+  methods, `Validate`, or `Clone`.
 - `AccessUnitRange` and `AccessUnitFormat` make the access-unit byte range and
   access-unit container explicit; RTP results report an Annex B access-unit view
   while RTP packet bytes stay under `RTPPackets`.
 - For RTP output, send `RTPPackets`, `RTPPacketData`, or `RTPPayloadData`.
   `EncodedFrame.Data` is retained only as an Annex B access-unit view for local
-  inspection through `AccessUnitData` and `NALData`. Packet-level helpers validate the
-  encoder-emitted 12-byte RTP header shape and exported packet metadata before
-  returning packet bytes. Payload helpers and packet clones also require
-  `Payload` to be exactly `Data[12:]`.
+  inspection through `AccessUnitData` and `NALData`. Packet-level helpers
+  validate the encoder-emitted 12-byte RTP header shape and exported packet
+  metadata before returning packet bytes. Payload helpers, packet validation,
+  and packet clones also require `Payload` to be exactly `Data[12:]`.
 - Overflowed caller-owned `EncodeInto` destination growth is rejected across
   Annex B, AVC, and RTP without consuming queued IDR state or advancing
   RTP/callback state. The same hard-error path preserves P-frame reference and

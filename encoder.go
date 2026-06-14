@@ -336,6 +336,17 @@ func (packet EncoderRTPPacket) PayloadData() ([]byte, error) {
 	return packet.Payload[:len(packet.Payload):len(packet.Payload)], nil
 }
 
+// Validate reports whether packet is a well-formed RTP packet helper value.
+func (packet EncoderRTPPacket) Validate() error {
+	if _, err := packet.PacketData(); err != nil {
+		return err
+	}
+	if _, err := packet.PayloadData(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func encoderRTPPacketHeaderOK(data []byte) bool {
 	return len(data) >= 12 && data[0] == 0x80
 }
@@ -412,10 +423,7 @@ func (packet EncoderRTPPacket) Clone() (EncoderRTPPacket, error) {
 	if !encoderRTPPacketCloneStorageOK(packet) {
 		return EncoderRTPPacket{}, ErrInvalidData
 	}
-	if _, err := packet.PacketData(); err != nil {
-		return EncoderRTPPacket{}, err
-	}
-	if _, err := packet.PayloadData(); err != nil {
+	if err := packet.Validate(); err != nil {
 		return EncoderRTPPacket{}, err
 	}
 	data := cloneByteSlice(packet.Data)
@@ -495,6 +503,9 @@ func (frame EncodedFrame) NALData(index int) ([]byte, error) {
 		index < 0 || index >= len(frame.NALUnits) {
 		return nil, ErrInvalidData
 	}
+	if err := frame.validateAccessUnitStorageShape(); err != nil {
+		return nil, err
+	}
 	unit := frame.NALUnits[index]
 	end, err := frame.validateNALUnitMetadata(unit)
 	if err != nil {
@@ -557,8 +568,11 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 
 func (frame EncodedFrame) accessUnitRange() (int, int, error) {
 	if frame.Dropped || len(frame.Data) > maxInt/2 || len(frame.NALUnits) > maxEncoderNALUnitListLen ||
-		len(frame.NALUnits) == 0 {
+		len(frame.RTPPackets) > maxEncoderRTPPacketListLen || len(frame.NALUnits) == 0 {
 		return 0, 0, ErrInvalidData
+	}
+	if err := frame.validateAccessUnitStorageShape(); err != nil {
+		return 0, 0, err
 	}
 	start := -1
 	end := 0
@@ -594,6 +608,22 @@ func (frame EncodedFrame) accessUnitRange() (int, int, error) {
 		return 0, 0, ErrInvalidData
 	}
 	return start, end, nil
+}
+
+func (frame EncodedFrame) validateAccessUnitStorageShape() error {
+	switch frame.OutputFormat {
+	case EncoderOutputAnnexB, EncoderOutputAVC:
+		if len(frame.RTPPackets) != 0 {
+			return ErrInvalidData
+		}
+	case EncoderOutputRTP:
+		if len(frame.RTPPackets) == 0 || len(frame.RTPPackets) > maxEncoderRTPPacketListLen {
+			return ErrInvalidData
+		}
+	default:
+		return ErrInvalidData
+	}
+	return nil
 }
 
 func (frame EncodedFrame) validateNALUnitMetadata(unit EncoderNALUnit) (int, error) {
@@ -684,20 +714,43 @@ func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, e
 	return appendEncoderHelperBytes(dst, data)
 }
 
+// Validate reports whether frame is a well-formed encoded result.
+//
+// Dropped results must carry only metadata. Non-dropped Annex B and AVC results
+// must not carry RTP packets. Non-dropped RTP results must carry RTP packets,
+// and every packet must pass EncoderRTPPacket.Validate.
+func (frame EncodedFrame) Validate() error {
+	if !encodedFrameCloneStorageOK(frame) {
+		return ErrInvalidData
+	}
+	if frame.Dropped {
+		if !validEncoderOutputFormat(frame.OutputFormat) ||
+			len(frame.Data) != 0 || len(frame.NALUnits) != 0 || len(frame.RTPPackets) != 0 {
+			return ErrInvalidData
+		}
+		return nil
+	}
+	if _, _, err := frame.accessUnitRange(); err != nil {
+		return err
+	}
+	for i := range frame.RTPPackets {
+		if err := frame.RTPPackets[i].Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Clone returns a deep-owned copy of the encoded result.
 //
 // The cloned Data, NALUnits, RTPPackets, and RTP packet payload views are
 // independent from frame and safe to retain after caller-owned EncodeInto
 // buffers are reused.
 func (frame EncodedFrame) Clone() (EncodedFrame, error) {
-	if !encodedFrameCloneStorageOK(frame) {
-		return EncodedFrame{}, ErrInvalidData
+	if err := frame.Validate(); err != nil {
+		return EncodedFrame{}, err
 	}
 	if frame.Dropped {
-		if !validEncoderOutputFormat(frame.OutputFormat) ||
-			len(frame.Data) != 0 || len(frame.NALUnits) != 0 || len(frame.RTPPackets) != 0 {
-			return EncodedFrame{}, ErrInvalidData
-		}
 		return EncodedFrame{
 			OutputFormat: frame.OutputFormat,
 			KeyFrame:     frame.KeyFrame,
@@ -707,20 +760,6 @@ func (frame EncodedFrame) Clone() (EncodedFrame, error) {
 			RTPTime:      frame.RTPTime,
 			Dropped:      true,
 		}, nil
-	}
-	if _, err := frame.AccessUnitData(); err != nil {
-		return EncodedFrame{}, err
-	}
-	if frame.OutputFormat == EncoderOutputRTP && len(frame.RTPPackets) == 0 {
-		return EncodedFrame{}, ErrInvalidData
-	}
-	for i := range frame.RTPPackets {
-		if _, err := frame.RTPPacketData(i); err != nil {
-			return EncodedFrame{}, err
-		}
-		if _, err := frame.RTPPayloadData(i); err != nil {
-			return EncodedFrame{}, err
-		}
 	}
 	clone := EncodedFrame{
 		OutputFormat: frame.OutputFormat,
