@@ -324,6 +324,8 @@ LCEVC is copied into frame side data for caller-owned retention.
 Packet side-data lists or payloads beyond public storage limits are treated as
 malformed packet side data during decode; the compressed packet data still
 decodes.
+Empty `DecodePacket` or `DecodePacketFrames` calls are flush-only and do not
+apply `NEW_EXTRADATA` or any other packet side data.
 Duplicate packet side data follows first-entry semantics across packet
 `NEW_EXTRADATA` configuration updates, scalar active-format and S12M timecode
 values, structured layouts, and A53 captions, ICC profile, HDR10+, and

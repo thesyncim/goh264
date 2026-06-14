@@ -607,6 +607,64 @@ func TestDecodePacketFramesIgnoresOverflowedSideDataListWithoutDroppingPacket(t 
 	}
 }
 
+func TestDecodePacketRejectsOverflowedPacketDataBeforeNewExtradata(t *testing.T) {
+	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) == 0 || len(frames16) == 0 {
+		t.Fatalf("16x16 stream samples/frames = %d/%d, want nonzero", len(samples16), len(frames16))
+	}
+	overflowedData := fakeDecoderRawBytesLen(maxIntForTest/2 + 1)
+
+	assertStoredConfigAndDecode := func(t *testing.T, dec *Decoder, want AVCConfig) {
+		t.Helper()
+		got, err := dec.AVCConfig()
+		if err != nil {
+			t.Fatalf("AVCConfig after overflowed packet data: %v", err)
+		}
+		if got != want {
+			t.Fatalf("AVCConfig after overflowed packet data = %+v, want previous %+v", got, want)
+		}
+		out, err := dec.DecodeConfiguredAVCFrames(samples16[0])
+		if err != nil {
+			t.Fatalf("DecodeConfiguredAVCFrames after overflowed packet data: %v", err)
+		}
+		assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+	}
+
+	for _, tt := range []struct {
+		name string
+		call func(*Decoder, Packet) ([]*Frame, error)
+	}{
+		{name: "DecodePacketFrames", call: func(dec *Decoder, pkt Packet) ([]*Frame, error) {
+			return dec.DecodePacketFrames(pkt)
+		}},
+		{name: "DecodePacket", call: func(dec *Decoder, pkt Packet) ([]*Frame, error) {
+			frame, err := dec.DecodePacket(pkt)
+			if frame == nil {
+				return nil, err
+			}
+			return []*Frame{frame}, err
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			cfg, err := dec.ConfigureAVCC(config16)
+			if err != nil {
+				t.Fatalf("ConfigureAVCC 16x16: %v", err)
+			}
+			frames, err := tt.call(dec, Packet{
+				Data:     overflowedData,
+				SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config32}},
+			})
+			if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
+				t.Fatalf("%s overflowed packet data = %d frames/%v, want no frames ErrInvalidData",
+					tt.name, len(frames), err)
+			}
+			assertStoredConfigAndDecode(t, dec, cfg)
+		})
+	}
+}
+
 func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 	side := FrameSideData{
 		UserDataUnregistered: [][]byte{{1, 2, 3}},
