@@ -476,6 +476,8 @@ cb := make([]byte, liveCfg.StrideCb*(liveCfg.Height/2))
 cr := make([]byte, liveCfg.StrideCr*(liveCfg.Height/2))
 pts := int64(0)
 frame := enc.I420Frame(y, cb, cr, pts)
+// PTS zero is explicit; set frame.TimestampMode = goh264.EncoderTimestampAuto
+// for encoder-managed RTP time.
 must(liveCfg.ValidateFrame(frame))
 must(enc.ValidateFrame(frame))
 out, err := enc.Encode(frame) // admitted path: IDR/P-skip/P16x16/residual-P/P IntraPCM
@@ -661,7 +663,9 @@ RTP output covers:
 - callback packet storage isolated from returned RTP packets;
 - mode-0 oversize rejection with live-state rollback for queued-IDR and P-frame
   paths;
-- automatic timestamp progression when frames omit explicit PTS.
+- RTP timestamping uses `EncoderFrame.PTS` directly, including zero. Set
+  `EncoderFrame.TimestampMode = EncoderTimestampAuto` to use the encoder RTP
+  timeline advanced by `EncoderFrame.Duration` or `RTPTimestampIncrement`.
 
 SPS/PPS cadence modes separate in-band keyframe headers, out-of-band headers,
 and every-IDR emission. Runtime reconfiguration can switch output format and RTP

@@ -7,6 +7,7 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -2095,8 +2096,8 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 			secondFrame := patternedI420EncoderFrame(16, 16)
 			secondFrame.Y[0] ^= 0x41
 			if tt.wantRTPIncrement != 0 {
-				secondFrame.PTS = 0
 				secondFrame.Duration = 0
+				secondFrame.TimestampMode = goh264.EncoderTimestampAuto
 			}
 			second, err := enc.Encode(secondFrame)
 			if err != nil {
@@ -2112,8 +2113,8 @@ func TestEncoderValidReconfigurePreservesPendingIDR(t *testing.T) {
 			assertEncoderVCLFrameNums(t, stream, []uint8{5, 5}, []uint32{0, 1})
 			if tt.wantRTPIncrement != 0 {
 				thirdFrame := secondFrame
-				thirdFrame.PTS = 0
 				thirdFrame.Duration = 0
+				thirdFrame.TimestampMode = goh264.EncoderTimestampAuto
 				thirdFrame.Y[1] ^= 0x11
 				third, err := enc.Encode(thirdFrame)
 				if err != nil {
@@ -2441,7 +2442,7 @@ func TestEncoderFrameRateInvalidUpdatesPreserveLiveState(t *testing.T) {
 				callbackCalls++
 			})
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 			first, err := enc.Encode(frame)
 			if err != nil {
 				t.Fatalf("Encode first IDR: %v", err)
@@ -2547,7 +2548,7 @@ func TestEncoderInvalidBundledRTPMetadataUpdatePreservesLiveState(t *testing.T) 
 	})
 
 	frame := patternedI420EncoderFrame(16, 16)
-	frame.PTS = 0
+	frame.TimestampMode = goh264.EncoderTimestampAuto
 	first, err := enc.Encode(frame)
 	if err != nil {
 		t.Fatalf("Encode first IDR: %v", err)
@@ -2642,7 +2643,7 @@ func TestEncoderInvalidRTPSettersPreservePacketState(t *testing.T) {
 			})
 
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 			first, err := enc.Encode(frame)
 			if err != nil {
 				t.Fatalf("Encode first IDR: %v", err)
@@ -2725,7 +2726,7 @@ func TestEncoderReconfigureInvalidLatencyUpdatesPreserveLiveState(t *testing.T) 
 				callbackCalls++
 			})
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 			first, err := enc.Encode(frame)
 			if err != nil {
 				t.Fatalf("Encode first IDR: %v", err)
@@ -2824,8 +2825,8 @@ func TestEncoderReconfigureSwitchesWebRTCPacketizationControls(t *testing.T) {
 	}
 
 	firstFrame := patternedI420EncoderFrame(16, 16)
-	firstFrame.PTS = 0
 	firstFrame.Duration = 0
+	firstFrame.TimestampMode = goh264.EncoderTimestampAuto
 	first, err := enc.Encode(firstFrame)
 	if err != nil {
 		t.Fatalf("Encode first mode-1 RTP frame: %v", err)
@@ -3800,8 +3801,8 @@ func TestEncoderRealtimeControlLoopStressPreservesPacketAndReferenceState(t *tes
 	})
 
 	frame := patternedI420EncoderFrame(128, 128)
-	frame.PTS = 0
 	frame.Duration = 0
+	frame.TimestampMode = goh264.EncoderTimestampAuto
 	first, err := enc.Encode(frame)
 	if err != nil {
 		t.Fatalf("Encode initial RTP IDR: %v", err)
@@ -3879,8 +3880,8 @@ func TestEncoderRealtimeControlLoopStressPreservesPacketAndReferenceState(t *tes
 		t.Fatalf("lower MaxEncodeTimeUS: %v", err)
 	}
 	lateChangedFrame := patternedI420EncoderFrame(128, 128)
-	lateChangedFrame.PTS = 0
 	lateChangedFrame.Duration = 0
+	lateChangedFrame.TimestampMode = goh264.EncoderTimestampAuto
 	lateChangedFrame.Y[0] ^= 0x4c
 	dropped, err := enc.Encode(lateChangedFrame)
 	if err != nil {
@@ -10196,7 +10197,7 @@ func TestEncoderFrameDropToBitrateDropsOversizeFrameWithoutAdvancingReferenceOrP
 				t.Fatalf("lower MaxFrameSize: %v", err)
 			}
 			droppedFrame := patternedI420EncoderFrame(16, 16)
-			droppedFrame.PTS = 0
+			droppedFrame.TimestampMode = goh264.EncoderTimestampAuto
 			droppedFrame.Y[0] ^= 0x40
 			dropped, err := enc.Encode(droppedFrame)
 			if err != nil {
@@ -10216,7 +10217,7 @@ func TestEncoderFrameDropToBitrateDropsOversizeFrameWithoutAdvancingReferenceOrP
 				t.Fatalf("raise MaxFrameSize: %v", err)
 			}
 			thirdFrame := firstFrame
-			thirdFrame.PTS = 0
+			thirdFrame.TimestampMode = goh264.EncoderTimestampAuto
 			third, err := enc.Encode(thirdFrame)
 			if err != nil {
 				t.Fatalf("Encode after dropped bitrate frame: %v", err)
@@ -10299,7 +10300,7 @@ func TestEncoderEncodeIntoFrameDropToBitrateReturnsEmptyOutputAndPreservesState(
 				t.Fatalf("lower MaxFrameSize: %v", err)
 			}
 			droppedFrame := patternedI420EncoderFrame(16, 16)
-			droppedFrame.PTS = 0
+			droppedFrame.TimestampMode = goh264.EncoderTimestampAuto
 			droppedFrame.Y[0] ^= 0x40
 			dropped, err := enc.EncodeInto(dst[:0], droppedFrame)
 			if err != nil {
@@ -10319,7 +10320,7 @@ func TestEncoderEncodeIntoFrameDropToBitrateReturnsEmptyOutputAndPreservesState(
 				t.Fatalf("raise MaxFrameSize: %v", err)
 			}
 			recoveredFrame := firstFrame
-			recoveredFrame.PTS = 0
+			recoveredFrame.TimestampMode = goh264.EncoderTimestampAuto
 			recovered, err := enc.EncodeInto(dst[:0], recoveredFrame)
 			if err != nil {
 				t.Fatalf("EncodeInto after dropped bitrate frame: %v", err)
@@ -10355,7 +10356,7 @@ func TestEncoderEncodeIntoFrameDropToBitrateReturnsEmptyOutputAndPreservesState(
 				t.Fatal("ForceIDR before bitrate drop did not queue IDR")
 			}
 			forcedDropFrame := firstFrame
-			forcedDropFrame.PTS = 0
+			forcedDropFrame.TimestampMode = goh264.EncoderTimestampAuto
 			forcedDropped, err := enc.EncodeInto(dst[:0], forcedDropFrame)
 			if err != nil {
 				t.Fatalf("EncodeInto forced IDR bitrate drop: %v", err)
@@ -10422,7 +10423,7 @@ func TestEncoderFrameDropToBitrateDropsOversizeSliceWithoutAdvancingFrameState(t
 				t.Fatalf("NewEncoder: %v", err)
 			}
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 
 			dropped, err := enc.Encode(frame)
 			if err != nil {
@@ -10506,7 +10507,7 @@ func TestEncoderFrameDropToBitrateDropsChangedOversizeSliceWithoutAdvancingRefer
 				t.Fatalf("lower SliceMaxBytes: %v", err)
 			}
 			droppedFrame := patternedI420EncoderFrame(16, 16)
-			droppedFrame.PTS = 0
+			droppedFrame.TimestampMode = goh264.EncoderTimestampAuto
 			droppedFrame.Y[0] ^= 0x40
 			dropped, err := enc.Encode(droppedFrame)
 			if err != nil {
@@ -10526,7 +10527,7 @@ func TestEncoderFrameDropToBitrateDropsChangedOversizeSliceWithoutAdvancingRefer
 				t.Fatalf("raise SliceMaxBytes: %v", err)
 			}
 			recoveredFrame := firstFrame
-			recoveredFrame.PTS = 0
+			recoveredFrame.TimestampMode = goh264.EncoderTimestampAuto
 			recovered, err := enc.Encode(recoveredFrame)
 			if err != nil {
 				t.Fatalf("Encode after dropped changed slice-budget frame: %v", err)
@@ -10558,7 +10559,7 @@ func TestEncoderFrameDropToBitrateDropsChangedOversizeSliceWithoutAdvancingRefer
 				t.Fatal("ForceIDR before slice-budget drop did not queue IDR")
 			}
 			forcedDropFrame := firstFrame
-			forcedDropFrame.PTS = 0
+			forcedDropFrame.TimestampMode = goh264.EncoderTimestampAuto
 			forcedDropFrame.Y[0] ^= 0x20
 			forcedDrop, err := enc.Encode(forcedDropFrame)
 			if err != nil {
@@ -10581,7 +10582,7 @@ func TestEncoderFrameDropToBitrateDropsChangedOversizeSliceWithoutAdvancingRefer
 				t.Fatalf("raise SliceMaxBytes before forced IDR recovery: %v", err)
 			}
 			forcedRecoverFrame := firstFrame
-			forcedRecoverFrame.PTS = 0
+			forcedRecoverFrame.TimestampMode = goh264.EncoderTimestampAuto
 			forcedRecover, err := enc.Encode(forcedRecoverFrame)
 			if err != nil {
 				t.Fatalf("Encode after forced IDR slice-budget drop: %v", err)
@@ -10636,7 +10637,7 @@ func TestEncoderFrameDropToBitrateDropsMaxBitrateBudgetWithoutAdvancingState(t *
 				callbackCalls++
 			})
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 
 			dropped, err := enc.Encode(frame)
 			if err != nil {
@@ -10691,9 +10692,9 @@ func TestEncoderFrameDropToBitrateConsumesAndRefillsMaxBitrateCredit(t *testing.
 	} {
 		t.Run(format.name, func(t *testing.T) {
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 			changedFrame := patternedI420EncoderFrame(16, 16)
-			changedFrame.PTS = 0
+			changedFrame.TimestampMode = goh264.EncoderTimestampAuto
 			changedFrame.Y[0] ^= 0x5a
 
 			probeCfg := goh264.DefaultEncoderConfig(16, 16)
@@ -10835,7 +10836,7 @@ func TestEncoderReconfigureLowerBitrateBudgetResetsCreditBeforeNextFrame(t *test
 	} {
 		t.Run(format.name, func(t *testing.T) {
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 
 			probeCfg := goh264.DefaultEncoderConfig(16, 16)
 			probeCfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -10987,7 +10988,7 @@ func TestEncoderSetBitrateResetsFrameBudgetCreditBeforeNextFrame(t *testing.T) {
 	} {
 		t.Run(format.name, func(t *testing.T) {
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 
 			probeCfg := goh264.DefaultEncoderConfig(16, 16)
 			probeCfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -11138,8 +11139,8 @@ func TestEncoderSetFrameRateResetsFrameBudgetAndRTPIncrement(t *testing.T) {
 	} {
 		t.Run(format.name, func(t *testing.T) {
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
 			frame.Duration = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 
 			probeCfg := goh264.DefaultEncoderConfig(16, 16)
 			probeCfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -11344,8 +11345,8 @@ func TestEncoderSetRTPTimestampIncrementControlsLiveCadence(t *testing.T) {
 	})
 
 	frame := patternedI420EncoderFrame(16, 16)
-	frame.PTS = 0
 	frame.Duration = 0
+	frame.TimestampMode = goh264.EncoderTimestampAuto
 	first, err := enc.Encode(frame)
 	if err != nil {
 		t.Fatalf("Encode first IDR: %v", err)
@@ -11477,7 +11478,7 @@ func TestEncoderReconfigureFrameDropModeTogglesDerivedBitrateBudget(t *testing.T
 	} {
 		t.Run(format.name, func(t *testing.T) {
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 
 			probeCfg := goh264.DefaultEncoderConfig(16, 16)
 			probeCfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -11610,7 +11611,7 @@ func TestEncoderReconfigureFrameDropModeTogglesDerivedBitrateBudget(t *testing.T
 
 func TestEncoderSetFrameDropModeTogglesDerivedBitrateBudget(t *testing.T) {
 	frame := patternedI420EncoderFrame(16, 16)
-	frame.PTS = 0
+	frame.TimestampMode = goh264.EncoderTimestampAuto
 
 	probeCfg := goh264.DefaultEncoderConfig(16, 16)
 	probeCfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -11734,7 +11735,7 @@ func TestEncoderReconfigureExplicitZeroVBVDisablesCapAndResetsBudget(t *testing.
 	} {
 		t.Run(format.name, func(t *testing.T) {
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 
 			probeCfg := goh264.DefaultEncoderConfig(16, 16)
 			probeCfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -11855,7 +11856,7 @@ func TestEncoderReconfigureExplicitZeroVBVDisablesCapAndResetsBudget(t *testing.
 
 func TestEncoderSetVBVBufferSizeZeroDisablesCapAndResetsBudget(t *testing.T) {
 	frame := patternedI420EncoderFrame(16, 16)
-	frame.PTS = 0
+	frame.TimestampMode = goh264.EncoderTimestampAuto
 
 	probeCfg := goh264.DefaultEncoderConfig(16, 16)
 	probeCfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -11966,7 +11967,7 @@ func TestEncoderFrameDropLateDoesNotApplyDerivedBitrateBudgetAcrossReconfigure(t
 	} {
 		t.Run(format.name, func(t *testing.T) {
 			frame := patternedI420EncoderFrame(16, 16)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 
 			probeCfg := goh264.DefaultEncoderConfig(16, 16)
 			probeCfg.DeblockMode = goh264.EncoderDeblockDisabled
@@ -12376,7 +12377,7 @@ func TestEncoderFrameDropLateDropsOverBudgetFrameWithoutAdvancingReferenceOrPack
 				callbackCalls++
 			})
 			frame := patternedI420EncoderFrame(128, 128)
-			frame.PTS = 0
+			frame.TimestampMode = goh264.EncoderTimestampAuto
 			dropped, err := enc.Encode(frame)
 			if err != nil {
 				t.Fatalf("Encode late-drop frame: %v", err)
@@ -12445,7 +12446,7 @@ func TestEncoderFrameDropLateDropsOverBudgetFrameWithoutAdvancingReferenceOrPack
 				t.Fatalf("raise MaxEncodeTimeUS for P-skip: %v", err)
 			}
 			pskipFrame := frame
-			pskipFrame.PTS = 0
+			pskipFrame.TimestampMode = goh264.EncoderTimestampAuto
 			pskip, err := enc.Encode(pskipFrame)
 			if err != nil {
 				t.Fatalf("Encode after late dropped changed frame: %v", err)
@@ -14712,7 +14713,7 @@ func TestEncoderDoesNotRetainInputFramePlanes(t *testing.T) {
 			}
 
 			firstFrame := patternedI420EncoderFrame(16, 16)
-			firstFrame.PTS = 0
+			firstFrame.TimestampMode = goh264.EncoderTimestampAuto
 			secondFrame := cloneI420EncoderFrame(firstFrame)
 
 			enc, err := goh264.NewEncoder(cfg)
@@ -16523,7 +16524,7 @@ func TestEncoderRTPPacketCallbackCanBeClearedAndSkipsNonRTPOutput(t *testing.T) 
 	}
 }
 
-func TestEncoderRTPAutoTimestampAdvancesWithoutExplicitPTS(t *testing.T) {
+func TestEncoderRTPAutoTimestampAdvancesWithTimestampModeAuto(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled
 	enc, err := goh264.NewEncoder(cfg)
@@ -16532,10 +16533,10 @@ func TestEncoderRTPAutoTimestampAdvancesWithoutExplicitPTS(t *testing.T) {
 	}
 
 	firstFrame := patternedI420EncoderFrame(16, 16)
-	firstFrame.PTS = 0
+	firstFrame.TimestampMode = goh264.EncoderTimestampAuto
 	first, err := enc.Encode(firstFrame)
 	if err != nil {
-		t.Fatalf("Encode first zero-PTS RTP frame: %v", err)
+		t.Fatalf("Encode first auto-timestamp RTP frame: %v", err)
 	}
 	if first.RTPTime != 0 {
 		t.Fatalf("first RTP time = %d, want 0", first.RTPTime)
@@ -16543,10 +16544,10 @@ func TestEncoderRTPAutoTimestampAdvancesWithoutExplicitPTS(t *testing.T) {
 	assertRTPPacketTimestamps(t, first.RTPPackets, first.RTPTime)
 
 	secondFrame := patternedI420EncoderFrame(16, 16)
-	secondFrame.PTS = 0
+	secondFrame.TimestampMode = goh264.EncoderTimestampAuto
 	second, err := enc.Encode(secondFrame)
 	if err != nil {
-		t.Fatalf("Encode second zero-PTS RTP frame: %v", err)
+		t.Fatalf("Encode second auto-timestamp RTP frame: %v", err)
 	}
 	if second.RTPTime != cfg.RTPTimestampIncrement {
 		t.Fatalf("second RTP time = %d, want default increment %d", second.RTPTime, cfg.RTPTimestampIncrement)
@@ -16566,7 +16567,7 @@ func TestEncoderRTPAutoTimestampAdvancesWithoutExplicitPTS(t *testing.T) {
 	assertRTPPacketTimestamps(t, third.RTPPackets, third.RTPTime)
 
 	fourthFrame := patternedI420EncoderFrame(16, 16)
-	fourthFrame.PTS = 0
+	fourthFrame.TimestampMode = goh264.EncoderTimestampAuto
 	fourthFrame.Duration = 1_500
 	fourth, err := enc.Encode(fourthFrame)
 	if err != nil {
@@ -16577,6 +16578,173 @@ func TestEncoderRTPAutoTimestampAdvancesWithoutExplicitPTS(t *testing.T) {
 			fourth.RTPTime, thirdFrame.PTS+thirdFrame.Duration)
 	}
 	assertRTPPacketTimestamps(t, fourth.RTPPackets, fourth.RTPTime)
+}
+
+func TestEncoderTimestampAutoOutputTimingMatchesChosenRTPTime(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	enc.SetRTPPacketCallback(func(_ goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackMetadata = append(callbackMetadata, meta)
+	})
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 123_456
+	firstFrame.Duration = 1_500
+	firstFrame.TimestampMode = goh264.EncoderTimestampAuto
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first auto-timestamp frame: %v", err)
+	}
+	if first.RTPTime != 0 || first.PTS != 0 || first.DTS != 0 {
+		t.Fatalf("first auto timing rtp/pts/dts = %d/%d/%d, want 0/0/0",
+			first.RTPTime, first.PTS, first.DTS)
+	}
+	assertRTPPacketTimestamps(t, first.RTPPackets, first.RTPTime)
+	if len(callbackMetadata) != len(first.RTPPackets) {
+		t.Fatalf("first callbacks = %d, want %d", len(callbackMetadata), len(first.RTPPackets))
+	}
+	for i, meta := range callbackMetadata {
+		if meta.FramePTS != first.PTS || meta.FrameDTS != first.DTS || meta.RTPTime != first.RTPTime {
+			t.Fatalf("first callback metadata[%d] timing = %d/%d/%d, want %d/%d/%d",
+				i, meta.FramePTS, meta.FrameDTS, meta.RTPTime, first.PTS, first.DTS, first.RTPTime)
+		}
+	}
+
+	callbackMetadata = callbackMetadata[:0]
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.PTS = 654_321
+	secondFrame.Duration = 1_500
+	secondFrame.TimestampMode = goh264.EncoderTimestampAuto
+	secondFrame.Y[0] ^= 0x35
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode second auto-timestamp frame: %v", err)
+	}
+	if second.RTPTime != first.RTPTime+uint32(firstFrame.Duration) ||
+		second.PTS != int64(second.RTPTime) || second.DTS != int64(second.RTPTime) {
+		t.Fatalf("second auto timing rtp/pts/dts = %d/%d/%d, want %d/%d/%d",
+			second.RTPTime, second.PTS, second.DTS,
+			first.RTPTime+uint32(firstFrame.Duration), second.RTPTime, second.RTPTime)
+	}
+	assertRTPPacketTimestamps(t, second.RTPPackets, second.RTPTime)
+	if len(callbackMetadata) != len(second.RTPPackets) {
+		t.Fatalf("second callbacks = %d, want %d", len(callbackMetadata), len(second.RTPPackets))
+	}
+	for i, meta := range callbackMetadata {
+		if meta.FramePTS != second.PTS || meta.FrameDTS != second.DTS || meta.RTPTime != second.RTPTime {
+			t.Fatalf("second callback metadata[%d] timing = %d/%d/%d, want %d/%d/%d",
+				i, meta.FramePTS, meta.FrameDTS, meta.RTPTime, second.PTS, second.DTS, second.RTPTime)
+		}
+	}
+}
+
+func TestEncoderTimestampAutoDroppedOutputTimingMatchesChosenRTPTime(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.SliceMaxBytes = 1
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.PTS = 123_456
+	frame.Duration = 1_500
+	frame.TimestampMode = goh264.EncoderTimestampAuto
+	dropped, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode dropped auto-timestamp frame: %v", err)
+	}
+	if !dropped.Dropped || dropped.RTPTime != 0 || dropped.PTS != 0 || dropped.DTS != 0 {
+		t.Fatalf("dropped auto timing dropped/rtp/pts/dts = %v/%d/%d/%d, want true/0/0/0",
+			dropped.Dropped, dropped.RTPTime, dropped.PTS, dropped.DTS)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{SliceMaxBytes: 4096}); err != nil {
+		t.Fatalf("raise SliceMaxBytes: %v", err)
+	}
+	out, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode after dropped auto-timestamp frame: %v", err)
+	}
+	if out.Dropped || out.RTPTime != uint32(frame.Duration) ||
+		out.PTS != int64(out.RTPTime) || out.DTS != int64(out.RTPTime) {
+		t.Fatalf("recovered auto timing dropped/rtp/pts/dts = %v/%d/%d/%d, want false/%d/%d/%d",
+			out.Dropped, out.RTPTime, out.PTS, out.DTS,
+			frame.Duration, frame.Duration, frame.Duration)
+	}
+	assertRTPPacketTimestamps(t, out.RTPPackets, out.RTPTime)
+}
+
+func TestEncoderTimestampAutoDoesNotValidateIgnoredPTS(t *testing.T) {
+	for _, pts := range []int64{-1, int64(^uint32(0)) + 1} {
+		t.Run(fmt.Sprintf("pts_%d", pts), func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			frame := patternedI420EncoderFrame(16, 16)
+			frame.PTS = pts
+			frame.TimestampMode = goh264.EncoderTimestampAuto
+			if err := cfg.ValidateFrame(frame); err != nil {
+				t.Fatalf("Config ValidateFrame with ignored PTS: %v", err)
+			}
+
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			if err := enc.ValidateFrame(frame); err != nil {
+				t.Fatalf("Encoder ValidateFrame with ignored PTS: %v", err)
+			}
+			out, err := enc.Encode(frame)
+			if err != nil {
+				t.Fatalf("Encode with ignored PTS: %v", err)
+			}
+			if out.RTPTime != 0 || out.PTS != 0 || out.DTS != 0 {
+				t.Fatalf("auto timing with ignored PTS rtp/pts/dts = %d/%d/%d, want 0/0/0",
+					out.RTPTime, out.PTS, out.DTS)
+			}
+		})
+	}
+}
+
+func TestEncoderRTPExplicitZeroPTSAfterNonZeroPTSIsHonored(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 90_000
+	firstFrame.Duration = 1_500
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first explicit-PTS RTP frame: %v", err)
+	}
+	if first.RTPTime != uint32(firstFrame.PTS) {
+		t.Fatalf("first RTP time = %d, want explicit PTS %d", first.RTPTime, firstFrame.PTS)
+	}
+	assertRTPPacketTimestamps(t, first.RTPPackets, first.RTPTime)
+
+	secondFrame := patternedI420EncoderFrame(16, 16)
+	secondFrame.PTS = 0
+	secondFrame.Duration = 1_500
+	secondFrame.Y[0] ^= 0x40
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode explicit-zero RTP frame: %v", err)
+	}
+	if second.RTPTime != 0 {
+		t.Fatalf("second RTP time = %d, want explicit zero PTS", second.RTPTime)
+	}
+	assertRTPPacketTimestamps(t, second.RTPPackets, 0)
 }
 
 func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
@@ -16656,6 +16824,14 @@ func TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream(t *testing.T) {
 				t.Fatalf("Encode negative PTS error = %v, want ErrInvalidData", err)
 			} else if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
 				t.Fatalf("negative PTS output = %+v, want empty output", out)
+			}
+			bad = frame
+			bad.PTS = int64(cfg.RTPTimestampIncrement)
+			bad.TimestampMode = goh264.EncoderTimestampMode(99)
+			if out, err := enc.Encode(bad); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Encode invalid timestamp mode error = %v, want ErrInvalidData", err)
+			} else if out.Dropped || len(out.Data) != 0 || len(out.NALUnits) != 0 || len(out.RTPPackets) != 0 {
+				t.Fatalf("invalid timestamp mode output = %+v, want empty output", out)
 			}
 			bad = frame
 			bad.PTS = int64(cfg.RTPTimestampIncrement)
@@ -18659,6 +18835,10 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	if _, ok := reflect.TypeOf(goh264.EncoderFrame{}).MethodByName("Clone"); !ok {
 		t.Fatal("EncoderFrame missing Clone convenience method")
 	}
+	if goh264.EncoderTimestampExplicit != 0 || goh264.EncoderTimestampAuto == goh264.EncoderTimestampExplicit {
+		t.Fatalf("EncoderTimestampMode constants = explicit %d auto %d, want explicit zero and distinct auto",
+			goh264.EncoderTimestampExplicit, goh264.EncoderTimestampAuto)
+	}
 	for _, method := range []string{"SPSData", "PPSData", "AnnexBData", "AVCCData", "AppendSPS", "AppendPPS", "AppendAnnexB", "AppendAVCC", "Validate", "Clone"} {
 		if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName(method); !ok {
 			t.Fatalf("EncoderParameterSets missing %s convenience method", method)
@@ -18763,7 +18943,7 @@ func TestEncoderRealtimeWebRTCResultSurfaceCoversRoadmap(t *testing.T) {
 			typ:  reflect.TypeOf(goh264.EncoderFrame{}),
 			fields: []string{
 				"Y", "Cb", "Cr", "StrideY", "StrideCb", "StrideCr",
-				"Width", "Height", "PTS", "Duration", "ForceIDR", "Color",
+				"Width", "Height", "PTS", "Duration", "TimestampMode", "ForceIDR", "Color",
 			},
 		},
 		{

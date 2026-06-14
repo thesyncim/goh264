@@ -184,9 +184,10 @@ P16x16, multi-slice IDR, odd-pixel constant chroma, P IntraPCM fallback rows, an
 STAP-A recovery SEI single-NAL packets, NAL type/count,
 FU-A start/end, parameter-set packets, and callback packet storage isolated from
 returned RTP packets while preserving the clipped payload-over-packet-data
-shape. RTP timestamps honor explicit frame PTS and advance zero-PTS frames
-from frame duration or `RTPTimestampIncrement`, including after runtime
-timestamp-increment reconfiguration. `EncodeInto` now has checked allocation
+shape. RTP timestamps use `EncoderFrame.PTS` directly, including zero; when
+`EncoderFrame.TimestampMode` is `EncoderTimestampAuto`, RTP time advances from
+`EncoderFrame.Duration` or `RTPTimestampIncrement`, including after runtime
+timestamp-increment reconfiguration. `EncodeInto` has checked allocation
 canaries for caller-buffer Annex B forced IDR, Annex B steady P-skip, Annex B
 exact P16x16 including single-macroblock deblock controls, Annex B odd-pixel
 constant-chroma exact P16x16, Annex B odd-pixel patterned-chroma P IntraPCM
@@ -320,7 +321,7 @@ P IntraPCM fallback boundary.
    bytes, clipped per-packet payload views over packet data, callback-style
    packet metadata including mode 0/1 IDR/P-frame single-NAL packets and
    changed-P STAP-A recovery SEI single-NAL packets,
-   and automatic timestamp progression for frames without explicit PTS, plus explicit SPS/PPS in-band,
+   and automatic timestamp progression for `EncoderTimestampAuto` frames, plus explicit SPS/PPS in-band,
    out-of-band, and every-IDR cadence semantics. Runtime reconfiguration now
    switches output format, RTP mode 0/1, STAP-A, payload type, SSRC, SPS/PPS
    mode, RTP timestamp increments, rate-control mode, VBV size,

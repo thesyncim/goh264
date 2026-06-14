@@ -210,24 +210,40 @@ type EncoderConfig struct {
 	RTPTimestampIncrement uint32
 }
 
+// EncoderTimestampMode controls how EncoderFrame.PTS is mapped to RTPTime.
+type EncoderTimestampMode uint8
+
+const (
+	// EncoderTimestampExplicit uses EncoderFrame.PTS directly. A zero PTS is a
+	// valid explicit RTP timestamp.
+	EncoderTimestampExplicit EncoderTimestampMode = iota
+	// EncoderTimestampAuto uses the encoder's RTP timestamp timeline for
+	// RTPTime, returned PTS/DTS, and callback frame timing. EncoderFrame.PTS is
+	// ignored for this frame.
+	EncoderTimestampAuto
+)
+
 // EncoderFrame is one I420 input frame.
 //
 // Encode and EncodeInto read the plane slices during the call and do not retain
 // them after the call returns. Color is validated as caller-supplied frame
-// metadata; encoded SPS/VUI color metadata comes from EncoderConfig.Color.
+// metadata; encoded SPS/VUI color metadata comes from EncoderConfig.Color. PTS
+// is explicit even when it is zero; set TimestampMode to EncoderTimestampAuto to
+// use the encoder's RTP timestamp timeline.
 type EncoderFrame struct {
-	Y        []byte
-	Cb       []byte
-	Cr       []byte
-	StrideY  int
-	StrideCb int
-	StrideCr int
-	Width    int
-	Height   int
-	PTS      int64
-	Duration int64
-	ForceIDR bool
-	Color    EncoderColorConfig
+	Y             []byte
+	Cb            []byte
+	Cr            []byte
+	StrideY       int
+	StrideCb      int
+	StrideCr      int
+	Width         int
+	Height        int
+	PTS           int64
+	Duration      int64
+	TimestampMode EncoderTimestampMode
+	ForceIDR      bool
+	Color         EncoderColorConfig
 }
 
 // Clone returns a deep-owned copy of the input frame.
@@ -1749,14 +1765,15 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		return EncodedFrame{}, err
 	}
 	rtpTime := e.encoderRTPTime(frame)
+	framePTS := encoderFrameOutputPTS(frame, rtpTime)
 	if miss, err := encoderOutputBudgetMiss(e.cfg, nals, outputSize); err != nil {
 		if e.cfg.FrameDrop == EncoderFrameDropToBitrate && miss != encoderOutputBudgetNone {
 			e.advanceEncoderRTPTime(frame, rtpTime)
 			e.advanceEncoderBitrateBudget(0)
 			return EncodedFrame{
 				OutputFormat: e.cfg.OutputFormat,
-				PTS:          frame.PTS,
-				DTS:          frame.PTS,
+				PTS:          framePTS,
+				DTS:          framePTS,
 				RTPTime:      rtpTime,
 				Dropped:      true,
 			}, nil
@@ -1768,8 +1785,8 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		e.advanceEncoderBitrateBudget(0)
 		return EncodedFrame{
 			OutputFormat: e.cfg.OutputFormat,
-			PTS:          frame.PTS,
-			DTS:          frame.PTS,
+			PTS:          framePTS,
+			DTS:          framePTS,
 			RTPTime:      rtpTime,
 			Dropped:      true,
 		}, nil
@@ -1791,8 +1808,8 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			e.advanceEncoderRTPTime(frame, rtpTime)
 			return EncodedFrame{
 				OutputFormat: e.cfg.OutputFormat,
-				PTS:          frame.PTS,
-				DTS:          frame.PTS,
+				PTS:          framePTS,
+				DTS:          framePTS,
 				RTPTime:      rtpTime,
 				Dropped:      true,
 			}, nil
@@ -1801,8 +1818,8 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		e.advanceEncoderRTPTime(frame, rtpTime)
 		return EncodedFrame{
 			OutputFormat: e.cfg.OutputFormat,
-			PTS:          frame.PTS,
-			DTS:          frame.PTS,
+			PTS:          framePTS,
+			DTS:          framePTS,
 			RTPTime:      rtpTime,
 			Dropped:      true,
 		}, nil
@@ -1814,7 +1831,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	p16ScratchCommitted = true
 	if e.cfg.OutputFormat == EncoderOutputRTP {
 		e.stampRTPPackets(packets)
-		e.notifyRTPPacketCallback(packets, frame, rtpTime, idr, idr)
+		e.notifyRTPPacketCallback(packets, framePTS, rtpTime, idr, idr)
 	}
 
 	e.advanceEncoderRTPTime(frame, rtpTime)
@@ -1835,8 +1852,8 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		RTPPackets:   packets,
 		KeyFrame:     idr,
 		IDR:          idr,
-		PTS:          frame.PTS,
-		DTS:          frame.PTS,
+		PTS:          framePTS,
+		DTS:          framePTS,
 		RTPTime:      rtpTime,
 	}, nil
 }
@@ -2521,7 +2538,13 @@ func (e *Encoder) validateFrame(frame EncoderFrame) error {
 }
 
 func (e *Encoder) validatedFrameView(frame EncoderFrame) (encoderFrameView, error) {
-	if frame.PTS < 0 || uint64(frame.PTS) > uint64(^uint32(0)) {
+	switch frame.TimestampMode {
+	case EncoderTimestampExplicit, EncoderTimestampAuto:
+	default:
+		return encoderFrameView{}, encoderInvalid("unknown frame timestamp mode")
+	}
+	if frame.TimestampMode == EncoderTimestampExplicit &&
+		(frame.PTS < 0 || uint64(frame.PTS) > uint64(^uint32(0))) {
 		return encoderFrameView{}, encoderInvalid("frame PTS must fit RTP timestamp")
 	}
 	if frame.Duration < 0 || uint64(frame.Duration) > uint64(^uint32(0)) {
@@ -4022,7 +4045,7 @@ func fillEncoderRTPPacketHeader(dst []byte, pkt EncoderRTPPacket) {
 	dst[11] = byte(pkt.SSRC)
 }
 
-func (e *Encoder) notifyRTPPacketCallback(packets []EncoderRTPPacket, frame EncoderFrame, rtpTime uint32, keyFrame bool, idr bool) {
+func (e *Encoder) notifyRTPPacketCallback(packets []EncoderRTPPacket, framePTS int64, rtpTime uint32, keyFrame bool, idr bool) {
 	callback := e.rtpPacketCallback
 	if callback == nil {
 		return
@@ -4031,8 +4054,8 @@ func (e *Encoder) notifyRTPPacketCallback(packets []EncoderRTPPacket, frame Enco
 		meta := encoderRTPPacketMetadataFromPayload(pkt.Payload)
 		meta.PacketIndex = i
 		meta.PacketCount = len(packets)
-		meta.FramePTS = frame.PTS
-		meta.FrameDTS = frame.PTS
+		meta.FramePTS = framePTS
+		meta.FrameDTS = framePTS
 		meta.RTPTime = rtpTime
 		meta.KeyFrame = keyFrame
 		meta.IDR = idr
@@ -4549,10 +4572,20 @@ func rtpTimestampIncrementChecked(clock, frameRateNum, frameRateDen int) (uint32
 }
 
 func (e *Encoder) encoderRTPTime(frame EncoderFrame) uint32 {
-	if frame.PTS != 0 || !e.rtpTimeInitialized {
-		return uint32(frame.PTS)
+	if frame.TimestampMode == EncoderTimestampAuto {
+		if e.rtpTimeInitialized {
+			return e.nextRTPTime
+		}
+		return 0
 	}
-	return e.nextRTPTime
+	return uint32(frame.PTS)
+}
+
+func encoderFrameOutputPTS(frame EncoderFrame, rtpTime uint32) int64 {
+	if frame.TimestampMode == EncoderTimestampAuto {
+		return int64(rtpTime)
+	}
+	return frame.PTS
 }
 
 func (e *Encoder) advanceEncoderRTPTime(frame EncoderFrame, rtpTime uint32) {
