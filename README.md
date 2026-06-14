@@ -173,10 +173,13 @@ The recommended decoder path is intentionally small:
 
 ```go
 dec := goh264.NewDecoder()
-frames, err := dec.DecodeFrames(packet)      // stateful Annex B, stored configured AVC, or avcC records
-frames, err = dec.DecodePacketFrames(packet) // packet side data and NEW_EXTRADATA
-frames, err = dec.FlushDelayedFrames()       // end-of-stream delayed output
-err = dec.Reset()                            // clear decoder state
+frames, err := dec.DecodeFrames(packetData) // stateful Annex B, stored configured AVC, or avcC records
+frames, err = dec.DecodePacketFrames(goh264.Packet{
+	Data:     packetData,
+	SideData: sideData,
+}) // packet side data and NEW_EXTRADATA
+frames, err = dec.FlushDelayedFrames() // end-of-stream delayed output
+err = dec.Reset()                      // clear decoder state
 ```
 
 Choose the entry point by ownership and packet shape:

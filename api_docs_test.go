@@ -245,6 +245,65 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}
 }
 
+func TestREADMEStructureKeepsDecoderPacketSurfaceTyped(t *testing.T) {
+	data, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	readme := string(data)
+
+	for _, phrase := range []string{
+		"frames, err := dec.DecodeFrames(packetData)",
+		"frames, err = dec.DecodePacketFrames(goh264.Packet{",
+		"Data:     packetData,",
+		"SideData: sideData,",
+		"}) // packet side data and NEW_EXTRADATA",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md decoder recommended path missing typed packet phrase %q", phrase)
+		}
+	}
+	for _, forbidden := range []string{
+		"DecodePacketFrames(packet) //",
+		"DecodePacketFrames(packetData)",
+	} {
+		if strings.Contains(readme, forbidden) {
+			t.Fatalf("README.md decoder recommended path should not blur Packet and []byte surfaces with %q", forbidden)
+		}
+	}
+
+	seen := map[string]int{}
+	for i, line := range strings.Split(readme, "\n") {
+		if !strings.HasPrefix(line, "## ") {
+			continue
+		}
+		heading := strings.TrimSpace(line)
+		if firstLine, ok := seen[heading]; ok {
+			t.Fatalf("README.md duplicate level-two heading %q at lines %d and %d", heading, firstLine, i+1)
+		}
+		seen[heading] = i + 1
+	}
+	requiredOrder := []string{
+		"## Quality And Parity Evidence",
+		"## Decoder API",
+		"## State And Ownership Boundaries",
+		"## Encoder API",
+		"## Trust And Verification",
+		"## Performance",
+	}
+	last := -1
+	for _, heading := range requiredOrder {
+		idx := strings.Index(readme, heading+"\n")
+		if idx < 0 {
+			t.Fatalf("README.md missing heading %q", heading)
+		}
+		if idx <= last {
+			t.Fatalf("README.md heading %q appears out of order", heading)
+		}
+		last = idx
+	}
+}
+
 func TestDecoderOwnershipAPIReturnsErrors(t *testing.T) {
 	errorType := reflect.TypeOf((*error)(nil)).Elem()
 	oldCloneHelperName := "Clone" + "Checked"
