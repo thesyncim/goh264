@@ -1,6 +1,6 @@
 # Production Evidence
 
-| Path | Admitted scope | Evidence shape | Remaining gaps |
+| Path | Admitted scope | Evidence shape | Outside current contract / evidence targets |
 | --- | --- | --- | --- |
 | Decoder | FFmpeg `n8.0.1` H.264 decoder path, public Annex B/AVC/avcC/packet surfaces, raw output, side data, delayed output, selected high-bit-depth and field/MBAFF/PAFF rows | Unit, fixture, public-vector, strict FFmpeg-oracle, fuzz-smoke, and quality-evidence runners | Broader field/MBAFF/PIC-AFF motion and DPB edges, high-bit-depth public corpus breadth, damaged-slice behavior, allocation/performance review |
 | Encoder | Guarded 8-bit I420 Constrained Baseline realtime subset: IDR IntraPCM, identical-reference P-skip, bounded exact P16x16 no-residual, bounded luma-DC, chroma-only, and combined luma/chroma residual-P, P IntraPCM recovery, Annex B/AVC/RTP output | Public control contract, internal writer/parser round trips, FFmpeg-backed public bitstream tests, encoder quality-evidence runner | General motion search, broader residual macroblock generation, adaptive rate-control decisions, remaining packetizer/control breadth, allocation/performance review |
@@ -275,7 +275,8 @@ unadmitted realtime controls, validates runtime
 bitrate, framerate, payload-size, SPS/PPS cadence, PLI/FIR, force-IDR, and
 partial reconfiguration paths, proves invalid frame-rate helper/reconfigure,
 runtime rate, latency/slice, output/header/preset, RTP re-entry payload-size,
-RTP metadata, and packetization updates leave config, queued-IDR state, RTP
+RTP metadata including zero payload type selecting dynamic payload type 96, and
+packetization updates leave config, queued-IDR state, RTP
 cadence, packets, callbacks, and rejected bundled ForceIDR requests intact
 across Annex B, AVC, and RTP output surfaces where the controls apply,
 proves accepted bitrate, rate-control, VBV, frame-drop, QP, frame-rate,

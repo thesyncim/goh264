@@ -165,8 +165,9 @@ runtime resolution reset that rejects stale-size frames without consuming the
 queued IDR before emitting/decoding a new-size IDR and resuming P-skip
 references at the new dimensions,
 public encoder frame storage validation and encode-shape preflight, invalid frame-rate helper/reconfigure plus invalid runtime rate,
-latency/slice, output/header/preset, RTP re-entry payload-size, and
-packetization updates that leave config, queued-IDR state, RTP cadence, packets,
+latency/slice, output/header/preset, RTP re-entry payload-size, RTP payload
+type zero selecting dynamic payload type 96, and packetization updates that
+leave config, queued-IDR state, RTP cadence, packets,
 callbacks, and rejected bundled ForceIDR requests intact,
 accepted bitrate, rate-control, VBV, frame-drop, QP, frame-rate, deblock,
 RTP timestamp increment, GOP/IDR cadence, resolution, RTP payload-size,

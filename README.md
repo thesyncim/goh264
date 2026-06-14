@@ -1,7 +1,7 @@
 # goh264
 
-Pure-Go H.264 codec workbench, decoder-first and source-shaped from FFmpeg
-`libavcodec`.
+Pure-Go H.264 decoder with a guarded realtime/WebRTC encoder API,
+source-shaped from FFmpeg `libavcodec`.
 
 This repository ports the FFmpeg `n8.0.1` H.264 decoder path, pinned at
 `894da5ca7d742e4429ffb2af534fcda0103ef593`. Decoder evidence covers public
@@ -13,14 +13,14 @@ Constrained Baseline I420 subset: IDR IntraPCM, identical-reference P-skip,
 bounded exact P16x16 no-residual prediction, bounded residual-P admission for
 exact luma-DC, chroma-only, and combined luma/chroma CAVLC residuals,
 changed P IntraPCM recovery frames, AVC/Annex B output, configured multi-slice
-output, and RTP packetization modes 0 and 1. Remaining encoder work includes
-general motion search, broader residual macroblock generation,
+output, and RTP packetization modes 0 and 1. Outside the current encoder
+contract: general motion search, broader residual macroblock generation,
 rate-control decisions, wider packetizer/control breadth, and reviewed
 allocation/performance evidence.
 
 ## Quality And Parity Evidence
 
-| Area | Evidence shape | Covered surfaces | Remaining gaps |
+| Area | Evidence shape | Covered surfaces | Outside current contract / evidence targets |
 | --- | --- | --- | --- |
 | Decoder | Parity-driven port from the pinned FFmpeg path | Public Annex B/AVC/avcC/packet decode surfaces, delayed output, raw output, side data, corpus/FATE rows, FFmpeg-oracle rows | Broader field/MBAFF/damaged-edge behavior, fresh artifact evidence, allocation/performance review |
 | Encoder | Guarded realtime subset | Baseline I420 IDR IntraPCM, P-skip, bounded exact P16x16 no-residual, bounded pixel-derived residual-P luma-DC, chroma-only, and combined luma/chroma admission, P IntraPCM recovery, Annex B/AVC/RTP output, ownership/transactional API guards | General motion search, broader residual generation, adaptive rate control, wider packetizer/control breadth, broader/full bitstream parity beyond admitted oracle rows, allocation/performance review |
@@ -371,12 +371,15 @@ Accepted encoder setup values:
 | Rate/budget | CBR or ConstantQP, QP range 0..51, non-negative VBV/frame/slice/time budgets | VBR mode; invalid bitrate ordering, QP outside 0..51, negative budgets |
 | Preset | `EncoderPresetRealtime` | Balanced/Quality presets; only `EncoderPresetRealtime` drives current mode selection |
 | Output | Annex B, AVC samples, or RTP | Unknown output formats |
-| RTP | packetization-mode 0 with payload size >= 2; packetization-mode 1 with payload size >= 3; STAP-A only in mode 1; DON disabled; payload type 0..127 | Mode-0 STAP-A, DON/interleaved mode, payload type >127, undersized RTP payloads |
+| RTP | packetization-mode 0 with payload size >= 2; packetization-mode 1 with payload size >= 3; STAP-A only in mode 1; DON disabled; payload type 1..127, with zero selecting the dynamic default 96 | Mode-0 STAP-A, DON/interleaved mode, payload type >127, undersized RTP payloads |
 
 For setup-time QP, zero scalar QP fields normally select derived defaults; set
 `EncoderConfig.ExplicitQP=true` when QP 0 is an intentional setup value. Runtime
 `SetQP` and pointer QP fields in `EncoderReconfigure` treat zero as an explicit
 value.
+For RTP, `RTPPayloadType` zero selects the dynamic default 96 during config
+normalization, `SetRTPMetadata`, and pointer-based `EncoderReconfigure`; use
+1..127 to emit a specific payload type.
 
 `EncoderConfig` owns encoded crop/color metadata. `Crop` and `Color` are written
 into SPS/VUI headers from the normalized encoder config. `EncoderFrame.Color` is

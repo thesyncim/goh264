@@ -418,7 +418,7 @@ func TestREADMEQualityEvidenceDoesNotTreatExamplesAsParityEvidence(t *testing.T)
 	for _, phrase := range []string{
 		"Quality And Parity Evidence",
 		"Guarded realtime subset",
-		"Remaining gaps",
+		"Outside current contract / evidence targets",
 		"Examples",
 		"API smoke tests only",
 		"broader/full bitstream parity beyond admitted oracle rows",
@@ -652,6 +652,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderRTPMode1STAPAFallbackAtSmallPayloadPreservesLiveState",
 		"TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData",
 		"TestEncoderConfigExplicitQPZeroConstructsAndEncodes",
+		"TestEncoderRTPPayloadTypeZeroSelectsDynamicDefault",
 		"TestEncoderSetQPZeroSurvivesNoopReconfigureAndEncodes",
 		"TestEncoderReconfigureLimitPointersDisableBudgets",
 		"TestEncoderReconfigureZeroScalarFieldsAreNoOps",
@@ -968,7 +969,9 @@ func TestREADMEEncoderAdmittedValuesTableDocumentsUnsupportedKnobs(t *testing.T)
 		"packetization-mode 1 with payload size >= 3",
 		"STAP-A only in mode 1",
 		"DON disabled",
-		"payload type 0..127",
+		"payload type 1..127, with zero selecting the dynamic default 96",
+		"`RTPPayloadType` zero selects the dynamic default 96 during config\nnormalization, `SetRTPMetadata`, and pointer-based `EncoderReconfigure`",
+		"use\n1..127 to emit a specific payload type",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md admitted-values table missing %q", phrase)

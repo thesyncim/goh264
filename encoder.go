@@ -150,6 +150,8 @@ type EncoderColorConfig struct {
 // InitialQP, MinQP, and MaxQP accept 0..51. When ExplicitQP is false, zero QP
 // fields select derived defaults during setup normalization; set ExplicitQP when
 // zero is an intentional setup value.
+// RTPPayloadType accepts 1..127; zero selects the dynamic default payload type
+// 96 during setup normalization.
 type EncoderConfig struct {
 	Width        int
 	Height       int
@@ -1029,10 +1031,11 @@ func slicesOverlap[T any](a []T, b []T) bool {
 // Pointer fields update when non-nil, including explicit false or zero values
 // where valid. Limits is the zero-capable grouped budget update and is applied
 // after MaxFrameSize, MaxEncodeTimeUS, SliceMaxBytes, and their pointer
-// zero-value forms. Reconfigure validates the resulting
-// configuration before changing encoder state; invalid updates leave the
-// encoder unchanged. ForceIDR queues an IDR request even when no config field
-// changes.
+// zero-value forms. RTPPayloadType uses nil to leave the live value unchanged;
+// a non-nil zero selects the dynamic default payload type 96. Reconfigure
+// validates the resulting configuration before changing encoder state; invalid
+// updates leave the encoder unchanged. ForceIDR queues an IDR request even when
+// no config field changes.
 type EncoderReconfigure struct {
 	TargetBitrate         int
 	MaxBitrate            int
