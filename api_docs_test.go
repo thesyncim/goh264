@@ -825,6 +825,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesDuplicateNewExtradataFirstEntryWins",
 		"TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries",
+		"TestDecodePacketFramesEmptyDuplicateNewExtradataSuppressesLaterEntries",
+		"TestDecodePacketFramesOverflowedDuplicateNewExtradataSuppressesLaterEntries",
 		"TestDecodeFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference",
 		"TestDecodePacketFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference",
 		"TestDecodeConfiguredAVCFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference",

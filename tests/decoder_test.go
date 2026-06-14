@@ -2876,6 +2876,80 @@ func TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries(
 	}
 }
 
+func TestDecodePacketFramesEmptyDuplicateNewExtradataSuppressesLaterEntries(t *testing.T) {
+	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) != 2 {
+		t.Fatalf("16x16 samples = %d, want 2", len(samples16))
+	}
+
+	dec := goh264.NewDecoder()
+	out, err := dec.DecodePacketFrames(goh264.Packet{
+		Data:     samples16[0],
+		SideData: []goh264.PacketSideData{{Type: goh264.PacketSideDataNewExtradata, Data: config16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+
+	out, err = dec.DecodePacketFrames(goh264.Packet{
+		Data: samples16[1],
+		SideData: []goh264.PacketSideData{
+			{Type: goh264.PacketSideDataNewExtradata},
+			{Type: goh264.PacketSideDataNewExtradata, Data: config32},
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames empty first duplicate NEW_EXTRADATA P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after empty duplicate NEW_EXTRADATA: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.Width != 16 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after empty duplicate NEW_EXTRADATA = %+v, want previous 16x16 config", got)
+	}
+}
+
+func TestDecodePacketFramesOverflowedDuplicateNewExtradataSuppressesLaterEntries(t *testing.T) {
+	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
+	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	if len(samples16) != 2 {
+		t.Fatalf("16x16 samples = %d, want 2", len(samples16))
+	}
+
+	dec := goh264.NewDecoder()
+	out, err := dec.DecodePacketFrames(goh264.Packet{
+		Data:     samples16[0],
+		SideData: []goh264.PacketSideData{{Type: goh264.PacketSideDataNewExtradata, Data: config16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+
+	out, err = dec.DecodePacketFrames(goh264.Packet{
+		Data: samples16[1],
+		SideData: []goh264.PacketSideData{
+			{Type: goh264.PacketSideDataNewExtradata, Data: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)},
+			{Type: goh264.PacketSideDataNewExtradata, Data: config32},
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames overflowed first duplicate NEW_EXTRADATA P-skip: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	got, err := dec.AVCConfig()
+	if err != nil {
+		t.Fatalf("AVCConfig after overflowed duplicate NEW_EXTRADATA: %v", err)
+	}
+	if got.NALLengthSize != 4 || got.StreamInfo.Width != 16 || got.StreamInfo.Height != 16 {
+		t.Fatalf("AVCConfig after overflowed duplicate NEW_EXTRADATA = %+v, want previous 16x16 config", got)
+	}
+}
+
 func TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration(t *testing.T) {
 	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
 	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
