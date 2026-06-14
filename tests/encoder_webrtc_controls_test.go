@@ -13645,6 +13645,78 @@ func TestEncoderEncodeIntoAppendsAndIndexesAfterPrefix(t *testing.T) {
 	}
 }
 
+func TestEncodedFrameAccessUnitRangeAndFormat(t *testing.T) {
+	for _, tt := range []struct {
+		name             string
+		outputFormat     goh264.EncoderOutputFormat
+		wantAccessFormat goh264.EncoderOutputFormat
+	}{
+		{name: "annexb", outputFormat: goh264.EncoderOutputAnnexB, wantAccessFormat: goh264.EncoderOutputAnnexB},
+		{name: "avc", outputFormat: goh264.EncoderOutputAVC, wantAccessFormat: goh264.EncoderOutputAVC},
+		{name: "rtp", outputFormat: goh264.EncoderOutputRTP, wantAccessFormat: goh264.EncoderOutputAnnexB},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			cfg.OutputFormat = tt.outputFormat
+			cfg.DeblockMode = goh264.EncoderDeblockDisabled
+			cfg.RTPMaxPayloadSize = 32
+			if tt.outputFormat != goh264.EncoderOutputRTP {
+				cfg.RTPMaxPayloadSize = 0
+			}
+			enc, err := goh264.NewEncoder(cfg)
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+
+			prefix := []byte{0xde, 0xad, 0xbe, 0xef, 0x55}
+			dst := append(make([]byte, 0, 4096), prefix...)
+			out, err := enc.EncodeInto(dst, patternedI420EncoderFrame(16, 16))
+			if err != nil {
+				t.Fatalf("EncodeInto: %v", err)
+			}
+
+			start, end, err := out.AccessUnitRange()
+			if err != nil {
+				t.Fatalf("AccessUnitRange: %v", err)
+			}
+			if start != len(prefix) || end != len(out.Data) {
+				t.Fatalf("AccessUnitRange = [%d,%d), want [%d,%d)", start, end, len(prefix), len(out.Data))
+			}
+			accessFormat, err := out.AccessUnitFormat()
+			if err != nil {
+				t.Fatalf("AccessUnitFormat: %v", err)
+			}
+			if accessFormat != tt.wantAccessFormat {
+				t.Fatalf("AccessUnitFormat = %v, want %v", accessFormat, tt.wantAccessFormat)
+			}
+			accessUnit, err := out.AccessUnitData()
+			if err != nil {
+				t.Fatalf("AccessUnitData: %v", err)
+			}
+			if !bytes.Equal(accessUnit, out.Data[start:end]) {
+				t.Fatalf("AccessUnitData does not match AccessUnitRange")
+			}
+			if cap(accessUnit) != len(accessUnit) {
+				t.Fatalf("AccessUnitData cap = %d, want clipped length %d", cap(accessUnit), len(accessUnit))
+			}
+			if tt.outputFormat == goh264.EncoderOutputRTP && !bytes.HasPrefix(accessUnit, []byte{0, 0, 0, 1}) {
+				t.Fatalf("RTP access-unit view prefix = %x, want Annex B start code", accessUnit[:min(len(accessUnit), 4)])
+			}
+		})
+	}
+
+	dropped := goh264.EncodedFrame{
+		OutputFormat: goh264.EncoderOutputRTP,
+		Dropped:      true,
+	}
+	if start, end, err := dropped.AccessUnitRange(); !errors.Is(err, goh264.ErrInvalidData) || start != 0 || end != 0 {
+		t.Fatalf("dropped AccessUnitRange = [%d,%d)/%v, want zero ErrInvalidData", start, end, err)
+	}
+	if format, err := dropped.AccessUnitFormat(); !errors.Is(err, goh264.ErrInvalidData) || format != 0 {
+		t.Fatalf("dropped AccessUnitFormat = %v/%v, want zero ErrInvalidData", format, err)
+	}
+}
+
 func TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputRTP
@@ -17876,6 +17948,12 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AccessUnitData"); !ok {
 		t.Fatal("EncodedFrame missing AccessUnitData convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AccessUnitRange"); !ok {
+		t.Fatal("EncodedFrame missing AccessUnitRange convenience method")
+	}
+	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AccessUnitFormat"); !ok {
+		t.Fatal("EncodedFrame missing AccessUnitFormat convenience method")
 	}
 	if _, ok := reflect.TypeOf(goh264.EncodedFrame{}).MethodByName("AppendAccessUnitData"); !ok {
 		t.Fatal("EncodedFrame missing AppendAccessUnitData convenience method")

@@ -563,6 +563,9 @@ with the strongest public API coverage for integration work:
   dropped frames, so callers do not need to infer format from packet presence.
   Caller-constructed `EncodedFrame` values must set `OutputFormat` before using
   access-unit/RTP helper methods or cloning dropped results.
+- `AccessUnitRange` and `AccessUnitFormat` make the access-unit byte range and
+  access-unit container explicit; RTP results report an Annex B access-unit view
+  while RTP packet bytes stay under `RTPPackets`.
 - For RTP output, send `RTPPackets`, `RTPPacketData`, or `RTPPayloadData`.
   `EncodedFrame.Data` is retained only as an Annex B access-unit view for local
   inspection through `AccessUnitData` and `NALData`. Packet-level helpers validate the

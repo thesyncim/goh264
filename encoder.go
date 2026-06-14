@@ -514,21 +514,58 @@ func (frame EncodedFrame) AppendNALData(dst []byte, index int) ([]byte, error) {
 	return appendEncoderHelperBytes(dst, data)
 }
 
+// AccessUnitRange returns the EncodedFrame.Data byte range for the encoded
+// access-unit view described by NALUnits.
+//
+// For EncodeInto calls that append after an existing dst prefix, start excludes
+// the caller prefix. For RTP output, the range describes the Annex B access-unit
+// view in Data, not RTPPackets.
+func (frame EncodedFrame) AccessUnitRange() (start int, end int, err error) {
+	return frame.accessUnitRange()
+}
+
+// AccessUnitFormat returns the container format used by AccessUnitData.
+//
+// For RTP output, AccessUnitData is an Annex B access-unit view and this method
+// returns EncoderOutputAnnexB. Use RTPPackets, RTPPacketData, or RTPPayloadData
+// for RTP packet bytes.
+func (frame EncodedFrame) AccessUnitFormat() (EncoderOutputFormat, error) {
+	if _, _, err := frame.accessUnitRange(); err != nil {
+		return 0, err
+	}
+	switch frame.OutputFormat {
+	case EncoderOutputAnnexB, EncoderOutputRTP:
+		return EncoderOutputAnnexB, nil
+	case EncoderOutputAVC:
+		return EncoderOutputAVC, nil
+	default:
+		return 0, ErrInvalidData
+	}
+}
+
 // AccessUnitData returns the encoded access-unit bytes described by NALUnits.
 //
 // The returned slice is clipped to its length. For EncodeInto calls that append
 // after an existing dst prefix, AccessUnitData excludes the caller prefix.
 func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
+	start, end, err := frame.accessUnitRange()
+	if err != nil {
+		return nil, err
+	}
+	return frame.Data[start:end:end], nil
+}
+
+func (frame EncodedFrame) accessUnitRange() (int, int, error) {
 	if frame.Dropped || len(frame.Data) > maxInt/2 || len(frame.NALUnits) > maxEncoderNALUnitListLen ||
 		len(frame.NALUnits) == 0 {
-		return nil, ErrInvalidData
+		return 0, 0, ErrInvalidData
 	}
 	start := -1
 	end := 0
 	for _, unit := range frame.NALUnits {
 		unitEnd, err := frame.validateNALUnitMetadata(unit)
 		if err != nil || unit.Offset < 4 {
-			return nil, ErrInvalidData
+			return 0, 0, ErrInvalidData
 		}
 		prefixStart := unit.Offset - 4
 		prefix := frame.Data[prefixStart:unit.Offset]
@@ -537,26 +574,26 @@ func (frame EncodedFrame) AccessUnitData() ([]byte, error) {
 		switch frame.OutputFormat {
 		case EncoderOutputAnnexB, EncoderOutputRTP:
 			if !annexBPrefix {
-				return nil, ErrInvalidData
+				return 0, 0, ErrInvalidData
 			}
 		case EncoderOutputAVC:
 			if !avcPrefix {
-				return nil, ErrInvalidData
+				return 0, 0, ErrInvalidData
 			}
 		default:
-			return nil, ErrInvalidData
+			return 0, 0, ErrInvalidData
 		}
 		if start < 0 {
 			start = prefixStart
 		} else if prefixStart != end {
-			return nil, ErrInvalidData
+			return 0, 0, ErrInvalidData
 		}
 		end = unitEnd
 	}
 	if start >= end {
-		return nil, ErrInvalidData
+		return 0, 0, ErrInvalidData
 	}
-	return frame.Data[start:end:end], nil
+	return start, end, nil
 }
 
 func (frame EncodedFrame) validateNALUnitMetadata(unit EncoderNALUnit) (int, error) {
