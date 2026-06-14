@@ -57,8 +57,10 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}{
 		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "Clone"},
 		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "Validate"},
+		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "AppendData"},
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "Clone"},
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "Validate"},
+		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "AppendData"},
 		{typeName: "Frame", typ: reflect.TypeOf((*Frame)(nil)), method: "Validate"},
 		{typeName: "Frame", typ: reflect.TypeOf((*Frame)(nil)), method: "Clone"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "Clone"},
@@ -134,6 +136,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	for _, name := range []string{
 		"DefaultRealtimeEncoderConfig",
 		"DefaultEncoderConfig",
+		"AppendData",
 		"Clone",
 		"Append",
 		"AppendSPS",
@@ -183,7 +186,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 	}
 }
 
-func TestDecoderOwnershipCloneAPIReturnsErrors(t *testing.T) {
+func TestDecoderOwnershipAPIReturnsErrors(t *testing.T) {
 	errorType := reflect.TypeOf((*error)(nil)).Elem()
 	oldCloneHelperName := "Clone" + "Checked"
 	for _, tt := range []struct {
@@ -204,6 +207,21 @@ func TestDecoderOwnershipCloneAPIReturnsErrors(t *testing.T) {
 		}
 		if _, ok := tt.typ.MethodByName(oldCloneHelperName); ok {
 			t.Fatalf("%s.%s is not a canonical decoder ownership helper", tt.typeName, oldCloneHelperName)
+		}
+	}
+	for _, tt := range []struct {
+		typeName string
+		typ      reflect.Type
+	}{
+		{typeName: "Packet", typ: reflect.TypeOf(Packet{})},
+		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{})},
+	} {
+		method, ok := tt.typ.MethodByName("AppendData")
+		if !ok {
+			t.Fatalf("%s missing AppendData", tt.typeName)
+		}
+		if method.Type.NumOut() == 0 || !method.Type.Out(method.Type.NumOut()-1).Implements(errorType) {
+			t.Fatalf("%s.AppendData should return an error", tt.typeName)
 		}
 	}
 }
@@ -686,6 +704,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecodePacketFramesDoesNotAliasCallerBuffer",
 		"TestConfigureAVCCDoesNotAliasCallerBuffer",
 		"TestPacketCloneDeepCopiesDataAndSideData",
+		"TestPacketAppendDataReturnsCallerOwnedBytes",
+		"TestPacketSideDataAppendDataReturnsCallerOwnedBytes",
 		"TestFrameCloneDeepCopiesPlanesAndSideData",
 		"TestDecodeFrameSideDataByteSlicesAreCallerOwned",
 		"TestFrameAppendRawYUVIsolatesOverlappingSource",

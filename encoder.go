@@ -309,7 +309,7 @@ func (packet EncoderRTPPacket) AppendPacketData(dst []byte) ([]byte, error) {
 	if err != nil {
 		return dst, err
 	}
-	return appendEncoderHelperBytes(dst, data)
+	return appendPublicBytes(dst, data)
 }
 
 // PayloadData returns the RTP payload bytes.
@@ -412,7 +412,7 @@ func (packet EncoderRTPPacket) AppendPayloadData(dst []byte) ([]byte, error) {
 	if err != nil {
 		return dst, err
 	}
-	return appendEncoderHelperBytes(dst, data)
+	return appendPublicBytes(dst, data)
 }
 
 // Clone returns a deep-owned RTP packet snapshot.
@@ -522,7 +522,7 @@ func (frame EncodedFrame) AppendNALData(dst []byte, index int) ([]byte, error) {
 	if err != nil {
 		return dst, err
 	}
-	return appendEncoderHelperBytes(dst, data)
+	return appendPublicBytes(dst, data)
 }
 
 // AccessUnitRange returns the EncodedFrame.Data byte range for the encoded
@@ -663,7 +663,7 @@ func (frame EncodedFrame) AppendAccessUnitData(dst []byte) ([]byte, error) {
 	if err != nil {
 		return dst, err
 	}
-	return appendEncoderHelperBytes(dst, data)
+	return appendPublicBytes(dst, data)
 }
 
 // RTPPacketData returns the complete RTP packet bytes for RTPPackets[index].
@@ -687,7 +687,7 @@ func (frame EncodedFrame) AppendRTPPacketData(dst []byte, index int) ([]byte, er
 	if err != nil {
 		return dst, err
 	}
-	return appendEncoderHelperBytes(dst, data)
+	return appendPublicBytes(dst, data)
 }
 
 // RTPPayloadData returns the RTP payload bytes for RTPPackets[index].
@@ -711,7 +711,7 @@ func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, e
 	if err != nil {
 		return dst, err
 	}
-	return appendEncoderHelperBytes(dst, data)
+	return appendPublicBytes(dst, data)
 }
 
 // Validate reports whether frame is a well-formed encoded result.
@@ -836,26 +836,26 @@ func (sets EncoderParameterSets) AVCC() ([]byte, error) {
 // AppendSPS appends a caller-owned copy of the SPS NAL to dst after validating
 // public storage sizes. On error, dst is returned unchanged.
 func (sets EncoderParameterSets) AppendSPS(dst []byte) ([]byte, error) {
-	return appendEncoderHelperBytes(dst, sets.SPS)
+	return appendPublicBytes(dst, sets.SPS)
 }
 
 // AppendPPS appends a caller-owned copy of the PPS NAL to dst after validating
 // public storage sizes. On error, dst is returned unchanged.
 func (sets EncoderParameterSets) AppendPPS(dst []byte) ([]byte, error) {
-	return appendEncoderHelperBytes(dst, sets.PPS)
+	return appendPublicBytes(dst, sets.PPS)
 }
 
 // AppendAnnexB appends a caller-owned copy of the Annex B parameter sets to dst
 // after validating public storage sizes. On error, dst is returned unchanged.
 func (sets EncoderParameterSets) AppendAnnexB(dst []byte) ([]byte, error) {
-	return appendEncoderHelperBytes(dst, sets.AnnexB)
+	return appendPublicBytes(dst, sets.AnnexB)
 }
 
 // AppendAVCC appends a caller-owned copy of the AVC decoder configuration
 // record to dst after validating public storage sizes. On error, dst is
 // returned unchanged.
 func (sets EncoderParameterSets) AppendAVCC(dst []byte) ([]byte, error) {
-	return appendEncoderHelperBytes(dst, sets.AVCDecoderConfigurationRecord)
+	return appendPublicBytes(dst, sets.AVCDecoderConfigurationRecord)
 }
 
 // Clone returns a deep-owned copy of the parameter-set helper surfaces after
@@ -901,19 +901,19 @@ type EncoderSEI struct {
 // AppendNAL appends a caller-owned copy of the SEI NAL to dst after validating
 // public storage sizes. On error, dst is returned unchanged.
 func (sei EncoderSEI) AppendNAL(dst []byte) ([]byte, error) {
-	return appendEncoderHelperBytes(dst, sei.NAL)
+	return appendPublicBytes(dst, sei.NAL)
 }
 
 // AppendAnnexB appends a caller-owned copy of the Annex B SEI NAL to dst after
 // validating public storage sizes. On error, dst is returned unchanged.
 func (sei EncoderSEI) AppendAnnexB(dst []byte) ([]byte, error) {
-	return appendEncoderHelperBytes(dst, sei.AnnexB)
+	return appendPublicBytes(dst, sei.AnnexB)
 }
 
 // AppendAVC appends a caller-owned copy of the AVC SEI NAL to dst after
 // validating public storage sizes. On error, dst is returned unchanged.
 func (sei EncoderSEI) AppendAVC(dst []byte) ([]byte, error) {
-	return appendEncoderHelperBytes(dst, sei.AVC)
+	return appendPublicBytes(dst, sei.AVC)
 }
 
 // Clone returns a deep-owned copy of the SEI helper surfaces after validating
@@ -944,7 +944,7 @@ func encoderSEICloneStorageOK(sei EncoderSEI) bool {
 		len(sei.AVC) <= maxInt/2
 }
 
-func appendEncoderHelperBytes(dst []byte, src []byte) ([]byte, error) {
+func appendPublicBytes(dst []byte, src []byte) ([]byte, error) {
 	if len(dst) > maxInt/2 || len(src) > maxInt/2 {
 		return dst, ErrInvalidData
 	}

@@ -403,11 +403,15 @@ func TestDecoderCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 	}
 
 	overflowSide := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}
+	prefix := []byte{0xde, 0xad}
 	if err := overflowSide.Validate(); !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("PacketSideData.Validate overflow = %v, want ErrInvalidData", err)
 	}
 	if got, err := overflowSide.Clone(); got.Type != 0 || got.Data != nil || !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("PacketSideData.Clone overflow = %+v/%v, want zero ErrInvalidData", got, err)
+	}
+	if got, err := overflowSide.AppendData(append([]byte(nil), prefix...)); !bytes.Equal(got, prefix) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("PacketSideData.AppendData overflow = %x/%v, want original prefix ErrInvalidData", got, err)
 	}
 
 	for _, tt := range []struct {
@@ -425,7 +429,22 @@ func TestDecoderCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 			if got, err := tt.packet.Clone(); got.Data != nil || got.SideData != nil || !errors.Is(err, ErrInvalidData) {
 				t.Fatalf("Packet.Clone overflow = %+v/%v, want zero ErrInvalidData", got, err)
 			}
+			if tt.name == "data" {
+				if got, err := tt.packet.AppendData(append([]byte(nil), prefix...)); !bytes.Equal(got, prefix) || !errors.Is(err, ErrInvalidData) {
+					t.Fatalf("Packet.AppendData overflow = %x/%v, want original prefix ErrInvalidData", got, err)
+				}
+			}
 		})
+	}
+
+	largeDst := fakeDecoderRawBytesLen(maxIntForTest / 2)
+	validSide := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: []byte{1}}
+	if got, err := validSide.AppendData(largeDst); len(got) != len(largeDst) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("PacketSideData.AppendData large dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
+	validPacket := Packet{Data: []byte{0, 0, 1, 0x65}}
+	if got, err := validPacket.AppendData(largeDst); len(got) != len(largeDst) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("Packet.AppendData large dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
 	}
 
 	for _, tt := range []struct {

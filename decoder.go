@@ -152,6 +152,13 @@ func (side PacketSideData) Clone() (PacketSideData, error) {
 	}, nil
 }
 
+// AppendData appends a caller-owned copy of the packet side-data payload to
+// dst after validating public storage sizes. On error, dst is returned
+// unchanged.
+func (side PacketSideData) AppendData(dst []byte) ([]byte, error) {
+	return appendPublicBytes(dst, side.Data)
+}
+
 // Packet is one compressed access unit plus optional packet side data.
 //
 // Data and SideData payloads are caller-owned input. The decoder reads them
@@ -195,6 +202,12 @@ func (pkt Packet) Clone() (Packet, error) {
 		clone.SideData[i] = sideClone
 	}
 	return clone, nil
+}
+
+// AppendData appends a caller-owned copy of the compressed packet bytes to dst
+// after validating public storage sizes. On error, dst is returned unchanged.
+func (pkt Packet) AppendData(dst []byte) ([]byte, error) {
+	return appendPublicBytes(dst, pkt.Data)
 }
 
 // FrameSideData contains SEI and packet side-data values attached to a decoded

@@ -368,6 +368,38 @@ func TestPacketSideDataCloneDeepCopiesPayload(t *testing.T) {
 	}
 }
 
+func TestPacketSideDataAppendDataReturnsCallerOwnedBytes(t *testing.T) {
+	backing := []byte{0xca, 0xfe, 1, 2, 3, 0xee}
+	side := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: backing[2:5]}
+	prefix := []byte{0xde, 0xad}
+	got, err := side.AppendData(append([]byte(nil), prefix...))
+	if err != nil {
+		t.Fatalf("PacketSideData.AppendData: %v", err)
+	}
+	if want := append(prefix, side.Data...); !bytes.Equal(got, want) {
+		t.Fatalf("PacketSideData.AppendData = %x, want %x", got, want)
+	}
+	got[len(prefix)] ^= 0xff
+	if backing[2] != 1 || side.Data[0] != 1 {
+		t.Fatalf("mutating appended side-data changed source backing/header: backing=%#x side=%#x",
+			backing[2], side.Data[0])
+	}
+
+	overlapBacking := []byte{0xde, 0xad, 1, 2, 3, 0xee}
+	overlapSide := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: overlapBacking[2:5]}
+	overlap, err := overlapSide.AppendData(overlapBacking[:2])
+	if err != nil {
+		t.Fatalf("PacketSideData.AppendData overlapping source: %v", err)
+	}
+	if want := []byte{0xde, 0xad, 1, 2, 3}; !bytes.Equal(overlap, want) {
+		t.Fatalf("PacketSideData.AppendData overlapping source = %x, want %x", overlap, want)
+	}
+	overlapSide.Data[0] ^= 0xff
+	if overlap[len(prefix)] != 1 {
+		t.Fatalf("overlapping PacketSideData.AppendData output aliases source after mutation: %x", overlap)
+	}
+}
+
 func TestPacketClonePreservesZeroValue(t *testing.T) {
 	var packet Packet
 	if err := packet.Validate(); err != nil {
@@ -375,6 +407,38 @@ func TestPacketClonePreservesZeroValue(t *testing.T) {
 	}
 	if clone, err := packet.Clone(); err != nil || clone.Data != nil || clone.SideData != nil {
 		t.Fatalf("zero Packet.Clone = %+v/%v, want zero Packet nil error", clone, err)
+	}
+}
+
+func TestPacketAppendDataReturnsCallerOwnedBytes(t *testing.T) {
+	backing := []byte{0xca, 0xfe, 0x00, 0x00, 0x01, 0x65, 0xee}
+	packet := Packet{Data: backing[2:6]}
+	prefix := []byte{0xde, 0xad}
+	got, err := packet.AppendData(append([]byte(nil), prefix...))
+	if err != nil {
+		t.Fatalf("Packet.AppendData: %v", err)
+	}
+	if want := append(prefix, packet.Data...); !bytes.Equal(got, want) {
+		t.Fatalf("Packet.AppendData = %x, want %x", got, want)
+	}
+	got[len(prefix)] ^= 0xff
+	if backing[2] != 0 || packet.Data[0] != 0 {
+		t.Fatalf("mutating appended packet changed source backing/header: backing=%#x packet=%#x",
+			backing[2], packet.Data[0])
+	}
+
+	overlapBacking := []byte{0xde, 0xad, 0x00, 0x00, 0x01, 0x65, 0xee}
+	overlapPacket := Packet{Data: overlapBacking[2:6]}
+	overlap, err := overlapPacket.AppendData(overlapBacking[:2])
+	if err != nil {
+		t.Fatalf("Packet.AppendData overlapping source: %v", err)
+	}
+	if want := []byte{0xde, 0xad, 0x00, 0x00, 0x01, 0x65}; !bytes.Equal(overlap, want) {
+		t.Fatalf("Packet.AppendData overlapping source = %x, want %x", overlap, want)
+	}
+	overlapPacket.Data[0] ^= 0xff
+	if overlap[len(prefix)] != 0 {
+		t.Fatalf("overlapping Packet.AppendData output aliases source after mutation: %x", overlap)
 	}
 }
 

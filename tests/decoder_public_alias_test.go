@@ -53,8 +53,10 @@ var _ = (*Decoder).AVCConfig
 
 var _ = (PacketSideData).Clone
 var _ = (PacketSideData).Validate
+var _ = (PacketSideData).AppendData
 var _ = (Packet).Clone
 var _ = (Packet).Validate
+var _ = (Packet).AppendData
 var _ = (FrameSideData).Clone
 var _ = (FrameSideData).Validate
 var _ = (*Frame).Validate
