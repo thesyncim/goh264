@@ -167,12 +167,14 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		typ      reflect.Type
 		method   string
 	}{
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "Validate"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "Clone"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AVCC"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendSPS"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendPPS"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAnnexB"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAVCC"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "Validate"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "Clone"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendNAL"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAnnexB"},
@@ -219,12 +221,14 @@ func TestEncoderHelperAPIReturnsErrors(t *testing.T) {
 		typ      reflect.Type
 		method   string
 	}{
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "Validate"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AVCC"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendSPS"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendPPS"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAnnexB"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "AppendAVCC"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), method: "Clone"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "Validate"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendNAL"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAnnexB"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), method: "AppendAVC"},
@@ -244,12 +248,14 @@ func TestEncoderHelperAPIReturnsErrors(t *testing.T) {
 		typ      reflect.Type
 		baseName string
 	}{
+		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "Validate"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AVCC"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AppendSPS"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AppendPPS"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AppendAnnexB"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "AppendAVCC"},
 		{typeName: "EncoderParameterSets", typ: reflect.TypeOf(EncoderParameterSets{}), baseName: "Clone"},
+		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), baseName: "Validate"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), baseName: "AppendNAL"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), baseName: "AppendAnnexB"},
 		{typeName: "EncoderSEI", typ: reflect.TypeOf(EncoderSEI{}), baseName: "AppendAVC"},

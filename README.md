@@ -556,11 +556,11 @@ with the strongest public API coverage for integration work:
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
   payload helpers have `Append...` forms for caller-owned retention buffers and
-  `Clone` forms for async snapshots. `EncoderParameterSets.Clone` and
-  `EncoderSEI.Clone` validate public storage sizes before cloning. `AVCC`,
-  `AppendSPS`, `AppendPPS`, `AppendAnnexB`, `AppendAVCC`, `AppendNAL`, and
-  `AppendAVC` provide the same storage validation for avcC bytes and
-  caller-managed append buffers.
+  `Clone` forms for async snapshots. `EncoderParameterSets.Validate` and
+  `EncoderSEI.Validate` check public storage sizes before retention or async
+  handoff; `Clone` uses the same checks before copying. `AVCC`, `AppendSPS`,
+  `AppendPPS`, `AppendAnnexB`, `AppendAVCC`, `AppendNAL`, and `AppendAVC`
+  validate avcC bytes and caller-managed append buffers.
   Invalid or overflowed-destination append calls return the original destination
   unchanged. If a caller-managed append destination overlaps the helper source
   bytes, the helpers return isolated output storage instead of aliasing the

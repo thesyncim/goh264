@@ -861,8 +861,8 @@ func (sets EncoderParameterSets) AppendAVCC(dst []byte) ([]byte, error) {
 // Clone returns a deep-owned copy of the parameter-set helper surfaces after
 // validating public storage sizes.
 func (sets EncoderParameterSets) Clone() (EncoderParameterSets, error) {
-	if !encoderParameterSetsCloneStorageOK(sets) {
-		return EncoderParameterSets{}, ErrInvalidData
+	if err := sets.Validate(); err != nil {
+		return EncoderParameterSets{}, err
 	}
 	return EncoderParameterSets{
 		SPS:                           cloneByteSlice(sets.SPS),
@@ -870,6 +870,15 @@ func (sets EncoderParameterSets) Clone() (EncoderParameterSets, error) {
 		AnnexB:                        cloneByteSlice(sets.AnnexB),
 		AVCDecoderConfigurationRecord: cloneByteSlice(sets.AVCDecoderConfigurationRecord),
 	}, nil
+}
+
+// Validate reports whether the parameter-set helper surfaces have public
+// storage sizes accepted by Clone.
+func (sets EncoderParameterSets) Validate() error {
+	if !encoderParameterSetsCloneStorageOK(sets) {
+		return ErrInvalidData
+	}
+	return nil
 }
 
 func encoderParameterSetsCloneStorageOK(sets EncoderParameterSets) bool {
@@ -910,14 +919,23 @@ func (sei EncoderSEI) AppendAVC(dst []byte) ([]byte, error) {
 // Clone returns a deep-owned copy of the SEI helper surfaces after validating
 // public storage sizes.
 func (sei EncoderSEI) Clone() (EncoderSEI, error) {
-	if !encoderSEICloneStorageOK(sei) {
-		return EncoderSEI{}, ErrInvalidData
+	if err := sei.Validate(); err != nil {
+		return EncoderSEI{}, err
 	}
 	return EncoderSEI{
 		NAL:    cloneByteSlice(sei.NAL),
 		AnnexB: cloneByteSlice(sei.AnnexB),
 		AVC:    cloneByteSlice(sei.AVC),
 	}, nil
+}
+
+// Validate reports whether the SEI helper surfaces have public storage sizes
+// accepted by Clone.
+func (sei EncoderSEI) Validate() error {
+	if !encoderSEICloneStorageOK(sei) {
+		return ErrInvalidData
+	}
+	return nil
 }
 
 func encoderSEICloneStorageOK(sei EncoderSEI) bool {

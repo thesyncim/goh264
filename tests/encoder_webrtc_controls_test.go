@@ -5482,6 +5482,9 @@ func TestEncoderParameterSetsReturnCallerOwnedSurfaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParameterSets: %v", err)
 	}
+	if err := headers.Validate(); err != nil {
+		t.Fatalf("Validate ParameterSets: %v", err)
+	}
 	originalAnnexB := append([]byte(nil), headers.AnnexB...)
 	originalAVCC := append([]byte(nil), headers.AVCDecoderConfigurationRecord...)
 	originalSPS := append([]byte(nil), headers.SPS...)
@@ -5535,6 +5538,9 @@ func TestEncoderParameterSetsCloneDeepCopiesSurfaces(t *testing.T) {
 	headers, err := enc.ParameterSets()
 	if err != nil {
 		t.Fatalf("ParameterSets: %v", err)
+	}
+	if err := headers.Validate(); err != nil {
+		t.Fatalf("Validate before Clone: %v", err)
 	}
 	clone, err := headers.Clone()
 	if err != nil {
@@ -5946,6 +5952,9 @@ func TestEncoderRecoveryPointSEIExposesWebRTCRecoverySignal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecoveryPointSEI: %v", err)
 	}
+	if err := sei.Validate(); err != nil {
+		t.Fatalf("Validate RecoveryPointSEI: %v", err)
+	}
 	if len(sei.NAL) == 0 || sei.NAL[0]&0x1f != 6 {
 		t.Fatalf("SEI NAL = %x, want type 6", sei.NAL)
 	}
@@ -6045,6 +6054,9 @@ func TestEncoderSEICloneDeepCopiesSurfaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecoveryPointSEI: %v", err)
 	}
+	if err := sei.Validate(); err != nil {
+		t.Fatalf("Validate before Clone: %v", err)
+	}
 	clone, err := sei.Clone()
 	if err != nil {
 		t.Fatalf("Clone: %v", err)
@@ -6089,6 +6101,9 @@ func TestEncoderHelperClonesRejectOverflowedPublicStorage(t *testing.T) {
 		{name: "avcc", sets: goh264.EncoderParameterSets{AVCDecoderConfigurationRecord: overflowBytes}},
 	} {
 		t.Run("parameter-sets-"+tt.name, func(t *testing.T) {
+			if err := tt.sets.Validate(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Validate overflow = %v, want ErrInvalidData", err)
+			}
 			clone, err := tt.sets.Clone()
 			if !errors.Is(err, goh264.ErrInvalidData) || len(clone.SPS) != 0 ||
 				len(clone.PPS) != 0 || len(clone.AnnexB) != 0 ||
@@ -6107,6 +6122,9 @@ func TestEncoderHelperClonesRejectOverflowedPublicStorage(t *testing.T) {
 		{name: "avc", sei: goh264.EncoderSEI{AVC: overflowBytes}},
 	} {
 		t.Run("sei-"+tt.name, func(t *testing.T) {
+			if err := tt.sei.Validate(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Validate overflow = %v, want ErrInvalidData", err)
+			}
 			clone, err := tt.sei.Clone()
 			if !errors.Is(err, goh264.ErrInvalidData) ||
 				len(clone.NAL) != 0 || len(clone.AnnexB) != 0 || len(clone.AVC) != 0 {
@@ -17955,12 +17973,12 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	if _, ok := reflect.TypeOf(goh264.EncoderFrame{}).MethodByName("Clone"); !ok {
 		t.Fatal("EncoderFrame missing Clone convenience method")
 	}
-	for _, method := range []string{"AVCC", "AppendSPS", "AppendPPS", "AppendAnnexB", "AppendAVCC", "Clone"} {
+	for _, method := range []string{"AVCC", "AppendSPS", "AppendPPS", "AppendAnnexB", "AppendAVCC", "Validate", "Clone"} {
 		if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName(method); !ok {
 			t.Fatalf("EncoderParameterSets missing %s convenience method", method)
 		}
 	}
-	for _, method := range []string{"AppendNAL", "AppendAnnexB", "AppendAVC", "Clone"} {
+	for _, method := range []string{"AppendNAL", "AppendAnnexB", "AppendAVC", "Validate", "Clone"} {
 		if _, ok := reflect.TypeOf(goh264.EncoderSEI{}).MethodByName(method); !ok {
 			t.Fatalf("EncoderSEI missing %s convenience method", method)
 		}
