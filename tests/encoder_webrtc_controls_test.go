@@ -17032,6 +17032,118 @@ func TestEncoderRTPAutoTimestampAdvancesWithTimestampModeAuto(t *testing.T) {
 	assertRTPPacketTimestamps(t, fourth.RTPPackets, fourth.RTPTime)
 }
 
+func TestEncoderRTPAutoTimestampCarriesDerivedFractionalCadence(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.FrameRateNum = 24_000
+	cfg.FrameRateDen = 1001
+	cfg.RTPTimestampIncrement = 0
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize fractional cadence config: %v", err)
+	}
+	if normalized.RTPTimestampIncrement != 3753 {
+		t.Fatalf("normalized increment = %d, want floor increment 3753", normalized.RTPTimestampIncrement)
+	}
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder fractional cadence config: %v", err)
+	}
+
+	wantRTPTime := []uint32{0, 3753, 7507, 11261, 15015}
+	for i, want := range wantRTPTime {
+		frame := patternedI420EncoderFrame(16, 16)
+		frame.TimestampMode = goh264.EncoderTimestampAuto
+		frame.Duration = 0
+		frame.Y[0] ^= byte(i)
+		out, err := enc.Encode(frame)
+		if err != nil {
+			t.Fatalf("Encode auto-timestamp frame %d: %v", i, err)
+		}
+		if out.RTPTime != want || out.PTS != int64(want) || out.DTS != int64(want) {
+			t.Fatalf("frame %d timing rtp/pts/dts = %d/%d/%d, want %d/%d/%d",
+				i, out.RTPTime, out.PTS, out.DTS, want, want, want)
+		}
+		assertRTPPacketTimestamps(t, out.RTPPackets, out.RTPTime)
+	}
+
+	if err := enc.Reset(); err != nil {
+		t.Fatalf("Reset fractional cadence encoder: %v", err)
+	}
+	for i, want := range []uint32{0, 3753, 7507} {
+		frame := patternedI420EncoderFrame(16, 16)
+		frame.TimestampMode = goh264.EncoderTimestampAuto
+		frame.Duration = 0
+		frame.Y[0] ^= byte(0x10 + i)
+		out, err := enc.Encode(frame)
+		if err != nil {
+			t.Fatalf("Encode post-reset auto-timestamp frame %d: %v", i, err)
+		}
+		if out.RTPTime != want {
+			t.Fatalf("post-reset frame %d RTP time = %d, want %d", i, out.RTPTime, want)
+		}
+	}
+}
+
+func TestEncoderRTPAutoTimestampSetFrameRateCarriesDerivedFractionalCadence(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	if err := enc.SetFrameRate(24_000, 1001); err != nil {
+		t.Fatalf("SetFrameRate fractional cadence: %v", err)
+	}
+	if got := enc.Config().RTPTimestampIncrement; got != 3753 {
+		t.Fatalf("runtime derived increment = %d, want floor increment 3753", got)
+	}
+
+	wantRTPTime := []uint32{0, 3753, 7507, 11261}
+	for i, want := range wantRTPTime {
+		frame := patternedI420EncoderFrame(16, 16)
+		frame.TimestampMode = goh264.EncoderTimestampAuto
+		frame.Duration = 0
+		frame.Y[0] ^= byte(0x20 + i)
+		out, err := enc.Encode(frame)
+		if err != nil {
+			t.Fatalf("Encode auto-timestamp frame %d: %v", i, err)
+		}
+		if out.RTPTime != want {
+			t.Fatalf("frame %d RTP time = %d, want %d", i, out.RTPTime, want)
+		}
+		assertRTPPacketTimestamps(t, out.RTPPackets, out.RTPTime)
+	}
+}
+
+func TestEncoderRTPAutoTimestampExplicitIncrementStaysFixed(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.FrameRateNum = 24_000
+	cfg.FrameRateDen = 1001
+	cfg.RTPTimestampIncrement = 4000
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder explicit increment: %v", err)
+	}
+
+	wantRTPTime := []uint32{0, 4000, 8000, 12000}
+	for i, want := range wantRTPTime {
+		frame := patternedI420EncoderFrame(16, 16)
+		frame.TimestampMode = goh264.EncoderTimestampAuto
+		frame.Duration = 0
+		frame.Y[0] ^= byte(0x40 + i)
+		out, err := enc.Encode(frame)
+		if err != nil {
+			t.Fatalf("Encode explicit-increment auto frame %d: %v", i, err)
+		}
+		if out.RTPTime != want {
+			t.Fatalf("frame %d RTP time = %d, want fixed increment time %d", i, out.RTPTime, want)
+		}
+		assertRTPPacketTimestamps(t, out.RTPPackets, out.RTPTime)
+	}
+}
+
 func TestEncoderTimestampAutoOutputTimingMatchesChosenRTPTime(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled

@@ -185,6 +185,8 @@ type EncoderColorConfig struct {
 // is the RTP clock denominator used to derive RTPTimestampIncrement.
 // RTPPayloadType accepts 1..127; zero selects the dynamic default payload type
 // 96 during setup normalization.
+// RTPTimestampIncrement zero derives cadence from TimeBaseDen and frame rate;
+// automatic timestamps carry fractional remainders forward when needed.
 type EncoderConfig struct {
 	Width        int
 	Height       int
@@ -252,7 +254,8 @@ const (
 	EncoderTimestampExplicit EncoderTimestampMode = iota
 	// EncoderTimestampAuto uses the encoder's RTP timestamp timeline for
 	// RTPTime, returned PTS/DTS, and callback frame timing. EncoderFrame.PTS is
-	// ignored for this frame.
+	// ignored for this frame. EncoderFrame.Duration overrides the configured
+	// cadence for this frame.
 	EncoderTimestampAuto
 )
 
@@ -1362,20 +1365,22 @@ type EncoderLimits struct {
 }
 
 type Encoder struct {
-	cfg                EncoderConfig
-	forceIDR           bool
-	frameNum           uint32
-	idrPicID           uint32
-	rtpSequenceNumber  uint16
-	nextRTPTime        uint32
-	rtpTimeInitialized bool
-	reference          encoderReferenceFrame
-	p16MVs             []encoderP16x16MotionVector
-	p16MVDs            []h264.EncoderMotionVectorDelta
-	bitrateCreditBytes int
-	bitrateCreditInit  bool
-	framesSinceIDR     int
-	rtpPacketCallback  EncoderRTPPacketCallback
+	cfg                   EncoderConfig
+	forceIDR              bool
+	frameNum              uint32
+	idrPicID              uint32
+	rtpSequenceNumber     uint16
+	nextRTPTime           uint32
+	rtpTimeInitialized    bool
+	rtpTimestampDerived   bool
+	rtpTimestampRemainder uint64
+	reference             encoderReferenceFrame
+	p16MVs                []encoderP16x16MotionVector
+	p16MVDs               []h264.EncoderMotionVectorDelta
+	bitrateCreditBytes    int
+	bitrateCreditInit     bool
+	framesSinceIDR        int
+	rtpPacketCallback     EncoderRTPPacketCallback
 }
 
 // DefaultRealtimeEncoderConfig returns a realtime/WebRTC-oriented 8-bit I420
@@ -1476,11 +1481,12 @@ func defaultRealtimeEncoderLevelIDC(width int, height int) uint8 {
 
 // NewEncoder validates and normalizes cfg, then returns a fresh encoder.
 func NewEncoder(cfg EncoderConfig) (*Encoder, error) {
+	rtpTimestampDerived := cfg.RTPTimestampIncrement == 0
 	normalized, err := normalizeEncoderConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return &Encoder{cfg: normalized}, nil
+	return &Encoder{cfg: normalized, rtpTimestampDerived: rtpTimestampDerived}, nil
 }
 
 // Validate reports whether cfg can be used to construct an encoder.
@@ -1544,9 +1550,11 @@ func (e *Encoder) Reset() error {
 	}
 	cfg := e.cfg
 	callback := e.rtpPacketCallback
+	rtpTimestampDerived := e.rtpTimestampDerived
 	*e = Encoder{
-		cfg:               cfg,
-		rtpPacketCallback: callback,
+		cfg:                 cfg,
+		rtpTimestampDerived: rtpTimestampDerived,
+		rtpPacketCallback:   callback,
 	}
 	return nil
 }
@@ -2039,6 +2047,8 @@ func (e *Encoder) SetFrameRate(num, den int) error {
 		return err
 	}
 	e.cfg = normalized
+	e.rtpTimestampDerived = true
+	e.rtpTimestampRemainder = 0
 	e.resetEncoderBitrateBudget()
 	return nil
 }
@@ -2337,6 +2347,8 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	oldWidth := cfg.Width
 	oldHeight := cfg.Height
 	oldOutputFormat := cfg.OutputFormat
+	rtpTimestampDerived := e.rtpTimestampDerived
+	resetRTPRemainder := false
 	qpRefresh := update.InitialQP != nil || update.MinQP != nil || update.MaxQP != nil
 	if update.TargetBitrate != 0 {
 		cfg.TargetBitrate = update.TargetBitrate
@@ -2370,6 +2382,8 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 			return err
 		}
 		cfg.RTPTimestampIncrement = increment
+		rtpTimestampDerived = true
+		resetRTPRemainder = true
 	}
 	if update.Width != 0 || update.Height != 0 {
 		strideY, strideCb, strideCr := defaultEncoderI420Strides(update.Width)
@@ -2446,6 +2460,8 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 	}
 	if update.RTPTimestampIncrement != 0 {
 		cfg.RTPTimestampIncrement = update.RTPTimestampIncrement
+		rtpTimestampDerived = false
+		resetRTPRemainder = true
 	}
 	normalized, err := normalizeEncoderConfigWithExplicitQP(cfg, update.InitialQP != nil, update.MinQP != nil, update.MaxQP != nil)
 	if err != nil {
@@ -2459,6 +2475,10 @@ func (e *Encoder) Reconfigure(update EncoderReconfigure) error {
 		normalized.RateControl != e.cfg.RateControl ||
 		normalized.FrameDrop != e.cfg.FrameDrop
 	e.cfg = normalized
+	e.rtpTimestampDerived = rtpTimestampDerived
+	if resetRTPRemainder {
+		e.rtpTimestampRemainder = 0
+	}
 	if bitrateBudgetRefresh {
 		e.resetEncoderBitrateBudget()
 	}
@@ -4717,18 +4737,44 @@ func encoderFrameOutputPTS(frame EncoderFrame, rtpTime uint32) int64 {
 }
 
 func (e *Encoder) advanceEncoderRTPTime(frame EncoderFrame, rtpTime uint32) {
-	e.nextRTPTime = rtpTime + encoderFrameRTPDuration(e.cfg, frame)
+	e.nextRTPTime = rtpTime + e.encoderFrameRTPDuration(frame)
 	e.rtpTimeInitialized = true
 }
 
-func encoderFrameRTPDuration(cfg EncoderConfig, frame EncoderFrame) uint32 {
+func (e *Encoder) encoderFrameRTPDuration(frame EncoderFrame) uint32 {
 	if frame.Duration > 0 {
 		return uint32(frame.Duration)
 	}
-	if cfg.RTPTimestampIncrement != 0 {
-		return cfg.RTPTimestampIncrement
+	if e != nil && e.rtpTimestampDerived {
+		return e.derivedEncoderFrameRTPDuration()
 	}
-	return rtpTimestampIncrement(cfg.TimeBaseDen, cfg.FrameRateNum, cfg.FrameRateDen)
+	if e != nil && e.cfg.RTPTimestampIncrement != 0 {
+		return e.cfg.RTPTimestampIncrement
+	}
+	if e == nil {
+		return 0
+	}
+	return rtpTimestampIncrement(e.cfg.TimeBaseDen, e.cfg.FrameRateNum, e.cfg.FrameRateDen)
+}
+
+func (e *Encoder) derivedEncoderFrameRTPDuration() uint32 {
+	if e == nil || e.cfg.FrameRateNum <= 0 {
+		return 0
+	}
+	ticks, err := checkedMulUint64(uint64(e.cfg.TimeBaseDen), uint64(e.cfg.FrameRateDen))
+	if err != nil {
+		return e.cfg.RTPTimestampIncrement
+	}
+	if ticks > ^uint64(0)-e.rtpTimestampRemainder {
+		return e.cfg.RTPTimestampIncrement
+	}
+	ticks += e.rtpTimestampRemainder
+	duration := ticks / uint64(e.cfg.FrameRateNum)
+	e.rtpTimestampRemainder = ticks % uint64(e.cfg.FrameRateNum)
+	if duration == 0 || duration > uint64(^uint32(0)) {
+		return e.cfg.RTPTimestampIncrement
+	}
+	return uint32(duration)
 }
 
 func encoderProfileSyntax(profile EncoderProfile) (uint8, uint8, error) {

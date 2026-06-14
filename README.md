@@ -382,7 +382,7 @@ Accepted encoder setup values:
 | Rate/budget | CBR or ConstantQP, QP range 0..51, non-negative VBV/frame/slice/time budgets | VBR mode; invalid bitrate ordering, QP outside 0..51, negative budgets |
 | Preset | `EncoderPresetRealtime` | Balanced/Quality presets; only `EncoderPresetRealtime` drives current mode selection |
 | Output | Annex B, AVC samples, or RTP | Unknown output formats |
-| Timing | `TimeBaseNum=1`; `TimeBaseDen>0`; `RTPTimestampIncrement>0`, or zero to derive it from `TimeBaseDen` and frame rate | Non-1 time-base numerator, non-positive time-base denominator, impossible derived RTP timestamp increment |
+| Timing | `TimeBaseNum=1`; `TimeBaseDen>0`; `RTPTimestampIncrement>0`, or zero to derive cadence from `TimeBaseDen` and frame rate | Non-1 time-base numerator, non-positive time-base denominator, impossible derived RTP timestamp increment |
 | RTP | packetization-mode 0 with payload size >= 2; packetization-mode 1 with payload size >= 3; STAP-A only in mode 1; DON disabled; payload type 1..127, with zero selecting the dynamic default 96 | Mode-0 STAP-A, DON/interleaved mode, payload type >127, undersized RTP payloads |
 
 For setup-time QP, zero scalar QP fields normally select derived defaults; set
@@ -394,7 +394,10 @@ normalization, `SetRTPMetadata`, and pointer-based `EncoderReconfigure`; use
 1..127 to emit a specific payload type.
 When `EncoderReconfigure` supplies both `FrameRateNum`/`FrameRateDen` and
 `RTPTimestampIncrement`, the frame rate is validated and stored while the
-explicit timestamp increment controls subsequent automatic RTP cadence.
+explicit timestamp increment controls subsequent automatic RTP cadence. For
+zero-derived setup and `SetFrameRate`, automatic timestamps carry fractional
+frame-rate remainders forward instead of repeating the floored integer
+increment forever.
 Annex B and AVC configs normalize `DONDisabled=true` so later
 `SetOutputFormat(EncoderOutputRTP)` uses admitted RTP defaults; direct RTP
 configs with `DONDisabled=false` return `ErrUnsupported`.
@@ -678,7 +681,8 @@ RTP output covers:
   paths;
 - RTP timestamping uses `EncoderFrame.PTS` directly, including zero. Set
   `EncoderFrame.TimestampMode = EncoderTimestampAuto` to use the encoder RTP
-  timeline advanced by `EncoderFrame.Duration` or `RTPTimestampIncrement`.
+  timeline advanced by `EncoderFrame.Duration` or config-derived cadence.
+  Explicit positive `RTPTimestampIncrement` values remain fixed increments.
 
 SPS/PPS cadence modes separate in-band keyframe headers, out-of-band headers,
 and every-IDR emission. Runtime reconfiguration can switch output format and RTP
