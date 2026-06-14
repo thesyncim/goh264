@@ -385,7 +385,8 @@ Annex B/AVC/RTP bitrate-drop and late-drop non-output paths,
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
 public `EncodedFrame.RTPPacketData`/`EncodedFrame.RTPPayloadData` and
 packet-level `EncoderRTPPacket` helpers, clipped packet payload views over
-packet data, packet storage isolated from `EncodedFrame.Data` including
+packet data, malformed RTP payload rejection for packet and payload byte
+helpers, packet storage isolated from `EncodedFrame.Data` including
 caller-backed `EncodeInto` output buffers, unchanged caller append destinations
 on invalid or overflowed-destination access-unit, NAL, RTP packet, and RTP
 payload appends, isolated overlapping source/destination helper appends,

@@ -14182,10 +14182,31 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "foreign payload", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(packetData, []byte{0x65, 0x88, 0x99})}}},
 	} {
 		t.Run("payload-"+tt.name, func(t *testing.T) {
+			if got, err := tt.frame.RTPPacketData(tt.index); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("RTPPacketData invalid payload = %x/%v, want nil ErrInvalidData", got, err)
+			}
 			if got, err := tt.frame.RTPPayloadData(tt.index); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
 				t.Fatalf("RTPPayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
 			}
 		})
+	}
+}
+
+func TestEncodedFrameRTPPacketDataRejectsMalformedPayload(t *testing.T) {
+	packetData := []byte{
+		0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd,
+		0xe5, 0x88, 0x99,
+	}
+	frame := goh264.EncodedFrame{
+		OutputFormat: goh264.EncoderOutputRTP,
+		RTPPackets:   []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(packetData, packetData[12:])},
+	}
+	if got, err := frame.RTPPacketData(0); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+		t.Fatalf("RTPPacketData malformed payload = %x/%v, want nil ErrInvalidData", got, err)
+	}
+	prefix := []byte{0xde, 0xad}
+	if got, err := frame.AppendRTPPacketData(append([]byte(nil), prefix...), 0); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, prefix) {
+		t.Fatalf("AppendRTPPacketData malformed payload = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
 }
 
@@ -14248,6 +14269,21 @@ func TestEncodedFrameAppendRTPDataReturnsCallerOwnedBytes(t *testing.T) {
 	}
 	if got, err := valid.AppendRTPPayloadData(overflowDst, 0); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
 		t.Fatalf("AppendRTPPayloadData overflowed dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
+}
+
+func TestEncoderRTPPacketDataRejectsMalformedPayload(t *testing.T) {
+	packetData := []byte{
+		0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd,
+		0xe5, 0x88, 0x99,
+	}
+	packet := encoderRTPPacketFromTestData(packetData, packetData[12:])
+	if got, err := packet.PacketData(); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+		t.Fatalf("PacketData malformed payload = %x/%v, want nil ErrInvalidData", got, err)
+	}
+	prefix := []byte{0xde, 0xad}
+	if got, err := packet.AppendPacketData(append([]byte(nil), prefix...)); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, prefix) {
+		t.Fatalf("AppendPacketData malformed payload = %x/%v, want preserved prefix ErrInvalidData", got, err)
 	}
 }
 
@@ -14353,20 +14389,19 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 	markerMismatchPacket := encoderRTPPacketFromTestData(packetData, packetData[12:])
 	markerMismatchPacket.Marker = !markerMismatchPacket.Marker
 	for _, tt := range []struct {
-		name              string
-		packet            goh264.EncoderRTPPacket
-		packetDataInvalid bool
+		name   string
+		packet goh264.EncoderRTPPacket
 	}{
-		{name: "short packet", packet: encoderRTPPacketFromTestData(packetData[:11], packetData[12:]), packetDataInvalid: true},
-		{name: "bad version", packet: encoderRTPPacketFromTestData(badVersionPacketData, badVersionPacketData[12:]), packetDataInvalid: true},
-		{name: "padding header", packet: encoderRTPPacketFromTestData(paddingHeaderPacketData, paddingHeaderPacketData[12:]), packetDataInvalid: true},
-		{name: "extension header", packet: encoderRTPPacketFromTestData(extensionHeaderPacketData, extensionHeaderPacketData[12:]), packetDataInvalid: true},
-		{name: "csrc header", packet: encoderRTPPacketFromTestData(csrcHeaderPacketData, csrcHeaderPacketData[12:]), packetDataInvalid: true},
-		{name: "payload type mismatch", packet: payloadTypeMismatchPacket, packetDataInvalid: true},
-		{name: "sequence mismatch", packet: sequenceMismatchPacket, packetDataInvalid: true},
-		{name: "timestamp mismatch", packet: timestampMismatchPacket, packetDataInvalid: true},
-		{name: "ssrc mismatch", packet: ssrcMismatchPacket, packetDataInvalid: true},
-		{name: "marker mismatch", packet: markerMismatchPacket, packetDataInvalid: true},
+		{name: "short packet", packet: encoderRTPPacketFromTestData(packetData[:11], packetData[12:])},
+		{name: "bad version", packet: encoderRTPPacketFromTestData(badVersionPacketData, badVersionPacketData[12:])},
+		{name: "padding header", packet: encoderRTPPacketFromTestData(paddingHeaderPacketData, paddingHeaderPacketData[12:])},
+		{name: "extension header", packet: encoderRTPPacketFromTestData(extensionHeaderPacketData, extensionHeaderPacketData[12:])},
+		{name: "csrc header", packet: encoderRTPPacketFromTestData(csrcHeaderPacketData, csrcHeaderPacketData[12:])},
+		{name: "payload type mismatch", packet: payloadTypeMismatchPacket},
+		{name: "sequence mismatch", packet: sequenceMismatchPacket},
+		{name: "timestamp mismatch", packet: timestampMismatchPacket},
+		{name: "ssrc mismatch", packet: ssrcMismatchPacket},
+		{name: "marker mismatch", packet: markerMismatchPacket},
 		{name: "payload starts after header", packet: encoderRTPPacketFromTestData(shiftedPayloadPacketData, shiftedPayloadPacketData[13:])},
 		{name: "payload truncated before packet end", packet: encoderRTPPacketFromTestData(packetData, packetData[12:14])},
 		{name: "empty payload", packet: encoderRTPPacketFromTestData(packetData, nil)},
@@ -14378,21 +14413,16 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 		{name: "foreign payload", packet: encoderRTPPacketFromTestData(packetData, []byte{0x65, 0x88, 0x99})},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := tt.packet.PacketData(); tt.packetDataInvalid {
-				if !errors.Is(err, goh264.ErrInvalidData) {
-					t.Fatalf("PacketData error = %v, want ErrInvalidData", err)
-				}
-				prefix := []byte{1, 2}
-				if got, err := tt.packet.AppendPacketData(append([]byte(nil), prefix...)); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, prefix) {
-					t.Fatalf("AppendPacketData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
-				}
-			} else if err != nil {
-				t.Fatalf("PacketData error = %v, want nil", err)
+			if got, err := tt.packet.PacketData(); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("PacketData invalid = %x/%v, want nil ErrInvalidData", got, err)
+			}
+			prefix := []byte{1, 2}
+			if got, err := tt.packet.AppendPacketData(append([]byte(nil), prefix...)); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, prefix) {
+				t.Fatalf("AppendPacketData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
 			}
 			if got, err := tt.packet.PayloadData(); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
 				t.Fatalf("PayloadData invalid = %x/%v, want nil ErrInvalidData", got, err)
 			}
-			prefix := []byte{1, 2}
 			if got, err := tt.packet.AppendPayloadData(append([]byte(nil), prefix...)); !errors.Is(err, goh264.ErrInvalidData) || !bytes.Equal(got, prefix) {
 				t.Fatalf("AppendPayloadData invalid = %x/%v, want preserved prefix ErrInvalidData", got, err)
 			}
@@ -14406,10 +14436,15 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 	}
 
 	overflowDst := fakeDecoderRawBytesLen(maxIntForTest / 2)
-	if got, err := valid.AppendPacketData(overflowDst); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
+	overflowPacketData := []byte{
+		0x80, 0xe0, 0x12, 0x34, 0, 0, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd,
+		0x65, 0x88, 0x99,
+	}
+	validForOverflow := encoderRTPPacketFromTestData(overflowPacketData, overflowPacketData[12:])
+	if got, err := validForOverflow.AppendPacketData(overflowDst); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
 		t.Fatalf("AppendPacketData overflowed dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
 	}
-	if got, err := valid.AppendPayloadData(overflowDst); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
+	if got, err := validForOverflow.AppendPayloadData(overflowDst); !errors.Is(err, goh264.ErrInvalidData) || len(got) != len(overflowDst) {
 		t.Fatalf("AppendPayloadData overflowed dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
 	}
 }

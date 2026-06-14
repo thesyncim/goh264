@@ -602,10 +602,10 @@ with the strongest public API coverage for integration work:
   `EncodedFrame.Data` is retained only as an Annex B access-unit view for local
   inspection through `AccessUnitData` and `NALData`. Packet-level helpers
   `PacketData`, `PayloadData`, `AppendPacketData`, `AppendPayloadData`,
-  `Validate`, and `Clone` validate the encoder-emitted 12-byte RTP header shape
-  and exported packet metadata before returning packet bytes. Payload helpers,
-  packet validation, and packet clones also require `Payload` to be exactly
-  `Data[12:]`.
+  `Validate`, and `Clone` validate the encoder-emitted 12-byte RTP header shape,
+  exported packet metadata, RTP payload view, and RTP payload syntax
+  before returning packet bytes. `PacketData`, payload helpers, packet
+  validation, and packet clones require `Payload` to be exactly `Data[12:]`.
 - Overflowed caller-owned `EncodeInto` destination growth is rejected across
   Annex B, AVC, and RTP without consuming queued IDR state or advancing
   RTP/callback state. The same hard-error path preserves P-frame reference and

@@ -305,11 +305,14 @@ type EncoderRTPPacket struct {
 // PacketData returns the complete RTP packet bytes, including the 12-byte RTP
 // header.
 //
+// PacketData validates the packet metadata, payload view, and RTP payload
+// syntax before returning bytes.
+//
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
 func (packet EncoderRTPPacket) PacketData() ([]byte, error) {
-	if len(packet.Data) > maxInt/2 || !encoderRTPPacketHeaderMetadataOK(packet) {
-		return nil, ErrInvalidData
+	if _, err := packet.PayloadData(); err != nil {
+		return nil, err
 	}
 	return packet.Data[:len(packet.Data):len(packet.Data)], nil
 }
@@ -680,6 +683,9 @@ func (frame EncodedFrame) AppendAccessUnitData(dst []byte) ([]byte, error) {
 }
 
 // RTPPacketData returns the complete RTP packet bytes for RTPPackets[index].
+//
+// RTPPacketData validates the packet metadata, payload view, and RTP payload
+// syntax before returning bytes.
 //
 // The returned slice is clipped to its length, so appending to it cannot
 // overwrite the following bytes in the packet backing store.
