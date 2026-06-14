@@ -87,6 +87,33 @@ const (
 	EncoderPresetQuality
 )
 
+type encoderH264LevelLimit struct {
+	levelIDC uint8
+	maxMBPS  uint64
+	maxFS    int
+	maxDPB   uint64
+	maxBR    int
+}
+
+var encoderBaselineLevelLimits = []encoderH264LevelLimit{
+	{levelIDC: 10, maxMBPS: 1485, maxFS: 99, maxDPB: 396, maxBR: 64_000},
+	{levelIDC: 11, maxMBPS: 3000, maxFS: 396, maxDPB: 900, maxBR: 192_000},
+	{levelIDC: 12, maxMBPS: 6000, maxFS: 396, maxDPB: 2376, maxBR: 384_000},
+	{levelIDC: 13, maxMBPS: 11880, maxFS: 396, maxDPB: 2376, maxBR: 768_000},
+	{levelIDC: 20, maxMBPS: 11880, maxFS: 396, maxDPB: 2376, maxBR: 2_000_000},
+	{levelIDC: 21, maxMBPS: 19800, maxFS: 792, maxDPB: 4752, maxBR: 4_000_000},
+	{levelIDC: 22, maxMBPS: 20250, maxFS: 1620, maxDPB: 8100, maxBR: 4_000_000},
+	{levelIDC: 30, maxMBPS: 40500, maxFS: 1620, maxDPB: 8100, maxBR: 10_000_000},
+	{levelIDC: 31, maxMBPS: 108000, maxFS: 3600, maxDPB: 18000, maxBR: 14_000_000},
+	{levelIDC: 32, maxMBPS: 216000, maxFS: 5120, maxDPB: 20480, maxBR: 20_000_000},
+	{levelIDC: 40, maxMBPS: 245760, maxFS: 8192, maxDPB: 32768, maxBR: 20_000_000},
+	{levelIDC: 41, maxMBPS: 245760, maxFS: 8192, maxDPB: 32768, maxBR: 50_000_000},
+	{levelIDC: 42, maxMBPS: 522240, maxFS: 8704, maxDPB: 34816, maxBR: 50_000_000},
+	{levelIDC: 50, maxMBPS: 589824, maxFS: 22080, maxDPB: 110400, maxBR: 135_000_000},
+	{levelIDC: 51, maxMBPS: 983040, maxFS: 36864, maxDPB: 184320, maxBR: 240_000_000},
+	{levelIDC: 52, maxMBPS: 2073600, maxFS: 36864, maxDPB: 184320, maxBR: 240_000_000},
+}
+
 type EncoderFrameDropMode uint8
 
 const (
@@ -152,6 +179,8 @@ type EncoderColorConfig struct {
 // InitialQP, MinQP, and MaxQP accept 0..51. When ExplicitQP is false, zero QP
 // fields select derived defaults during setup normalization; set ExplicitQP when
 // zero is an intentional setup value.
+// LevelIDC zero selects the smallest admitted Baseline level that fits the
+// configured geometry, frame rate, reference count, and maximum bitrate.
 // TimeBaseNum must be 1; zero selects 1 during setup normalization. TimeBaseDen
 // is the RTP clock denominator used to derive RTPTimestampIncrement.
 // RTPPayloadType accepts 1..127; zero selects the dynamic default payload type
@@ -1365,7 +1394,7 @@ func DefaultRealtimeEncoderConfig(width, height int) EncoderConfig {
 		TimeBaseNum:           1,
 		TimeBaseDen:           90000,
 		Profile:               EncoderProfileConstrainedBaseline,
-		LevelIDC:              31,
+		LevelIDC:              defaultRealtimeEncoderLevelIDC(width, height),
 		EntropyMode:           EncoderEntropyCAVLC,
 		DeblockMode:           EncoderDeblockEnabled,
 		MaxReferenceFrames:    1,
@@ -1425,6 +1454,24 @@ func DefaultAVCEncoderConfig(width, height int) EncoderConfig {
 // DefaultRealtimeEncoderConfig.
 func DefaultEncoderConfig(width, height int) EncoderConfig {
 	return DefaultRealtimeEncoderConfig(width, height)
+}
+
+func defaultRealtimeEncoderLevelIDC(width int, height int) uint8 {
+	const minimumRealtimeLevelIDC = 31
+	macroblockCount, err := encoderMacroblockCountChecked(width, height)
+	if err != nil {
+		return minimumRealtimeLevelIDC
+	}
+	levelIDC, err := normalizeEncoderLevelIDC(EncoderConfig{
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		MaxBitrate:         1_000_000,
+	}, macroblockCount)
+	if err != nil || levelIDC < minimumRealtimeLevelIDC {
+		return minimumRealtimeLevelIDC
+	}
+	return levelIDC
 }
 
 // NewEncoder validates and normalizes cfg, then returns a fresh encoder.
@@ -4333,9 +4380,6 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	default:
 		return cfg, encoderInvalid("unknown encoder profile")
 	}
-	if cfg.LevelIDC == 0 {
-		cfg.LevelIDC = 31
-	}
 	if cfg.EntropyMode == 0 {
 		cfg.EntropyMode = EncoderEntropyCAVLC
 	}
@@ -4389,6 +4433,15 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	if cfg.MaxBitrate < cfg.TargetBitrate {
 		return cfg, encoderInvalid("max bitrate must be greater than or equal to target bitrate")
 	}
+	macroblockCount, err := encoderMacroblockCountChecked(cfg.Width, cfg.Height)
+	if err != nil {
+		return cfg, err
+	}
+	levelIDC, err := normalizeEncoderLevelIDC(cfg, macroblockCount)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.LevelIDC = levelIDC
 	if cfg.VBVBufferSize < 0 || cfg.MaxFrameSize < 0 {
 		return cfg, encoderInvalid("VBV buffer size and max frame size cannot be negative")
 	}
@@ -4430,10 +4483,6 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	}
 	if cfg.SliceCount == 0 {
 		cfg.SliceCount = 1
-	}
-	macroblockCount, err := encoderMacroblockCountChecked(cfg.Width, cfg.Height)
-	if err != nil {
-		return cfg, err
 	}
 	if cfg.SliceCount > macroblockCount {
 		return cfg, encoderInvalid("slice count cannot exceed coded macroblock count")
@@ -4497,6 +4546,56 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 		}
 	}
 	return cfg, nil
+}
+
+func normalizeEncoderLevelIDC(cfg EncoderConfig, macroblockCount int) (uint8, error) {
+	if cfg.LevelIDC == 0 {
+		for _, limit := range encoderBaselineLevelLimits {
+			if encoderLevelLimitFitsConfig(limit, cfg, macroblockCount) {
+				return limit.levelIDC, nil
+			}
+		}
+		return 0, encoderInvalid("no admitted H.264 level fits the configured stream envelope")
+	}
+	for _, limit := range encoderBaselineLevelLimits {
+		if limit.levelIDC != cfg.LevelIDC {
+			continue
+		}
+		if !encoderLevelLimitFitsConfig(limit, cfg, macroblockCount) {
+			return 0, encoderInvalid("configured H.264 level is too small for geometry, frame rate, references, or bitrate")
+		}
+		return cfg.LevelIDC, nil
+	}
+	return 0, encoderInvalid("unknown H.264 level")
+}
+
+func encoderLevelLimitFitsConfig(limit encoderH264LevelLimit, cfg EncoderConfig, macroblockCount int) bool {
+	if macroblockCount <= 0 || macroblockCount > limit.maxFS || cfg.MaxBitrate > limit.maxBR {
+		return false
+	}
+	if !encoderLevelAllowsMacroblocksPerSecond(limit, macroblockCount, cfg.FrameRateNum, cfg.FrameRateDen) {
+		return false
+	}
+	refMbs, err := checkedMulUint64(uint64(macroblockCount), uint64(cfg.MaxReferenceFrames))
+	if err != nil || refMbs > limit.maxDPB {
+		return false
+	}
+	return true
+}
+
+func encoderLevelAllowsMacroblocksPerSecond(limit encoderH264LevelLimit, macroblockCount int, frameRateNum int, frameRateDen int) bool {
+	if macroblockCount <= 0 || frameRateNum <= 0 || frameRateDen <= 0 {
+		return false
+	}
+	used, err := checkedMulUint64(uint64(macroblockCount), uint64(frameRateNum))
+	if err != nil {
+		return false
+	}
+	allowed, err := checkedMulUint64(limit.maxMBPS, uint64(frameRateDen))
+	if err != nil {
+		return true
+	}
+	return used <= allowed
 }
 
 func validateEncoderRTPControlEnvelope(cfg EncoderConfig) error {

@@ -547,6 +547,10 @@ with the strongest public API coverage for integration work:
   needs the exact setup.
 - `EncoderConfig.Normalize` exposes the exact validated configuration stored by
   `NewEncoder`.
+- `EncoderConfig.LevelIDC = 0` selects the smallest admitted Baseline level
+  that fits the normalized geometry, frame rate, reference count, and maximum
+  bitrate. Explicit nonzero levels are rejected when they are too small for
+  that envelope.
 - `Encoder.Config` returns the exact normalized live configuration after
   accepted runtime setters and `Reconfigure` updates.
 - `EncoderConfig.ParameterSets` and `EncoderConfig.RecoveryPointSEIMessage`

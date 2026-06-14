@@ -41,6 +41,9 @@ func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
 	if got.Profile != goh264.EncoderProfileConstrainedBaseline {
 		t.Fatalf("profile = %v, want constrained baseline", got.Profile)
 	}
+	if got.LevelIDC != 31 {
+		t.Fatalf("level = %d, want 31 for default realtime headroom", got.LevelIDC)
+	}
 	if got.EntropyMode != goh264.EncoderEntropyCAVLC || got.BFrames != 0 || got.MaxReferenceFrames != 1 {
 		t.Fatalf("baseline realtime tools = entropy %v bframes %d refs %d, want CAVLC/0/1",
 			got.EntropyMode, got.BFrames, got.MaxReferenceFrames)
@@ -69,6 +72,28 @@ func TestEncoderDefaultRealtimeWebRTCConfig(t *testing.T) {
 	}
 	if normalized != got {
 		t.Fatalf("Normalize default = %+v, want encoder config %+v", normalized, got)
+	}
+}
+
+func TestEncoderDefaultRealtimeConfigDerivesHigherLevelForLargeGeometry(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(1920, 1080)
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder full HD default: %v", err)
+	}
+	if got := enc.Config(); got.LevelIDC != 40 {
+		t.Fatalf("full HD default level = %d, want 40", got.LevelIDC)
+	}
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets: %v", err)
+	}
+	info, err := goh264.NewDecoder().ParseHeadersAnnexB(headers.AnnexB)
+	if err != nil {
+		t.Fatalf("ParseHeadersAnnexB: %v", err)
+	}
+	if info.LevelIDC != 40 || info.Width != 1920 || info.Height != 1080 {
+		t.Fatalf("full HD SPS info = %+v, want level 40 1920x1080", info)
 	}
 }
 
@@ -193,7 +218,7 @@ func TestEncoderConfigNormalizeAppliesDerivedDefaults(t *testing.T) {
 	}
 	if normalized.TimeBaseNum != 1 || normalized.TimeBaseDen != 90000 ||
 		normalized.Profile != goh264.EncoderProfileConstrainedBaseline ||
-		normalized.LevelIDC != 31 ||
+		normalized.LevelIDC != 20 ||
 		normalized.EntropyMode != goh264.EncoderEntropyCAVLC ||
 		normalized.DeblockMode != goh264.EncoderDeblockEnabled ||
 		normalized.MaxReferenceFrames != 1 ||
@@ -223,6 +248,107 @@ func TestEncoderConfigNormalizeAppliesDerivedDefaults(t *testing.T) {
 	}
 	if got := enc.Config(); got != normalized {
 		t.Fatalf("NewEncoder config = %+v, want Normalize result %+v", got, normalized)
+	}
+}
+
+func TestEncoderConfigLevelZeroDerivesMinimumAdmittedLevel(t *testing.T) {
+	tests := []struct {
+		name       string
+		width      int
+		height     int
+		frNum      int
+		frDen      int
+		maxBitrate int
+		wantLevel  uint8
+	}{
+		{name: "tiny low bitrate", width: 16, height: 16, frNum: 30, frDen: 1, maxBitrate: 64_000, wantLevel: 10},
+		{name: "tiny default bitrate", width: 64, height: 32, frNum: 30, frDen: 1, maxBitrate: 1_000_000, wantLevel: 20},
+		{name: "vga thirty fps", width: 640, height: 480, frNum: 30, frDen: 1, maxBitrate: 1_000_000, wantLevel: 30},
+		{name: "hd thirty fps", width: 1280, height: 720, frNum: 30, frDen: 1, maxBitrate: 4_000_000, wantLevel: 31},
+		{name: "full hd thirty fps", width: 1920, height: 1080, frNum: 30, frDen: 1, maxBitrate: 10_000_000, wantLevel: 40},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(tt.width, tt.height)
+			cfg.LevelIDC = 0
+			cfg.FrameRateNum = tt.frNum
+			cfg.FrameRateDen = tt.frDen
+			cfg.TargetBitrate = tt.maxBitrate
+			cfg.MaxBitrate = tt.maxBitrate
+
+			normalized, err := cfg.Normalize()
+			if err != nil {
+				t.Fatalf("Normalize: %v", err)
+			}
+			if normalized.LevelIDC != tt.wantLevel {
+				t.Fatalf("derived level = %d, want %d for %+v", normalized.LevelIDC, tt.wantLevel, normalized)
+			}
+			headers, err := cfg.ParameterSets()
+			if err != nil {
+				t.Fatalf("ParameterSets: %v", err)
+			}
+			info, err := goh264.NewDecoder().ParseHeadersAnnexB(headers.AnnexB)
+			if err != nil {
+				t.Fatalf("ParseHeadersAnnexB: %v", err)
+			}
+			if info.LevelIDC != tt.wantLevel {
+				t.Fatalf("SPS level = %d, want %d", info.LevelIDC, tt.wantLevel)
+			}
+		})
+	}
+}
+
+func TestEncoderConfigRejectsExplicitLevelOutsideConfiguredEnvelope(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*goh264.EncoderConfig)
+	}{
+		{name: "unknown", mutate: func(c *goh264.EncoderConfig) { c.LevelIDC = 99 }},
+		{name: "geometry and macroblocks per second", mutate: func(c *goh264.EncoderConfig) {
+			c.LevelIDC = 10
+			c.Width = 640
+			c.Height = 480
+			c.StrideY = 640
+			c.StrideCb = 320
+			c.StrideCr = 320
+			c.TargetBitrate = 64_000
+			c.MaxBitrate = 64_000
+		}},
+		{name: "bitrate", mutate: func(c *goh264.EncoderConfig) {
+			c.LevelIDC = 10
+			c.Width = 16
+			c.Height = 16
+			c.StrideY = 16
+			c.StrideCb = 8
+			c.StrideCr = 8
+			c.TargetBitrate = 1_000_000
+			c.MaxBitrate = 1_000_000
+		}},
+		{name: "full hd level too small", mutate: func(c *goh264.EncoderConfig) {
+			c.LevelIDC = 31
+			c.Width = 1920
+			c.Height = 1080
+			c.StrideY = 1920
+			c.StrideCb = 960
+			c.StrideCr = 960
+			c.TargetBitrate = 4_000_000
+			c.MaxBitrate = 4_000_000
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := goh264.DefaultEncoderConfig(16, 16)
+			tt.mutate(&cfg)
+			if err := cfg.Validate(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Validate error = %v, want ErrInvalidData", err)
+			}
+			if _, err := cfg.Normalize(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Normalize error = %v, want ErrInvalidData", err)
+			}
+			if _, err := goh264.NewEncoder(cfg); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("NewEncoder error = %v, want ErrInvalidData", err)
+			}
+		})
 	}
 }
 
