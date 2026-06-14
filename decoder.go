@@ -1229,13 +1229,14 @@ func (d *Decoder) storeAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationR
 }
 
 func (d *Decoder) updateAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationRecord) {
+	_, _, hadActiveSPS := d.currentActiveSPS()
 	resetDPB := d.parameterSetUpdateNeedsDPBResetForAnySPS(cfg.SPS, cfg.PPS)
 	d.sps = cfg.SPS
 	d.pps = cfg.PPS
 	d.avcFirstSPSID = cfg.FirstSPSID
 	d.avcFirstSPSValid = true
 	d.avcNALLengthSize = cfg.NALLengthSize
-	if resetDPB {
+	if resetDPB || !hadActiveSPS {
 		d.clearActiveSPS()
 		_ = d.simple.StoreAVCDecoderConfiguration(cfg)
 		return
@@ -1250,13 +1251,14 @@ func (d *Decoder) updateAVCDecoderConfigurationForPacket(cfg h264.AVCDecoderConf
 }
 
 func (d *Decoder) updateAVCDecoderConfigurationForActiveSPS(cfg h264.AVCDecoderConfigurationRecord, activeSPS decoderActiveSPS) {
+	_, _, hadActiveSPS := d.currentActiveSPS()
 	resetDPB := d.parameterSetUpdateNeedsDPBResetForActiveSPS(cfg.SPS, cfg.PPS, activeSPS)
 	d.sps = cfg.SPS
 	d.pps = cfg.PPS
 	d.avcFirstSPSID = cfg.FirstSPSID
 	d.avcFirstSPSValid = true
 	d.avcNALLengthSize = cfg.NALLengthSize
-	if resetDPB {
+	if resetDPB || !hadActiveSPS {
 		d.clearActiveSPS()
 		_ = d.simple.StoreAVCDecoderConfiguration(cfg)
 		return
