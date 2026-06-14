@@ -65,6 +65,11 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		{typeName: "Frame", typ: reflect.TypeOf((*Frame)(nil)), method: "Clone"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "Clone"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "Validate"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendUserDataUnregistered"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendA53ClosedCaptions"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendICCProfile"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendDynamicHDR10Plus"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendLCEVC"},
 	} {
 		if _, ok := tt.typ.MethodByName(tt.method); !ok {
 			t.Fatalf("README decoder ownership names missing %s.%s", tt.typeName, tt.method)
@@ -137,6 +142,11 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"DefaultRealtimeEncoderConfig",
 		"DefaultEncoderConfig",
 		"AppendData",
+		"AppendUserDataUnregistered",
+		"AppendA53ClosedCaptions",
+		"AppendICCProfile",
+		"AppendDynamicHDR10Plus",
+		"AppendLCEVC",
 		"Clone",
 		"Append",
 		"AppendSPS",
@@ -212,16 +222,22 @@ func TestDecoderOwnershipAPIReturnsErrors(t *testing.T) {
 	for _, tt := range []struct {
 		typeName string
 		typ      reflect.Type
+		method   string
 	}{
-		{typeName: "Packet", typ: reflect.TypeOf(Packet{})},
-		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{})},
+		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "AppendData"},
+		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "AppendData"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendUserDataUnregistered"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendA53ClosedCaptions"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendICCProfile"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendDynamicHDR10Plus"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendLCEVC"},
 	} {
-		method, ok := tt.typ.MethodByName("AppendData")
+		method, ok := tt.typ.MethodByName(tt.method)
 		if !ok {
-			t.Fatalf("%s missing AppendData", tt.typeName)
+			t.Fatalf("%s missing %s", tt.typeName, tt.method)
 		}
 		if method.Type.NumOut() == 0 || !method.Type.Out(method.Type.NumOut()-1).Implements(errorType) {
-			t.Fatalf("%s.AppendData should return an error", tt.typeName)
+			t.Fatalf("%s.%s should return an error", tt.typeName, tt.method)
 		}
 	}
 }
@@ -706,6 +722,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestPacketCloneDeepCopiesDataAndSideData",
 		"TestPacketAppendDataReturnsCallerOwnedBytes",
 		"TestPacketSideDataAppendDataReturnsCallerOwnedBytes",
+		"TestFrameSideDataAppendHelpersReturnCallerOwnedBytes",
 		"TestFrameCloneDeepCopiesPlanesAndSideData",
 		"TestDecodeFrameSideDataByteSlicesAreCallerOwned",
 		"TestFrameAppendRawYUVIsolatesOverlappingSource",

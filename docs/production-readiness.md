@@ -89,7 +89,9 @@ overflowed public frame and side-data storage rejection; `Packet.Clone`,
 `PacketSideData.Clone`, and `FrameSideData.Clone` expose the same checked
 ownership contracts for caller-constructed packet and side-data values, while
 `Packet.AppendData` and `PacketSideData.AppendData` provide caller-buffer
-retention paths for compressed packet and packet side-data bytes.
+retention paths for compressed packet and packet side-data bytes. Decoded
+`FrameSideData` byte-payload append helpers cover unregistered user data, A53,
+ICC, HDR10+, and LCEVC retention.
 Public SEI `FrameSideData` byte slices are guarded as caller-owned by mutating
 decoded unregistered-user-data, A53, and LCEVC slices and re-decoding the same
 input bytes.

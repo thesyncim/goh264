@@ -448,17 +448,54 @@ func TestDecoderCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 	}
 
 	for _, tt := range []struct {
-		name string
-		side FrameSideData
+		name   string
+		side   FrameSideData
+		append func(FrameSideData, []byte) ([]byte, error)
 	}{
-		{name: "unregistered-list", side: FrameSideData{UserDataUnregistered: fakeByteSlices(maxIntForTest/32 + 1)}},
-		{name: "unregistered-payload", side: FrameSideData{UserDataUnregistered: [][]byte{fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}}},
-		{name: "a53-cc", side: FrameSideData{A53ClosedCaptions: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{
+			name: "unregistered-list",
+			side: FrameSideData{UserDataUnregistered: fakeByteSlices(maxIntForTest/32 + 1)},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendUserDataUnregistered(dst, 0)
+			},
+		},
+		{
+			name: "unregistered-payload",
+			side: FrameSideData{UserDataUnregistered: [][]byte{fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendUserDataUnregistered(dst, 0)
+			},
+		},
+		{
+			name: "a53-cc",
+			side: FrameSideData{A53ClosedCaptions: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendA53ClosedCaptions(dst)
+			},
+		},
 		{name: "s12m", side: FrameSideData{S12MTimecodes: fakeUint32s(maxIntForTest/4 + 1)}},
 		{name: "picture-timing-timecode", side: FrameSideData{PictureTiming: &PictureTiming{Timecode: fakeTimecodes(maxIntForTest/32 + 1)}}},
-		{name: "icc", side: FrameSideData{ICCProfile: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
-		{name: "dynamic-hdr10-plus", side: FrameSideData{DynamicHDR10Plus: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
-		{name: "lcevc", side: FrameSideData{LCEVC: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}},
+		{
+			name: "icc",
+			side: FrameSideData{ICCProfile: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendICCProfile(dst)
+			},
+		},
+		{
+			name: "dynamic-hdr10-plus",
+			side: FrameSideData{DynamicHDR10Plus: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendDynamicHDR10Plus(dst)
+			},
+		},
+		{
+			name: "lcevc",
+			side: FrameSideData{LCEVC: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendLCEVC(dst)
+			},
+		},
 		{name: "reference-displays", side: FrameSideData{ReferenceDisplays: &ReferenceDisplaysInfo{Displays: fakeReferenceDisplays(maxIntForTest/16 + 1)}}},
 	} {
 		t.Run("frame-side-data-"+tt.name, func(t *testing.T) {
@@ -467,6 +504,45 @@ func TestDecoderCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 			}
 			if got, err := tt.side.Clone(); !reflect.DeepEqual(got, FrameSideData{}) || !errors.Is(err, ErrInvalidData) {
 				t.Fatalf("FrameSideData.Clone overflow = %+v/%v, want zero ErrInvalidData", got, err)
+			}
+			if tt.append != nil {
+				if got, err := tt.append(tt.side, append([]byte(nil), prefix...)); !bytes.Equal(got, prefix) || !errors.Is(err, ErrInvalidData) {
+					t.Fatalf("FrameSideData append overflow = %x/%v, want original prefix ErrInvalidData", got, err)
+				}
+			}
+		})
+	}
+
+	validFrameSide := FrameSideData{
+		UserDataUnregistered: [][]byte{{1}},
+		A53ClosedCaptions:    []byte{2},
+		ICCProfile:           []byte{3},
+		DynamicHDR10Plus:     []byte{4},
+		LCEVC:                []byte{5},
+	}
+	for _, tt := range []struct {
+		name   string
+		append func(FrameSideData, []byte) ([]byte, error)
+	}{
+		{name: "unregistered", append: func(side FrameSideData, dst []byte) ([]byte, error) {
+			return side.AppendUserDataUnregistered(dst, 0)
+		}},
+		{name: "a53", append: func(side FrameSideData, dst []byte) ([]byte, error) {
+			return side.AppendA53ClosedCaptions(dst)
+		}},
+		{name: "icc", append: func(side FrameSideData, dst []byte) ([]byte, error) {
+			return side.AppendICCProfile(dst)
+		}},
+		{name: "dynamic-hdr10-plus", append: func(side FrameSideData, dst []byte) ([]byte, error) {
+			return side.AppendDynamicHDR10Plus(dst)
+		}},
+		{name: "lcevc", append: func(side FrameSideData, dst []byte) ([]byte, error) {
+			return side.AppendLCEVC(dst)
+		}},
+	} {
+		t.Run("frame-side-data-dst-"+tt.name, func(t *testing.T) {
+			if got, err := tt.append(validFrameSide, largeDst); len(got) != len(largeDst) || !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("FrameSideData append large dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
 			}
 		})
 	}
@@ -539,6 +615,113 @@ func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 		clone.PictureTiming.Timecode[0].Frame == side.PictureTiming.Timecode[0].Frame ||
 		clone.ReferenceDisplays.Displays[0].LeftViewID == side.ReferenceDisplays.Displays[0].LeftViewID {
 		t.Fatal("mutating source side data changed clone")
+	}
+}
+
+func TestFrameSideDataAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
+	prefix := []byte{0xde, 0xad}
+	for _, tt := range []struct {
+		name   string
+		side   FrameSideData
+		source func(FrameSideData) []byte
+		append func(FrameSideData, []byte) ([]byte, error)
+	}{
+		{
+			name: "unregistered",
+			side: FrameSideData{UserDataUnregistered: [][]byte{{1, 2, 3}}},
+			source: func(side FrameSideData) []byte {
+				return side.UserDataUnregistered[0]
+			},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendUserDataUnregistered(dst, 0)
+			},
+		},
+		{
+			name: "a53",
+			side: FrameSideData{A53ClosedCaptions: []byte{4, 5}},
+			source: func(side FrameSideData) []byte {
+				return side.A53ClosedCaptions
+			},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendA53ClosedCaptions(dst)
+			},
+		},
+		{
+			name: "icc",
+			side: FrameSideData{ICCProfile: []byte{6, 7}},
+			source: func(side FrameSideData) []byte {
+				return side.ICCProfile
+			},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendICCProfile(dst)
+			},
+		},
+		{
+			name: "dynamic-hdr10-plus",
+			side: FrameSideData{DynamicHDR10Plus: []byte{8, 9}},
+			source: func(side FrameSideData) []byte {
+				return side.DynamicHDR10Plus
+			},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendDynamicHDR10Plus(dst)
+			},
+		},
+		{
+			name: "lcevc",
+			side: FrameSideData{LCEVC: []byte{10, 11}},
+			source: func(side FrameSideData) []byte {
+				return side.LCEVC
+			},
+			append: func(side FrameSideData, dst []byte) ([]byte, error) {
+				return side.AppendLCEVC(dst)
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			source := tt.source(tt.side)
+			want := append(append([]byte(nil), prefix...), source...)
+			got, err := tt.append(tt.side, append([]byte(nil), prefix...))
+			if err != nil {
+				t.Fatalf("append helper: %v", err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("append helper = %x, want %x", got, want)
+			}
+			source[0] ^= 0xff
+			if !bytes.Equal(got, want) {
+				t.Fatalf("append helper output aliases source after mutation: got %x want %x", got, want)
+			}
+
+			backing := append(append([]byte(nil), prefix...), want[len(prefix):]...)
+			overlapSide := tt.side
+			switch tt.name {
+			case "unregistered":
+				overlapSide.UserDataUnregistered = [][]byte{backing[len(prefix):]}
+			case "a53":
+				overlapSide.A53ClosedCaptions = backing[len(prefix):]
+			case "icc":
+				overlapSide.ICCProfile = backing[len(prefix):]
+			case "dynamic-hdr10-plus":
+				overlapSide.DynamicHDR10Plus = backing[len(prefix):]
+			case "lcevc":
+				overlapSide.LCEVC = backing[len(prefix):]
+			}
+			overlap, err := tt.append(overlapSide, backing[:len(prefix)])
+			if err != nil {
+				t.Fatalf("append helper overlapping source: %v", err)
+			}
+			if !bytes.Equal(overlap, want) {
+				t.Fatalf("append helper overlapping source = %x, want %x", overlap, want)
+			}
+			tt.source(overlapSide)[0] ^= 0xff
+			if !bytes.Equal(overlap, want) {
+				t.Fatalf("overlapping append helper output aliases source after mutation: got %x want %x", overlap, want)
+			}
+		})
+	}
+
+	if got, err := (FrameSideData{}).AppendUserDataUnregistered(append([]byte(nil), prefix...), 0); !bytes.Equal(got, prefix) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("AppendUserDataUnregistered missing index = %x/%v, want original prefix ErrInvalidData", got, err)
 	}
 }
 

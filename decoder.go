@@ -257,6 +257,40 @@ func (side FrameSideData) Clone() (FrameSideData, error) {
 	return cloneFrameSideData(side), nil
 }
 
+// AppendUserDataUnregistered appends a caller-owned copy of
+// UserDataUnregistered[index] to dst. On error, dst is returned unchanged.
+func (side FrameSideData) AppendUserDataUnregistered(dst []byte, index int) ([]byte, error) {
+	if len(side.UserDataUnregistered) > maxInt/32 ||
+		index < 0 || index >= len(side.UserDataUnregistered) {
+		return dst, ErrInvalidData
+	}
+	return appendPublicBytes(dst, side.UserDataUnregistered[index])
+}
+
+// AppendA53ClosedCaptions appends a caller-owned copy of A53ClosedCaptions to
+// dst. On error, dst is returned unchanged.
+func (side FrameSideData) AppendA53ClosedCaptions(dst []byte) ([]byte, error) {
+	return appendPublicBytes(dst, side.A53ClosedCaptions)
+}
+
+// AppendICCProfile appends a caller-owned copy of ICCProfile to dst. On error,
+// dst is returned unchanged.
+func (side FrameSideData) AppendICCProfile(dst []byte) ([]byte, error) {
+	return appendPublicBytes(dst, side.ICCProfile)
+}
+
+// AppendDynamicHDR10Plus appends a caller-owned copy of DynamicHDR10Plus to
+// dst. On error, dst is returned unchanged.
+func (side FrameSideData) AppendDynamicHDR10Plus(dst []byte) ([]byte, error) {
+	return appendPublicBytes(dst, side.DynamicHDR10Plus)
+}
+
+// AppendLCEVC appends a caller-owned copy of LCEVC to dst. On error, dst is
+// returned unchanged.
+func (side FrameSideData) AppendLCEVC(dst []byte) ([]byte, error) {
+	return appendPublicBytes(dst, side.LCEVC)
+}
+
 type PictureTiming struct {
 	PicStruct       int32
 	CTType          int32

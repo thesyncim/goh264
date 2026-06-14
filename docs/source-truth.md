@@ -133,7 +133,8 @@ appender no-panic rejection for overflowed caller-constructed frame geometry,
 `Frame.Clone` deep-owned decoded-frame snapshots with overflowed public storage
 rejection, checked `Packet.Clone`, `PacketSideData.Clone`, and
 `FrameSideData.Clone` snapshots plus `Packet.AppendData` and
-`PacketSideData.AppendData` caller-buffer retention,
+`PacketSideData.AppendData` caller-buffer retention, decoded `FrameSideData`
+byte-payload append helpers,
 checked low/high internal motion and reconstruction plane-span overflow rejection,
 public SEI side-data byte-slice ownership against caller mutation,
 raw-diff/frame-MD5 diagnostics, and CLI benchmark comparison.

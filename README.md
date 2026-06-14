@@ -304,7 +304,10 @@ for retained packets and decoded output metadata. `Packet.Validate`,
 `PacketSideData.Validate`, `Frame.Validate`, and `FrameSideData.Validate` expose
 the same checks for preflight before handoff or retention. `Packet.AppendData`
 and `PacketSideData.AppendData` append caller-owned byte copies for retained
-compressed packets and packet side-data payloads.
+compressed packets and packet side-data payloads. `FrameSideData` also provides
+`AppendUserDataUnregistered`, `AppendA53ClosedCaptions`, `AppendICCProfile`,
+`AppendDynamicHDR10Plus`, and `AppendLCEVC` for retaining individual decoded
+side-data byte payloads in caller-managed buffers.
 Structured side-data entries are decoded only when their payload validates;
 byte-oriented packet side data such as A53 captions, ICC profile, HDR10+, and
 LCEVC is copied into frame side data for caller-owned retention.
