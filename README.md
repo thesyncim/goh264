@@ -799,8 +799,9 @@ Production use should be backed by a fresh quality-evidence pass proving:
   bitstream-oracles, residual-boundary, writer, allocation, and benchmark gates. This runner
   requires `ffmpeg` for admitted encoder bitstream-oracle rows; set
   `GOH264_FFMPEG_BIN` when the oracle binary is not named `ffmpeg`.
-- Allocation and performance evidence is recorded in
-  [docs/production-readiness.md](docs/production-readiness.md).
+- Allocation and performance evidence expectations and local bundle paths are
+  described in [docs/production-readiness.md](docs/production-readiness.md);
+  checked-in reviewed profile artifacts remain pending there.
 - The documented encoder contract is limited to the listed realtime subset.
   Broader support requires matching motion-search, residual, rate-control,
   packetizer, control, and oracle evidence in
@@ -818,7 +819,9 @@ The decoder quality-evidence runner writes logs under
 `testdata/h264/realvectors/failures.jsonl` contains known-red rows unless
 `GOH264_QUALITY_ALLOW_KNOWN_RED=1` is set for a local diagnostic run. It
 also requires a clean worktree unless `GOH264_QUALITY_ALLOW_DIRTY=1` is set for
-diagnostics.
+diagnostics. It requires `ffmpeg`, `ffprobe`, `cc`, and the pinned upstream
+oracle sources under `.upstream/ffmpeg-n8.0.1`; run
+`scripts/fetch-upstream.sh` when that upstream tree is missing.
 The encoder quality-evidence runner writes logs under
 `.artifacts/h264-encoder-quality-evidence/` and likewise requires a clean
 worktree unless `GOH264_ENCODER_QUALITY_ALLOW_DIRTY=1` is set for diagnostics.

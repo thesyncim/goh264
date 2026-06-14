@@ -595,6 +595,8 @@ func TestDocsAndScriptsAvoidShippingStatusWording(t *testing.T) {
 			statusPhrase("re", "lease tag"),
 			statusPhrase("re", "leased version"),
 			statusPhrase("published ", "version"),
+			statusPhrase("rem", "oved ", "from the ", "ledger"),
+			statusPhrase("rem", "ove ", "from the ", "ledger"),
 			statusPhrase("encoder api (experimental)"),
 			statusPhrase("experimental admitted subset"),
 			statusPhrase("rejected/not-yet-admitted"),

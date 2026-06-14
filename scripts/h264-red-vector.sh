@@ -57,7 +57,7 @@ if [[ "$framemd5_status" -ne 0 ]]; then
     exit "$framemd5_status"
 fi
 
-printf '\nknown-red red queue (expected to fail until the lane is removed from the ledger)'
+printf '\nknown-red red queue (expected to fail while ledger rows are current)'
 if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
     printf ' filter=%s' "$GOH264_CORPUS_FILTER"
 fi
