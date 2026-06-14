@@ -403,7 +403,8 @@ func validateEncoderRTPPayload(payload []byte) error {
 			if size == 0 || pos+size > len(payload) {
 				return ErrInvalidData
 			}
-			if payload[pos]&0x80 != 0 || payload[pos]&0x1f == 0 {
+			innerType := payload[pos] & 0x1f
+			if payload[pos]&0x80 != 0 || innerType == 0 || innerType >= 24 {
 				return ErrInvalidData
 			}
 			pos += size
@@ -414,6 +415,10 @@ func validateEncoderRTPPayload(payload []byte) error {
 		}
 		fuHeader := payload[1]
 		if fuHeader&0x20 != 0 || fuHeader&0x1f == 0 || fuHeader&0xc0 == 0xc0 {
+			return ErrInvalidData
+		}
+	default:
+		if typ >= 24 {
 			return ErrInvalidData
 		}
 	}

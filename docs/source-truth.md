@@ -250,8 +250,9 @@ metadata and callback packet isolation, RTP payload-type/SSRC/sequence metadata,
 RTP header bytes with public `EncodedFrame.RTPPacketData`/
 `EncodedFrame.RTPPayloadData` and packet-level `EncoderRTPPacket` helpers,
 clipped packet payload views over packet data, malformed RTP payload rejection
-for packet and payload byte helpers, and packet storage isolated from
-`EncodedFrame.Data` including caller-backed `EncodeInto` output buffers,
+for admitted single-NAL, STAP-A, and FU-A packet/payload byte helpers including
+STAP-B, MTAP, FU-B, and nested STAP-A packetization units, and packet storage
+isolated from `EncodedFrame.Data` including caller-backed `EncodeInto` output buffers,
 unchanged caller append destinations on invalid or overflowed-destination
 access-unit, NAL, RTP packet, and RTP payload appends, malformed dropped-result storage rejected by
 `EncodedFrame.Clone`, checked `EncoderRTPPacket` payload/data clone rejection,

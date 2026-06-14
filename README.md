@@ -609,9 +609,11 @@ with the strongest public API coverage for integration work:
   inspection through `AccessUnitData` and `NALData`. Packet-level helpers
   `PacketData`, `PayloadData`, `AppendPacketData`, `AppendPayloadData`,
   `Validate`, and `Clone` validate the encoder-emitted 12-byte RTP header shape,
-  exported packet metadata, RTP payload view, and RTP payload syntax
-  before returning packet bytes. `PacketData`, payload helpers, packet
-  validation, and packet clones require `Payload` to be exactly `Data[12:]`.
+  exported packet metadata, RTP payload view, and admitted single-NAL, STAP-A,
+  and FU-A payload syntax before returning packet bytes. STAP-B, MTAP, FU-B,
+  and nested packetization units inside STAP-A are rejected. `PacketData`,
+  payload helpers, packet validation, and packet clones require `Payload` to be
+  exactly `Data[12:]`.
 - Overflowed caller-owned `EncodeInto` destination growth is rejected across
   Annex B, AVC, and RTP without consuming queued IDR state or advancing
   RTP/callback state. The same hard-error path preserves P-frame reference and
