@@ -205,7 +205,11 @@ Single-frame helpers (`Decode`, `DecodePacket`, `DecodeAnnexB`, `DecodeAVC`,
 `DecodeConfiguredAVC`, `DecodeAVCC`, and `FlushDelayedFrame`) return
 `ErrUnsupported` when a packet produces zero or multiple frames. If a damaged
 packet produces exactly one valid frame before a later decode error, the helper
-returns that frame with the error. For stream processing, prefer `DecodeFrames` or
+returns that frame with the error. Empty-input delayed-output calls through
+single-frame helpers consume delayed output only when exactly one frame is
+available; on zero or multiple delayed frames they return `ErrUnsupported` and
+the queued delayed output remains available to `FlushDelayedFrames`. For stream
+processing, prefer `DecodeFrames` or
 `DecodePacketFrames`; they retain decoder reference state across packets, select
 Annex B or the stored configured-AVC length size, store avcC records when
 encountered, and flush delayed output when called with empty data. `DecodeConfiguredAVCFrames`

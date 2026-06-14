@@ -873,6 +873,8 @@ func TestREADMEStateAndOwnershipDocumentsDecoderEncoderBoundaries(t *testing.T) 
 		"## State And Ownership Boundaries",
 		"`Decoder.DecodeFrames` / `DecodePacketFrames`",
 		"Retain decoder references and delayed output across stream packets",
+		"Empty-input delayed-output calls through\nsingle-frame helpers consume delayed output only when exactly one frame is\navailable",
+		"queued delayed output remains available to `FlushDelayedFrames`",
 		"`Decoder.ConfigureAVCC`",
 		"resets decoder picture state for the configured-AVC boundary",
 		"`Decoder.DecodeAVCCFrames` / packet `NEW_EXTRADATA`",
@@ -916,6 +918,8 @@ func TestPublicCommentsDocumentStateAndOwnershipBoundaries(t *testing.T) {
 		"ConfigureAVCC parses an avcC record, stores it for configured-AVC decode\n// calls, resets decoder picture state",
 		"InspectAVCC parses avcC metadata without changing decoder state",
 		"DecodeAVCCFrames updates the stored AVC configuration from an avcC record,\n// decodes data with that configuration, and drains delayed frames",
+		"FlushDelayedFrame drains delayed output only when exactly one delayed frame is\n// available and returns that frame",
+		"without another decode error; in that case delayed output remains available\n// to FlushDelayedFrames",
 	} {
 		if !strings.Contains(decoder, phrase) {
 			t.Fatalf("decoder public comments missing state/ownership phrase %q", phrase)

@@ -149,8 +149,9 @@ Public API delayed-output coverage includes AVC configured samples and Annex B
 access-unit streaming through `DecodeFrames`, with end-of-stream flush via an
 empty packet and an empty second flush. `FlushDelayedFrame` is covered as the
 single-frame convenience form, including exactly-one delayed output, nil
-receiver rejection, and zero-frame `ErrUnsupported` classification after the
-delayed queue is drained. Configured AVC stateful decode also
+receiver rejection, zero-frame `ErrUnsupported` classification, and internal
+multi-frame mismatch rollback that leaves delayed output available to
+`FlushDelayedFrames`. Configured AVC stateful decode also
 drains delayed B-frame output through `DecodeConfiguredAVCFrames(nil)`,
 including the single-frame helper when the empty packet releases exactly one
 frame. AVC-with-configuration-record decode follows the same empty-packet

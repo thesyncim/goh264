@@ -787,10 +787,12 @@ func (d *Decoder) FlushDelayedFrames() ([]*Frame, error) {
 	return framesFromH264(frames), nil
 }
 
-// FlushDelayedFrame drains delayed output and returns the single delayed frame.
+// FlushDelayedFrame drains delayed output only when exactly one delayed frame is
+// available and returns that frame.
 //
 // It returns ErrUnsupported when the flush produces zero or multiple frames
-// without another decode error.
+// without another decode error; in that case delayed output remains available
+// to FlushDelayedFrames.
 func (d *Decoder) FlushDelayedFrame() (*Frame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
