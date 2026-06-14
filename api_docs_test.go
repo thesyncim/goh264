@@ -71,7 +71,11 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendDynamicHDR10Plus"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendLCEVC"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendS12MTimecodes"},
+		{typeName: "PictureTiming", typ: reflect.TypeOf((*PictureTiming)(nil)), method: "Validate"},
+		{typeName: "PictureTiming", typ: reflect.TypeOf((*PictureTiming)(nil)), method: "Clone"},
 		{typeName: "PictureTiming", typ: reflect.TypeOf((*PictureTiming)(nil)), method: "AppendTimecodes"},
+		{typeName: "ReferenceDisplaysInfo", typ: reflect.TypeOf((*ReferenceDisplaysInfo)(nil)), method: "Validate"},
+		{typeName: "ReferenceDisplaysInfo", typ: reflect.TypeOf((*ReferenceDisplaysInfo)(nil)), method: "Clone"},
 		{typeName: "ReferenceDisplaysInfo", typ: reflect.TypeOf((*ReferenceDisplaysInfo)(nil)), method: "AppendDisplays"},
 	} {
 		if _, ok := tt.typ.MethodByName(tt.method); !ok {
@@ -240,6 +244,8 @@ func TestDecoderOwnershipAPIReturnsErrors(t *testing.T) {
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{})},
 		{typeName: "Frame", typ: reflect.TypeOf((*Frame)(nil))},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{})},
+		{typeName: "PictureTiming", typ: reflect.TypeOf((*PictureTiming)(nil))},
+		{typeName: "ReferenceDisplaysInfo", typ: reflect.TypeOf((*ReferenceDisplaysInfo)(nil))},
 	} {
 		method, ok := tt.typ.MethodByName("Clone")
 		if !ok {
@@ -265,7 +271,9 @@ func TestDecoderOwnershipAPIReturnsErrors(t *testing.T) {
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendDynamicHDR10Plus"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendLCEVC"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendS12MTimecodes"},
+		{typeName: "PictureTiming", typ: reflect.TypeOf((*PictureTiming)(nil)), method: "Validate"},
 		{typeName: "PictureTiming", typ: reflect.TypeOf((*PictureTiming)(nil)), method: "AppendTimecodes"},
+		{typeName: "ReferenceDisplaysInfo", typ: reflect.TypeOf((*ReferenceDisplaysInfo)(nil)), method: "Validate"},
 		{typeName: "ReferenceDisplaysInfo", typ: reflect.TypeOf((*ReferenceDisplaysInfo)(nil)), method: "AppendDisplays"},
 	} {
 		method, ok := tt.typ.MethodByName(tt.method)
@@ -802,6 +810,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestPacketCloneDeepCopiesDataAndSideData",
 		"TestPacketAppendDataReturnsCallerOwnedBytes",
 		"TestPacketSideDataAppendDataReturnsCallerOwnedBytes",
+		"TestFrameSideDataNestedHelpersDeepCopyAndValidate",
 		"TestFrameSideDataAppendHelpersReturnCallerOwnedBytes",
 		"TestFrameSideDataAppendTypedHelpersReturnCallerOwnedValues",
 		"TestFrameCloneDeepCopiesPlanesAndSideData",

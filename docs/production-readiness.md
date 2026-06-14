@@ -93,7 +93,9 @@ retention paths for compressed packet and packet side-data bytes. Decoded
 `FrameSideData` byte-payload append helpers cover unregistered user data, A53,
 ICC, HDR10+, and LCEVC retention; typed append helpers cover S12M timecodes,
 picture-timing timecodes, and 3D reference-display entries with the same
-caller-buffer/error contract.
+caller-buffer/error contract. `PictureTiming` and `ReferenceDisplaysInfo`
+also expose checked `Validate`/`Clone` helpers for retaining structured
+side-data containers directly.
 Public SEI `FrameSideData` byte slices are guarded as caller-owned by mutating
 decoded unregistered-user-data, A53, and LCEVC slices and re-decoding the same
 input bytes.

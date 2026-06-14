@@ -651,6 +651,101 @@ func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 	}
 }
 
+func TestFrameSideDataNestedHelpersDeepCopyAndValidate(t *testing.T) {
+	fakeTimecodes := func(n int) []Timecode {
+		var tc Timecode
+		return fakeDecoderRawSliceLen(&tc, n)
+	}
+	fakeReferenceDisplays := func(n int) []ReferenceDisplay {
+		var display ReferenceDisplay
+		return fakeDecoderRawSliceLen(&display, n)
+	}
+
+	timing := &PictureTiming{
+		PicStruct:       1,
+		CTType:          2,
+		DPBOutputDelay:  3,
+		CPBRemovalDelay: 4,
+		Timecode:        []Timecode{{Full: true, Frame: 12}, {Seconds: 1}},
+	}
+	if err := timing.Validate(); err != nil {
+		t.Fatalf("PictureTiming.Validate: %v", err)
+	}
+	timingClone, err := timing.Clone()
+	if err != nil {
+		t.Fatalf("PictureTiming.Clone: %v", err)
+	}
+	if timingClone == timing || !reflect.DeepEqual(timingClone, timing) {
+		t.Fatalf("PictureTiming.Clone = %+v, want deep-equal distinct clone of %+v", timingClone, timing)
+	}
+	if &timingClone.Timecode[0] == &timing.Timecode[0] {
+		t.Fatal("PictureTiming.Clone aliases source timecodes")
+	}
+	timingClone.Timecode[0].Frame++
+	timing.Timecode[1].Seconds++
+	if timingClone.Timecode[0].Frame == timing.Timecode[0].Frame ||
+		timingClone.Timecode[1].Seconds == timing.Timecode[1].Seconds {
+		t.Fatal("mutating PictureTiming source or clone changed the other side")
+	}
+	var nilTiming *PictureTiming
+	if err := nilTiming.Validate(); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("nil PictureTiming.Validate = %v, want ErrInvalidData", err)
+	}
+	if got, err := nilTiming.Clone(); got != nil || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("nil PictureTiming.Clone = %+v/%v, want nil ErrInvalidData", got, err)
+	}
+	overflowTiming := &PictureTiming{Timecode: fakeTimecodes(maxIntForTest/32 + 1)}
+	if err := overflowTiming.Validate(); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflow PictureTiming.Validate = %v, want ErrInvalidData", err)
+	}
+	if got, err := overflowTiming.Clone(); got != nil || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflow PictureTiming.Clone = %+v/%v, want nil ErrInvalidData", got, err)
+	}
+
+	displays := &ReferenceDisplaysInfo{
+		PrecRefDisplayWidth:    12,
+		RefViewingDistanceFlag: true,
+		PrecRefViewingDist:     9,
+		Displays: []ReferenceDisplay{
+			{LeftViewID: 3, RightViewID: 4},
+			{LeftViewID: 5, RightViewID: 6},
+		},
+	}
+	if err := displays.Validate(); err != nil {
+		t.Fatalf("ReferenceDisplaysInfo.Validate: %v", err)
+	}
+	displaysClone, err := displays.Clone()
+	if err != nil {
+		t.Fatalf("ReferenceDisplaysInfo.Clone: %v", err)
+	}
+	if displaysClone == displays || !reflect.DeepEqual(displaysClone, displays) {
+		t.Fatalf("ReferenceDisplaysInfo.Clone = %+v, want deep-equal distinct clone of %+v", displaysClone, displays)
+	}
+	if &displaysClone.Displays[0] == &displays.Displays[0] {
+		t.Fatal("ReferenceDisplaysInfo.Clone aliases source displays")
+	}
+	displaysClone.Displays[0].LeftViewID++
+	displays.Displays[1].RightViewID++
+	if displaysClone.Displays[0].LeftViewID == displays.Displays[0].LeftViewID ||
+		displaysClone.Displays[1].RightViewID == displays.Displays[1].RightViewID {
+		t.Fatal("mutating ReferenceDisplaysInfo source or clone changed the other side")
+	}
+	var nilDisplays *ReferenceDisplaysInfo
+	if err := nilDisplays.Validate(); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("nil ReferenceDisplaysInfo.Validate = %v, want ErrInvalidData", err)
+	}
+	if got, err := nilDisplays.Clone(); got != nil || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("nil ReferenceDisplaysInfo.Clone = %+v/%v, want nil ErrInvalidData", got, err)
+	}
+	overflowDisplays := &ReferenceDisplaysInfo{Displays: fakeReferenceDisplays(maxIntForTest/16 + 1)}
+	if err := overflowDisplays.Validate(); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflow ReferenceDisplaysInfo.Validate = %v, want ErrInvalidData", err)
+	}
+	if got, err := overflowDisplays.Clone(); got != nil || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("overflow ReferenceDisplaysInfo.Clone = %+v/%v, want nil ErrInvalidData", got, err)
+	}
+}
+
 func TestFrameSideDataAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 	prefix := []byte{0xde, 0xad}
 	for _, tt := range []struct {

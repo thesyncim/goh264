@@ -308,8 +308,10 @@ compressed packets and packet side-data payloads. `FrameSideData` also provides
 `AppendUserDataUnregistered`, `AppendA53ClosedCaptions`, `AppendICCProfile`,
 `AppendDynamicHDR10Plus`, `AppendLCEVC`, and `AppendS12MTimecodes` for retaining
 individual decoded side-data payloads in caller-managed buffers.
+`PictureTiming.Validate`/`Clone` and `ReferenceDisplaysInfo.Validate`/`Clone`
+provide retained snapshots for structured side-data containers, while
 `PictureTiming.AppendTimecodes` and `ReferenceDisplaysInfo.AppendDisplays`
-provide the same caller-buffer/error contract for structured side-data lists.
+provide the caller-buffer/error contract for individual structured lists.
 Structured side-data entries are decoded only when their payload validates;
 byte-oriented packet side data such as A53 captions, ICC profile, HDR10+, and
 LCEVC is copied into frame side data for caller-owned retention.

@@ -305,6 +305,23 @@ type PictureTiming struct {
 	Timecode        []Timecode
 }
 
+// Validate reports whether timing has public storage sizes accepted by Clone.
+func (timing *PictureTiming) Validate() error {
+	if timing == nil || len(timing.Timecode) > maxInt/32 {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+// Clone returns a deep-owned copy of the picture-timing side data after
+// validating public storage sizes.
+func (timing *PictureTiming) Clone() (*PictureTiming, error) {
+	if err := timing.Validate(); err != nil {
+		return nil, err
+	}
+	return clonePictureTiming(timing), nil
+}
+
 // AppendTimecodes appends caller-owned copies of Timecode entries to dst. On
 // error, dst is returned unchanged.
 func (timing *PictureTiming) AppendTimecodes(dst []Timecode) ([]Timecode, error) {
@@ -434,6 +451,23 @@ type ReferenceDisplaysInfo struct {
 	RefViewingDistanceFlag bool
 	PrecRefViewingDist     uint8
 	Displays               []ReferenceDisplay
+}
+
+// Validate reports whether displays has public storage sizes accepted by Clone.
+func (displays *ReferenceDisplaysInfo) Validate() error {
+	if displays == nil || len(displays.Displays) > maxInt/16 {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+// Clone returns a deep-owned copy of the reference-display side data after
+// validating public storage sizes.
+func (displays *ReferenceDisplaysInfo) Clone() (*ReferenceDisplaysInfo, error) {
+	if err := displays.Validate(); err != nil {
+		return nil, err
+	}
+	return cloneReferenceDisplaysInfo(displays), nil
 }
 
 // AppendDisplays appends caller-owned copies of Displays entries to dst. On
