@@ -733,6 +733,9 @@ func TestEncoderRealtimeWebRTCRejectsInvalidConfigs(t *testing.T) {
 			c.FrameRateDen = 1
 			c.RTPTimestampIncrement = 0
 		}, want: goh264.ErrInvalidData},
+		{name: "time base numerator not admitted", mutate: func(c *goh264.EncoderConfig) {
+			c.TimeBaseNum = 2
+		}, want: goh264.ErrInvalidData},
 		{name: "bitrate frame budget overflow", mutate: func(c *goh264.EncoderConfig) {
 			c.TargetBitrate = maxIntForTest
 			c.MaxBitrate = maxIntForTest

@@ -377,6 +377,7 @@ Accepted encoder setup values:
 | Rate/budget | CBR or ConstantQP, QP range 0..51, non-negative VBV/frame/slice/time budgets | VBR mode; invalid bitrate ordering, QP outside 0..51, negative budgets |
 | Preset | `EncoderPresetRealtime` | Balanced/Quality presets; only `EncoderPresetRealtime` drives current mode selection |
 | Output | Annex B, AVC samples, or RTP | Unknown output formats |
+| Timing | `TimeBaseNum=1`; `TimeBaseDen>0`; `RTPTimestampIncrement>0`, or zero to derive it from `TimeBaseDen` and frame rate | Non-1 time-base numerator, non-positive time-base denominator, impossible derived RTP timestamp increment |
 | RTP | packetization-mode 0 with payload size >= 2; packetization-mode 1 with payload size >= 3; STAP-A only in mode 1; DON disabled; payload type 1..127, with zero selecting the dynamic default 96 | Mode-0 STAP-A, DON/interleaved mode, payload type >127, undersized RTP payloads |
 
 For setup-time QP, zero scalar QP fields normally select derived defaults; set

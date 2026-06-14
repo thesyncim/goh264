@@ -150,6 +150,8 @@ type EncoderColorConfig struct {
 // InitialQP, MinQP, and MaxQP accept 0..51. When ExplicitQP is false, zero QP
 // fields select derived defaults during setup normalization; set ExplicitQP when
 // zero is an intentional setup value.
+// TimeBaseNum must be 1; zero selects 1 during setup normalization. TimeBaseDen
+// is the RTP clock denominator used to derive RTPTimestampIncrement.
 // RTPPayloadType accepts 1..127; zero selects the dynamic default payload type
 // 96 during setup normalization.
 type EncoderConfig struct {
@@ -4285,8 +4287,8 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	if cfg.TimeBaseDen == 0 {
 		cfg.TimeBaseDen = 90000
 	}
-	if cfg.TimeBaseNum <= 0 || cfg.TimeBaseDen <= 0 {
-		return cfg, encoderInvalid("time base numerator and denominator must be positive")
+	if cfg.TimeBaseNum != 1 || cfg.TimeBaseDen <= 0 {
+		return cfg, encoderInvalid("time base numerator must be 1 and denominator must be positive")
 	}
 	if cfg.Profile == 0 {
 		cfg.Profile = EncoderProfileConstrainedBaseline

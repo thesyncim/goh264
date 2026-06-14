@@ -26,9 +26,9 @@ The public API must expose controls before the implementation depends on hidden
 defaults:
 
 - Source format: width, height, strides, input pixel format, frame rate,
-  time base, and timestamps, with crop and color/VUI metadata owned by
-  `EncoderConfig` and serialized from SPS/VUI headers rather than per-frame
-  overrides.
+  `TimeBaseNum=1`, positive `TimeBaseDen`, and timestamps, with crop and
+  color/VUI metadata owned by `EncoderConfig` and serialized from SPS/VUI
+  headers rather than per-frame overrides.
 - Profile/level: profile, constraint flags, level, entropy mode, deblock mode,
   transform size, reference count, and SPS/PPS cadence.
 - Rate control: CBR/ConstantQP mode, target bitrate, max bitrate, buffer/VBV
