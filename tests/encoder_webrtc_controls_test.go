@@ -16053,6 +16053,96 @@ func TestEncoderRTPPacketCallbackReceivesWebRTCMetadata(t *testing.T) {
 	}
 }
 
+func TestEncoderRTPPacketCallbackReconfigureAppliesAfterCurrentResult(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.RTPMaxPayloadSize = 128
+	cfg.STAPA = true
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.GOPSize = 10000
+	cfg.IDRInterval = 10000
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	var callbackPackets []goh264.EncoderRTPPacket
+	var callbackMetadata []goh264.EncoderRTPPacketMetadata
+	var callbackErr error
+	var reconfigured bool
+	enc.SetRTPPacketCallback(func(pkt goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
+		callbackPackets = append(callbackPackets, pkt)
+		callbackMetadata = append(callbackMetadata, meta)
+		if reconfigured {
+			return
+		}
+		reconfigured = true
+		callbackErr = enc.SetOutputFormat(goh264.EncoderOutputAVC)
+		enc.ForceIDR()
+	})
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	firstFrame.PTS = 90_000
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first RTP frame: %v", err)
+	}
+	if callbackErr != nil {
+		t.Fatalf("callback SetOutputFormat: %v", callbackErr)
+	}
+	if !reconfigured {
+		t.Fatal("RTP callback did not run")
+	}
+	if first.OutputFormat != goh264.EncoderOutputRTP || len(first.RTPPackets) == 0 {
+		t.Fatalf("first output format/packets = %v/%d, want current RTP result",
+			first.OutputFormat, len(first.RTPPackets))
+	}
+	if err := first.Validate(); err != nil {
+		t.Fatalf("first Validate after callback reconfigure: %v", err)
+	}
+	if len(callbackPackets) != len(first.RTPPackets) || len(callbackMetadata) != len(first.RTPPackets) {
+		t.Fatalf("callback packets/meta = %d/%d, want first RTP packet count %d",
+			len(callbackPackets), len(callbackMetadata), len(first.RTPPackets))
+	}
+	for i, meta := range callbackMetadata {
+		if meta.PacketIndex != i || meta.PacketCount != len(first.RTPPackets) ||
+			meta.FramePTS != first.PTS || meta.FrameDTS != first.DTS ||
+			meta.RTPTime != first.RTPTime || !meta.KeyFrame || !meta.IDR {
+			t.Fatalf("callback metadata[%d] = %+v, want current RTP result metadata", i, meta)
+		}
+	}
+	if got := enc.Config().OutputFormat; got != goh264.EncoderOutputAVC {
+		t.Fatalf("post-callback config output format = %v, want AVC for the next frame", got)
+	}
+	if !enc.PendingIDR() {
+		t.Fatal("callback ForceIDR did not remain queued for the next frame")
+	}
+
+	callbackPackets = callbackPackets[:0]
+	callbackMetadata = callbackMetadata[:0]
+	secondFrame := firstFrame
+	secondFrame.PTS += int64(cfg.RTPTimestampIncrement)
+	secondFrame.Y[0] ^= 0x51
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode second AVC frame: %v", err)
+	}
+	if second.OutputFormat != goh264.EncoderOutputAVC || len(second.RTPPackets) != 0 || !second.IDR {
+		t.Fatalf("second output format/packets/IDR = %v/%d/%v, want forced-IDR AVC result",
+			second.OutputFormat, len(second.RTPPackets), second.IDR)
+	}
+	if err := second.Validate(); err != nil {
+		t.Fatalf("second Validate: %v", err)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{7, 8, 5})
+	if enc.PendingIDR() {
+		t.Fatal("forced IDR from callback stayed queued after the next emitted frame")
+	}
+	if len(callbackPackets) != 0 || len(callbackMetadata) != 0 {
+		t.Fatalf("non-RTP frame callback packets/meta = %d/%d, want no callbacks",
+			len(callbackPackets), len(callbackMetadata))
+	}
+}
+
 func TestEncoderRTPPacketCallbackPacketsSurviveLaterEncode(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.RTPMaxPayloadSize = 128

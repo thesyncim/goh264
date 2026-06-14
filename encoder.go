@@ -510,7 +510,8 @@ type EncoderRTPPacketMetadata struct {
 //
 // The callback runs synchronously before Encode or EncodeInto returns. The
 // packet passed to the callback is a clone and does not alias the packet storage
-// returned in EncodedFrame.RTPPackets.
+// returned in EncodedFrame.RTPPackets. Encoder control changes made from the
+// callback apply after the current EncodedFrame has been assembled.
 type EncoderRTPPacketCallback func(packet EncoderRTPPacket, metadata EncoderRTPPacketMetadata)
 
 // EncodedFrame is the result of one encoder call.
@@ -1756,7 +1757,8 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		}
 	}
 
-	outputSize, err := encoderAccessUnitOutputSize(e.cfg.OutputFormat, nals)
+	outputFormat := e.cfg.OutputFormat
+	outputSize, err := encoderAccessUnitOutputSize(outputFormat, nals)
 	if err != nil {
 		return EncodedFrame{}, err
 	}
@@ -1767,7 +1769,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 			e.advanceEncoderRTPTime(frame, rtpTime)
 			e.advanceEncoderBitrateBudget(0)
 			return EncodedFrame{
-				OutputFormat: e.cfg.OutputFormat,
+				OutputFormat: outputFormat,
 				PTS:          framePTS,
 				DTS:          framePTS,
 				RTPTime:      rtpTime,
@@ -1780,7 +1782,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		e.advanceEncoderRTPTime(frame, rtpTime)
 		e.advanceEncoderBitrateBudget(0)
 		return EncodedFrame{
-			OutputFormat: e.cfg.OutputFormat,
+			OutputFormat: outputFormat,
 			PTS:          framePTS,
 			DTS:          framePTS,
 			RTPTime:      rtpTime,
@@ -1788,7 +1790,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		}, nil
 	}
 	var packets []EncoderRTPPacket
-	if e.cfg.OutputFormat == EncoderOutputRTP {
+	if outputFormat == EncoderOutputRTP {
 		switch e.cfg.RTPPacketizationMode {
 		case EncoderRTPPacketizationSingleNAL:
 			packets, err = packetizeEncoderRTPSingleNAL(nals, e.cfg.RTPMaxPayloadSize, rtpTime)
@@ -1803,7 +1805,7 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		if encoderLateBudgetMiss(lateStart, e.cfg) {
 			e.advanceEncoderRTPTime(frame, rtpTime)
 			return EncodedFrame{
-				OutputFormat: e.cfg.OutputFormat,
+				OutputFormat: outputFormat,
 				PTS:          framePTS,
 				DTS:          framePTS,
 				RTPTime:      rtpTime,
@@ -1813,21 +1815,20 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	} else if encoderLateBudgetMiss(lateStart, e.cfg) {
 		e.advanceEncoderRTPTime(frame, rtpTime)
 		return EncodedFrame{
-			OutputFormat: e.cfg.OutputFormat,
+			OutputFormat: outputFormat,
 			PTS:          framePTS,
 			DTS:          framePTS,
 			RTPTime:      rtpTime,
 			Dropped:      true,
 		}, nil
 	}
-	data, units, err := appendEncoderAccessUnit(dst, e.cfg.OutputFormat, nals)
+	data, units, err := appendEncoderAccessUnit(dst, outputFormat, nals)
 	if err != nil {
 		return EncodedFrame{}, err
 	}
 	p16ScratchCommitted = true
-	if e.cfg.OutputFormat == EncoderOutputRTP {
+	if outputFormat == EncoderOutputRTP {
 		e.stampRTPPackets(packets)
-		e.notifyRTPPacketCallback(packets, framePTS, rtpTime, idr, idr)
 	}
 
 	e.advanceEncoderRTPTime(frame, rtpTime)
@@ -1841,8 +1842,8 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 	} else {
 		e.framesSinceIDR++
 	}
-	return EncodedFrame{
-		OutputFormat: e.cfg.OutputFormat,
+	result := EncodedFrame{
+		OutputFormat: outputFormat,
 		Data:         data,
 		NALUnits:     units,
 		RTPPackets:   packets,
@@ -1851,7 +1852,11 @@ func (e *Encoder) EncodeInto(dst []byte, frame EncoderFrame) (EncodedFrame, erro
 		PTS:          framePTS,
 		DTS:          framePTS,
 		RTPTime:      rtpTime,
-	}, nil
+	}
+	if outputFormat == EncoderOutputRTP {
+		e.notifyRTPPacketCallback(packets, framePTS, rtpTime, idr, idr)
+	}
+	return result, nil
 }
 
 // ForceIDR requests that the next successfully encoded frame be an IDR frame.
