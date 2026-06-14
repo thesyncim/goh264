@@ -485,8 +485,9 @@ _ = owned
 must(enc.Reset()) // clear encoder coding state, keep config/callback
 ```
 
-For RTP output, set the RTP output format before encoding and use the RTP packet
-helpers instead of the access-unit helpers:
+For RTP output, set the RTP output format before encoding and use RTP packet
+helpers for network send. Access-unit helpers remain available for local
+inspection of the Annex B view:
 
 ```go
 must(enc.SetOutputFormat(goh264.EncoderOutputRTP))
@@ -560,12 +561,15 @@ with the strongest public API coverage for integration work:
 - `EncoderFrame.Clone` returns a deep-owned input snapshot for retry queues or
   async handoff.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
-  payload helpers have `Append...` forms for caller-owned retention buffers and
-  `Clone` forms for async snapshots. `EncoderParameterSets.Validate` and
+  payload helpers have explicit append forms for caller-owned retention buffers
+  and `Clone` forms for async snapshots. `EncoderParameterSets.Validate` and
   `EncoderSEI.Validate` check public storage sizes before retention or async
-  handoff; `Clone` uses the same checks before copying. `AVCC`, `AppendSPS`,
-  `AppendPPS`, `AppendAnnexB`, `AppendAVCC`, `AppendNAL`, and `AppendAVC`
-  validate avcC bytes and caller-managed append buffers.
+  handoff; `Clone` uses the same checks before copying. `AVCC` validates avcC
+  storage before copying, while `AppendSPS`, `AppendPPS`, `AppendAnnexB`,
+  `AppendAVCC`, `AppendNAL`, `AppendAVC`, `AppendNALData`,
+  `AppendAccessUnitData`, `AppendRTPPacketData`, `AppendRTPPayloadData`,
+  `AppendPacketData`, and `AppendPayloadData` validate their source surfaces and
+  caller-managed append buffers.
   Invalid or overflowed-destination append calls return the original destination
   unchanged. If a caller-managed append destination overlaps the helper source
   bytes, the helpers return isolated output storage instead of aliasing the
@@ -584,9 +588,11 @@ with the strongest public API coverage for integration work:
 - For RTP output, send `RTPPackets`, `RTPPacketData`, or `RTPPayloadData`.
   `EncodedFrame.Data` is retained only as an Annex B access-unit view for local
   inspection through `AccessUnitData` and `NALData`. Packet-level helpers
-  validate the encoder-emitted 12-byte RTP header shape and exported packet
-  metadata before returning packet bytes. Payload helpers, packet validation,
-  and packet clones also require `Payload` to be exactly `Data[12:]`.
+  `PacketData`, `PayloadData`, `AppendPacketData`, `AppendPayloadData`,
+  `Validate`, and `Clone` validate the encoder-emitted 12-byte RTP header shape
+  and exported packet metadata before returning packet bytes. Payload helpers,
+  packet validation, and packet clones also require `Payload` to be exactly
+  `Data[12:]`.
 - Overflowed caller-owned `EncodeInto` destination growth is rejected across
   Annex B, AVC, and RTP without consuming queued IDR state or advancing
   RTP/callback state. The same hard-error path preserves P-frame reference and

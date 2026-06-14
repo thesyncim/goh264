@@ -15409,6 +15409,29 @@ func TestEncoderRTPPacketCallbackPacketsSurviveLaterEncode(t *testing.T) {
 			!bytes.Equal(firstCallbackPackets[i].Payload, first.RTPPackets[i].Payload) {
 			t.Fatalf("callback packet[%d] did not match first returned packet", i)
 		}
+		if err := firstCallbackPackets[i].Validate(); err != nil {
+			t.Fatalf("callback packet[%d].Validate: %v", i, err)
+		}
+		if got, err := firstCallbackPackets[i].PacketData(); err != nil ||
+			!bytes.Equal(got, firstCallbackPackets[i].Data) || cap(got) != len(got) {
+			t.Fatalf("callback packet[%d].PacketData = %x cap=%d err=%v, want clipped packet bytes",
+				i, got, cap(got), err)
+		}
+		if got, err := firstCallbackPackets[i].PayloadData(); err != nil ||
+			!bytes.Equal(got, firstCallbackPackets[i].Payload) || cap(got) != len(got) {
+			t.Fatalf("callback packet[%d].PayloadData = %x cap=%d err=%v, want clipped payload bytes",
+				i, got, cap(got), err)
+		}
+		clone, err := firstCallbackPackets[i].Clone()
+		if err != nil {
+			t.Fatalf("callback packet[%d].Clone: %v", i, err)
+		}
+		if !bytes.Equal(clone.Data, firstCallbackPackets[i].Data) ||
+			!bytes.Equal(clone.Payload, firstCallbackPackets[i].Payload) ||
+			len(clone.Data) < 12 || len(clone.Payload) == 0 ||
+			&clone.Data[12] != &clone.Payload[0] {
+			t.Fatalf("callback packet[%d].Clone = %+v, want deep-owned packet view", i, clone)
+		}
 	}
 	callbackPackets = callbackPackets[:0]
 
