@@ -737,6 +737,8 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderEncodeIntoRTPPacketsDoNotAliasAccessUnitData",
 		"TestEncoderConfigExplicitQPZeroConstructsAndEncodes",
 		"TestEncoderRTPPayloadTypeZeroSelectsDynamicDefault",
+		"TestEncoderRTPPayloadTypeZeroNormalizesForNonRTPOutputs",
+		"TestEncoderRTPPacketCallbackReconfigureAppliesAfterCurrentResult",
 		"TestEncoderRealtimeWebRTCRejectsInvalidConfigs",
 		"TestEncoderRTPAutoTimestampAdvancesWithTimestampModeAuto",
 		"TestEncoderTimestampAutoOutputTimingMatchesChosenRTPTime",
@@ -966,6 +968,111 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 			t.Fatalf("decoder quality evidence script should preflight focused gate %q", forbidden)
 		}
 	}
+}
+
+func TestQualityEvidenceHelpersRejectEmptyAndSkippedRuns(t *testing.T) {
+	for _, tt := range []struct {
+		path    string
+		phrases []string
+	}{
+		{
+			path: "scripts/h264-real-vector-strict.sh",
+			phrases: []string{
+				"go test ./tests -run '^$' -list \"$pattern\"",
+				"TestH264RealVectorStrictOracle",
+				"status: fail (missing focused test",
+				"status: fail (focused test skipped)",
+			},
+		},
+		{
+			path: "scripts/h264-real-vector-upstream-audit.sh",
+			phrases: []string{
+				"go test ./tests -run '^$' -list \"$pattern\"",
+				"TestH264RealVectorImportedUpstreamInventory",
+				"TestH264RealVectorPinnedFATEInventory",
+				"TestH264RealVectorDocumentationCounts",
+				"TestH264RealVectorUpstreamFATECoverage",
+				"status: fail (missing focused test",
+				"status: fail (focused test skipped)",
+			},
+		},
+		{
+			path: "scripts/h264-decoder-fuzz-smoke.sh",
+			phrases: []string{
+				"go test ./tests -run '^$' -list \"$PATTERN\"",
+				"grep -Eq '^Fuzz' \"$list_log\"",
+				"status: fail (no matching fuzz targets)",
+				"testing: warning: no fuzz tests to fuzz|^--- SKIP: ",
+				"status: fail (fuzz target did not run)",
+			},
+		},
+		{
+			path: "scripts/h264-benchstat-canary.sh",
+			phrases: []string{
+				"go test -run '^$' -list \"$PATTERN\" .",
+				"grep -Eq '^Benchmark' \"$list_log\"",
+				"status: fail (no matching benchmarks)",
+				"grep -Eq '^Benchmark' \"$log\"",
+				"status: fail (benchmark did not run)",
+			},
+		},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			data, err := os.ReadFile(tt.path)
+			if err != nil {
+				t.Fatalf("read %s: %v", tt.path, err)
+			}
+			script := string(data)
+			for _, phrase := range tt.phrases {
+				if !strings.Contains(script, phrase) {
+					t.Fatalf("%s missing empty-run guard phrase %q", tt.path, phrase)
+				}
+			}
+		})
+	}
+}
+
+func TestQualityEvidenceRunGoTestGateRejectsSkippedFocusedRuns(t *testing.T) {
+	for _, path := range []string{
+		"scripts/h264-decoder-quality-evidence.sh",
+		"scripts/h264-encoder-quality-evidence.sh",
+	} {
+		t.Run(path, func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			body := qualityEvidenceFunctionBody(t, string(data), "run_go_test_gate", "run_exact_go_test_gate")
+			for _, phrase := range []string{
+				"local log=\"$out_dir/$name.log\"",
+				"go test \"$pkg\" -run \"$pattern\" \"$@\" 2>&1 | tee \"$log\"",
+				"grep -Eq '^--- SKIP: ' \"$log\"",
+				"status: fail (focused test skipped)",
+			} {
+				if !strings.Contains(body, phrase) {
+					t.Fatalf("%s run_go_test_gate missing skipped-run guard phrase %q", path, phrase)
+				}
+			}
+			if forbidden := "run_gate \"$name\" go test \"$pkg\" -run \"$pattern\" \"$@\""; strings.Contains(body, forbidden) {
+				t.Fatalf("%s run_go_test_gate should not delegate focused run through run_gate", path)
+			}
+		})
+	}
+}
+
+func qualityEvidenceFunctionBody(t *testing.T, script, name, nextName string) string {
+	t.Helper()
+	startNeedle := name + "() {"
+	start := strings.Index(script, startNeedle)
+	if start < 0 {
+		t.Fatalf("script missing function %s", name)
+	}
+	endNeedle := "\n" + nextName + "() {"
+	end := strings.Index(script[start:], endNeedle)
+	if end < 0 {
+		t.Fatalf("script missing function %s after %s", nextName, name)
+	}
+	return script[start : start+end]
 }
 
 func TestDecoderEvidenceDocsNameNewExtradataDuplicateSemantics(t *testing.T) {
