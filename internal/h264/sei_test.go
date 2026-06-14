@@ -265,11 +265,21 @@ func TestDecodeSimpleNALUnitsParsesLeadingSEI(t *testing.T) {
 		Type: NALSEI,
 		RBSP: buildSEIRBSP(seiTestMessage{typ: seiTypeUserDataUnregistered, payload: seiUnregisteredPayload()}),
 	}}, &spsList, &ppsList, &dpb, &sei, DecodedFrameSideData{}, false)
-	if err != ErrInvalidData {
-		t.Fatalf("err = %v, want ErrInvalidData for packet without slices", err)
+	if err != nil {
+		t.Fatalf("stateful leading SEI err = %v, want nil", err)
 	}
 	if sei.Common.Unregistered.X264Build != 165 {
 		t.Fatalf("simple decoder SEI x264 build = %d", sei.Common.Unregistered.X264Build)
+	}
+}
+
+func TestDecodeSimpleNALUnitsRejectsOneShotSEIOnlyPacket(t *testing.T) {
+	_, err := DecodeSimpleNALUnits([]NALUnit{{
+		Type: NALSEI,
+		RBSP: buildSEIRBSP(seiTestMessage{typ: seiTypeUserDataUnregistered, payload: seiUnregisteredPayload()}),
+	}})
+	if err != ErrInvalidData {
+		t.Fatalf("one-shot SEI-only packet err = %v, want ErrInvalidData", err)
 	}
 }
 

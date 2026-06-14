@@ -287,6 +287,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 	}
 	var frames []*DecodedFrame
 	decodedFrames := 0
+	acceptedStateOnlyNAL := false
 	currentIDRSegmentOutputIndex := -1
 
 	for nalIndex, nal := range nals {
@@ -299,6 +300,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				continue
 			}
 			spsList[sps.SPSID] = sps
+			acceptedStateOnlyNAL = true
 		case NALPPS:
 			pps, err := DecodePPS(nal.RBSP, spsList)
 			if err != nil {
@@ -307,6 +309,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				continue
 			}
 			ppsList[pps.PPSID] = pps
+			acceptedStateOnlyNAL = true
 		case NALSEI:
 			if st.frameComplete {
 				st.resetPicture()
@@ -314,7 +317,11 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				continue
 			}
 			// FFmpeg keeps SEI parse failures non-fatal unless AV_EF_EXPLODE is set.
-			_ = sei.Decode(nal.RBSP, spsList)
+			if err := sei.Decode(nal.RBSP, spsList); err == nil {
+				acceptedStateOnlyNAL = true
+			}
+		case NALAUD, NALEndSequence, NALEndStream, NALFillerData:
+			acceptedStateOnlyNAL = true
 		case NALSlice, NALIDRSlice:
 			dpbSnapshot := dpb.snapshot()
 			returnSliceError := func(err error) ([]*DecodedFrame, error) {
@@ -531,6 +538,9 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 		frames = append(frames, out...)
 	}
 	if decodedFrames == 0 {
+		if !flushOutput && acceptedStateOnlyNAL {
+			return frames, nil
+		}
 		return nil, ErrInvalidData
 	}
 	return frames, nil

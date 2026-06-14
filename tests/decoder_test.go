@@ -4256,8 +4256,8 @@ func assertSEIOnlyPacketAppliesToNextFrame(t *testing.T, decode func([]byte) ([]
 	))
 
 	frames, err := decode(seiOnly)
-	if err != nil && !errors.Is(err, ErrInvalidData) {
-		t.Fatalf("SEI-only packet = frames %d err %v, want no frames and at most ErrInvalidData", len(frames), err)
+	if err != nil {
+		t.Fatalf("SEI-only packet = frames %d err %v, want no frames and nil error", len(frames), err)
 	}
 	if len(frames) != 0 {
 		t.Fatalf("SEI-only packet decoded %d frames, want 0", len(frames))
