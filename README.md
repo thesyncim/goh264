@@ -18,6 +18,23 @@ contract: general motion search, broader residual macroblock generation,
 rate-control decisions, wider packetizer/control breadth, and reviewed
 allocation/performance evidence.
 
+## API At A Glance
+
+| Job | Preferred surface |
+| --- | --- |
+| Decode complete Annex B bytes with no retained stream state | `NewDecoder().DecodeAnnexBFrames(data)` |
+| Decode stateful Annex B packets, stored configured-AVC packets, or avcC records | `dec.DecodeFrames(data)` |
+| Decode packet bytes plus packet side data such as `NEW_EXTRADATA` | `dec.DecodePacketFrames(Packet{Data: data, SideData: sideData})` |
+| Decode known length-prefixed AVC with 1-, 2-, 3-, or 4-byte NAL lengths | `dec.DecodeAVCFrames(data, nalLengthSize)` |
+| Store avcC once, then feed configured AVC packets | `dec.ConfigureAVCC(avcc)`, then `dec.DecodeConfiguredAVCFrames(packet)` |
+| Update avcC and decode one packet as an in-stream configured-AVC unit | `dec.DecodeAVCCFrames(avcc, packet)` |
+| Encode guarded realtime I420 to Annex B, AVC, or RTP | start from `DefaultRTPEncoderConfig`, `DefaultAnnexBEncoderConfig`, or `DefaultAVCEncoderConfig`; call `Normalize`, `NewEncoder`, then `Encode` or `EncodeInto` |
+| Retain caller-owned packets, frames, headers, encoded output, or RTP packets | use the relevant `Clone`, `Validate`, or `Append...` helper |
+
+Use the detailed Decoder API and Encoder API sections below for state,
+ownership, error, and admission rules. Use the Trust And Verification gates
+before treating a checkout as production evidence.
+
 ## Quality And Parity Evidence
 
 | Area | Evidence shape | Covered surfaces | Outside current contract / evidence targets |

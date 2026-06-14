@@ -256,6 +256,18 @@ func TestREADMEStructureKeepsDecoderPacketSurfaceTyped(t *testing.T) {
 	readme := string(data)
 
 	for _, phrase := range []string{
+		"## API At A Glance",
+		"| Decode stateful Annex B packets, stored configured-AVC packets, or avcC records | `dec.DecodeFrames(data)` |",
+		"| Decode packet bytes plus packet side data such as `NEW_EXTRADATA` | `dec.DecodePacketFrames(Packet{Data: data, SideData: sideData})` |",
+		"| Encode guarded realtime I420 to Annex B, AVC, or RTP | start from `DefaultRTPEncoderConfig`, `DefaultAnnexBEncoderConfig`, or `DefaultAVCEncoderConfig`; call `Normalize`, `NewEncoder`, then `Encode` or `EncodeInto` |",
+		"Use the detailed Decoder API and Encoder API sections below for state,\nownership, error, and admission rules.",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Fatalf("README.md API-at-a-glance section missing phrase %q", phrase)
+		}
+	}
+
+	for _, phrase := range []string{
 		"frames, err := dec.DecodeFrames(packetData)",
 		"frames, err = dec.DecodePacketFrames(goh264.Packet{",
 		"Data:     packetData,",
@@ -287,6 +299,7 @@ func TestREADMEStructureKeepsDecoderPacketSurfaceTyped(t *testing.T) {
 		seen[heading] = i + 1
 	}
 	requiredOrder := []string{
+		"## API At A Glance",
 		"## Quality And Parity Evidence",
 		"## Decoder API",
 		"## State And Ownership Boundaries",
