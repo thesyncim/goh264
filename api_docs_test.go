@@ -587,6 +587,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"decoder API-surface",
 		"decoder output-ownership gates",
 		"ref-modification gates",
+		"delayed-output rollback gates",
 		"native/FFmpeg oracle smoke gates",
 	} {
 		if !strings.Contains(readme, phrase) {
@@ -607,6 +608,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"run_exact_go_test_gate decoder-api-surfaces ./tests",
 		"run_exact_go_test_gate decoder-output-ownership ./tests",
 		"run_exact_go_test_gate decoder-ref-modifications ./internal/h264",
+		"run_exact_go_test_gate decoder-delayed-output ./internal/h264",
 		"run_exact_oracle_go_test_gate decoder-ffmpeg-oracle-smoke ./tests",
 		"run_exact_oracle_go_test_gate decoder-native-oracle-smoke ./internal/h264",
 		"require_oracle_command ffmpeg",
@@ -618,6 +620,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"decoder-output-ownership",
 		"decoder_output_ownership_tests",
 		"decoder-ref-modifications",
+		"decoder-delayed-output",
 		"decoder-ffmpeg-oracle-smoke",
 		"decoder-native-oracle-smoke",
 		"TestParseHeadersAnnexBBlack16",
@@ -647,6 +650,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration",
 		"TestSimpleFrameDPBRejectsMissingShortRefModificationTarget",
 		"TestSimpleFrameDPBRejectsMissingLongRefModificationTarget",
+		"TestSimpleDecoderFlushDelayedFrameRejectsMultipleWithoutDraining",
 		"TestDecodeConfiguredAVCFramesDoesNotAliasCallerBuffer",
 		"TestDecodePacketFramesDoesNotAliasCallerBuffer",
 		"TestConfigureAVCCDoesNotAliasCallerBuffer",
@@ -669,9 +673,11 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"run_gate decoder-api-surfaces go test",
 		"run_gate decoder-output-ownership go test",
 		"run_gate decoder-ref-modifications go test",
+		"run_gate decoder-delayed-output go test",
 		"run_go_test_gate decoder-api-surfaces ./tests",
 		"run_go_test_gate decoder-output-ownership ./tests",
 		"run_go_test_gate decoder-ref-modifications ./internal/h264",
+		"run_go_test_gate decoder-delayed-output ./internal/h264",
 	} {
 		if strings.Contains(script, forbidden) {
 			t.Fatalf("decoder quality evidence script should preflight focused gate %q", forbidden)

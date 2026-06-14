@@ -713,7 +713,8 @@ Production use should be backed by a fresh quality-evidence pass proving:
   admitted-encoder quality gate.
 - `scripts/h264-decoder-quality-evidence.sh` is green, including
   decoder API-surface gates, decoder output-ownership gates,
-  ref-modification gates, and native/FFmpeg oracle smoke gates.
+  ref-modification gates, delayed-output rollback gates, and
+  native/FFmpeg oracle smoke gates.
 - `go vet ./...` is green.
 - `go test ./...` is green.
 - `go test -race ./...` is green.
