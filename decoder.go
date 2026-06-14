@@ -612,6 +612,9 @@ func (d *Decoder) Reset() error {
 // It returns ErrUnsupported when the packet produces zero or multiple frames
 // without another decode error.
 func (d *Decoder) Decode(data []byte) (*Frame, error) {
+	if len(data) == 0 {
+		return d.FlushDelayedFrame()
+	}
 	frames, err := d.DecodeFrames(data)
 	return singleFrameFromFrames(frames, err)
 }
@@ -659,6 +662,9 @@ func (d *Decoder) decodeFrames(data []byte, packetSideData h264.DecodedFrameSide
 // It returns ErrUnsupported when the packet produces zero or multiple frames
 // without another decode error.
 func (d *Decoder) DecodePacket(pkt Packet) (*Frame, error) {
+	if len(pkt.Data) == 0 {
+		return d.FlushDelayedFrame()
+	}
 	frames, err := d.DecodePacketFrames(pkt)
 	return singleFrameFromFrames(frames, err)
 }
@@ -732,6 +738,12 @@ func (d *Decoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*Frame, err
 // DecodeConfiguredAVC decodes data using the stored AVC configuration and
 // returns the single output frame.
 func (d *Decoder) DecodeConfiguredAVC(data []byte) (*Frame, error) {
+	if d == nil || d.avcNALLengthSize == 0 {
+		return nil, ErrInvalidData
+	}
+	if len(data) == 0 {
+		return d.FlushDelayedFrame()
+	}
 	frames, err := d.DecodeConfiguredAVCFrames(data)
 	return singleFrameFromFrames(frames, err)
 }
@@ -780,13 +792,30 @@ func (d *Decoder) FlushDelayedFrames() ([]*Frame, error) {
 // It returns ErrUnsupported when the flush produces zero or multiple frames
 // without another decode error.
 func (d *Decoder) FlushDelayedFrame() (*Frame, error) {
-	frames, err := d.FlushDelayedFrames()
-	return singleFrameFromFrames(frames, err)
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	frame, err := d.simple.FlushDelayedFrame()
+	if frame == nil {
+		return nil, err
+	}
+	return frameFromH264(frame), err
 }
 
 // DecodeAVCC updates the stored AVC configuration from an avcC record, decodes
 // data, and returns the single output frame.
 func (d *Decoder) DecodeAVCC(config []byte, data []byte) (*Frame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	if len(data) == 0 {
+		cfg, err := h264.DecodeAVCDecoderConfigurationRecord(config)
+		if err != nil {
+			return nil, err
+		}
+		d.updateAVCDecoderConfigurationForPacket(cfg, data)
+		return d.FlushDelayedFrame()
+	}
 	frames, err := d.DecodeAVCCFrames(config, data)
 	return singleFrameFromFrames(frames, err)
 }

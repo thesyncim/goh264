@@ -3,6 +3,7 @@
 package h264
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -76,6 +77,42 @@ func TestApplySimpleFrameTimingPropsFromPictureTiming(t *testing.T) {
 					frame.RepeatPict, frame.InterlacedFrame, frame.TopFieldFirst)
 			}
 		})
+	}
+}
+
+func TestSimpleDecoderFlushDelayedFrameRejectsMultipleWithoutDraining(t *testing.T) {
+	sps := simpleDPBTestSPS(2)
+	earlier := simpleDPBTestFrame(sps, 0)
+	earlier.poc = 0
+	later := simpleDPBTestFrame(sps, 1)
+	later.poc = 2
+	dec := &SimpleDecoder{
+		dpb: simpleFrameDPB{
+			delayed:        []*DecodedFrame{later, earlier},
+			frameRecovered: simpleFrameRecoveredSEI,
+		},
+	}
+
+	frame, err := dec.FlushDelayedFrame()
+	if frame != nil {
+		t.Fatal("FlushDelayedFrame returned frame, want nil")
+	}
+	if !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("FlushDelayedFrame error = %v, want ErrUnsupported", err)
+	}
+	if len(dec.dpb.delayed) != 2 || dec.dpb.delayed[0] != later || dec.dpb.delayed[1] != earlier {
+		t.Fatalf("delayed frames after failed single flush = %v, want original two-frame queue", dec.dpb.delayed)
+	}
+	if earlier.recovered != 0 || later.recovered != 0 {
+		t.Fatalf("recovered flags after failed single flush = %d/%d, want 0/0", earlier.recovered, later.recovered)
+	}
+
+	frames, err := dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("FlushDelayedFrames: %v", err)
+	}
+	if len(frames) != 2 || frames[0] != earlier || frames[1] != later {
+		t.Fatalf("FlushDelayedFrames = %v, want earlier then later", frames)
 	}
 }
 

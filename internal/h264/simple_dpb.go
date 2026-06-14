@@ -42,6 +42,7 @@ type simpleFrameDPBSnapshot struct {
 	refMask            map[*DecodedFrame]int32
 	poc                simplePOCContext
 	delayed            []*DecodedFrame
+	delayedRecovered   [h264MaxDPBFrames]uint8
 	hasBFrames         int
 	lastPOCs           [h264MaxDPBFrames]int32
 	lastPOCsInit       bool
@@ -118,6 +119,14 @@ func (d *simpleFrameDPB) snapshot() simpleFrameDPBSnapshot {
 		recoveryFrame:      d.recoveryFrame,
 		frameRecovered:     d.frameRecovered,
 	}
+	for i, frame := range d.delayed {
+		if i == len(snap.delayedRecovered) {
+			break
+		}
+		if frame != nil {
+			snap.delayedRecovered[i] = frame.recovered
+		}
+	}
 	if len(d.refMask) != 0 {
 		snap.refMask = make(map[*DecodedFrame]int32, len(d.refMask))
 		for frame, mask := range d.refMask {
@@ -148,6 +157,11 @@ func (d *simpleFrameDPB) restore(snap simpleFrameDPBSnapshot) {
 	d.delayed = append(d.delayed[:0], snap.delayed...)
 	if len(snap.delayed) == 0 {
 		d.delayed = nil
+	}
+	for i, frame := range d.delayed {
+		if frame != nil && i < len(snap.delayedRecovered) {
+			frame.recovered = snap.delayedRecovered[i]
+		}
 	}
 	d.hasBFrames = snap.hasBFrames
 	d.lastPOCs = snap.lastPOCs

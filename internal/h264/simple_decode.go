@@ -191,6 +191,22 @@ func (d *SimpleDecoder) FlushDelayedFrames() ([]*DecodedFrame, error) {
 	return d.dpb.drainOutputFrames(true)
 }
 
+func (d *SimpleDecoder) FlushDelayedFrame() (*DecodedFrame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	snap := d.dpb.snapshot()
+	frames, err := d.dpb.drainOutputFrames(true)
+	if len(frames) == 1 {
+		return frames[0], err
+	}
+	d.dpb.restore(snap)
+	if err != nil {
+		return nil, err
+	}
+	return nil, ErrUnsupported
+}
+
 func (d *SimpleDecoder) DecodeAVCFramesWithConfig(data []byte, cfg AVCDecoderConfigurationRecord) ([]*DecodedFrame, error) {
 	if err := d.StoreAVCDecoderConfiguration(cfg); err != nil {
 		return nil, err
