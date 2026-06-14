@@ -388,8 +388,9 @@ packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
 public `EncodedFrame.RTPPacketData`/`EncodedFrame.RTPPayloadData` and
 packet-level `EncoderRTPPacket` helpers, clipped packet payload views over
 packet data, malformed RTP payload rejection for admitted single-NAL, STAP-A,
-and FU-A packet/payload byte helpers including STAP-B, MTAP, FU-B, and nested
-STAP-A packetization units, packet storage isolated from `EncodedFrame.Data`
+and FU-A packet/payload byte helpers including STAP-B, MTAP, FU-B, nested
+STAP-A units, and FU-A fragments whose reconstructed NAL type is another
+packetization unit, packet storage isolated from `EncodedFrame.Data`
 including caller-backed `EncodeInto` output buffers, unchanged caller append
 destinations on invalid or overflowed-destination access-unit, NAL, RTP packet,
 and RTP payload appends, isolated overlapping source/destination helper appends,

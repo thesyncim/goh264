@@ -14292,6 +14292,8 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 	emptyFragmentFUAPacketData := rtpPacketWithPayload(28, 0x85)
 	zeroFUAPacketData := rtpPacketWithPayload(28, 0x80)
 	reservedFUAPacketData := rtpPacketWithPayload(28, 0xa5)
+	nestedSTAPAFUAPacketData := rtpPacketWithPayload(28, 0x98, 0x99)
+	nestedFUAFUAPacketData := rtpPacketWithPayload(28, 0x9c, 0x99)
 	invalidStartEndFUAPacketData := rtpPacketWithPayload(28, 0xc5, 0x99)
 	shiftedPayloadPacketData := rtpPacketWithPayload(0x65, 0x61, 0x62)
 	for _, tt := range []struct {
@@ -14327,6 +14329,8 @@ func TestEncodedFrameRTPDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "empty fragment fua", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(emptyFragmentFUAPacketData, emptyFragmentFUAPacketData[12:])}}},
 		{name: "fua zero nal type", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(zeroFUAPacketData, zeroFUAPacketData[12:])}}},
 		{name: "fua reserved bit", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(reservedFUAPacketData, reservedFUAPacketData[12:])}}},
+		{name: "fua stapa nal type", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(nestedSTAPAFUAPacketData, nestedSTAPAFUAPacketData[12:])}}},
+		{name: "fua fua nal type", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(nestedFUAFUAPacketData, nestedFUAFUAPacketData[12:])}}},
 		{name: "fua start and end", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(invalidStartEndFUAPacketData, invalidStartEndFUAPacketData[12:])}}},
 		{name: "foreign payload", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputRTP, RTPPackets: []goh264.EncoderRTPPacket{encoderRTPPacketFromTestData(packetData, []byte{0x65, 0x88, 0x99})}}},
 	} {
@@ -14532,6 +14536,8 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 	nestedSTAPAInSTAPAPacketData := rtpPacketWithPayload(24, 0, 1, 24)
 	nestedFUAInSTAPAPacketData := rtpPacketWithPayload(24, 0, 1, 28)
 	malformedFUAPacketData := rtpPacketWithPayload(28, 0x85)
+	nestedSTAPAFUAPacketData := rtpPacketWithPayload(28, 0x98, 0x99)
+	nestedFUAFUAPacketData := rtpPacketWithPayload(28, 0x9c, 0x99)
 	shiftedPayloadPacketData := rtpPacketWithPayload(0x65, 0x61, 0x62)
 	payloadTypeMismatchPacket := encoderRTPPacketFromTestData(packetData, packetData[12:])
 	payloadTypeMismatchPacket.PayloadType ^= 1
@@ -14571,6 +14577,8 @@ func TestEncoderRTPPacketDataHelpersReturnClippedCallerOwnedBytes(t *testing.T) 
 		{name: "stapa inner stapa", packet: encoderRTPPacketFromTestData(nestedSTAPAInSTAPAPacketData, nestedSTAPAInSTAPAPacketData[12:])},
 		{name: "stapa inner fua", packet: encoderRTPPacketFromTestData(nestedFUAInSTAPAPacketData, nestedFUAInSTAPAPacketData[12:])},
 		{name: "malformed fua", packet: encoderRTPPacketFromTestData(malformedFUAPacketData, malformedFUAPacketData[12:])},
+		{name: "fua stapa nal type", packet: encoderRTPPacketFromTestData(nestedSTAPAFUAPacketData, nestedSTAPAFUAPacketData[12:])},
+		{name: "fua fua nal type", packet: encoderRTPPacketFromTestData(nestedFUAFUAPacketData, nestedFUAFUAPacketData[12:])},
 		{name: "foreign payload", packet: encoderRTPPacketFromTestData(packetData, []byte{0x65, 0x88, 0x99})},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

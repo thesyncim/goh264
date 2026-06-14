@@ -414,7 +414,8 @@ func validateEncoderRTPPayload(payload []byte) error {
 			return ErrInvalidData
 		}
 		fuHeader := payload[1]
-		if fuHeader&0x20 != 0 || fuHeader&0x1f == 0 || fuHeader&0xc0 == 0xc0 {
+		fragmentedType := fuHeader & 0x1f
+		if fuHeader&0x20 != 0 || fragmentedType == 0 || fragmentedType >= 24 || fuHeader&0xc0 == 0xc0 {
 			return ErrInvalidData
 		}
 	default:
