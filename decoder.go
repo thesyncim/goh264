@@ -291,12 +291,27 @@ func (side FrameSideData) AppendLCEVC(dst []byte) ([]byte, error) {
 	return appendPublicBytes(dst, side.LCEVC)
 }
 
+// AppendS12MTimecodes appends a caller-owned copy of S12MTimecodes to dst. On
+// error, dst is returned unchanged.
+func (side FrameSideData) AppendS12MTimecodes(dst []uint32) ([]uint32, error) {
+	return appendPublicSlice(dst, side.S12MTimecodes, maxInt/4)
+}
+
 type PictureTiming struct {
 	PicStruct       int32
 	CTType          int32
 	DPBOutputDelay  int32
 	CPBRemovalDelay int32
 	Timecode        []Timecode
+}
+
+// AppendTimecodes appends caller-owned copies of Timecode entries to dst. On
+// error, dst is returned unchanged.
+func (timing *PictureTiming) AppendTimecodes(dst []Timecode) ([]Timecode, error) {
+	if timing == nil {
+		return dst, ErrInvalidData
+	}
+	return appendPublicSlice(dst, timing.Timecode, maxInt/32)
 }
 
 type Timecode struct {
@@ -419,6 +434,15 @@ type ReferenceDisplaysInfo struct {
 	RefViewingDistanceFlag bool
 	PrecRefViewingDist     uint8
 	Displays               []ReferenceDisplay
+}
+
+// AppendDisplays appends caller-owned copies of Displays entries to dst. On
+// error, dst is returned unchanged.
+func (displays *ReferenceDisplaysInfo) AppendDisplays(dst []ReferenceDisplay) ([]ReferenceDisplay, error) {
+	if displays == nil {
+		return dst, ErrInvalidData
+	}
+	return appendPublicSlice(dst, displays.Displays, maxInt/16)
 }
 
 type ReferenceDisplay struct {

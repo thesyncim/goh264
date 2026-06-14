@@ -546,6 +546,39 @@ func TestDecoderCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 			}
 		})
 	}
+
+	uint32Prefix := []uint32{0xde, 0xad}
+	overflowS12M := FrameSideData{S12MTimecodes: fakeUint32s(maxIntForTest/4 + 1)}
+	if got, err := overflowS12M.AppendS12MTimecodes(append([]uint32(nil), uint32Prefix...)); !reflect.DeepEqual(got, uint32Prefix) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("FrameSideData.AppendS12MTimecodes overflow = %v/%v, want original prefix ErrInvalidData", got, err)
+	}
+	validFrameSide.S12MTimecodes = []uint32{1}
+	largeUint32Dst := fakeUint32s(maxIntForTest / 4)
+	if got, err := validFrameSide.AppendS12MTimecodes(largeUint32Dst); len(got) != len(largeUint32Dst) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("FrameSideData.AppendS12MTimecodes large dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
+
+	timecodePrefix := []Timecode{{Frame: 7}}
+	overflowTiming := &PictureTiming{Timecode: fakeTimecodes(maxIntForTest/32 + 1)}
+	if got, err := overflowTiming.AppendTimecodes(append([]Timecode(nil), timecodePrefix...)); !reflect.DeepEqual(got, timecodePrefix) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("PictureTiming.AppendTimecodes overflow = %+v/%v, want original prefix ErrInvalidData", got, err)
+	}
+	validTiming := &PictureTiming{Timecode: []Timecode{{Frame: 1}}}
+	largeTimecodeDst := fakeTimecodes(maxIntForTest / 32)
+	if got, err := validTiming.AppendTimecodes(largeTimecodeDst); len(got) != len(largeTimecodeDst) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("PictureTiming.AppendTimecodes large dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
+
+	displayPrefix := []ReferenceDisplay{{LeftViewID: 7}}
+	overflowDisplays := &ReferenceDisplaysInfo{Displays: fakeReferenceDisplays(maxIntForTest/16 + 1)}
+	if got, err := overflowDisplays.AppendDisplays(append([]ReferenceDisplay(nil), displayPrefix...)); !reflect.DeepEqual(got, displayPrefix) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("ReferenceDisplaysInfo.AppendDisplays overflow = %+v/%v, want original prefix ErrInvalidData", got, err)
+	}
+	validDisplays := &ReferenceDisplaysInfo{Displays: []ReferenceDisplay{{LeftViewID: 1}}}
+	largeDisplayDst := fakeReferenceDisplays(maxIntForTest / 16)
+	if got, err := validDisplays.AppendDisplays(largeDisplayDst); len(got) != len(largeDisplayDst) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("ReferenceDisplaysInfo.AppendDisplays large dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
 }
 
 func TestDecodePacketFramesRejectsOverflowedSideDataListWithoutDroppingPacket(t *testing.T) {
@@ -722,6 +755,100 @@ func TestFrameSideDataAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 
 	if got, err := (FrameSideData{}).AppendUserDataUnregistered(append([]byte(nil), prefix...), 0); !bytes.Equal(got, prefix) || !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("AppendUserDataUnregistered missing index = %x/%v, want original prefix ErrInvalidData", got, err)
+	}
+}
+
+func TestFrameSideDataAppendTypedHelpersReturnCallerOwnedValues(t *testing.T) {
+	s12mPrefix := []uint32{0xde, 0xad}
+	s12mSide := FrameSideData{S12MTimecodes: []uint32{1, 2}}
+	s12mWant := append(append([]uint32(nil), s12mPrefix...), s12mSide.S12MTimecodes...)
+	s12mGot, err := s12mSide.AppendS12MTimecodes(append([]uint32(nil), s12mPrefix...))
+	if err != nil {
+		t.Fatalf("AppendS12MTimecodes: %v", err)
+	}
+	if !reflect.DeepEqual(s12mGot, s12mWant) {
+		t.Fatalf("AppendS12MTimecodes = %v, want %v", s12mGot, s12mWant)
+	}
+	s12mSide.S12MTimecodes[0] ^= 0xff
+	if !reflect.DeepEqual(s12mGot, s12mWant) {
+		t.Fatalf("AppendS12MTimecodes output aliases source after mutation: got %v want %v", s12mGot, s12mWant)
+	}
+	s12mBacking := append(append([]uint32(nil), s12mPrefix...), s12mWant[len(s12mPrefix):]...)
+	s12mOverlapSide := FrameSideData{S12MTimecodes: s12mBacking[len(s12mPrefix):]}
+	s12mOverlap, err := s12mOverlapSide.AppendS12MTimecodes(s12mBacking[:len(s12mPrefix)])
+	if err != nil {
+		t.Fatalf("AppendS12MTimecodes overlapping source: %v", err)
+	}
+	if !reflect.DeepEqual(s12mOverlap, s12mWant) {
+		t.Fatalf("AppendS12MTimecodes overlapping source = %v, want %v", s12mOverlap, s12mWant)
+	}
+	s12mOverlapSide.S12MTimecodes[0] ^= 0xff
+	if !reflect.DeepEqual(s12mOverlap, s12mWant) {
+		t.Fatalf("overlapping AppendS12MTimecodes output aliases source after mutation: got %v want %v", s12mOverlap, s12mWant)
+	}
+
+	timecodePrefix := []Timecode{{Frame: 1}}
+	timing := &PictureTiming{Timecode: []Timecode{{Full: true, Frame: 12}, {Seconds: 1}}}
+	timecodeWant := append(append([]Timecode(nil), timecodePrefix...), timing.Timecode...)
+	timecodeGot, err := timing.AppendTimecodes(append([]Timecode(nil), timecodePrefix...))
+	if err != nil {
+		t.Fatalf("AppendTimecodes: %v", err)
+	}
+	if !reflect.DeepEqual(timecodeGot, timecodeWant) {
+		t.Fatalf("AppendTimecodes = %+v, want %+v", timecodeGot, timecodeWant)
+	}
+	timing.Timecode[0].Frame++
+	if !reflect.DeepEqual(timecodeGot, timecodeWant) {
+		t.Fatalf("AppendTimecodes output aliases source after mutation: got %+v want %+v", timecodeGot, timecodeWant)
+	}
+	timecodeBacking := append(append([]Timecode(nil), timecodePrefix...), timecodeWant[len(timecodePrefix):]...)
+	overlapTiming := &PictureTiming{Timecode: timecodeBacking[len(timecodePrefix):]}
+	timecodeOverlap, err := overlapTiming.AppendTimecodes(timecodeBacking[:len(timecodePrefix)])
+	if err != nil {
+		t.Fatalf("AppendTimecodes overlapping source: %v", err)
+	}
+	if !reflect.DeepEqual(timecodeOverlap, timecodeWant) {
+		t.Fatalf("AppendTimecodes overlapping source = %+v, want %+v", timecodeOverlap, timecodeWant)
+	}
+	overlapTiming.Timecode[0].Frame++
+	if !reflect.DeepEqual(timecodeOverlap, timecodeWant) {
+		t.Fatalf("overlapping AppendTimecodes output aliases source after mutation: got %+v want %+v", timecodeOverlap, timecodeWant)
+	}
+	var nilTiming *PictureTiming
+	if got, err := nilTiming.AppendTimecodes(append([]Timecode(nil), timecodePrefix...)); !reflect.DeepEqual(got, timecodePrefix) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("nil PictureTiming.AppendTimecodes = %+v/%v, want original prefix ErrInvalidData", got, err)
+	}
+
+	displayPrefix := []ReferenceDisplay{{LeftViewID: 1}}
+	displays := &ReferenceDisplaysInfo{Displays: []ReferenceDisplay{{LeftViewID: 3, RightViewID: 4}, {LeftViewID: 5, RightViewID: 6}}}
+	displayWant := append(append([]ReferenceDisplay(nil), displayPrefix...), displays.Displays...)
+	displayGot, err := displays.AppendDisplays(append([]ReferenceDisplay(nil), displayPrefix...))
+	if err != nil {
+		t.Fatalf("AppendDisplays: %v", err)
+	}
+	if !reflect.DeepEqual(displayGot, displayWant) {
+		t.Fatalf("AppendDisplays = %+v, want %+v", displayGot, displayWant)
+	}
+	displays.Displays[0].LeftViewID++
+	if !reflect.DeepEqual(displayGot, displayWant) {
+		t.Fatalf("AppendDisplays output aliases source after mutation: got %+v want %+v", displayGot, displayWant)
+	}
+	displayBacking := append(append([]ReferenceDisplay(nil), displayPrefix...), displayWant[len(displayPrefix):]...)
+	overlapDisplays := &ReferenceDisplaysInfo{Displays: displayBacking[len(displayPrefix):]}
+	displayOverlap, err := overlapDisplays.AppendDisplays(displayBacking[:len(displayPrefix)])
+	if err != nil {
+		t.Fatalf("AppendDisplays overlapping source: %v", err)
+	}
+	if !reflect.DeepEqual(displayOverlap, displayWant) {
+		t.Fatalf("AppendDisplays overlapping source = %+v, want %+v", displayOverlap, displayWant)
+	}
+	overlapDisplays.Displays[0].LeftViewID++
+	if !reflect.DeepEqual(displayOverlap, displayWant) {
+		t.Fatalf("overlapping AppendDisplays output aliases source after mutation: got %+v want %+v", displayOverlap, displayWant)
+	}
+	var nilDisplays *ReferenceDisplaysInfo
+	if got, err := nilDisplays.AppendDisplays(append([]ReferenceDisplay(nil), displayPrefix...)); !reflect.DeepEqual(got, displayPrefix) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("nil ReferenceDisplaysInfo.AppendDisplays = %+v/%v, want original prefix ErrInvalidData", got, err)
 	}
 }
 

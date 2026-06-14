@@ -961,6 +961,23 @@ func appendPublicBytes(dst []byte, src []byte) ([]byte, error) {
 	return append(dst, src...), nil
 }
 
+func appendPublicSlice[T any](dst []T, src []T, maxLen int) ([]T, error) {
+	if len(dst) > maxLen || len(src) > maxLen {
+		return dst, ErrInvalidData
+	}
+	n, err := checkedAddInt(len(dst), len(src))
+	if err != nil || n > maxLen {
+		return dst, ErrInvalidData
+	}
+	if cap(dst) >= n && slicesOverlap(dst[:n], src) {
+		out := make([]T, n)
+		copy(out, dst)
+		copy(out[len(dst):], src)
+		return out, nil
+	}
+	return append(dst, src...), nil
+}
+
 func byteSlicesOverlap(a []byte, b []byte) bool {
 	if len(a) == 0 || len(b) == 0 {
 		return false
@@ -969,6 +986,25 @@ func byteSlicesOverlap(a []byte, b []byte) bool {
 	aEnd := aStart + uintptr(len(a)-1)
 	bStart := uintptr(unsafe.Pointer(&b[0]))
 	bEnd := bStart + uintptr(len(b)-1)
+	if aEnd < aStart || bEnd < bStart {
+		return true
+	}
+	return aStart <= bEnd && bStart <= aEnd
+}
+
+func slicesOverlap[T any](a []T, b []T) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	var zero T
+	size := unsafe.Sizeof(zero)
+	if size == 0 {
+		return false
+	}
+	aStart := uintptr(unsafe.Pointer(unsafe.SliceData(a)))
+	aEnd := aStart + uintptr(len(a)-1)*size
+	bStart := uintptr(unsafe.Pointer(unsafe.SliceData(b)))
+	bEnd := bStart + uintptr(len(b)-1)*size
 	if aEnd < aStart || bEnd < bStart {
 		return true
 	}

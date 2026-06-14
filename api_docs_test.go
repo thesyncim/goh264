@@ -70,6 +70,9 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendICCProfile"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendDynamicHDR10Plus"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendLCEVC"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendS12MTimecodes"},
+		{typeName: "PictureTiming", typ: reflect.TypeOf((*PictureTiming)(nil)), method: "AppendTimecodes"},
+		{typeName: "ReferenceDisplaysInfo", typ: reflect.TypeOf((*ReferenceDisplaysInfo)(nil)), method: "AppendDisplays"},
 	} {
 		if _, ok := tt.typ.MethodByName(tt.method); !ok {
 			t.Fatalf("README decoder ownership names missing %s.%s", tt.typeName, tt.method)
@@ -147,6 +150,9 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		"AppendICCProfile",
 		"AppendDynamicHDR10Plus",
 		"AppendLCEVC",
+		"AppendS12MTimecodes",
+		"AppendTimecodes",
+		"AppendDisplays",
 		"Clone",
 		"Append",
 		"AppendSPS",
@@ -231,6 +237,9 @@ func TestDecoderOwnershipAPIReturnsErrors(t *testing.T) {
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendICCProfile"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendDynamicHDR10Plus"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendLCEVC"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendS12MTimecodes"},
+		{typeName: "PictureTiming", typ: reflect.TypeOf((*PictureTiming)(nil)), method: "AppendTimecodes"},
+		{typeName: "ReferenceDisplaysInfo", typ: reflect.TypeOf((*ReferenceDisplaysInfo)(nil)), method: "AppendDisplays"},
 	} {
 		method, ok := tt.typ.MethodByName(tt.method)
 		if !ok {
@@ -723,6 +732,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestPacketAppendDataReturnsCallerOwnedBytes",
 		"TestPacketSideDataAppendDataReturnsCallerOwnedBytes",
 		"TestFrameSideDataAppendHelpersReturnCallerOwnedBytes",
+		"TestFrameSideDataAppendTypedHelpersReturnCallerOwnedValues",
 		"TestFrameCloneDeepCopiesPlanesAndSideData",
 		"TestDecodeFrameSideDataByteSlicesAreCallerOwned",
 		"TestFrameAppendRawYUVIsolatesOverlappingSource",
