@@ -433,6 +433,12 @@ func TestDecoderCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 				if got, err := tt.packet.AppendData(append([]byte(nil), prefix...)); !bytes.Equal(got, prefix) || !errors.Is(err, ErrInvalidData) {
 					t.Fatalf("Packet.AppendData overflow = %x/%v, want original prefix ErrInvalidData", got, err)
 				}
+			} else {
+				sidePrefix := []PacketSideData{{Type: PacketSideDataICCProfile, Data: []byte{0x01}}}
+				got, err := tt.packet.AppendSideData(append([]PacketSideData(nil), sidePrefix...))
+				if !reflect.DeepEqual(got, sidePrefix) || !errors.Is(err, ErrInvalidData) {
+					t.Fatalf("Packet.AppendSideData overflow = %+v/%v, want original prefix ErrInvalidData", got, err)
+				}
 			}
 		})
 	}
@@ -445,6 +451,11 @@ func TestDecoderCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 	validPacket := Packet{Data: []byte{0, 0, 1, 0x65}}
 	if got, err := validPacket.AppendData(largeDst); len(got) != len(largeDst) || !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("Packet.AppendData large dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
+	}
+	largeSideDst := fakePacketSideData(maxIntForTest / 32)
+	validSidePacket := Packet{SideData: []PacketSideData{{Type: PacketSideDataA53ClosedCaptions, Data: []byte{1}}}}
+	if got, err := validSidePacket.AppendSideData(largeSideDst); len(got) != len(largeSideDst) || !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("Packet.AppendSideData large dst = len %d/%v, want original dst ErrInvalidData", len(got), err)
 	}
 
 	for _, tt := range []struct {
@@ -3497,6 +3508,41 @@ func TestDecodePacketFramesIgnoresMalformedStructuredPacketSideData(t *testing.T
 		side.ContentLight != nil ||
 		side.ReferenceDisplays != nil {
 		t.Fatalf("malformed structured packet side data was accepted: %+v", side)
+	}
+}
+
+func TestDecodePacketFramesIgnoresOverflowedPacketSideDataPayloadsWithoutDroppingPacket(t *testing.T) {
+	overflowPayload := fakeDecoderRawBytesLen(maxIntForTest/2 + 1)
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{
+			{Type: PacketSideDataA53ClosedCaptions, Data: overflowPayload},
+			{Type: PacketSideDataActiveFormat, Data: overflowPayload},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if len(frame.SideData.A53ClosedCaptions) != 0 || frame.SideData.ActiveFormat != nil {
+		t.Fatalf("overflowed packet side data surfaced on frame: %+v", frame.SideData)
+	}
+}
+
+func TestDecodePacketFramesOverflowedPacketSideDataPayloadSuppressesLaterDuplicate(t *testing.T) {
+	frame, err := NewDecoder().DecodePacket(Packet{
+		Data: decodeHexFixture(t, black16AnnexBHex),
+		SideData: []PacketSideData{
+			{Type: PacketSideDataActiveFormat, Data: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)},
+			{Type: PacketSideDataActiveFormat, Data: []byte{0x0a}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	if frame.SideData.ActiveFormat != nil {
+		t.Fatalf("later duplicate packet side data overrode overflowed first entry: %+v", frame.SideData)
 	}
 }
 

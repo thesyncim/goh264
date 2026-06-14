@@ -210,6 +210,44 @@ func (pkt Packet) AppendData(dst []byte) ([]byte, error) {
 	return appendPublicBytes(dst, pkt.Data)
 }
 
+// AppendSideData appends caller-owned copies of packet side-data entries to dst
+// after validating public storage sizes. On error, dst is returned unchanged.
+func (pkt Packet) AppendSideData(dst []PacketSideData) ([]PacketSideData, error) {
+	if len(dst) > maxInt/32 || len(pkt.SideData) > maxInt/32 {
+		return dst, ErrInvalidData
+	}
+	n, err := checkedAddInt(len(dst), len(pkt.SideData))
+	if err != nil || n > maxInt/32 {
+		return dst, ErrInvalidData
+	}
+	for _, side := range pkt.SideData {
+		if err := side.Validate(); err != nil {
+			return dst, err
+		}
+	}
+	if len(pkt.SideData) == 0 {
+		return dst, nil
+	}
+	if cap(dst) >= n && slicesOverlap(dst[:n], pkt.SideData) {
+		out := make([]PacketSideData, n)
+		copy(out, dst)
+		appendClonedPacketSideData(out[len(dst):], pkt.SideData)
+		return out, nil
+	}
+	out := append(dst, make([]PacketSideData, len(pkt.SideData))...)
+	appendClonedPacketSideData(out[len(dst):], pkt.SideData)
+	return out, nil
+}
+
+func appendClonedPacketSideData(dst []PacketSideData, src []PacketSideData) {
+	for i, side := range src {
+		dst[i] = PacketSideData{
+			Type: side.Type,
+			Data: cloneByteSlice(side.Data),
+		}
+	}
+}
+
 // FrameSideData contains SEI and packet side-data values attached to a decoded
 // frame.
 //
@@ -795,7 +833,7 @@ func (d *Decoder) DecodePacketFrames(pkt Packet) ([]*Frame, error) {
 	if len(pkt.Data) == 0 {
 		return d.FlushDelayedFrames()
 	}
-	if side, ok := packetSideDataGet(pkt.SideData, PacketSideDataNewExtradata); ok {
+	if side, ok := packetSideDataGet(pkt.SideData, PacketSideDataNewExtradata); ok && packetSideDataPayloadOK(side) {
 		// h264_decode_frame calls ff_h264_decode_extradata for packet
 		// NEW_EXTRADATA and ignores its return value before decoding buf.
 		_ = d.decodeNewExtradataForPacket(side.Data, pkt.Data)
@@ -1553,63 +1591,67 @@ func packetSideDataGet(sideData []PacketSideData, typ PacketSideDataType) (Packe
 	return PacketSideData{}, false
 }
 
+func packetSideDataPayloadOK(side PacketSideData) bool {
+	return len(side.Data) <= maxInt/2
+}
+
 func packetFrameSideDataFromPacket(sideData []PacketSideData) h264.DecodedFrameSideData {
 	var out h264.DecodedFrameSideData
 	if len(sideData) > maxInt/32 {
 		return out
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataA53ClosedCaptions); ok {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataA53ClosedCaptions); ok && packetSideDataPayloadOK(side) {
 		out.A53ClosedCaptions = cloneByteSlice(side.Data)
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataActiveFormat); ok && len(side.Data) > 0 {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataActiveFormat); ok && packetSideDataPayloadOK(side) && len(side.Data) > 0 {
 		out.AFD = h264.H2645SEIAFD{
 			Present:                 1,
 			ActiveFormatDescription: side.Data[0],
 		}
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataS12MTimecode); ok {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataS12MTimecode); ok && packetSideDataPayloadOK(side) {
 		out.S12MTimecodes = s12mTimecodesFromPacketSideData(side.Data)
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataStereo3D); ok {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataStereo3D); ok && packetSideDataPayloadOK(side) {
 		if stereo, ok := stereo3DFromPacketSideData(side.Data); ok {
 			out.Stereo3D = stereo
 		}
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataSpherical); ok {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataSpherical); ok && packetSideDataPayloadOK(side) {
 		if spherical, ok := sphericalFromPacketSideData(side.Data); ok {
 			out.Spherical = spherical
 		}
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataDisplayMatrix); ok {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataDisplayMatrix); ok && packetSideDataPayloadOK(side) {
 		if matrix, ok := displayMatrixFromPacketSideData(side.Data); ok {
 			out.DisplayMatrix = matrix
 		}
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataAmbientViewingEnvironment); ok {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataAmbientViewingEnvironment); ok && packetSideDataPayloadOK(side) {
 		if ambient, ok := ambientViewingFromPacketSideData(side.Data); ok {
 			out.AmbientViewing = ambient
 		}
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataMasteringDisplayMetadata); ok {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataMasteringDisplayMetadata); ok && packetSideDataPayloadOK(side) {
 		if mastering, ok := masteringDisplayFromPacketSideData(side.Data); ok {
 			out.MasteringMetadata = mastering
 		}
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataContentLightLevel); ok {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataContentLightLevel); ok && packetSideDataPayloadOK(side) {
 		if light, ok := contentLightFromPacketSideData(side.Data); ok {
 			out.ContentLight = light
 		}
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataICCProfile); ok && len(side.Data) != 0 {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataICCProfile); ok && packetSideDataPayloadOK(side) && len(side.Data) != 0 {
 		out.ICCProfile = cloneByteSlice(side.Data)
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataDynamicHDR10Plus); ok && len(side.Data) != 0 {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataDynamicHDR10Plus); ok && packetSideDataPayloadOK(side) && len(side.Data) != 0 {
 		out.DynamicHDR10Plus = cloneByteSlice(side.Data)
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideDataLCEVC); ok && len(side.Data) != 0 {
+	if side, ok := packetSideDataGet(sideData, PacketSideDataLCEVC); ok && packetSideDataPayloadOK(side) && len(side.Data) != 0 {
 		out.LCEVC = cloneByteSlice(side.Data)
 	}
-	if side, ok := packetSideDataGet(sideData, PacketSideData3DReferenceDisplays); ok {
+	if side, ok := packetSideDataGet(sideData, PacketSideData3DReferenceDisplays); ok && packetSideDataPayloadOK(side) {
 		if displays, ok := referenceDisplaysFromPacketSideData(side.Data); ok {
 			out.ReferenceDisplays = displays
 		}

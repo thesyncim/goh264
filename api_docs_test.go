@@ -58,6 +58,7 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "Clone"},
 		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "Validate"},
 		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "AppendData"},
+		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "AppendSideData"},
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "Clone"},
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "Validate"},
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "AppendData"},
@@ -265,6 +266,7 @@ func TestDecoderOwnershipAPIReturnsErrors(t *testing.T) {
 		method   string
 	}{
 		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "AppendData"},
+		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "AppendSideData"},
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "AppendData"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendUserDataUnregistered"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "AppendA53ClosedCaptions"},
@@ -788,6 +790,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestFrameCloneRejectsOverflowedPublicStorage",
 		"TestDecoderCloneHelpersRejectOverflowedPublicStorage",
 		"TestDecodePacketFramesRejectsOverflowedSideDataListWithoutDroppingPacket",
+		"TestDecodePacketFramesIgnoresOverflowedPacketSideDataPayloadsWithoutDroppingPacket",
+		"TestDecodePacketFramesOverflowedPacketSideDataPayloadSuppressesLaterDuplicate",
 		"TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
 		"TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference",
@@ -813,6 +817,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"TestDecodePacketFramesDoesNotAliasCallerBuffer",
 		"TestConfigureAVCCDoesNotAliasCallerBuffer",
 		"TestPacketCloneDeepCopiesDataAndSideData",
+		"TestPacketAppendSideDataReturnsCallerOwnedValues",
 		"TestPacketAppendDataReturnsCallerOwnedBytes",
 		"TestPacketSideDataAppendDataReturnsCallerOwnedBytes",
 		"TestFrameSideDataNestedHelpersDeepCopyAndValidate",

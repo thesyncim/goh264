@@ -302,12 +302,13 @@ profile, HDR10+, and LCEVC side data.
 `FrameSideData.Clone` validate public storage and return deep-owned snapshots
 for retained packets and decoded output metadata. `Packet.Validate`,
 `PacketSideData.Validate`, `Frame.Validate`, and `FrameSideData.Validate` expose
-the same checks for preflight before handoff or retention. `Packet.AppendData`
-and `PacketSideData.AppendData` append caller-owned byte copies for retained
-compressed packets and packet side-data payloads. `FrameSideData` also provides
-`AppendUserDataUnregistered`, `AppendA53ClosedCaptions`, `AppendICCProfile`,
-`AppendDynamicHDR10Plus`, `AppendLCEVC`, and `AppendS12MTimecodes` for retaining
-individual decoded side-data payloads in caller-managed buffers.
+the same checks for preflight before handoff or retention. `Packet.AppendData`,
+`Packet.AppendSideData`, and `PacketSideData.AppendData` append caller-owned
+copies for retained compressed packets, packet side-data lists, and packet
+side-data payloads. `FrameSideData` also provides `AppendUserDataUnregistered`,
+`AppendA53ClosedCaptions`, `AppendICCProfile`, `AppendDynamicHDR10Plus`,
+`AppendLCEVC`, and `AppendS12MTimecodes` for retaining individual decoded
+side-data payloads in caller-managed buffers.
 `PictureTiming.Validate`/`Clone` and `ReferenceDisplaysInfo.Validate`/`Clone`
 provide retained snapshots for structured side-data containers, while
 `PictureTiming.AppendTimecodes` and `ReferenceDisplaysInfo.AppendDisplays`
@@ -315,8 +316,9 @@ provide the caller-buffer/error contract for individual structured lists.
 Structured side-data entries are decoded only when their payload validates;
 byte-oriented packet side data such as A53 captions, ICC profile, HDR10+, and
 LCEVC is copied into frame side data for caller-owned retention.
-Packet side-data lists beyond public storage limits are ignored during decode;
-the compressed packet data still decodes.
+Packet side-data lists or payloads beyond public storage limits are treated as
+malformed packet side data during decode; the compressed packet data still
+decodes.
 Duplicate packet side data follows first-entry semantics: empty or malformed
 first `NEW_EXTRADATA`, active-format, S12M timecode, ICC profile, HDR10+, and
 LCEVC entries suppress later duplicates.

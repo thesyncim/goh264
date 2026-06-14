@@ -442,6 +442,61 @@ func TestPacketAppendDataReturnsCallerOwnedBytes(t *testing.T) {
 	}
 }
 
+func TestPacketAppendSideDataReturnsCallerOwnedValues(t *testing.T) {
+	captionsBacking := []byte{0xca, 0xfe, 1, 2, 3, 0xee}
+	packet := Packet{SideData: []PacketSideData{
+		{Type: PacketSideDataA53ClosedCaptions, Data: captionsBacking[2:5]},
+		{Type: PacketSideDataActiveFormat, Data: []byte{0x0a}},
+	}}
+	prefix := []PacketSideData{{Type: PacketSideDataICCProfile, Data: []byte{0x01}}}
+	got, err := packet.AppendSideData(append([]PacketSideData(nil), prefix...))
+	if err != nil {
+		t.Fatalf("Packet.AppendSideData: %v", err)
+	}
+	if len(got) != 3 ||
+		got[0].Type != prefix[0].Type ||
+		got[1].Type != PacketSideDataA53ClosedCaptions ||
+		got[2].Type != PacketSideDataActiveFormat ||
+		!bytes.Equal(got[1].Data, []byte{1, 2, 3}) ||
+		!bytes.Equal(got[2].Data, []byte{0x0a}) {
+		t.Fatalf("Packet.AppendSideData = %+v, want prefix plus packet side data", got)
+	}
+	if &got[1].Data[0] == &packet.SideData[0].Data[0] ||
+		&got[2].Data[0] == &packet.SideData[1].Data[0] {
+		t.Fatal("Packet.AppendSideData aliases source payload")
+	}
+	packet.SideData[0].Type = PacketSideDataLCEVC
+	packet.SideData[0].Data[0] ^= 0xff
+	packet.SideData[1].Data[0] ^= 0xff
+	if got[1].Type != PacketSideDataA53ClosedCaptions ||
+		!bytes.Equal(got[1].Data, []byte{1, 2, 3}) ||
+		!bytes.Equal(got[2].Data, []byte{0x0a}) {
+		t.Fatalf("mutating source packet changed appended side data: %+v", got)
+	}
+
+	overlapBacking := []PacketSideData{
+		{Type: PacketSideDataICCProfile, Data: []byte{0x01}},
+		{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0x02, 0x03}},
+	}
+	overlapPacket := Packet{SideData: overlapBacking[1:]}
+	overlap, err := overlapPacket.AppendSideData(overlapBacking[:1])
+	if err != nil {
+		t.Fatalf("Packet.AppendSideData overlapping source: %v", err)
+	}
+	if len(overlap) != 2 ||
+		overlap[0].Type != PacketSideDataICCProfile ||
+		overlap[1].Type != PacketSideDataA53ClosedCaptions ||
+		!bytes.Equal(overlap[1].Data, []byte{0x02, 0x03}) {
+		t.Fatalf("Packet.AppendSideData overlapping source = %+v", overlap)
+	}
+	overlapBacking[1].Type = PacketSideDataLCEVC
+	overlapBacking[1].Data[0] ^= 0xff
+	if overlap[1].Type != PacketSideDataA53ClosedCaptions ||
+		!bytes.Equal(overlap[1].Data, []byte{0x02, 0x03}) {
+		t.Fatalf("overlapping Packet.AppendSideData output aliases source after mutation: %+v", overlap)
+	}
+}
+
 func TestPacketCloneDeepCopiesDataAndSideData(t *testing.T) {
 	config, samples := annexBToAVCConfigAndSamples(t, decodeHexFixture(t, black16IPAnnexBHex), 4)
 	if len(samples) != 2 {

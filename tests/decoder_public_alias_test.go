@@ -57,6 +57,7 @@ var _ = (PacketSideData).AppendData
 var _ = (Packet).Clone
 var _ = (Packet).Validate
 var _ = (Packet).AppendData
+var _ = (Packet).AppendSideData
 var _ = (FrameSideData).Clone
 var _ = (FrameSideData).Validate
 var _ = (FrameSideData).AppendUserDataUnregistered

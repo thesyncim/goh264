@@ -88,8 +88,11 @@ high-bit-depth planes plus nested side-data slices and pointers, including
 overflowed public frame and side-data storage rejection; `Packet.Clone`,
 `PacketSideData.Clone`, and `FrameSideData.Clone` expose the same checked
 ownership contracts for caller-constructed packet and side-data values, while
-`Packet.AppendData` and `PacketSideData.AppendData` provide caller-buffer
-retention paths for compressed packet and packet side-data bytes. Decoded
+`Packet.AppendData`, `Packet.AppendSideData`, and `PacketSideData.AppendData`
+provide caller-buffer retention paths for compressed packet bytes, packet
+side-data lists, and packet side-data payloads. Overflowed packet side-data
+payloads are treated as malformed per-packet metadata without dropping the
+compressed packet. Decoded
 `FrameSideData` byte-payload append helpers cover unregistered user data, A53,
 ICC, HDR10+, and LCEVC retention; typed append helpers cover S12M timecodes,
 picture-timing timecodes, and 3D reference-display entries with the same

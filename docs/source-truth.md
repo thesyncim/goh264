@@ -132,9 +132,11 @@ caller-owned convenience output, `RawYUVSize` overflow rejection, and raw-output
 appender no-panic rejection for overflowed caller-constructed frame geometry,
 `Frame.Clone` deep-owned decoded-frame snapshots with overflowed public storage
 rejection, checked `Packet.Clone`, `PacketSideData.Clone`, and
-`FrameSideData.Clone` snapshots plus `Packet.AppendData` and
-`PacketSideData.AppendData` caller-buffer retention, decoded `FrameSideData`
-byte-payload append helpers, and typed append helpers for S12M timecodes,
+`FrameSideData.Clone` snapshots plus `Packet.AppendData`,
+`Packet.AppendSideData`, and `PacketSideData.AppendData` caller-buffer
+retention, overflowed packet side-data payload rejection before per-packet
+metadata import, decoded `FrameSideData` byte-payload append helpers, and typed
+append helpers for S12M timecodes,
 picture-timing timecodes, and 3D reference-display entries plus checked
 `PictureTiming`/`ReferenceDisplaysInfo` structured-container snapshots,
 checked low/high internal motion and reconstruction plane-span overflow rejection,
