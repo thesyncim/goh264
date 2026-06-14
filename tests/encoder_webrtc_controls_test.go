@@ -14184,6 +14184,7 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "negative offset", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: -1, Size: 1}}}, index: 0},
 		{name: "zero size", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 4}}}, index: 0},
 		{name: "past data", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 6, Size: 3}}}, index: 0},
+		{name: "missing nal type", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 3}}}, index: 0},
 		{name: "forbidden zero bit", frame: goh264.EncodedFrame{Data: []byte{0, 0, 0, 1, 0xe7}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}, index: 0},
 		{name: "zero nal type", frame: goh264.EncodedFrame{Data: []byte{0, 0, 0, 1, 0x00}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}, index: 0},
 		{name: "type mismatch", frame: goh264.EncodedFrame{Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 8, Offset: 4, Size: 3}}}, index: 0},
@@ -14209,6 +14210,7 @@ func TestEncodedFrameNALDataRejectsInvalidIndexesAndMetadata(t *testing.T) {
 		{name: "bad prefix", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: []byte{9, 9, 9, 9, 0x67}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}},
 		{name: "zero size", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 4}}}},
 		{name: "past data", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 6, Size: 3}}}},
+		{name: "missing nal type", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 3}}}},
 		{name: "forbidden zero bit", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: []byte{0, 0, 0, 1, 0xe7}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}},
 		{name: "zero nal type", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: []byte{0, 0, 0, 1, 0x00}, NALUnits: []goh264.EncoderNALUnit{{Offset: 4, Size: 1}}}},
 		{name: "type mismatch", frame: goh264.EncodedFrame{OutputFormat: goh264.EncoderOutputAnnexB, Data: valid.Data, NALUnits: []goh264.EncoderNALUnit{{Type: 8, Offset: 4, Size: 3}}}},
@@ -15095,6 +15097,14 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 				OutputFormat: goh264.EncoderOutputAnnexB,
 				Data:         []byte{0, 0, 0, 1, 0x65},
 				NALUnits:     []goh264.EncoderNALUnit{{Offset: 4, Size: 2}},
+			},
+		},
+		{
+			name: "missing nal type",
+			frame: goh264.EncodedFrame{
+				OutputFormat: goh264.EncoderOutputAnnexB,
+				Data:         []byte{0, 0, 0, 1, 0x65},
+				NALUnits:     []goh264.EncoderNALUnit{{Offset: 4, Size: 1}},
 			},
 		},
 		{

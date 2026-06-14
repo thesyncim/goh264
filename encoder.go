@@ -672,13 +672,7 @@ func (frame EncodedFrame) validateNALUnitMetadata(unit EncoderNALUnit) (int, err
 	if err != nil || end > len(frame.Data) {
 		return 0, ErrInvalidData
 	}
-	if unit.Type == 0 {
-		if frame.Data[unit.Offset]&0x80 != 0 || frame.Data[unit.Offset]&0x1f == 0 {
-			return 0, ErrInvalidData
-		}
-		return end, nil
-	}
-	if frame.Data[unit.Offset]&0x80 != 0 {
+	if unit.Type == 0 || frame.Data[unit.Offset]&0x80 != 0 {
 		return 0, ErrInvalidData
 	}
 	if unit.Type != frame.Data[unit.Offset]&0x1f {
