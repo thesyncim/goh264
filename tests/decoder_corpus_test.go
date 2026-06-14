@@ -1515,6 +1515,9 @@ func validateH264CorpusEntry(t *testing.T, entry h264CorpusEntry) {
 		if entry.FrameCount <= 0 {
 			t.Fatalf("%s: frame_count must be positive", entry.ID)
 		}
+		if len(entry.FrameMD5) != 0 && len(entry.FrameMD5) != entry.FrameCount {
+			t.Fatalf("%s: frame_md5 count = %d, want 0 or %d", entry.ID, len(entry.FrameMD5), entry.FrameCount)
+		}
 		validateH264CorpusFrameGroups(t, entry)
 	case "decode-error":
 		if entry.BitstreamMD5 == "" || entry.ExpectedError == "" {
@@ -1969,6 +1972,9 @@ func h264CorpusFramesMatchMetadata(entry h264CorpusEntry, frames []*Frame) (bool
 	if len(frames) != entry.FrameCount {
 		return false, fmt.Sprintf("frames = %d, want %d", len(frames), entry.FrameCount)
 	}
+	if len(entry.FrameMD5) != 0 && len(entry.FrameMD5) != entry.FrameCount {
+		return false, fmt.Sprintf("frame_md5 count = %d, want 0 or %d", len(entry.FrameMD5), entry.FrameCount)
+	}
 	for groupIndex, group := range entry.FrameGroups {
 		for offset := 0; offset < group.Count; offset++ {
 			frameIndex := group.Start + offset
@@ -1993,7 +1999,16 @@ func h264CorpusFramesMatchMetadata(entry h264CorpusEntry, frames []*Frame) (bool
 			if len(raw) != group.FrameSize {
 				return false, fmt.Sprintf("frame[%d] raw size = %d, want %d", frameIndex, len(raw), group.FrameSize)
 			}
+			if len(entry.FrameMD5) != 0 {
+				sum := md5.Sum(raw)
+				if got := hex.EncodeToString(sum[:]); got != entry.FrameMD5[frameIndex] {
+					return false, fmt.Sprintf("frame[%d] md5 = %s, want %s", frameIndex, got, entry.FrameMD5[frameIndex])
+				}
+			}
 		}
+	}
+	if len(entry.FrameMD5) != 0 {
+		return true, fmt.Sprintf("matched frame metadata and md5 oracle (%d frames, %d groups)", len(frames), len(entry.FrameGroups))
 	}
 	return true, fmt.Sprintf("matched frame metadata oracle (%d frames, %d groups)", len(frames), len(entry.FrameGroups))
 }
