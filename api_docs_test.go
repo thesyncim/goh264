@@ -1063,6 +1063,34 @@ func TestQualityEvidenceRunGoTestGateRejectsSkippedFocusedRuns(t *testing.T) {
 	}
 }
 
+func TestQualityEvidenceDirtyDiagnosticModeIsNotCleanPass(t *testing.T) {
+	for _, path := range []string{
+		"scripts/h264-quality-evidence.sh",
+		"scripts/h264-decoder-quality-evidence.sh",
+		"scripts/h264-encoder-quality-evidence.sh",
+	} {
+		t.Run(path, func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			script := string(data)
+			for _, phrase := range []string{
+				"worktree-clean: pass",
+				"worktree-clean: allowed-dirty",
+				"git status --short: empty",
+			} {
+				if !strings.Contains(script, phrase) {
+					t.Fatalf("%s missing dirty-diagnostic phrase %q", path, phrase)
+				}
+			}
+			if strings.Contains(script, "fi\nprintf '\\nworktree-clean: pass\\n'") {
+				t.Fatalf("%s reports clean pass unconditionally after dirty override branch", path)
+			}
+		})
+	}
+}
+
 func qualityEvidenceFunctionBody(t *testing.T, script, name, nextName string) string {
 	t.Helper()
 	startNeedle := name + "() {"

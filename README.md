@@ -811,6 +811,8 @@ The combined quality-evidence runner writes logs under
 `.artifacts/h264-full-quality-evidence/` by default, drives the race, decoder,
 and admitted encoder runners, and requires a clean worktree unless
 `GOH264_FULL_QUALITY_ALLOW_DIRTY=1` is set for diagnostics.
+Diagnostic dirty-worktree runs are labeled `worktree-clean: allowed-dirty` in
+the evidence summary rather than `worktree-clean: pass`.
 The decoder quality-evidence runner writes logs under
 `.artifacts/h264-quality-evidence/` by default and fails while
 `testdata/h264/realvectors/failures.jsonl` contains known-red rows unless

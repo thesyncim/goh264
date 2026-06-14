@@ -126,8 +126,18 @@ if [[ "${GOH264_ENCODER_QUALITY_ALLOW_DIRTY:-0}" != "1" ]]; then
         } | tee -a "$summary" >&2
         exit 1
     fi
+    printf '\nworktree-clean: pass\n' | tee -a "$summary"
+else
+    status="$(git status --short)"
+    {
+        printf '\nworktree-clean: allowed-dirty\n'
+        if [[ -n "$status" ]]; then
+            printf '%s\n' "$status"
+        else
+            printf 'git status --short: empty\n'
+        fi
+    } | tee -a "$summary"
 fi
-printf '\nworktree-clean: pass\n' | tee -a "$summary"
 
 if ! ffmpeg_path="$(command -v "$ffmpeg_bin")"; then
     {

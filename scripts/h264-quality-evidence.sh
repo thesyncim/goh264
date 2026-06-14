@@ -51,11 +51,20 @@ if [[ "${GOH264_FULL_QUALITY_ALLOW_DIRTY:-0}" != "1" ]]; then
         } | tee -a "$summary" >&2
         exit 1
     fi
+    printf '\nworktree-clean: pass\n' | tee -a "$summary"
 else
+    status="$(git status --short)"
+    {
+        printf '\nworktree-clean: allowed-dirty\n'
+        if [[ -n "$status" ]]; then
+            printf '%s\n' "$status"
+        else
+            printf 'git status --short: empty\n'
+        fi
+    } | tee -a "$summary"
     export GOH264_QUALITY_ALLOW_DIRTY="${GOH264_QUALITY_ALLOW_DIRTY:-1}"
     export GOH264_ENCODER_QUALITY_ALLOW_DIRTY="${GOH264_ENCODER_QUALITY_ALLOW_DIRTY:-1}"
 fi
-printf '\nworktree-clean: pass\n' | tee -a "$summary"
 
 run_gate go-test-race go test -race ./...
 
