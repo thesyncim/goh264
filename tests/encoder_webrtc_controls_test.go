@@ -15127,6 +15127,174 @@ func TestEncodedFrameCloneRejectsInvalidMetadata(t *testing.T) {
 	}
 }
 
+func TestEncodedFrameValidateRejectsFrameLevelMetadataMismatches(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputAnnexB
+	cfg.RTPMaxPayloadSize = 0
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	frame := patternedI420EncoderFrame(16, 16)
+	idr, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode IDR: %v", err)
+	}
+	if err := idr.Validate(); err != nil {
+		t.Fatalf("Validate IDR: %v", err)
+	}
+	frame.PTS += int64(cfg.RTPTimestampIncrement)
+	p, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode P: %v", err)
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("Validate P: %v", err)
+	}
+
+	for _, tt := range []struct {
+		name  string
+		frame goh264.EncodedFrame
+	}{
+		{name: "idr missing keyframe flag", frame: func() goh264.EncodedFrame {
+			out := idr
+			out.KeyFrame = false
+			return out
+		}()},
+		{name: "idr missing idr flag", frame: func() goh264.EncodedFrame {
+			out := idr
+			out.IDR = false
+			return out
+		}()},
+		{name: "p frame marked keyframe", frame: func() goh264.EncodedFrame {
+			out := p
+			out.KeyFrame = true
+			return out
+		}()},
+		{name: "p frame marked idr", frame: func() goh264.EncodedFrame {
+			out := p
+			out.IDR = true
+			return out
+		}()},
+		{name: "access unit without vcl", frame: goh264.EncodedFrame{
+			OutputFormat: goh264.EncoderOutputAnnexB,
+			Data:         []byte{0, 0, 0, 1, 0x67},
+			NALUnits:     []goh264.EncoderNALUnit{{Type: 7, Offset: 4, Size: 1, KeyFrame: true, ParameterSet: true}},
+			KeyFrame:     true,
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.frame.Validate(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Validate invalid frame metadata = %v, want ErrInvalidData", err)
+			}
+			got, err := tt.frame.Clone()
+			if !errors.Is(err, goh264.ErrInvalidData) || len(got.Data) != 0 ||
+				len(got.NALUnits) != 0 || len(got.RTPPackets) != 0 {
+				t.Fatalf("Clone invalid frame metadata = %+v/%v, want zero ErrInvalidData", got, err)
+			}
+		})
+	}
+}
+
+func TestEncodedFrameValidateRejectsRTPListMetadataMismatches(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputRTP
+	cfg.RTPMaxPayloadSize = 24
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+	out, err := enc.Encode(patternedI420EncoderFrame(16, 16))
+	if err != nil {
+		t.Fatalf("Encode RTP: %v", err)
+	}
+	if len(out.RTPPackets) < 2 {
+		t.Fatalf("RTP packets = %d, want at least two packets for list metadata checks", len(out.RTPPackets))
+	}
+	if err := out.Validate(); err != nil {
+		t.Fatalf("Validate RTP output: %v", err)
+	}
+
+	setTimestamp := func(packet *goh264.EncoderRTPPacket, timestamp uint32) {
+		packet.Timestamp = timestamp
+		binary.BigEndian.PutUint32(packet.Data[4:8], timestamp)
+	}
+	setSequence := func(packet *goh264.EncoderRTPPacket, sequence uint16) {
+		packet.SequenceNumber = sequence
+		binary.BigEndian.PutUint16(packet.Data[2:4], sequence)
+	}
+	setPayloadType := func(packet *goh264.EncoderRTPPacket, payloadType uint8) {
+		packet.PayloadType = payloadType
+		packet.Data[1] = (packet.Data[1] & 0x80) | (payloadType & 0x7f)
+	}
+	setSSRC := func(packet *goh264.EncoderRTPPacket, ssrc uint32) {
+		packet.SSRC = ssrc
+		binary.BigEndian.PutUint32(packet.Data[8:12], ssrc)
+	}
+	setMarker := func(packet *goh264.EncoderRTPPacket, marker bool) {
+		packet.Marker = marker
+		if marker {
+			packet.Data[1] |= 0x80
+		} else {
+			packet.Data[1] &^= 0x80
+		}
+	}
+	cloneAndMutate := func(mutate func(*goh264.EncodedFrame)) goh264.EncodedFrame {
+		t.Helper()
+		clone, err := out.Clone()
+		if err != nil {
+			t.Fatalf("Clone valid RTP output: %v", err)
+		}
+		mutate(&clone)
+		for i := range clone.RTPPackets {
+			if err := clone.RTPPackets[i].Validate(); err != nil {
+				t.Fatalf("mutated packet[%d] Validate: %v", i, err)
+			}
+		}
+		return clone
+	}
+
+	for _, tt := range []struct {
+		name  string
+		frame goh264.EncodedFrame
+	}{
+		{name: "frame rtp time mismatch", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
+			frame.RTPTime++
+		})},
+		{name: "packet timestamp mismatch", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
+			setTimestamp(&frame.RTPPackets[0], frame.RTPTime+1)
+		})},
+		{name: "payload type mismatch", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
+			setPayloadType(&frame.RTPPackets[1], frame.RTPPackets[0].PayloadType+1)
+		})},
+		{name: "ssrc mismatch", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
+			setSSRC(&frame.RTPPackets[1], frame.RTPPackets[0].SSRC+1)
+		})},
+		{name: "sequence gap", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
+			setSequence(&frame.RTPPackets[1], frame.RTPPackets[0].SequenceNumber+2)
+		})},
+		{name: "early marker", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
+			setMarker(&frame.RTPPackets[0], true)
+		})},
+		{name: "missing final marker", frame: cloneAndMutate(func(frame *goh264.EncodedFrame) {
+			setMarker(&frame.RTPPackets[len(frame.RTPPackets)-1], false)
+		})},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.frame.Validate(); !errors.Is(err, goh264.ErrInvalidData) {
+				t.Fatalf("Validate invalid RTP list metadata = %v, want ErrInvalidData", err)
+			}
+			got, err := tt.frame.Clone()
+			if !errors.Is(err, goh264.ErrInvalidData) || len(got.Data) != 0 ||
+				len(got.NALUnits) != 0 || len(got.RTPPackets) != 0 {
+				t.Fatalf("Clone invalid RTP list metadata = %+v/%v, want zero ErrInvalidData", got, err)
+			}
+		})
+	}
+}
+
 func TestEncodedFrameOutputHelpersRejectOverflowedPublicStorage(t *testing.T) {
 	overflowBytes := fakeDecoderRawBytesLen(maxIntForTest/2 + 1)
 	validAccessUnit := []byte{0, 0, 0, 1, 0x65}

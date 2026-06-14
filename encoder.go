@@ -737,7 +737,9 @@ func (frame EncodedFrame) AppendRTPPayloadData(dst []byte, index int) ([]byte, e
 //
 // Dropped results must carry only metadata. Non-dropped Annex B and AVC results
 // must not carry RTP packets. Non-dropped RTP results must carry RTP packets,
-// and every packet must pass EncoderRTPPacket.Validate.
+// and every packet must pass EncoderRTPPacket.Validate. Non-dropped results
+// must also have frame-level keyframe/IDR metadata that matches their NAL
+// metadata, plus RTP packet-list metadata that matches the frame.
 func (frame EncodedFrame) Validate() error {
 	if !encodedFrameCloneStorageOK(frame) {
 		return ErrInvalidData
@@ -755,6 +757,53 @@ func (frame EncodedFrame) Validate() error {
 	for i := range frame.RTPPackets {
 		if err := frame.RTPPackets[i].Validate(); err != nil {
 			return err
+		}
+	}
+	if err := frame.validateEncodedFrameMetadata(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (frame EncodedFrame) validateEncodedFrameMetadata() error {
+	hasVCL := false
+	hasIDR := false
+	for _, unit := range frame.NALUnits {
+		switch unit.Type {
+		case 1:
+			hasVCL = true
+		case 5:
+			hasVCL = true
+			hasIDR = true
+		}
+	}
+	if !hasVCL || frame.IDR != hasIDR || frame.KeyFrame != hasIDR {
+		return ErrInvalidData
+	}
+	if frame.OutputFormat == EncoderOutputRTP {
+		return frame.validateRTPPacketListMetadata()
+	}
+	return nil
+}
+
+func (frame EncodedFrame) validateRTPPacketListMetadata() error {
+	if len(frame.RTPPackets) == 0 {
+		return ErrInvalidData
+	}
+	payloadType := frame.RTPPackets[0].PayloadType
+	ssrc := frame.RTPPackets[0].SSRC
+	for i, packet := range frame.RTPPackets {
+		if packet.Timestamp != frame.RTPTime ||
+			packet.PayloadType != payloadType ||
+			packet.SSRC != ssrc ||
+			packet.Marker != (i == len(frame.RTPPackets)-1) {
+			return ErrInvalidData
+		}
+		if i != 0 {
+			wantSequence := frame.RTPPackets[i-1].SequenceNumber + 1
+			if packet.SequenceNumber != wantSequence {
+				return ErrInvalidData
+			}
 		}
 	}
 	return nil

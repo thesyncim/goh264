@@ -589,10 +589,11 @@ with the strongest public API coverage for integration work:
   Invalid or overflowed-destination append calls return the original destination
   unchanged. If a caller-managed append destination overlaps the helper source
   bytes, the helpers return isolated output storage instead of aliasing the
-  source. `EncodedFrame.Validate` checks public result shape before retention or
-  async handoff. `EncodedFrame.Clone` uses the same checks and rejects dropped
-  results that still carry emitted byte, NAL, or RTP packet storage, non-RTP
-  results that carry RTP packets, and RTP results that lack RTP packets.
+  source. `EncodedFrame.Validate` checks public result shape, frame-level
+  keyframe/IDR metadata, and RTP packet-list metadata before retention or async
+  handoff. `EncodedFrame.Clone` uses the same checks and rejects dropped results
+  that still carry emitted byte, NAL, or RTP packet storage, non-RTP results
+  that carry RTP packets, and RTP results that lack RTP packets.
 - `EncodedFrame.OutputFormat` records the emitted result format, including
   dropped frames, so callers do not need to infer format from packet presence.
   Caller-constructed `EncodedFrame` values must set `OutputFormat` and keep RTP
