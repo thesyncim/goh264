@@ -11495,6 +11495,68 @@ func TestEncoderSetRTPTimestampIncrementControlsLiveCadence(t *testing.T) {
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 1, 1}, []uint32{0, 1, 2})
 }
 
+func TestEncoderReconfigureExplicitTimestampIncrementWinsWithFrameRate(t *testing.T) {
+	cfg := goh264.DefaultEncoderConfig(16, 16)
+	cfg.OutputFormat = goh264.EncoderOutputRTP
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
+	cfg.RTPMaxPayloadSize = 1200
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder: %v", err)
+	}
+
+	frame := patternedI420EncoderFrame(16, 16)
+	frame.Duration = 0
+	frame.TimestampMode = goh264.EncoderTimestampAuto
+	first, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR || first.RTPTime != 0 {
+		t.Fatalf("first frame dropped=%v idr=%v rtp=%d, want delivered IDR at 0",
+			first.Dropped, first.IDR, first.RTPTime)
+	}
+
+	if err := enc.Reconfigure(goh264.EncoderReconfigure{
+		FrameRateNum:          60,
+		FrameRateDen:          1,
+		RTPTimestampIncrement: 7000,
+	}); err != nil {
+		t.Fatalf("Reconfigure frame rate plus explicit timestamp increment: %v", err)
+	}
+	gotCfg := enc.Config()
+	if gotCfg.FrameRateNum != 60 || gotCfg.FrameRateDen != 1 || gotCfg.RTPTimestampIncrement != 7000 {
+		t.Fatalf("config after combined timing reconfigure = frame-rate %d/%d increment %d, want 60/1 and 7000",
+			gotCfg.FrameRateNum, gotCfg.FrameRateDen, gotCfg.RTPTimestampIncrement)
+	}
+	if enc.PendingIDR() {
+		t.Fatal("combined timing reconfigure queued unexpected IDR")
+	}
+
+	second, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode first P-skip after combined timing reconfigure: %v", err)
+	}
+	if second.Dropped || second.IDR || second.RTPTime != cfg.RTPTimestampIncrement {
+		t.Fatalf("second frame dropped=%v idr=%v rtp=%d, want old queued timestamp %d",
+			second.Dropped, second.IDR, second.RTPTime, cfg.RTPTimestampIncrement)
+	}
+	assertEncoderNALTypes(t, second.NALUnits, []uint8{1})
+	assertRTPPacketTimestamps(t, second.RTPPackets, second.RTPTime)
+
+	third, err := enc.Encode(frame)
+	if err != nil {
+		t.Fatalf("Encode second P-skip after combined timing reconfigure: %v", err)
+	}
+	if third.Dropped || third.IDR || third.RTPTime != second.RTPTime+7000 {
+		t.Fatalf("third frame dropped=%v idr=%v rtp=%d, want explicit-increment timestamp %d",
+			third.Dropped, third.IDR, third.RTPTime, second.RTPTime+7000)
+	}
+	assertEncoderNALTypes(t, third.NALUnits, []uint8{1})
+	assertRTPPacketTimestamps(t, third.RTPPackets, third.RTPTime)
+}
+
 func TestEncoderFrameDropDisabledDoesNotApplyDerivedBitrateBudget(t *testing.T) {
 	for _, format := range []struct {
 		name string

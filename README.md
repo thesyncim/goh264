@@ -392,6 +392,9 @@ value.
 For RTP, `RTPPayloadType` zero selects the dynamic default 96 during config
 normalization, `SetRTPMetadata`, and pointer-based `EncoderReconfigure`; use
 1..127 to emit a specific payload type.
+When `EncoderReconfigure` supplies both `FrameRateNum`/`FrameRateDen` and
+`RTPTimestampIncrement`, the frame rate is validated and stored while the
+explicit timestamp increment controls subsequent automatic RTP cadence.
 Annex B and AVC configs normalize `DONDisabled=true` so later
 `SetOutputFormat(EncoderOutputRTP)` uses admitted RTP defaults; direct RTP
 configs with `DONDisabled=false` return `ErrUnsupported`.

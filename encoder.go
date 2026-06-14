@@ -1275,10 +1275,12 @@ func slicesOverlap[T any](a []T, b []T) bool {
 // where valid. Limits is the zero-capable grouped budget update and is applied
 // after MaxFrameSize, MaxEncodeTimeUS, SliceMaxBytes, and their pointer
 // zero-value forms. RTPPayloadType uses nil to leave the live value unchanged;
-// a non-nil zero selects the dynamic default payload type 96. Reconfigure
-// validates the resulting configuration before changing encoder state; invalid
-// updates leave the encoder unchanged. ForceIDR queues an IDR request even when
-// no config field changes.
+// a non-nil zero selects the dynamic default payload type 96. When frame rate
+// and RTPTimestampIncrement are both supplied, the explicit timestamp increment
+// wins after frame-rate validation. Reconfigure validates the resulting
+// configuration before changing encoder state; invalid updates leave the
+// encoder unchanged. ForceIDR queues an IDR request even when no config field
+// changes.
 type EncoderReconfigure struct {
 	TargetBitrate         int
 	MaxBitrate            int

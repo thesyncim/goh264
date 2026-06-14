@@ -652,6 +652,7 @@ func TestREADMEEncoderSampleChecksRuntimeControlErrors(t *testing.T) {
 		"`EncoderConfig.ExplicitQP=true`",
 		"`SetQP` and pointer QP fields",
 		"`FrameRateNum`/`FrameRateDen` and `Width`/`Height` must be supplied",
+		"explicit timestamp increment controls subsequent automatic RTP cadence",
 		"When `Limits` is non-nil, it is applied after the individual budget",
 	} {
 		if !strings.Contains(readme, required) {
@@ -745,6 +746,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderTimestampAutoDroppedOutputTimingMatchesChosenRTPTime",
 		"TestEncoderTimestampAutoDoesNotValidateIgnoredPTS",
 		"TestEncoderRTPExplicitZeroPTSAfterNonZeroPTSIsHonored",
+		"TestEncoderReconfigureExplicitTimestampIncrementWinsWithFrameRate",
 		"TestEncoderEncodeIntoValidatesInvalidFrameBeforeBitstream",
 		"TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap",
 		"TestEncoderSetQPZeroSurvivesNoopReconfigureAndEncodes",
