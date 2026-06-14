@@ -75,7 +75,20 @@ run_exact_go_test_gate() {
         fi
     done
     printf 'status: pass\n' | tee -a "$summary"
-    run_gate "$name" go test "$pkg" -run "$pattern" "$@"
+
+    local log="$out_dir/$name.log"
+    {
+        printf '\n== %s ==\n' "$name"
+        printf 'command: go test %q -run %q' "$pkg" "$pattern"
+        printf ' %q' "$@"
+        printf '\n'
+    } | tee -a "$summary"
+    go test "$pkg" -run "$pattern" "$@" 2>&1 | tee "$log"
+    if grep -Eq '^--- SKIP: ' "$log"; then
+        printf 'status: fail (focused test skipped)\n' | tee -a "$summary" >&2
+        exit 1
+    fi
+    printf 'status: pass\n' | tee -a "$summary"
 }
 
 {

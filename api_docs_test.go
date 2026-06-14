@@ -629,6 +629,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"go test \"$pkg\" -run '^$' -list \"$pattern\"",
 		"status: fail (no matching tests)",
 		"status: fail (missing focused test",
+		"status: fail (focused test skipped)",
 		"run_go_test_gate encoder-contract ./tests",
 		"run_exact_go_test_gate encoder-api-surfaces ./tests",
 		"run_exact_go_test_gate encoder-output-ownership ./tests",
@@ -793,6 +794,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 	for _, phrase := range []string{
 		"run_go_test_gate()",
 		"run_exact_go_test_gate()",
+		"run_exact_env_go_test_gate()",
 		"run_exact_oracle_go_test_gate()",
 		"require_oracle_command()",
 		"require_oracle_file()",
@@ -800,6 +802,7 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"go test \"$pkg\" -run '^$' -list \"$pattern\"",
 		"status: fail (no matching tests)",
 		"status: fail (missing focused test",
+		"status: fail (focused test skipped)",
 		"status: fail (oracle test skipped)",
 		"run_exact_go_test_gate decoder-api-surfaces ./tests",
 		"run_exact_go_test_gate decoder-output-ownership ./tests",
@@ -808,6 +811,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"run_exact_go_test_gate decoder-public-delayed-output ./tests",
 		"run_exact_oracle_go_test_gate decoder-ffmpeg-oracle-smoke ./tests",
 		"run_exact_oracle_go_test_gate decoder-native-oracle-smoke ./internal/h264",
+		"run_exact_env_go_test_gate real-vector-failure-ledger ./tests",
+		"run_exact_env_go_test_gate real-vector-matrix ./tests",
 		"require_oracle_command ffmpeg",
 		"require_oracle_command ffprobe",
 		"require_oracle_command cc",
@@ -895,6 +900,8 @@ func TestDecoderQualityEvidenceNamesAPISurfaceAndRefGates(t *testing.T) {
 		"run_go_test_gate decoder-ref-modifications ./internal/h264",
 		"run_go_test_gate decoder-delayed-output ./internal/h264",
 		"run_go_test_gate decoder-public-delayed-output ./tests",
+		"run_env_gate real-vector-failure-ledger",
+		"run_env_gate real-vector-matrix",
 	} {
 		if strings.Contains(script, forbidden) {
 			t.Fatalf("decoder quality evidence script should preflight focused gate %q", forbidden)

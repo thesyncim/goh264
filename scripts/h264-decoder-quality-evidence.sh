@@ -79,7 +79,61 @@ run_exact_go_test_gate() {
         fi
     done
     printf 'status: pass\n' | tee -a "$summary"
-    run_gate "$name" go test "$pkg" -run "$pattern" "$@"
+
+    local log="$out_dir/$name.log"
+    {
+        printf '\n== %s ==\n' "$name"
+        printf 'command: go test %q -run %q' "$pkg" "$pattern"
+        printf ' %q' "$@"
+        printf '\n'
+    } | tee -a "$summary"
+    go test "$pkg" -run "$pattern" "$@" 2>&1 | tee "$log"
+    if grep -Eq '^--- SKIP: ' "$log"; then
+        printf 'status: fail (focused test skipped)\n' | tee -a "$summary" >&2
+        exit 1
+    fi
+    printf 'status: pass\n' | tee -a "$summary"
+}
+
+run_exact_env_go_test_gate() {
+    local name="$1"
+    local pkg="$2"
+    local pattern="$3"
+    shift 3
+    if [[ "${pattern:0:2}" != "^(" || "${pattern: -2}" != ")$" ]]; then
+        printf 'run_exact_env_go_test_gate %s requires an anchored exact-name pattern\n' "$name" | tee -a "$summary" >&2
+        exit 1
+    fi
+    local expected="${pattern:2:${#pattern}-4}"
+    local -a expected_names=()
+    IFS='|' read -r -a expected_names <<<"$expected"
+    local list_log="$out_dir/$name-list.log"
+    {
+        printf '\n== %s-list ==\n' "$name"
+        printf 'command: go test %q -run %q -list %q\n' "$pkg" '^$' "$pattern"
+    } | tee -a "$summary"
+    go test "$pkg" -run '^$' -list "$pattern" 2>&1 | tee "$list_log"
+    for test_name in "${expected_names[@]}"; do
+        if ! grep -Fxq "$test_name" "$list_log"; then
+            printf 'status: fail (missing focused test %s)\n' "$test_name" | tee -a "$summary" >&2
+            exit 1
+        fi
+    done
+    printf 'status: pass\n' | tee -a "$summary"
+
+    local log="$out_dir/$name.log"
+    {
+        printf '\n== %s ==\n' "$name"
+        printf 'command: env'
+        printf ' %q' "$@"
+        printf ' go test %q -run %q -count=1 -v\n' "$pkg" "$pattern"
+    } | tee -a "$summary"
+    env "$@" go test "$pkg" -run "$pattern" -count=1 -v 2>&1 | tee "$log"
+    if grep -Eq '^--- SKIP: ' "$log"; then
+        printf 'status: fail (focused test skipped)\n' | tee -a "$summary" >&2
+        exit 1
+    fi
+    printf 'status: pass\n' | tee -a "$summary"
 }
 
 require_oracle_command() {
@@ -192,15 +246,13 @@ if [[ -s testdata/h264/realvectors/failures.jsonl && "${GOH264_QUALITY_ALLOW_KNO
 fi
 printf '\nknown-red-failures: none\n' | tee -a "$summary"
 
-run_env_gate real-vector-failure-ledger \
+run_exact_env_go_test_gate real-vector-failure-ledger ./tests '^(TestH264RealVectorFailureLedgerFreshness)$' \
     GOH264_REAL_VECTOR_FAILURES=1 \
-    GOH264_CORPUS_FETCH="${GOH264_CORPUS_FETCH:-1}" \
-    go test ./tests -run '^TestH264RealVectorFailureLedgerFreshness$' -count=1 -v
+    GOH264_CORPUS_FETCH="${GOH264_CORPUS_FETCH:-1}"
 
-run_env_gate real-vector-matrix \
+run_exact_env_go_test_gate real-vector-matrix ./tests '^(TestH264RealVectorFailureMatrix)$' \
     GOH264_REAL_VECTOR_MATRIX=1 \
-    GOH264_CORPUS_FETCH="${GOH264_CORPUS_FETCH:-1}" \
-    go test ./tests -run '^TestH264RealVectorFailureMatrix$' -count=1 -v
+    GOH264_CORPUS_FETCH="${GOH264_CORPUS_FETCH:-1}"
 
 run_gate real-vector-strict scripts/h264-real-vector-strict.sh
 run_gate real-vector-upstream-audit scripts/h264-real-vector-upstream-audit.sh
