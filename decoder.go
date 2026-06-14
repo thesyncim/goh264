@@ -796,8 +796,9 @@ func (d *Decoder) decodeFrames(data []byte, packetSideData h264.DecodedFrameSide
 	if err != nil {
 		return nil, err
 	}
-	activeSPS := d.prepareInBandParameterSetUpdate(nals)
+	activeSPS, rejectedInBandParameterSets := d.prepareInBandParameterSetUpdate(nals)
 	frames, err := d.simple.DecodeNALUnitsWithSideData(nals, packetSideData)
+	d.restoreSimpleParamSetsAfterRejectedInBandUpdate(rejectedInBandParameterSets)
 	if err != nil {
 		d.rememberActiveSPS(activeSPS)
 		return framesFromH264WithError(frames, err)
@@ -919,8 +920,9 @@ func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	if err != nil {
 		return nil, err
 	}
-	activeSPS := d.prepareInBandParameterSetUpdate(nals)
+	activeSPS, rejectedInBandParameterSets := d.prepareInBandParameterSetUpdate(nals)
 	frames, err := d.simple.DecodeNALUnits(nals)
+	d.restoreSimpleParamSetsAfterRejectedInBandUpdate(rejectedInBandParameterSets)
 	if err != nil {
 		d.rememberActiveSPS(activeSPS)
 		return framesFromH264WithError(frames, err)
@@ -1008,8 +1010,9 @@ func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConf
 	if err != nil {
 		return nil, err
 	}
-	activeSPS := d.prepareInBandParameterSetUpdate(nals)
+	activeSPS, rejectedInBandParameterSets := d.prepareInBandParameterSetUpdate(nals)
 	frames, decodeErr := d.simple.DecodeNALUnits(nals)
+	d.restoreSimpleParamSetsAfterRejectedInBandUpdate(rejectedInBandParameterSets)
 	flushed, flushErr := d.simple.FlushDelayedFrames()
 	if len(flushed) != 0 {
 		frames = append(frames, flushed...)
@@ -1313,13 +1316,13 @@ func (d *Decoder) parameterSetUpdateNeedsDPBResetForActiveSPS(nextSPS [32]*h264.
 	return spsRequiresDPBReset(prevSPS, nextActiveSPS)
 }
 
-func (d *Decoder) prepareInBandParameterSetUpdate(nals []h264.NALUnit) decoderActiveSPS {
+func (d *Decoder) prepareInBandParameterSetUpdate(nals []h264.NALUnit) (decoderActiveSPS, bool) {
 	if d == nil {
-		return decoderActiveSPS{}
+		return decoderActiveSPS{}, false
 	}
-	nextSPS, nextPPS, activeSPS, haveParamSet := inBandParameterSetStateFromNALUnits(nals, d.sps, d.pps)
-	if !haveParamSet {
-		return activeSPS
+	nextSPS, nextPPS, activeSPS, haveParamSet, rejectedParamSetGroup := inBandParameterSetStateFromNALUnits(nals, d.sps, d.pps)
+	if rejectedParamSetGroup || !haveParamSet {
+		return activeSPS, rejectedParamSetGroup
 	}
 	resetDPB := false
 	if activeSPS.ok {
@@ -1332,11 +1335,18 @@ func (d *Decoder) prepareInBandParameterSetUpdate(nals []h264.NALUnit) decoderAc
 	if resetDPB {
 		d.clearActiveSPS()
 		_ = d.simple.StoreParamSets(d.sps, d.pps)
-		return activeSPS
+		return activeSPS, false
 	}
 	d.refreshActiveSPSFromStoredParamSets()
 	_ = d.simple.UpdateParamSets(d.sps, d.pps)
-	return activeSPS
+	return activeSPS, false
+}
+
+func (d *Decoder) restoreSimpleParamSetsAfterRejectedInBandUpdate(rejected bool) {
+	if d == nil || !rejected {
+		return
+	}
+	_ = d.simple.UpdateParamSets(d.sps, d.pps)
 }
 
 func activeSPSIDFromParamSets(sps [32]*h264.SPS, pps [256]*h264.PPS) (uint32, bool) {
@@ -1411,13 +1421,20 @@ func activeSPSFromParamSets(sps [32]*h264.SPS, pps [256]*h264.PPS) (uint32, *h26
 	return id, sps[id], true
 }
 
-func inBandParameterSetStateFromNALUnits(nals []h264.NALUnit, sps [32]*h264.SPS, pps [256]*h264.PPS) ([32]*h264.SPS, [256]*h264.PPS, decoderActiveSPS, bool) {
+func inBandParameterSetStateFromNALUnits(nals []h264.NALUnit, sps [32]*h264.SPS, pps [256]*h264.PPS) ([32]*h264.SPS, [256]*h264.PPS, decoderActiveSPS, bool, bool) {
+	baseSPS := sps
+	basePPS := pps
 	haveParamSet := false
+	rejectedParamSetGroup := false
 	for _, nal := range nals {
 		switch nal.Type {
 		case h264.NALSPS:
 			decoded, err := h264.DecodeSPSFromNAL(nal)
 			if err != nil || decoded.SPSID >= uint32(len(sps)) {
+				rejectedParamSetGroup = true
+				continue
+			}
+			if rejectedParamSetGroup {
 				continue
 			}
 			sps[decoded.SPSID] = decoded
@@ -1425,25 +1442,43 @@ func inBandParameterSetStateFromNALUnits(nals []h264.NALUnit, sps [32]*h264.SPS,
 		case h264.NALPPS:
 			decoded, err := h264.DecodePPS(nal.RBSP, &sps)
 			if err != nil || decoded.PPSID >= uint32(len(pps)) {
+				rejectedParamSetGroup = true
+				continue
+			}
+			if rejectedParamSetGroup {
 				continue
 			}
 			pps[decoded.PPSID] = decoded
 			haveParamSet = true
 		case h264.NALSlice, h264.NALIDRSlice:
-			sh, err := h264.ParseSliceHeader(nal, &pps)
-			if err != nil || sh == nil || sh.SPS == nil {
-				return sps, pps, decoderActiveSPS{}, haveParamSet
+			parsePPS := pps
+			if rejectedParamSetGroup {
+				parsePPS = basePPS
 			}
-			return sps, pps, decoderActiveSPS{
+			sh, err := h264.ParseSliceHeader(nal, &parsePPS)
+			if err != nil || sh == nil || sh.SPS == nil {
+				if rejectedParamSetGroup {
+					return baseSPS, basePPS, decoderActiveSPS{}, false, true
+				}
+				return sps, pps, decoderActiveSPS{}, haveParamSet, false
+			}
+			activeSPS := decoderActiveSPS{
 				id:  sh.SPS.SPSID,
 				sps: sh.SPS,
 				ok:  true,
-			}, haveParamSet
+			}
+			if rejectedParamSetGroup {
+				return baseSPS, basePPS, activeSPS, false, true
+			}
+			return sps, pps, activeSPS, haveParamSet, false
 		default:
 			continue
 		}
 	}
-	return sps, pps, decoderActiveSPS{}, haveParamSet
+	if rejectedParamSetGroup {
+		return baseSPS, basePPS, decoderActiveSPS{}, false, true
+	}
+	return sps, pps, decoderActiveSPS{}, haveParamSet, false
 }
 
 func activeSPSFromPacket(data []byte, configuredNALLengthSize int, sps [32]*h264.SPS, pps [256]*h264.PPS) decoderActiveSPS {

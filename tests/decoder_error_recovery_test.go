@@ -1186,6 +1186,70 @@ func TestDecodeFramesAnnexBRecoversAfterMalformedInBandParameterSets(t *testing.
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeFramesAnnexBRejectsPartialInBandParameterSetsTransactionally(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if frames, err := dec.DecodeFrames(config); err != nil || len(frames) != 0 {
+		t.Fatalf("config frames=%d err=%v", len(frames), err)
+	}
+	first := avcSampleToAnnexB(t, samples[0], 4)
+	second := avcSampleToAnnexB(t, samples[1], 4)
+	frames, err := dec.DecodeFrames(first)
+	if err != nil {
+		t.Fatalf("DecodeFrames first: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+
+	packet := partiallyValidForeignSPSMalformedPPSAnnexB(t)
+	packet = append(packet, second...)
+	frames, err = dec.DecodeFrames(packet)
+	if err != nil {
+		t.Fatalf("decode after partially valid malformed in-band parameter sets: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+}
+
+func TestDecodeFramesAnnexBRejectsPartialInBandHeaderOnlyWithoutPoisoningConfig(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if frames, err := dec.DecodeFrames(config); err != nil || len(frames) != 0 {
+		t.Fatalf("config frames=%d err=%v", len(frames), err)
+	}
+	frames, err := dec.DecodeFrames(avcSampleToAnnexB(t, samples[0], 4))
+	if err != nil {
+		t.Fatalf("DecodeFrames first: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+
+	out, err := dec.DecodeFrames(partiallyValidForeignSPSMalformedPPSAnnexB(t))
+	if err != nil {
+		t.Fatalf("partial in-band header-only packet: %v", err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("partial in-band header-only packet returned %d frames, want 0", len(out))
+	}
+	assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+
+	frames, err = dec.DecodeFrames(avcSampleToAnnexB(t, samples[1], 4))
+	if err != nil {
+		t.Fatalf("DecodeFrames after partial in-band header-only packet: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestParseHeadersAnnexBRejectPreservesStoredConfiguration(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -1259,6 +1323,68 @@ func TestDecodeConfiguredAVCFramesRecoversAfterMalformedInBandParameterSets(t *t
 	frames, err = dec.DecodeConfiguredAVCFrames(sample)
 	if err != nil {
 		t.Fatalf("decode after malformed in-band parameter sets: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodeConfiguredAVCFramesRejectsPartialInBandParameterSetsTransactionally(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
+	}
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+
+	sample := partiallyValidForeignSPSMalformedPPSAVC(t, 4)
+	sample = append(sample, samples[1]...)
+	frames, err = dec.DecodeConfiguredAVCFrames(sample)
+	if err != nil {
+		t.Fatalf("decode after partially valid malformed in-band parameter sets: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+}
+
+func TestDecodeConfiguredAVCFramesRejectsPartialInBandHeaderOnlyWithoutPoisoningConfig(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
+	}
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+
+	out, err := dec.DecodeConfiguredAVCFrames(partiallyValidForeignSPSMalformedPPSAVC(t, 4))
+	if err != nil {
+		t.Fatalf("partial in-band header-only packet: %v", err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("partial in-band header-only packet returned %d frames, want 0", len(out))
+	}
+	assertDecoderAVCConfigGeometry(t, dec, 4, 16, 16)
+
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after partial in-band header-only packet: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
@@ -1863,6 +1989,20 @@ func malformedInBandParameterSetsAVC(t *testing.T, nalLengthSize int) []byte {
 	t.Helper()
 	var out []byte
 	out = appendAVCNALUnit(t, out, []byte{0x60 | byte(h264.NALSPS)}, nalLengthSize)
+	out = appendAVCNALUnit(t, out, []byte{0x60 | byte(h264.NALPPS)}, nalLengthSize)
+	return out
+}
+
+func partiallyValidForeignSPSMalformedPPSAnnexB(t *testing.T) []byte {
+	t.Helper()
+	out := firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS)
+	out = appendAnnexBNAL(out, []byte{0x60 | byte(h264.NALPPS)})
+	return out
+}
+
+func partiallyValidForeignSPSMalformedPPSAVC(t *testing.T, nalLengthSize int) []byte {
+	t.Helper()
+	out := annexBToAVC(t, firstParameterSetAnnexB(t, decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex), h264.NALSPS), nalLengthSize)
 	out = appendAVCNALUnit(t, out, []byte{0x60 | byte(h264.NALPPS)}, nalLengthSize)
 	return out
 }
