@@ -4384,6 +4384,44 @@ func TestEncoderReconfigureUpdatesRateControlQPDropAndGOPControls(t *testing.T) 
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1, 5}, []uint32{0, 1, 2, 3})
 }
 
+func TestEncoderCBRIsDropOnlyAndDoesNotChangeVCLQP(t *testing.T) {
+	cfg := goh264.DefaultAnnexBEncoderConfig(16, 16)
+	cfg.DeblockMode = goh264.EncoderDeblockDisabled
+	cfg.RateControl = goh264.EncoderRateControlCBR
+	cfg.FrameDrop = goh264.EncoderFrameDropToBitrate
+	cfg.InitialQP = 31
+	cfg.TargetBitrate = 10_000_000
+	cfg.MaxBitrate = 10_000_000
+	cfg.VBVBufferSize = 10_000_000
+
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder CBR contract: %v", err)
+	}
+	reference := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(reference)
+	if err != nil {
+		t.Fatalf("Encode CBR IDR: %v", err)
+	}
+	if first.Dropped || !first.IDR {
+		t.Fatalf("CBR first frame dropped=%v idr=%v, want emitted IDR", first.Dropped, first.IDR)
+	}
+
+	changed := cloneI420EncoderFrame(reference)
+	changed.PTS += int64(enc.Config().RTPTimestampIncrement)
+	mutateI420EncoderFramePlanes(&changed)
+	second, err := enc.Encode(changed)
+	if err != nil {
+		t.Fatalf("Encode CBR changed P frame: %v", err)
+	}
+	if second.Dropped || second.IDR {
+		t.Fatalf("CBR second frame dropped=%v idr=%v, want emitted P frame", second.Dropped, second.IDR)
+	}
+
+	stream := append(append([]byte(nil), first.Data...), second.Data...)
+	assertEncoderVCLQScales(t, stream, []uint8{5, 1}, []uint32{31, 31})
+}
+
 func TestEncoderSetQPQueuesIDRWithUpdatedQScale(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.OutputFormat = goh264.EncoderOutputAnnexB

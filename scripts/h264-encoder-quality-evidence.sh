@@ -163,6 +163,7 @@ run_exact_go_test_gate encoder-api-surfaces ./tests "$encoder_api_surface_tests"
 run_exact_go_test_gate encoder-output-ownership ./tests "$encoder_output_ownership_tests" -count=1 -v
 run_exact_go_test_gate encoder-bitstream-oracles ./tests "$encoder_bitstream_oracle_tests" -count=1 -v
 run_go_test_gate encoder-residual-boundary ./tests '^(TestEncoderResidualShapedPDeltaUsesResidualPAcrossPublicOutputs|TestEncoderChromaOnlyResidualPUsesResidualAcrossPublicOutputs|TestEncoderCombinedResidualPUsesResidualAcrossPublicOutputs|TestEncoderMultiMacroblockLumaDCResidualPUsesResidualAcrossPublicOutputs|TestEncoderMultiSliceLumaDCResidualPUsesResidualAcrossPublicOutputs|TestEncoderSixMacroblockRowCrossingLumaDCResidualPUsesResidualAcrossPublicOutputs)$' -count=1 -v
+run_exact_go_test_gate encoder-bitstream-goldens ./internal/h264 '^(TestEncoderCanonicalSPSPPSNALGoldens|TestEncoderCanonicalIDRAndPSkipNALGoldens)$' -count=1 -v
 run_go_test_gate encoder-allocation-canary ./tests '^TestEncoderEncodeIntoAllocationCanary$' -count=1 -v
 run_go_test_gate encoder-writers ./internal/h264 '^(TestBitWriter|TestAppendNAL|TestAppendAVC|TestBuildEncoder|TestAppendSEI|TestCAVLCWriteResidual|TestWriteCAVLCInterPBoundedMacroblock|TestEncodeI420P16x16ResidualSliceRBSP)' -count=1 -v
 run_gate encoder-benchmem go test . -run '^$' -bench "$bench_pattern" -benchmem -benchtime "$bench_time"

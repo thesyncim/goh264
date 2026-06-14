@@ -5,6 +5,7 @@ package h264
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -197,5 +198,79 @@ func TestBuildEncoderParameterSetsRejectsInvalidSyntaxConfig(t *testing.T) {
 				t.Fatalf("BuildEncoderParameterSets error = %v, want ErrInvalidData", err)
 			}
 		})
+	}
+}
+
+func TestEncoderCanonicalSPSPPSNALGoldens(t *testing.T) {
+	cfg := EncoderParameterSetConfig{
+		ProfileIDC:         66,
+		ConstraintSetFlags: 0x03,
+		LevelIDC:           31,
+		Width:              16,
+		Height:             16,
+		FrameRateNum:       30,
+		FrameRateDen:       1,
+		MaxReferenceFrames: 1,
+		InitialQP:          26,
+	}
+	sets, err := BuildEncoderParameterSets(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := mustHex(t, "6742c01f95a7a10000030001000003003c8f08042a"); !bytes.Equal(sets.SPS, want) {
+		t.Fatalf("canonical SPS = %x, want %x", sets.SPS, want)
+	}
+	if want := mustHex(t, "68ce3c80"); !bytes.Equal(sets.PPS, want) {
+		t.Fatalf("canonical PPS = %x, want %x", sets.PPS, want)
+	}
+	if want := mustHex(t, "000000016742c01f95a7a10000030001000003003c8f08042a0000000168ce3c80"); !bytes.Equal(sets.AnnexB, want) {
+		t.Fatalf("canonical Annex B parameter sets = %x, want %x", sets.AnnexB, want)
+	}
+	if want := mustHex(t, "0142c01fffe100156742c01f95a7a10000030001000003003c8f08042a01000468ce3c80"); !bytes.Equal(sets.AVCDecoderConfigurationRecord, want) {
+		t.Fatalf("canonical avcC = %x, want %x", sets.AVCDecoderConfigurationRecord, want)
+	}
+}
+
+func TestEncoderCanonicalIDRAndPSkipNALGoldens(t *testing.T) {
+	idr, err := BuildEncoderI420IntraPCMIDRSlice(EncoderI420IntraPCMIDRConfig{
+		Width:                      16,
+		Height:                     16,
+		StrideY:                    16,
+		StrideCb:                   8,
+		StrideCr:                   8,
+		Y:                          make([]byte, 16*16),
+		Cb:                         make([]byte, 8*8),
+		Cr:                         make([]byte, 8*8),
+		InitialQP:                  26,
+		DisableDeblockingFilterIDC: 0,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	idrNALHex := "65b804f0d0" + strings.Repeat("000003", 191) + "000080"
+	if want := mustHex(t, "00000001"+idrNALHex); !bytes.Equal(idr.AnnexB, want) {
+		t.Fatalf("canonical IDR Annex B = %x, want %x", idr.AnnexB, want)
+	}
+	if want := mustHex(t, "00000245"+idrNALHex); !bytes.Equal(idr.AVC, want) {
+		t.Fatalf("canonical IDR AVC = %x, want %x", idr.AVC, want)
+	}
+
+	pskip, err := BuildEncoderI420PSkipSlice(EncoderI420PSkipConfig{
+		Width:                      16,
+		Height:                     16,
+		FrameNum:                   1,
+		InitialQP:                  26,
+		DisableDeblockingFilterIDC: 0,
+		NALLengthSize:              4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := mustHex(t, "0000000141e023d4"); !bytes.Equal(pskip.AnnexB, want) {
+		t.Fatalf("canonical P-skip Annex B = %x, want %x", pskip.AnnexB, want)
+	}
+	if want := mustHex(t, "0000000441e023d4"); !bytes.Equal(pskip.AVC, want) {
+		t.Fatalf("canonical P-skip AVC = %x, want %x", pskip.AVC, want)
 	}
 }
