@@ -384,6 +384,9 @@ value.
 For RTP, `RTPPayloadType` zero selects the dynamic default 96 during config
 normalization, `SetRTPMetadata`, and pointer-based `EncoderReconfigure`; use
 1..127 to emit a specific payload type.
+Annex B and AVC configs normalize `DONDisabled=true` so later
+`SetOutputFormat(EncoderOutputRTP)` uses admitted RTP defaults; direct RTP
+configs with `DONDisabled=false` return `ErrUnsupported`.
 
 `EncoderConfig` owns encoded crop/color metadata. `Crop` and `Color` are written
 into SPS/VUI headers from the normalized encoder config. `EncoderFrame.Color` is

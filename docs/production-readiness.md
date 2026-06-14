@@ -383,7 +383,9 @@ access-unit views that exclude an existing caller-buffer `EncodeInto` prefix,
 and preserves caller-owned `EncodeInto` storage on RTP mode-0 rejection and
 proves mode-0 oversize queued-IDR and P-frame packetization failures leave
 pending-IDR, reference, RTP sequence, and callback state recoverable, plus
-Annex B/AVC/RTP bitrate-drop and late-drop non-output paths,
+non-RTP `DONDisabled` normalization for later RTP re-entry with direct RTP
+interleaved-DON rejection, and Annex B/AVC/RTP bitrate-drop and late-drop
+non-output paths,
 packet payload-type/SSRC/sequence metadata plus full RTP header bytes with
 public `EncodedFrame.RTPPacketData`/`EncodedFrame.RTPPayloadData` and
 packet-level `EncoderRTPPacket` helpers, clipped packet payload views over

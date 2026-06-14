@@ -4412,6 +4412,9 @@ func normalizeEncoderConfigWithExplicitQP(cfg EncoderConfig, explicitInitialQP, 
 	default:
 		return cfg, encoderInvalid("unknown encoder output format")
 	}
+	if cfg.OutputFormat != EncoderOutputRTP {
+		cfg.DONDisabled = true
+	}
 	if err := validateEncoderRTPControlEnvelope(cfg); err != nil {
 		return cfg, err
 	}

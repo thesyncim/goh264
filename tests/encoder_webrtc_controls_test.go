@@ -3510,6 +3510,80 @@ func TestEncoderReconfigureSwitchesOutputFormatFromAVCToRTPForForcedIDR(t *testi
 	assertEncoderVCLFrameNums(t, stream, []uint8{5, 5, 1}, []uint32{0, 1, 2})
 }
 
+func TestEncoderManualNonRTPConfigDefaultsDONDisabledForRTPReentry(t *testing.T) {
+	cfg := goh264.EncoderConfig{
+		Width:         16,
+		Height:        16,
+		FrameRateNum:  30,
+		FrameRateDen:  1,
+		TargetBitrate: 800_000,
+		OutputFormat:  goh264.EncoderOutputAVC,
+		DeblockMode:   goh264.EncoderDeblockDisabled,
+	}
+	directRTP := cfg
+	directRTP.OutputFormat = goh264.EncoderOutputRTP
+	directRTP.DONDisabled = false
+	if _, err := goh264.NewEncoder(directRTP); !errors.Is(err, goh264.ErrUnsupported) {
+		t.Fatalf("NewEncoder direct RTP DONDisabled=false error = %v, want ErrUnsupported", err)
+	}
+
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize manual AVC config: %v", err)
+	}
+	if !normalized.DONDisabled {
+		t.Fatalf("normalized non-RTP DONDisabled = false, want admitted RTP re-entry default")
+	}
+	enc, err := goh264.NewEncoder(cfg)
+	if err != nil {
+		t.Fatalf("NewEncoder manual AVC config: %v", err)
+	}
+	if got := enc.Config(); got.OutputFormat != goh264.EncoderOutputAVC || !got.DONDisabled {
+		t.Fatalf("stored manual AVC config output/DON = %v/%v, want AVC/true", got.OutputFormat, got.DONDisabled)
+	}
+
+	firstFrame := patternedI420EncoderFrame(16, 16)
+	first, err := enc.Encode(firstFrame)
+	if err != nil {
+		t.Fatalf("Encode first AVC IDR: %v", err)
+	}
+	if !first.IDR || len(first.RTPPackets) != 0 {
+		t.Fatalf("first AVC output idr/rtp-packets = %v/%d, want IDR/no RTP", first.IDR, len(first.RTPPackets))
+	}
+	if err := enc.SetOutputFormat(goh264.EncoderOutputRTP); err != nil {
+		t.Fatalf("SetOutputFormat RTP from manual AVC config: %v", err)
+	}
+	got := enc.Config()
+	if got.OutputFormat != goh264.EncoderOutputRTP || !got.DONDisabled ||
+		got.RTPMaxPayloadSize != 1200 || got.RTPPayloadType != 96 {
+		t.Fatalf("RTP re-entry config = %+v, want RTP with admitted defaults", got)
+	}
+
+	secondFrame := firstFrame
+	secondFrame.PTS = int64(got.RTPTimestampIncrement)
+	second, err := enc.Encode(secondFrame)
+	if err != nil {
+		t.Fatalf("Encode forced RTP IDR from manual AVC config: %v", err)
+	}
+	if !second.IDR || len(second.RTPPackets) == 0 {
+		t.Fatalf("forced RTP re-entry output idr/packets = %v/%d, want IDR/RTP packets", second.IDR, len(second.RTPPackets))
+	}
+	if err := second.Validate(); err != nil {
+		t.Fatalf("Validate forced RTP re-entry output: %v", err)
+	}
+	headers, err := enc.ParameterSets()
+	if err != nil {
+		t.Fatalf("ParameterSets after RTP re-entry: %v", err)
+	}
+	stream := append([]byte(nil), headers.AnnexB...)
+	stream = append(stream, annexBFromEncoderRTPPackets(t, second.RTPPackets)...)
+	decoded, err := goh264.NewDecoder().DecodeFrames(stream)
+	if err != nil {
+		t.Fatalf("Decode RTP re-entry IDR: %v", err)
+	}
+	assertDecodedEncoderFrameBytes(t, decoded, appendI420FrameBytes(nil, secondFrame))
+}
+
 func TestEncoderReconfigureResolutionResetsReferenceAndQueuesIDR(t *testing.T) {
 	cfg := goh264.DefaultEncoderConfig(16, 16)
 	cfg.DeblockMode = goh264.EncoderDeblockDisabled

@@ -177,6 +177,8 @@ max-frame-size, slice-byte, encode-time, `SetLimits` grouped budgets, grouped
 reconfigure limits, output/cadence, RTP packetization, RTP metadata, and
 reconfigure updates, including SPS/PPS cadence and recovery-point toggles,
 preserving a queued IDR until an IDR is emitted,
+non-RTP `DONDisabled` normalization for later RTP re-entry while direct RTP
+interleaved-DON configs reject,
 public `Encoder.Reset` preserving configuration and RTP callback while clearing
 reference, pending-IDR, frame-budget, RTP timestamp, and RTP sequence state
 before fresh-IDR reuse,

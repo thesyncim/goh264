@@ -685,6 +685,7 @@ func TestEncoderQualityEvidenceNamesAPISurfaceGate(t *testing.T) {
 		"TestEncoderNonRTPConfigsRejectInvalidRTPControls",
 		"TestEncoderInvalidRTPControlsRejectForNonRTPOutputsWithoutMutation",
 		"TestEncoderReconfigureOutputFormatQueuesIDRBoundary",
+		"TestEncoderManualNonRTPConfigDefaultsDONDisabledForRTPReentry",
 		"TestEncoderInvalidRTPSettersPreservePacketState",
 		"TestEncoderFrameColorDoesNotOverrideConfigHeaders",
 		"TestEncoderValidSetterPreservesPendingIDR",
@@ -1011,6 +1012,9 @@ func TestREADMEEncoderAdmittedValuesTableDocumentsUnsupportedKnobs(t *testing.T)
 		"payload type 1..127, with zero selecting the dynamic default 96",
 		"`RTPPayloadType` zero selects the dynamic default 96 during config\nnormalization, `SetRTPMetadata`, and pointer-based `EncoderReconfigure`",
 		"use\n1..127 to emit a specific payload type",
+		"Annex B and AVC configs normalize `DONDisabled=true`",
+		"`SetOutputFormat(EncoderOutputRTP)` uses admitted RTP defaults",
+		"direct RTP\nconfigs with `DONDisabled=false` return `ErrUnsupported`",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Fatalf("README.md admitted-values table missing %q", phrase)
