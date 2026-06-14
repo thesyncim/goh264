@@ -5444,12 +5444,12 @@ func TestEncoderParameterSetsExposeWebRTCHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfigureAVCC: %v", err)
 	}
-	headersAVCC, err := headers.AVCC()
+	headersAVCC, err := headers.AVCCData()
 	if err != nil {
-		t.Fatalf("AVCC: %v", err)
+		t.Fatalf("AVCCData: %v", err)
 	}
 	if !bytes.Equal(headersAVCC, headers.AVCDecoderConfigurationRecord) {
-		t.Fatalf("AVCC() = %x, want %x", headersAVCC, headers.AVCDecoderConfigurationRecord)
+		t.Fatalf("AVCCData = %x, want %x", headersAVCC, headers.AVCDecoderConfigurationRecord)
 	}
 	if avcc.NALLengthSize != 4 || avcc.StreamInfo.Width != 638 || avcc.StreamInfo.Height != 478 ||
 		avcc.StreamInfo.Profile != "Constrained Baseline" {
@@ -5735,12 +5735,22 @@ func TestEncoderParameterSetsAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 	if want := append(prefix, headers.AVCDecoderConfigurationRecord...); !bytes.Equal(avcc, want) {
 		t.Fatalf("AppendAVCC = %x, want %x", avcc, want)
 	}
-	if got, err := headers.AVCC(); err != nil || !bytes.Equal(got, headers.AVCDecoderConfigurationRecord) {
-		t.Fatalf("AVCC = %x, want avcC bytes", got)
-	} else {
-		got[0] ^= 0xff
-		if bytes.Equal(got, headers.AVCDecoderConfigurationRecord) {
-			t.Fatal("AVCC returned bytes alias parameter-set storage")
+	for _, tt := range []struct {
+		name string
+		call func(goh264.EncoderParameterSets) ([]byte, error)
+		want []byte
+	}{
+		{name: "SPSData", call: goh264.EncoderParameterSets.SPSData, want: headers.SPS},
+		{name: "PPSData", call: goh264.EncoderParameterSets.PPSData, want: headers.PPS},
+		{name: "AnnexBData", call: goh264.EncoderParameterSets.AnnexBData, want: headers.AnnexB},
+		{name: "AVCCData", call: goh264.EncoderParameterSets.AVCCData, want: headers.AVCDecoderConfigurationRecord},
+	} {
+		got, err := tt.call(headers)
+		if err != nil || !bytes.Equal(got, tt.want) {
+			t.Fatalf("%s = %x/%v, want %x", tt.name, got, err, tt.want)
+		}
+		if cap(got) != len(got) {
+			t.Fatalf("%s cap = %d, want clipped len %d", tt.name, cap(got), len(got))
 		}
 	}
 
@@ -5762,38 +5772,78 @@ func TestEncoderParameterSetsAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 	}
 }
 
-func TestEncoderParameterSetsAVCCReturnsCallerOwnedBytes(t *testing.T) {
-	if got, err := (goh264.EncoderParameterSets{}).AVCC(); got != nil || err != nil {
-		t.Fatalf("zero-value AVCC = %x/%v, want nil/nil", got, err)
-	}
-	if got, err := (goh264.EncoderParameterSets{AVCDecoderConfigurationRecord: []byte{}}).AVCC(); got != nil || err != nil {
-		t.Fatalf("empty AVCC = %x/%v, want nil/nil", got, err)
+func TestEncoderParameterSetsDataHelpersReturnClippedBytes(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		call func(goh264.EncoderParameterSets) ([]byte, error)
+	}{
+		{name: "SPSData", call: goh264.EncoderParameterSets.SPSData},
+		{name: "PPSData", call: goh264.EncoderParameterSets.PPSData},
+		{name: "AnnexBData", call: goh264.EncoderParameterSets.AnnexBData},
+		{name: "AVCCData", call: goh264.EncoderParameterSets.AVCCData},
+	} {
+		t.Run("zero-"+tt.name, func(t *testing.T) {
+			if got, err := tt.call(goh264.EncoderParameterSets{}); got != nil || err != nil {
+				t.Fatalf("zero-value %s = %x/%v, want nil/nil", tt.name, got, err)
+			}
+		})
 	}
 
-	backing := []byte{0x01, 0x42, 0x00, 0x1f, 0xff, 0xee}
+	backing := []byte{
+		0x67, 0x42, 0xee,
+		0x68, 0xce, 0xee,
+		0, 0, 0, 1, 0x67, 0xee,
+		0x01, 0x42, 0x00, 0x1f, 0xff, 0xee,
+	}
 	headers := goh264.EncoderParameterSets{
-		AVCDecoderConfigurationRecord: backing[:5],
+		SPS:                           backing[0:2],
+		PPS:                           backing[3:5],
+		AnnexB:                        backing[6:11],
+		AVCDecoderConfigurationRecord: backing[12:17],
 	}
-	avcc, err := headers.AVCC()
-	if err != nil || !bytes.Equal(avcc, backing[:5]) {
-		t.Fatalf("AVCC = %x err=%v, want avcC bytes", avcc, err)
-	}
-	avcc[0] ^= 0xff
-	if backing[0] != 0x01 || headers.AVCDecoderConfigurationRecord[0] != 0x01 {
-		t.Fatalf("mutating AVCC bytes changed source backing/header: backing=%#x header=%#x",
-			backing[0], headers.AVCDecoderConfigurationRecord[0])
-	}
-	grown := append(avcc, 0xaa)
-	grown[len(avcc)] ^= 0xff
-	if backing[5] != 0xee {
-		t.Fatalf("appending to AVCC copies overwrote caller backing byte: %#x", backing[5])
+	for _, tt := range []struct {
+		name          string
+		call          func(goh264.EncoderParameterSets) ([]byte, error)
+		want          []byte
+		sentinelIndex int
+	}{
+		{name: "SPSData", call: goh264.EncoderParameterSets.SPSData, want: backing[0:2], sentinelIndex: 2},
+		{name: "PPSData", call: goh264.EncoderParameterSets.PPSData, want: backing[3:5], sentinelIndex: 5},
+		{name: "AnnexBData", call: goh264.EncoderParameterSets.AnnexBData, want: backing[6:11], sentinelIndex: 11},
+		{name: "AVCCData", call: goh264.EncoderParameterSets.AVCCData, want: backing[12:17], sentinelIndex: 17},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.call(headers)
+			if err != nil || !bytes.Equal(got, tt.want) {
+				t.Fatalf("%s = %x/%v, want %x", tt.name, got, err, tt.want)
+			}
+			if cap(got) != len(got) {
+				t.Fatalf("%s cap = %d, want clipped len %d", tt.name, cap(got), len(got))
+			}
+			grown := append(got, 0xaa)
+			grown[len(got)] ^= 0xff
+			if backing[tt.sentinelIndex] != 0xee {
+				t.Fatalf("appending to %s overwrote backing sentinel: %#x", tt.name, backing[tt.sentinelIndex])
+			}
+		})
 	}
 
-	overflow := goh264.EncoderParameterSets{
-		AVCDecoderConfigurationRecord: fakeDecoderRawBytesLen(maxIntForTest/2 + 1),
-	}
-	if got, err := overflow.AVCC(); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
-		t.Fatalf("overflowed AVCC = len %d/%v, want nil ErrInvalidData", len(got), err)
+	overflowBytes := fakeDecoderRawBytesLen(maxIntForTest/2 + 1)
+	for _, tt := range []struct {
+		name string
+		sets goh264.EncoderParameterSets
+		call func(goh264.EncoderParameterSets) ([]byte, error)
+	}{
+		{name: "SPSData", sets: goh264.EncoderParameterSets{SPS: overflowBytes}, call: goh264.EncoderParameterSets.SPSData},
+		{name: "PPSData", sets: goh264.EncoderParameterSets{PPS: overflowBytes}, call: goh264.EncoderParameterSets.PPSData},
+		{name: "AnnexBData", sets: goh264.EncoderParameterSets{AnnexB: overflowBytes}, call: goh264.EncoderParameterSets.AnnexBData},
+		{name: "AVCCData", sets: goh264.EncoderParameterSets{AVCDecoderConfigurationRecord: overflowBytes}, call: goh264.EncoderParameterSets.AVCCData},
+	} {
+		t.Run("overflow-"+tt.name, func(t *testing.T) {
+			if got, err := tt.call(tt.sets); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("overflowed %s = len %d/%v, want nil ErrInvalidData", tt.name, len(got), err)
+			}
+		})
 	}
 }
 
@@ -6386,6 +6436,23 @@ func TestEncoderSEIAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 	if want := append(prefix, sei.AVC...); !bytes.Equal(avc, want) {
 		t.Fatalf("AppendAVC = %x, want %x", avc, want)
 	}
+	for _, tt := range []struct {
+		name string
+		call func(goh264.EncoderSEI) ([]byte, error)
+		want []byte
+	}{
+		{name: "NALData", call: goh264.EncoderSEI.NALData, want: sei.NAL},
+		{name: "AnnexBData", call: goh264.EncoderSEI.AnnexBData, want: sei.AnnexB},
+		{name: "AVCData", call: goh264.EncoderSEI.AVCData, want: sei.AVC},
+	} {
+		got, err := tt.call(sei)
+		if err != nil || !bytes.Equal(got, tt.want) {
+			t.Fatalf("%s = %x/%v, want %x", tt.name, got, err, tt.want)
+		}
+		if cap(got) != len(got) {
+			t.Fatalf("%s cap = %d, want clipped len %d", tt.name, cap(got), len(got))
+		}
+	}
 
 	sei.NAL[0] ^= 0xff
 	sei.AnnexB[0] ^= 0xff
@@ -6394,6 +6461,76 @@ func TestEncoderSEIAppendHelpersReturnCallerOwnedBytes(t *testing.T) {
 		bytes.Equal(annexB[len(prefix):], sei.AnnexB) ||
 		bytes.Equal(avc[len(prefix):], sei.AVC) {
 		t.Fatal("SEI append helper output aliases source after mutation")
+	}
+}
+
+func TestEncoderSEIDataHelpersReturnClippedBytes(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		call func(goh264.EncoderSEI) ([]byte, error)
+	}{
+		{name: "NALData", call: goh264.EncoderSEI.NALData},
+		{name: "AnnexBData", call: goh264.EncoderSEI.AnnexBData},
+		{name: "AVCData", call: goh264.EncoderSEI.AVCData},
+	} {
+		t.Run("zero-"+tt.name, func(t *testing.T) {
+			if got, err := tt.call(goh264.EncoderSEI{}); got != nil || err != nil {
+				t.Fatalf("zero-value %s = %x/%v, want nil/nil", tt.name, got, err)
+			}
+		})
+	}
+
+	backing := []byte{
+		0x06, 0x05, 0xee,
+		0, 0, 0, 1, 0x06, 0xee,
+		0, 0, 0, 2, 0x06, 0xee,
+	}
+	sei := goh264.EncoderSEI{
+		NAL:    backing[0:2],
+		AnnexB: backing[3:8],
+		AVC:    backing[9:14],
+	}
+	for _, tt := range []struct {
+		name          string
+		call          func(goh264.EncoderSEI) ([]byte, error)
+		want          []byte
+		sentinelIndex int
+	}{
+		{name: "NALData", call: goh264.EncoderSEI.NALData, want: backing[0:2], sentinelIndex: 2},
+		{name: "AnnexBData", call: goh264.EncoderSEI.AnnexBData, want: backing[3:8], sentinelIndex: 8},
+		{name: "AVCData", call: goh264.EncoderSEI.AVCData, want: backing[9:14], sentinelIndex: 14},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.call(sei)
+			if err != nil || !bytes.Equal(got, tt.want) {
+				t.Fatalf("%s = %x/%v, want %x", tt.name, got, err, tt.want)
+			}
+			if cap(got) != len(got) {
+				t.Fatalf("%s cap = %d, want clipped len %d", tt.name, cap(got), len(got))
+			}
+			grown := append(got, 0xaa)
+			grown[len(got)] ^= 0xff
+			if backing[tt.sentinelIndex] != 0xee {
+				t.Fatalf("appending to %s overwrote backing sentinel: %#x", tt.name, backing[tt.sentinelIndex])
+			}
+		})
+	}
+
+	overflowBytes := fakeDecoderRawBytesLen(maxIntForTest/2 + 1)
+	for _, tt := range []struct {
+		name string
+		sei  goh264.EncoderSEI
+		call func(goh264.EncoderSEI) ([]byte, error)
+	}{
+		{name: "NALData", sei: goh264.EncoderSEI{NAL: overflowBytes}, call: goh264.EncoderSEI.NALData},
+		{name: "AnnexBData", sei: goh264.EncoderSEI{AnnexB: overflowBytes}, call: goh264.EncoderSEI.AnnexBData},
+		{name: "AVCData", sei: goh264.EncoderSEI{AVC: overflowBytes}, call: goh264.EncoderSEI.AVCData},
+	} {
+		t.Run("overflow-"+tt.name, func(t *testing.T) {
+			if got, err := tt.call(tt.sei); !errors.Is(err, goh264.ErrInvalidData) || got != nil {
+				t.Fatalf("overflowed %s = len %d/%v, want nil ErrInvalidData", tt.name, len(got), err)
+			}
+		})
 	}
 }
 
@@ -18146,12 +18283,12 @@ func TestEncoderRealtimeWebRTCControlSurfaceCoversRoadmap(t *testing.T) {
 	if _, ok := reflect.TypeOf(goh264.EncoderFrame{}).MethodByName("Clone"); !ok {
 		t.Fatal("EncoderFrame missing Clone convenience method")
 	}
-	for _, method := range []string{"AVCC", "AppendSPS", "AppendPPS", "AppendAnnexB", "AppendAVCC", "Validate", "Clone"} {
+	for _, method := range []string{"SPSData", "PPSData", "AnnexBData", "AVCCData", "AppendSPS", "AppendPPS", "AppendAnnexB", "AppendAVCC", "Validate", "Clone"} {
 		if _, ok := reflect.TypeOf(goh264.EncoderParameterSets{}).MethodByName(method); !ok {
 			t.Fatalf("EncoderParameterSets missing %s convenience method", method)
 		}
 	}
-	for _, method := range []string{"AppendNAL", "AppendAnnexB", "AppendAVC", "Validate", "Clone"} {
+	for _, method := range []string{"NALData", "AnnexBData", "AVCData", "AppendNAL", "AppendAnnexB", "AppendAVC", "Validate", "Clone"} {
 		if _, ok := reflect.TypeOf(goh264.EncoderSEI{}).MethodByName(method); !ok {
 			t.Fatalf("EncoderSEI missing %s convenience method", method)
 		}

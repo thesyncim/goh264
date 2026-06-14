@@ -840,16 +840,38 @@ type EncoderParameterSets struct {
 	AVCDecoderConfigurationRecord []byte
 }
 
-// AVCC returns a caller-owned AVC decoder configuration record copy after
-// validating public storage sizes.
-func (sets EncoderParameterSets) AVCC() ([]byte, error) {
-	if len(sets.AVCDecoderConfigurationRecord) > maxInt/2 {
-		return nil, ErrInvalidData
-	}
-	if len(sets.AVCDecoderConfigurationRecord) == 0 {
-		return nil, nil
-	}
-	return cloneByteSlice(sets.AVCDecoderConfigurationRecord), nil
+// SPSData returns the SPS NAL bytes after validating public storage sizes.
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the backing store.
+func (sets EncoderParameterSets) SPSData() ([]byte, error) {
+	return publicBytesView(sets.SPS)
+}
+
+// PPSData returns the PPS NAL bytes after validating public storage sizes.
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the backing store.
+func (sets EncoderParameterSets) PPSData() ([]byte, error) {
+	return publicBytesView(sets.PPS)
+}
+
+// AnnexBData returns the Annex B parameter-set bytes after validating public
+// storage sizes.
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the backing store.
+func (sets EncoderParameterSets) AnnexBData() ([]byte, error) {
+	return publicBytesView(sets.AnnexB)
+}
+
+// AVCCData returns the AVC decoder configuration record bytes after validating
+// public storage sizes.
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the backing store.
+func (sets EncoderParameterSets) AVCCData() ([]byte, error) {
+	return publicBytesView(sets.AVCDecoderConfigurationRecord)
 }
 
 // AppendSPS appends a caller-owned copy of the SPS NAL to dst after validating
@@ -917,6 +939,31 @@ type EncoderSEI struct {
 	AVC    []byte
 }
 
+// NALData returns the SEI NAL bytes after validating public storage sizes.
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the backing store.
+func (sei EncoderSEI) NALData() ([]byte, error) {
+	return publicBytesView(sei.NAL)
+}
+
+// AnnexBData returns the Annex B SEI bytes after validating public storage
+// sizes.
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the backing store.
+func (sei EncoderSEI) AnnexBData() ([]byte, error) {
+	return publicBytesView(sei.AnnexB)
+}
+
+// AVCData returns the AVC SEI bytes after validating public storage sizes.
+//
+// The returned slice is clipped to its length, so appending to it cannot
+// overwrite the following bytes in the backing store.
+func (sei EncoderSEI) AVCData() ([]byte, error) {
+	return publicBytesView(sei.AVC)
+}
+
 // AppendNAL appends a caller-owned copy of the SEI NAL to dst after validating
 // public storage sizes. On error, dst is returned unchanged.
 func (sei EncoderSEI) AppendNAL(dst []byte) ([]byte, error) {
@@ -961,6 +1008,13 @@ func encoderSEICloneStorageOK(sei EncoderSEI) bool {
 	return len(sei.NAL) <= maxInt/2 &&
 		len(sei.AnnexB) <= maxInt/2 &&
 		len(sei.AVC) <= maxInt/2
+}
+
+func publicBytesView(src []byte) ([]byte, error) {
+	if len(src) > maxInt/2 {
+		return nil, ErrInvalidData
+	}
+	return src[:len(src):len(src)], nil
 }
 
 func appendPublicBytes(dst []byte, src []byte) ([]byte, error) {

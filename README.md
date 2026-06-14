@@ -400,7 +400,7 @@ headers, err := cfg.ParameterSets()
 if err != nil {
 	log.Fatal(err)
 }
-headerAVCC, err := headers.AVCC()
+headerAVCC, err := headers.AVCCData()
 if err != nil {
 	log.Fatal(err)
 }
@@ -452,7 +452,7 @@ headers, err = enc.ParameterSets() // SPS/PPS NALs plus Annex B and avcC headers
 if err != nil {
 	log.Fatal(err)
 }
-headerAVCC, err = headers.AVCC()
+headerAVCC, err = headers.AVCCData()
 if err != nil {
 	log.Fatal(err)
 }
@@ -574,15 +574,18 @@ with the strongest public API coverage for integration work:
   snapshot for retry queues or async handoff. Use `EncoderConfig.ValidateFrame`
   or `Encoder.ValidateFrame` for config-specific encode-shape validation.
 - Parameter-set, SEI, encoded-frame, NAL, access-unit, RTP packet, and RTP
-  payload helpers have explicit append forms for caller-owned retention buffers
-  and `Clone` forms for async snapshots. `EncoderParameterSets.Validate` and
-  `EncoderSEI.Validate` check public storage sizes before retention or async
-  handoff; `Clone` uses the same checks before copying. `AVCC` validates avcC
-  storage before copying, while `AppendSPS`, `AppendPPS`, `AppendAnnexB`,
-  `AppendAVCC`, `AppendNAL`, `AppendAVC`, `AppendNALData`,
-  `AppendAccessUnitData`, `AppendRTPPacketData`, `AppendRTPPayloadData`,
-  `AppendPacketData`, and `AppendPayloadData` validate their source surfaces and
-  caller-managed append buffers.
+  payload helpers use one byte-access pattern: direct `SPSData`, `PPSData`,
+  `AnnexBData`, `AVCCData`, `NALData`, `AVCData`, `AccessUnitData`,
+  `RTPPacketData`, `RTPPayloadData`, `PacketData`, and `PayloadData` methods
+  return checked clipped views; explicit append forms copy into caller-owned
+  retention buffers; `Clone` forms produce async snapshots.
+  `EncoderParameterSets.Validate` and `EncoderSEI.Validate` check public
+  storage sizes before retention or async handoff; `Clone` uses the same checks
+  before copying. `AppendSPS`, `AppendPPS`, `AppendAnnexB`, `AppendAVCC`,
+  `AppendNAL`, `AppendAVC`, `AppendNALData`, `AppendAccessUnitData`,
+  `AppendRTPPacketData`, `AppendRTPPayloadData`, `AppendPacketData`, and
+  `AppendPayloadData` validate their source surfaces and caller-managed append
+  buffers.
   Invalid or overflowed-destination append calls return the original destination
   unchanged. If a caller-managed append destination overlaps the helper source
   bytes, the helpers return isolated output storage instead of aliasing the
