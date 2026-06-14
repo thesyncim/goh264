@@ -143,11 +143,20 @@ func (side PacketSideData) Clone() PacketSideData {
 	return clone
 }
 
+// Validate reports whether side has public storage sizes accepted by checked
+// clone helpers.
+func (side PacketSideData) Validate() error {
+	if len(side.Data) > maxInt/2 {
+		return ErrInvalidData
+	}
+	return nil
+}
+
 // CloneChecked returns a deep-owned copy of the packet side-data payload after
 // validating public storage sizes.
 func (side PacketSideData) CloneChecked() (PacketSideData, error) {
-	if len(side.Data) > maxInt/2 {
-		return PacketSideData{}, ErrInvalidData
+	if err := side.Validate(); err != nil {
+		return PacketSideData{}, err
 	}
 	return PacketSideData{
 		Type: side.Type,
@@ -176,11 +185,25 @@ func (pkt Packet) Clone() Packet {
 	return clone
 }
 
+// Validate reports whether pkt has public storage sizes accepted by checked
+// clone helpers.
+func (pkt Packet) Validate() error {
+	if len(pkt.Data) > maxInt/2 || len(pkt.SideData) > maxInt/32 {
+		return ErrInvalidData
+	}
+	for _, side := range pkt.SideData {
+		if err := side.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CloneChecked returns a deep-owned copy of the compressed packet and side-data
 // payloads after validating public storage sizes.
 func (pkt Packet) CloneChecked() (Packet, error) {
-	if len(pkt.Data) > maxInt/2 || len(pkt.SideData) > maxInt/32 {
-		return Packet{}, ErrInvalidData
+	if err := pkt.Validate(); err != nil {
+		return Packet{}, err
 	}
 	clone := Packet{
 		Data: cloneByteSlice(pkt.Data),
@@ -240,11 +263,20 @@ func (side FrameSideData) Clone() FrameSideData {
 	return clone
 }
 
+// Validate reports whether side has public storage sizes accepted by frame
+// clone helpers.
+func (side FrameSideData) Validate() error {
+	if !frameSideDataCloneStorageOK(side) {
+		return ErrInvalidData
+	}
+	return nil
+}
+
 // CloneChecked returns a deep-owned copy of the decoded frame side data after
 // validating public storage sizes.
 func (side FrameSideData) CloneChecked() (FrameSideData, error) {
-	if !frameSideDataCloneStorageOK(side) {
-		return FrameSideData{}, ErrInvalidData
+	if err := side.Validate(); err != nil {
+		return FrameSideData{}, err
 	}
 	return cloneFrameSideData(side), nil
 }
@@ -489,11 +521,8 @@ type Frame struct {
 // Plane slices and side-data slices in the clone are independent from f and can
 // be retained or mutated without affecting the source frame.
 func (f *Frame) Clone() (*Frame, error) {
-	if f == nil {
-		return nil, ErrInvalidData
-	}
-	if !frameCloneStorageOK(f) {
-		return nil, ErrInvalidData
+	if err := f.Validate(); err != nil {
+		return nil, err
 	}
 	clone := *f
 	clone.Y = cloneByteSlice(f.Y)
@@ -504,6 +533,17 @@ func (f *Frame) Clone() (*Frame, error) {
 	clone.Cr16 = cloneUint16Slice(f.Cr16)
 	clone.SideData = cloneFrameSideData(f.SideData)
 	return &clone, nil
+}
+
+// Validate reports whether f has public storage sizes accepted by Clone.
+func (f *Frame) Validate() error {
+	if f == nil {
+		return ErrInvalidData
+	}
+	if !frameCloneStorageOK(f) {
+		return ErrInvalidData
+	}
+	return nil
 }
 
 func frameCloneStorageOK(f *Frame) bool {

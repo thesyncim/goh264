@@ -323,6 +323,9 @@ func TestDecodeMethodsRejectNilDecoder(t *testing.T) {
 
 func TestFrameCloneRejectsNilFrame(t *testing.T) {
 	var frame *Frame
+	if err := frame.Validate(); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("Frame.Validate nil = %v, want ErrInvalidData", err)
+	}
 	if got, err := frame.Clone(); got != nil || !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("Frame.Clone nil = %+v/%v, want nil ErrInvalidData", got, err)
 	}
@@ -367,6 +370,9 @@ func TestFrameCloneRejectsOverflowedPublicStorage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.frame.Validate(); !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("Frame.Validate overflow = %v, want ErrInvalidData", err)
+			}
 			if got, err := tt.frame.Clone(); got != nil || !errors.Is(err, ErrInvalidData) {
 				t.Fatalf("Frame.Clone overflow = %+v/%v, want nil ErrInvalidData", got, err)
 			}
@@ -397,6 +403,9 @@ func TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 	}
 
 	overflowSide := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: fakeDecoderRawBytesLen(maxIntForTest/2 + 1)}
+	if err := overflowSide.Validate(); !errors.Is(err, ErrInvalidData) {
+		t.Fatalf("PacketSideData.Validate overflow = %v, want ErrInvalidData", err)
+	}
 	if got, err := overflowSide.CloneChecked(); got.Type != 0 || got.Data != nil || !errors.Is(err, ErrInvalidData) {
 		t.Fatalf("PacketSideData.CloneChecked overflow = %+v/%v, want zero ErrInvalidData", got, err)
 	}
@@ -413,6 +422,9 @@ func TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 		{name: "side-payload", packet: Packet{SideData: []PacketSideData{overflowSide}}},
 	} {
 		t.Run("packet-"+tt.name, func(t *testing.T) {
+			if err := tt.packet.Validate(); !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("Packet.Validate overflow = %v, want ErrInvalidData", err)
+			}
 			if got, err := tt.packet.CloneChecked(); got.Data != nil || got.SideData != nil || !errors.Is(err, ErrInvalidData) {
 				t.Fatalf("Packet.CloneChecked overflow = %+v/%v, want zero ErrInvalidData", got, err)
 			}
@@ -437,6 +449,9 @@ func TestDecoderCheckedCloneHelpersRejectOverflowedPublicStorage(t *testing.T) {
 		{name: "reference-displays", side: FrameSideData{ReferenceDisplays: &ReferenceDisplaysInfo{Displays: fakeReferenceDisplays(maxIntForTest/16 + 1)}}},
 	} {
 		t.Run("frame-side-data-"+tt.name, func(t *testing.T) {
+			if err := tt.side.Validate(); !errors.Is(err, ErrInvalidData) {
+				t.Fatalf("FrameSideData.Validate overflow = %v, want ErrInvalidData", err)
+			}
 			if got, err := tt.side.CloneChecked(); !reflect.DeepEqual(got, FrameSideData{}) || !errors.Is(err, ErrInvalidData) {
 				t.Fatalf("FrameSideData.CloneChecked overflow = %+v/%v, want zero ErrInvalidData", got, err)
 			}
@@ -473,6 +488,9 @@ func TestFrameSideDataCloneDeepCopiesNestedStorage(t *testing.T) {
 		DynamicHDR10Plus:     []byte{16},
 		LCEVC:                []byte{17},
 		ReferenceDisplays:    &ReferenceDisplaysInfo{Displays: []ReferenceDisplay{{LeftViewID: 18, RightViewID: 19}}},
+	}
+	if err := side.Validate(); err != nil {
+		t.Fatalf("FrameSideData.Validate: %v", err)
 	}
 	clone := side.Clone()
 	if !reflect.DeepEqual(clone, side) {
@@ -571,6 +589,9 @@ func TestFrameCloneDeepCopiesPlanesAndSideData(t *testing.T) {
 			LCEVC:                []byte{17},
 			ReferenceDisplays:    &ReferenceDisplaysInfo{Displays: []ReferenceDisplay{{LeftViewID: 18, RightViewID: 19}}},
 		},
+	}
+	if err := frame.Validate(); err != nil {
+		t.Fatalf("Frame.Validate: %v", err)
 	}
 	clone, err := frame.Clone()
 	if err != nil {

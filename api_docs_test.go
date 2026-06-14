@@ -56,11 +56,15 @@ func TestREADMECodecAPIChooserNamesPublicEntryPoints(t *testing.T) {
 		method   string
 	}{
 		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "Clone"},
+		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "Validate"},
 		{typeName: "Packet", typ: reflect.TypeOf(Packet{}), method: "CloneChecked"},
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "Clone"},
+		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "Validate"},
 		{typeName: "PacketSideData", typ: reflect.TypeOf(PacketSideData{}), method: "CloneChecked"},
+		{typeName: "Frame", typ: reflect.TypeOf((*Frame)(nil)), method: "Validate"},
 		{typeName: "Frame", typ: reflect.TypeOf((*Frame)(nil)), method: "Clone"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "Clone"},
+		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "Validate"},
 		{typeName: "FrameSideData", typ: reflect.TypeOf(FrameSideData{}), method: "CloneChecked"},
 	} {
 		if _, ok := tt.typ.MethodByName(tt.method); !ok {
@@ -864,6 +868,7 @@ func TestREADMEDecoderRawOutputDocumentsOverlapIsolation(t *testing.T) {
 	for _, phrase := range []string{
 		"`RawYUVBytesLE` returns a caller-owned rawvideo byte buffer",
 		"`RawYUV16` returns a caller-owned uint16 sample buffer",
+		"`Frame.Validate` checks decoded-frame plane and side-data storage for caller-owned preflight",
 		"Raw-output append helpers isolate output when the caller destination overlaps frame plane storage",
 	} {
 		if !strings.Contains(readme, phrase) {

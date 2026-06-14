@@ -345,6 +345,9 @@ func TestDecodePacketDoesNotAliasCallerBuffer(t *testing.T) {
 
 func TestPacketSideDataCloneDeepCopiesPayload(t *testing.T) {
 	side := PacketSideData{Type: PacketSideDataA53ClosedCaptions, Data: []byte{1, 2, 3}}
+	if err := side.Validate(); err != nil {
+		t.Fatalf("PacketSideData.Validate: %v", err)
+	}
 	clone := side.Clone()
 	if clone.Type != side.Type || !bytes.Equal(clone.Data, side.Data) {
 		t.Fatalf("PacketSideData.Clone = %+v, want byte-identical copy of %+v", clone, side)
@@ -381,6 +384,9 @@ func TestPacketSideDataCloneDeepCopiesPayload(t *testing.T) {
 
 func TestPacketClonePreservesZeroValue(t *testing.T) {
 	var packet Packet
+	if err := packet.Validate(); err != nil {
+		t.Fatalf("zero Packet.Validate: %v", err)
+	}
 	if clone := packet.Clone(); clone.Data != nil || clone.SideData != nil {
 		t.Fatalf("zero Packet.Clone = %+v, want zero Packet", clone)
 	}
@@ -400,6 +406,9 @@ func TestPacketCloneDeepCopiesDataAndSideData(t *testing.T) {
 			{Type: PacketSideDataNewExtradata, Data: config},
 			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{1, 2, 3}},
 		},
+	}
+	if err := packet.Validate(); err != nil {
+		t.Fatalf("Packet.Validate: %v", err)
 	}
 	clone := packet.Clone()
 	if !bytes.Equal(clone.Data, packet.Data) || len(clone.SideData) != len(packet.SideData) {
