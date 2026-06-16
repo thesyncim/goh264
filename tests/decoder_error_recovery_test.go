@@ -1980,6 +1980,81 @@ func TestDecodeFramesSwitchesFormatsAfterMalformedPacket(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestDecodeFramesSwitchesAVCLengthSizeAfterDamagedPacket(t *testing.T) {
+	config16, samples16, frames16 := decoderAVCTestStreamWithNALLengthSize(t, 16, 16, 4)
+	config32, samples32, frames32 := decoderAVCTestStreamWithNALLengthSize(t, 32, 16, 2)
+	if len(samples16) != 2 || len(samples32) != 2 {
+		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
+	}
+
+	dec := NewDecoder()
+	if out, err := dec.DecodeFrames(config16); err != nil || len(out) != 0 {
+		t.Fatalf("16x16 length-4 config frames=%d err=%v", len(out), err)
+	}
+	out, err := dec.DecodeFrames(samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeFrames 16x16 length-4 IDR: %v", err)
+	}
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[0]))
+
+	out, err = dec.DecodeFrames(truncateFirstVCLAVCPayload(t, samples16[1], 4))
+	assertNoFramesInvalidData(t, "damaged length-4 AVC packet", out, err)
+
+	if out, err = dec.DecodeFrames(config32); err != nil || len(out) != 0 {
+		t.Fatalf("32x16 length-2 config after damage frames=%d err=%v", len(out), err)
+	}
+	assertDecoderAVCConfigGeometry(t, dec, 2, 32, 16)
+
+	out, err = dec.DecodeFrames(samples32[0])
+	if err != nil {
+		t.Fatalf("DecodeFrames 32x16 length-2 IDR after damage: %v", err)
+	}
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
+
+	out, err = dec.DecodeFrames(samples32[1])
+	if err != nil {
+		t.Fatalf("DecodeFrames 32x16 length-2 P-skip after config switch: %v", err)
+	}
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[1]))
+}
+
+func TestDecodePacketFramesNewExtradataSwitchesAVCLengthSizeAfterDamagedPacket(t *testing.T) {
+	config16, samples16, frames16 := decoderAVCTestStreamWithNALLengthSize(t, 16, 16, 4)
+	config32, samples32, frames32 := decoderAVCTestStreamWithNALLengthSize(t, 32, 16, 2)
+	if len(samples16) != 2 || len(samples32) != 2 {
+		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
+	}
+
+	dec := NewDecoder()
+	out, err := dec.DecodePacketFrames(Packet{
+		Data:     samples16[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config16}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 16x16 length-4 NEW_EXTRADATA IDR: %v", err)
+	}
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[0]))
+
+	out, err = dec.DecodePacketFrames(Packet{Data: truncateFirstVCLAVCPayload(t, samples16[1], 4)})
+	assertNoFramesInvalidData(t, "damaged packet length-4 AVC", out, err)
+
+	out, err = dec.DecodePacketFrames(Packet{
+		Data:     samples32[0],
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config32}},
+	})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 32x16 length-2 NEW_EXTRADATA after damage: %v", err)
+	}
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
+	assertDecoderAVCConfigGeometry(t, dec, 2, 32, 16)
+
+	out, err = dec.DecodePacketFrames(Packet{Data: samples32[1]})
+	if err != nil {
+		t.Fatalf("DecodePacketFrames 32x16 length-2 packet after side-data switch: %v", err)
+	}
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[1]))
+}
+
 func TestDecodeConfiguredAVCFramesReturnsPriorFramesBeforeDamagedSlice(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -2206,6 +2281,20 @@ func assertNoFramesNoError(t *testing.T, label string, frames []*Frame, err erro
 	if err != nil || len(frames) != 0 {
 		t.Fatalf("%s = %d frames/%v, want no frames and no error", label, len(frames), err)
 	}
+}
+
+func decoderAVCTestStreamWithNALLengthSize(t *testing.T, width int, height int, nalLengthSize int) ([]byte, [][]byte, []decoderI420Frame) {
+	t.Helper()
+	headers, packets, frames := decoderAnnexBTestStream(t, width, height)
+	data := append([]byte(nil), headers...)
+	for _, packet := range packets {
+		data = append(data, packet...)
+	}
+	config, samples := annexBToAVCConfigAndSamples(t, data, nalLengthSize)
+	if len(samples) != len(packets) {
+		t.Fatalf("%dx%d length-%d AVC samples = %d, want %d", width, height, nalLengthSize, len(samples), len(packets))
+	}
+	return config, samples, frames
 }
 
 func assertDecoderAVCConfigGeometry(t *testing.T, dec *Decoder, nalLengthSize int, width int, height int) {
