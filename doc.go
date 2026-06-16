@@ -15,6 +15,7 @@
 //     expected; they return ErrUnsupported for zero-frame or multi-frame
 //     packets that otherwise decode successfully.
 //
-// This package does not provide an H.264 encoder and does not grant patent
-// rights. See PATENTS.md in the repository for the user-facing patent notice.
+// This package does not provide H.264 bitstream generation and does not grant
+// patent rights. See PATENTS.md in the repository for the user-facing patent
+// notice.
 package goh264

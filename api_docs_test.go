@@ -10,11 +10,7 @@ import (
 )
 
 func TestREADMEFocusesOnDecoderOnlyPublicSurface(t *testing.T) {
-	data, err := os.ReadFile("README.md")
-	if err != nil {
-		t.Fatalf("read README.md: %v", err)
-	}
-	readme := string(data)
+	readme := readProjectText(t, "README.md")
 
 	decoderType := reflect.TypeOf((*Decoder)(nil))
 	packageFunctions := map[string]any{
@@ -67,4 +63,55 @@ func TestREADMEFocusesOnDecoderOnlyPublicSurface(t *testing.T) {
 	if !strings.Contains(readme, "decoder-only") || !strings.Contains(readme, "PATENTS.md") {
 		t.Fatal("README should state decoder-only scope and point to PATENTS.md")
 	}
+}
+
+func TestProjectTextAvoidsToolAttribution(t *testing.T) {
+	for _, path := range []string{
+		"README.md",
+		"PATENTS.md",
+		"doc.go",
+		"docs/production-readiness.md",
+		"docs/source-truth.md",
+		"docs/translation-ledger.md",
+	} {
+		text := strings.ToLower(readProjectText(t, path))
+		if strings.Contains(text, "co"+"dex") {
+			t.Fatalf("%s should not mention implementation tooling", path)
+		}
+	}
+}
+
+func TestPatentNoticeKeepsResponsibilityBoundary(t *testing.T) {
+	readme := readProjectText(t, "README.md")
+	patents := readProjectText(t, "PATENTS.md")
+
+	for _, snippet := range []string{
+		"decoder-only",
+		"does not grant patent rights",
+		"users and distributors are responsible",
+		"PATENTS.md",
+	} {
+		if !strings.Contains(readme, snippet) {
+			t.Fatalf("README missing patent-boundary snippet %q", snippet)
+		}
+	}
+	for _, snippet := range []string{
+		"not legal advice",
+		"does not grant any patent license",
+		"Decoder-only scope is an implementation boundary",
+		"You are responsible",
+	} {
+		if !strings.Contains(patents, snippet) {
+			t.Fatalf("PATENTS.md missing responsibility snippet %q", snippet)
+		}
+	}
+}
+
+func readProjectText(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(data)
 }

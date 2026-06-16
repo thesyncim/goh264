@@ -1,7 +1,8 @@
 # goh264
 
-`goh264` is a pure-Go, decoder-only H.264/AVC package. It imports no cgo and no
-third-party Go modules.
+`goh264` is a pure-Go, decoder-only H.264/AVC package. It accepts
+already-compressed H.264 input and returns decoded frames, metadata, and side
+data. It imports no cgo and no third-party Go modules.
 
 The decoder is source-shaped from the FFmpeg `n8.0.1` H.264 decoder path,
 pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`. Current evidence covers
@@ -18,10 +19,24 @@ Requires Go 1.24 or newer.
 
 ## Patent Notice
 
-`goh264` is decoder-only and does not include an H.264 encoder. H.264/AVC
+`goh264` is decoder-only and does not include H.264 bitstream generation.
+Decoder-only scope does not determine H.264/AVC patent obligations. H.264/AVC
 technology may be covered by patent rights in some jurisdictions. This project
 does not grant patent rights; users and distributors are responsible for their
 own licensing analysis. See [PATENTS.md](PATENTS.md).
+
+## Accepted Inputs
+
+- Annex B access units or complete Annex B byte streams with start codes.
+- Length-prefixed AVC packets with 1-, 2-, 3-, or 4-byte NAL lengths.
+- avcC decoder configuration records for configured-AVC streams.
+- Packet side data for FFmpeg-compatible metadata such as `NEW_EXTRADATA`.
+- Header-only buffers when callers only need stream metadata.
+
+`goh264` does not provide camera capture, RTP/WebRTC packetization, bitrate
+selection, keyframe requests, or H.264 bitstream generation. Bring encoded H.264
+input from another component and handle that component's licensing and
+distribution requirements separately.
 
 ## API At A Glance
 
@@ -126,6 +141,14 @@ caller-owned uint16 sample buffer for high-bit-depth frames. `AppendRawYUV`,
 `FrameSideData.Clone`, `Packet.Validate`, `Packet.Clone`,
 `PacketSideData.Validate`, and `PacketSideData.Clone` are provided for callers
 that need explicit ownership and storage checks.
+
+## Error Handling
+
+Errors can wrap the package sentinels. Use `errors.Is(err,
+goh264.ErrInvalidData)` for malformed bitstreams or invalid public API
+arguments. Use `errors.Is(err, goh264.ErrUnsupported)` for valid inputs outside
+the current decoder contract, including single-frame helper calls that decode to
+zero or multiple frames.
 
 ## Current Evidence
 

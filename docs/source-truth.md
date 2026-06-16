@@ -1,7 +1,9 @@
 # Source Truth
 
-`goh264` is decoder-only. The implementation follows the FFmpeg `n8.0.1`
-H.264 decoder path pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`.
+`goh264` is decoder-only. It accepts already-compressed H.264/AVC input and
+returns decoded frames, metadata, and side data. The implementation follows the
+FFmpeg `n8.0.1` H.264 decoder path pinned at
+`894da5ca7d742e4429ffb2af534fcda0103ef593`.
 
 ## In Scope
 
@@ -22,6 +24,8 @@ H.264 decoder path pinned at `894da5ca7d742e4429ffb2af534fcda0103ef593`.
 - Send-side controls.
 - Rate control, RTP packetization for generated frames, or SPS/PPS generation
   for newly encoded video.
+- Patent or licensing clearance for callers, distributors, encoded media, or
+  surrounding pipelines.
 - FMO, 11/13-bit luma depths, `chroma_format_idc > 3`, separate color planes,
   and mixed chroma/luma bit depths at the pinned FFmpeg parity boundary.
 

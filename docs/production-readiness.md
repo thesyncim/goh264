@@ -3,6 +3,11 @@
 `goh264` is a decoder-only H.264/AVC package. It does not provide H.264
 bitstream generation or send-side controls.
 
+The package can be imported without FFmpeg, cgo, or third-party Go modules.
+FFmpeg is only part of the local evidence workflow. Patent and distribution
+analysis remains the caller's responsibility, including for any surrounding
+capture, transmit, storage, or playback pipeline.
+
 | Path | Admitted Scope | Evidence Shape | Remaining Risk |
 | --- | --- | --- | --- |
 | Decoder | FFmpeg `n8.0.1` H.264 decoder path; public Annex B, AVC, avcC, packet, raw-output, side-data, and delayed-output surfaces | Unit tests, fixture tests, public-vector tests, strict FFmpeg-oracle rows, fuzz smoke, benchmark canaries, and quality-evidence runners | Broader field/MBAFF/PIC-AFF motion behavior, damaged-slice edge cases, allocation/performance review, threading/SIMD, exact libavcodec delayed-output edge behavior |
