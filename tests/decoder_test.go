@@ -3936,6 +3936,18 @@ func TestDecodePacketFramesSEIOnlyPacketAppliesToNextFrame(t *testing.T) {
 	})
 }
 
+func TestDecodeFramesSEIOnlyPacketDoesNotLeakAfterDamagedFrame(t *testing.T) {
+	dec := NewDecoder()
+	assertSEIOnlyPacketDoesNotLeakAfterDamagedFrame(t, dec.DecodeFrames)
+}
+
+func TestDecodePacketFramesSEIOnlyPacketDoesNotLeakAfterDamagedFrame(t *testing.T) {
+	dec := NewDecoder()
+	assertSEIOnlyPacketDoesNotLeakAfterDamagedFrame(t, func(data []byte) ([]*Frame, error) {
+		return dec.DecodePacketFrames(Packet{Data: data})
+	})
+}
+
 func assertSEIOnlyPacketAppliesToNextFrame(t *testing.T, decode func([]byte) ([]*Frame, error)) {
 	t.Helper()
 
@@ -3977,6 +3989,37 @@ func assertSEIOnlyPacketAppliesToNextFrame(t *testing.T, decode func([]byte) ([]
 	second := frames[0].SideData
 	if second.ActiveFormat != nil || len(second.A53ClosedCaptions) != 0 || len(second.LCEVC) != 0 {
 		t.Fatalf("second repeated SEI-only packet side data = %+v", second)
+	}
+}
+
+func assertSEIOnlyPacketDoesNotLeakAfterDamagedFrame(t *testing.T, decode func([]byte) ([]*Frame, error)) {
+	t.Helper()
+
+	seiOnly := appendAnnexBNAL(nil, decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0d)},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x01, 0x02, 0x03})},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload([]byte{0x7e, 0x01, 0x00, 0x03, 0x02})},
+	))
+
+	frames, err := decode(seiOnly)
+	if err != nil || len(frames) != 0 {
+		t.Fatalf("SEI-only packet = frames %d err %v, want no frames and nil error", len(frames), err)
+	}
+
+	damaged := truncateFirstVCLAnnexBPayload(t, decodeHexFixture(t, black16AnnexBHex))
+	frames, err = decode(damaged)
+	if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
+		t.Fatalf("damaged frame after SEI-only packet = frames %d err %v, want no frames ErrInvalidData", len(frames), err)
+	}
+
+	frames, err = decode(decodeHexFixture(t, black16AnnexBHex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	side := frames[0].SideData
+	if side.ActiveFormat != nil || len(side.A53ClosedCaptions) != 0 || len(side.LCEVC) != 0 {
+		t.Fatalf("SEI-only side data leaked after damaged frame: %+v", side)
 	}
 }
 
