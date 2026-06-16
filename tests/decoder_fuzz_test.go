@@ -14,6 +14,8 @@ func TestDecodeMalformedPublicSurfacesNoPanic(t *testing.T) {
 	validAnnexB := decodeHexFixture(t, black16AnnexBHex)
 	validAVC := annexBToAVC(t, validAnnexB, 4)
 	validConfig, validSamples := annexBToAVCConfigAndSamples(t, validAnnexB, 4)
+	ipAnnexB := decodeHexFixture(t, black16IPAnnexBHex)
+	ipConfig, ipSamples := annexBToAVCConfigAndSamples(t, ipAnnexB, 4)
 	bFrameAnnexB := decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex)
 	bFrameConfig, bFrameSamples := annexBToAVCConfigAndSamples(t, bFrameAnnexB, 4)
 
@@ -28,6 +30,7 @@ func TestDecodeMalformedPublicSurfacesNoPanic(t *testing.T) {
 		{name: "annexb empty sps", data: []byte{0x00, 0x00, 0x01, 0x67}},
 		{name: "avc oversized length", data: []byte{0x00, 0x00, 0x00, 0x05, 0x65}, aux: validConfig},
 		{name: "truncated avc", data: validAVC[:len(validAVC)-1], aux: validConfig},
+		{name: "delta without initial reference", data: ipSamples[1], aux: ipConfig},
 		{name: "truncated configured sample", data: validSamples[0][:len(validSamples[0])/2], aux: validConfig},
 		{name: "truncated config", data: validSamples[0], aux: validConfig[:len(validConfig)-1]},
 		{name: "b-frame reordered stream", data: bFrameAnnexB},

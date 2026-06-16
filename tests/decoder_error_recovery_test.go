@@ -1681,6 +1681,197 @@ func TestStatefulDecoderRecoversAcrossBFrameLossAndCorruption(t *testing.T) {
 	}
 }
 
+func TestStatefulDecoderWithholdsDeltaUntilReferenceAfterInitialLoss(t *testing.T) {
+	config, samples, frames := decoderAVCTestStream(t, 16, 16)
+	annexBHeaders, annexBPackets, annexBFrames := decoderAnnexBTestStream(t, 16, 16)
+	if len(samples) != 2 || len(frames) != 2 || len(annexBPackets) != 2 || len(annexBFrames) != 2 {
+		t.Fatalf("fixture counts samples=%d frames=%d packets=%d annexb-frames=%d, want 2 each",
+			len(samples), len(frames), len(annexBPackets), len(annexBFrames))
+	}
+
+	surfaces := []struct {
+		name                   string
+		configure              func(t *testing.T, dec *Decoder)
+		decode                 func(t *testing.T, dec *Decoder, sample int) ([]*Frame, error)
+		damageIDR              func(t *testing.T, dec *Decoder) ([]*Frame, error)
+		wantDeltaWithoutRefErr bool
+		wantFrame              decoderI420Frame
+	}{
+		{
+			name: "configured-avc",
+			configure: func(t *testing.T, dec *Decoder) {
+				t.Helper()
+				if _, err := dec.ConfigureAVCC(config); err != nil {
+					t.Fatalf("ConfigureAVCC: %v", err)
+				}
+			},
+			decode: func(t *testing.T, dec *Decoder, sample int) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodeConfiguredAVCFrames(samples[sample])
+			},
+			damageIDR: func(t *testing.T, dec *Decoder) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodeConfiguredAVCFrames(truncateFirstVCLAVCPayload(t, samples[0], 4))
+			},
+			wantFrame: frames[0],
+		},
+		{
+			name: "auto-annexb",
+			configure: func(t *testing.T, dec *Decoder) {
+				t.Helper()
+				frames, err := dec.DecodeFrames(annexBHeaders)
+				if err != nil {
+					t.Fatalf("DecodeFrames Annex B headers: %v", err)
+				}
+				if len(frames) != 0 {
+					t.Fatalf("Annex B headers returned %d frames, want 0", len(frames))
+				}
+			},
+			decode: func(t *testing.T, dec *Decoder, sample int) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodeFrames(annexBPackets[sample])
+			},
+			damageIDR: func(t *testing.T, dec *Decoder) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodeFrames(truncateFirstVCLAnnexBPayload(t, annexBPackets[0]))
+			},
+			wantDeltaWithoutRefErr: true,
+			wantFrame:              annexBFrames[0],
+		},
+		{
+			name: "packet-new-extradata",
+			configure: func(t *testing.T, dec *Decoder) {
+				t.Helper()
+			},
+			decode: func(t *testing.T, dec *Decoder, sample int) ([]*Frame, error) {
+				t.Helper()
+				pkt := Packet{Data: samples[sample]}
+				if sample == 1 {
+					pkt.SideData = []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}}
+				}
+				return dec.DecodePacketFrames(pkt)
+			},
+			damageIDR: func(t *testing.T, dec *Decoder) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodePacketFrames(Packet{
+					Data:     truncateFirstVCLAVCPayload(t, samples[0], 4),
+					SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}},
+				})
+			},
+			wantFrame: frames[0],
+		},
+	}
+
+	for _, surface := range surfaces {
+		t.Run(surface.name, func(t *testing.T) {
+			for _, tt := range []struct {
+				name      string
+				interrupt func(t *testing.T, dec *Decoder)
+			}{
+				{
+					name: "dropped-initial-idr",
+					interrupt: func(t *testing.T, dec *Decoder) {
+						t.Helper()
+					},
+				},
+				{
+					name: "corrupt-initial-idr",
+					interrupt: func(t *testing.T, dec *Decoder) {
+						t.Helper()
+						frames, err := surface.damageIDR(t, dec)
+						assertNoFramesInvalidData(t, "corrupt initial IDR", frames, err)
+					},
+				},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					dec := NewDecoder()
+					surface.configure(t, dec)
+
+					tt.interrupt(t, dec)
+
+					frames, err := surface.decode(t, dec, 1)
+					if surface.wantDeltaWithoutRefErr {
+						assertNoFramesInvalidData(t, surface.name+" delta without reference", frames, err)
+					} else {
+						assertNoFramesNoError(t, surface.name+" delta without reference", frames, err)
+					}
+
+					frames, err = surface.decode(t, dec, 0)
+					if err != nil {
+						t.Fatalf("%s IDR after %s: %v", surface.name, tt.name, err)
+					}
+					assertDecodedFrameBytes(t, frames, appendI420DecoderFrameBytes(nil, surface.wantFrame))
+
+					frames, err = surface.decode(t, dec, 1)
+					if err != nil {
+						t.Fatalf("%s delta after IDR recovery from %s: %v", surface.name, tt.name, err)
+					}
+					assertDecodedFrameBytes(t, frames, appendI420DecoderFrameBytes(nil, surface.wantFrame))
+				})
+			}
+		})
+	}
+}
+
+func TestDecoderResetAfterDamagedDelayedAccessUnitClearsRecoveryState(t *testing.T) {
+	data := decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
+	}
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames sample[0]: %v", err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("sample[0] returned %d delayed frames before damage, want 0", len(frames))
+	}
+	frames, err = dec.DecodeConfiguredAVCFrames(truncateFirstVCLAVCPayload(t, samples[1], 4))
+	assertNoFramesInvalidData(t, "damaged delayed access unit", frames, err)
+
+	if err := dec.Reset(); err != nil {
+		t.Fatalf("Reset after damaged delayed access unit: %v", err)
+	}
+	frames, err = dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("FlushDelayedFrames after reset: %v", err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("FlushDelayedFrames after reset returned %d stale frames, want 0", len(frames))
+	}
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[2])
+	if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
+		t.Fatalf("DecodeConfiguredAVCFrames after reset without config = %d frames/%v, want no frames ErrInvalidData", len(frames), err)
+	}
+
+	if _, err := dec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("reconfigure after reset: %v", err)
+	}
+	var recovered []*Frame
+	for i, sample := range samples {
+		frames, err := dec.DecodeConfiguredAVCFrames(sample)
+		if err != nil {
+			t.Fatalf("DecodeConfiguredAVCFrames recovered sample[%d]: %v", i, err)
+		}
+		recovered = append(recovered, frames...)
+	}
+	frames, err = dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("FlushDelayedFrames after reset recovery: %v", err)
+	}
+	recovered = append(recovered, frames...)
+	assertFrameMD5Strings(t, recovered, []string{
+		"2a9d9acd3e52356ad072de93fdbaca3d",
+		"96107676801850afd8aed8546397e3bf",
+		"3967b8bfe3a3a8cde4bc22334008eb1f",
+	})
+}
+
 func TestDecodeFramesRecoversAfterMalformedPacketBoundary(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -2007,6 +2198,13 @@ func assertNoFramesInvalidData(t *testing.T, label string, frames []*Frame, err 
 	t.Helper()
 	if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
 		t.Fatalf("%s = %d frames/%v, want no frames ErrInvalidData", label, len(frames), err)
+	}
+}
+
+func assertNoFramesNoError(t *testing.T, label string, frames []*Frame, err error) {
+	t.Helper()
+	if err != nil || len(frames) != 0 {
+		t.Fatalf("%s = %d frames/%v, want no frames and no error", label, len(frames), err)
 	}
 }
 
