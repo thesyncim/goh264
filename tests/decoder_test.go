@@ -3948,6 +3948,32 @@ func TestDecodePacketFramesSEIOnlyPacketDoesNotLeakAfterDamagedFrame(t *testing.
 	})
 }
 
+func TestDecodeFramesSEIOnlyPacketDoesNotLeakAfterMalformedPacket(t *testing.T) {
+	dec := NewDecoder()
+	assertSEIOnlyPacketDoesNotLeakAfterMalformedPacket(t, dec.DecodeFrames)
+}
+
+func TestDecodePacketFramesSEIOnlyPacketDoesNotLeakAfterMalformedPacket(t *testing.T) {
+	dec := NewDecoder()
+	assertSEIOnlyPacketDoesNotLeakAfterMalformedPacket(t, func(data []byte) ([]*Frame, error) {
+		return dec.DecodePacketFrames(Packet{Data: data})
+	})
+}
+
+func TestDecodeConfiguredAVCFramesSEIOnlyPacketDoesNotLeakAfterMalformedPacket(t *testing.T) {
+	data := decodeHexFixture(t, black16AnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 1 {
+		t.Fatalf("samples = %d, want 1", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
+	}
+	assertConfiguredAVCSEIOnlyPacketDoesNotLeakAfterMalformedPacket(t, dec.DecodeConfiguredAVCFrames, samples[0])
+}
+
 func TestDecodeFramesFlushClearsPendingSEIOnlySideData(t *testing.T) {
 	dec := NewDecoder()
 	assertFlushClearsPendingSEIOnlySideData(t, dec.DecodeFrames, dec.FlushDelayedFrames)
@@ -4053,6 +4079,66 @@ func assertSEIOnlyPacketDoesNotLeakAfterDamagedFrame(t *testing.T, decode func([
 	side := frames[0].SideData
 	if side.ActiveFormat != nil || len(side.A53ClosedCaptions) != 0 || len(side.LCEVC) != 0 {
 		t.Fatalf("SEI-only side data leaked after damaged frame: %+v", side)
+	}
+}
+
+func assertSEIOnlyPacketDoesNotLeakAfterMalformedPacket(t *testing.T, decode func([]byte) ([]*Frame, error)) {
+	t.Helper()
+
+	seiOnly := appendAnnexBNAL(nil, decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0d)},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x01, 0x02, 0x03})},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload([]byte{0x7e, 0x01, 0x00, 0x03, 0x02})},
+	))
+
+	frames, err := decode(seiOnly)
+	if err != nil || len(frames) != 0 {
+		t.Fatalf("SEI-only packet = frames %d err %v, want no frames and nil error", len(frames), err)
+	}
+
+	frames, err = decode([]byte{0x00, 0x00, 0x01})
+	if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
+		t.Fatalf("malformed packet after SEI-only packet = frames %d err %v, want no frames ErrInvalidData", len(frames), err)
+	}
+
+	frames, err = decode(decodeHexFixture(t, black16AnnexBHex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	side := frames[0].SideData
+	if side.ActiveFormat != nil || len(side.A53ClosedCaptions) != 0 || len(side.LCEVC) != 0 {
+		t.Fatalf("SEI-only side data leaked after malformed packet: %+v", side)
+	}
+}
+
+func assertConfiguredAVCSEIOnlyPacketDoesNotLeakAfterMalformedPacket(t *testing.T, decode func([]byte) ([]*Frame, error), validPacket []byte) {
+	t.Helper()
+
+	seiOnly := appendAVCNALUnit(t, nil, decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0d)},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x01, 0x02, 0x03})},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload([]byte{0x7e, 0x01, 0x00, 0x03, 0x02})},
+	), 4)
+
+	frames, err := decode(seiOnly)
+	if err != nil || len(frames) != 0 {
+		t.Fatalf("configured AVC SEI-only packet = frames %d err %v, want no frames and nil error", len(frames), err)
+	}
+
+	frames, err = decode([]byte{0x00, 0x00, 0x00, 0x10, 0x65})
+	if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
+		t.Fatalf("malformed configured AVC packet after SEI-only packet = frames %d err %v, want no frames ErrInvalidData", len(frames), err)
+	}
+
+	frames, err = decode(validPacket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	side := frames[0].SideData
+	if side.ActiveFormat != nil || len(side.A53ClosedCaptions) != 0 || len(side.LCEVC) != 0 {
+		t.Fatalf("configured AVC SEI-only side data leaked after malformed packet: %+v", side)
 	}
 }
 

@@ -787,6 +787,7 @@ func (d *Decoder) decodeFrames(data []byte, packetSideData h264.DecodedFrameSide
 	if h264.IsAVCDecoderConfigurationRecord(data) {
 		cfg, err := h264.DecodeAVCDecoderConfigurationRecord(data)
 		if err != nil {
+			d.clearPendingSEI()
 			return nil, err
 		}
 		d.updateAVCDecoderConfiguration(cfg)
@@ -794,12 +795,14 @@ func (d *Decoder) decodeFrames(data []byte, packetSideData h264.DecodedFrameSide
 	}
 	nals, _, err := h264.SplitAutoPacket(data, d.avcNALLengthSize)
 	if err != nil {
+		d.clearPendingSEI()
 		return nil, err
 	}
 	activeSPS, rejectedInBandParameterSets := d.prepareInBandParameterSetUpdate(nals)
 	frames, err := d.simple.DecodeNALUnitsWithSideData(nals, packetSideData)
 	d.restoreSimpleParamSetsAfterRejectedInBandUpdate(rejectedInBandParameterSets)
 	if err != nil {
+		d.clearPendingSEI()
 		d.rememberActiveSPS(activeSPS)
 		return framesFromH264WithError(frames, err)
 	}
@@ -918,12 +921,14 @@ func (d *Decoder) DecodeConfiguredAVCFrames(data []byte) ([]*Frame, error) {
 	}
 	nals, err := h264.SplitAVCC(data, d.avcNALLengthSize)
 	if err != nil {
+		d.clearPendingSEI()
 		return nil, err
 	}
 	activeSPS, rejectedInBandParameterSets := d.prepareInBandParameterSetUpdate(nals)
 	frames, err := d.simple.DecodeNALUnits(nals)
 	d.restoreSimpleParamSetsAfterRejectedInBandUpdate(rejectedInBandParameterSets)
 	if err != nil {
+		d.clearPendingSEI()
 		d.rememberActiveSPS(activeSPS)
 		return framesFromH264WithError(frames, err)
 	}
@@ -969,6 +974,7 @@ func (d *Decoder) DecodeAVCC(config []byte, data []byte) (*Frame, error) {
 	if len(data) == 0 {
 		cfg, err := h264.DecodeAVCDecoderConfigurationRecord(config)
 		if err != nil {
+			d.clearPendingSEI()
 			return nil, err
 		}
 		frame, err := d.FlushDelayedFrame()
@@ -988,6 +994,7 @@ func (d *Decoder) DecodeAVCCFrames(config []byte, data []byte) ([]*Frame, error)
 	}
 	cfg, err := h264.DecodeAVCDecoderConfigurationRecord(config)
 	if err != nil {
+		d.clearPendingSEI()
 		return nil, err
 	}
 	if len(data) == 0 {
@@ -1008,6 +1015,7 @@ func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConf
 	}
 	nals, err := h264.SplitAVCC(data, cfg.NALLengthSize)
 	if err != nil {
+		d.clearPendingSEI()
 		return nil, err
 	}
 	activeSPS, rejectedInBandParameterSets := d.prepareInBandParameterSetUpdate(nals)
@@ -1018,6 +1026,7 @@ func (d *Decoder) decodeAVCFramesWithConfig(data []byte, cfg h264.AVCDecoderConf
 		frames = append(frames, flushed...)
 	}
 	if decodeErr != nil {
+		d.clearPendingSEI()
 		d.rememberActiveSPS(activeSPS)
 		if flushErr != nil {
 			decodeErr = fmt.Errorf("%v; flush delayed: %w", decodeErr, flushErr)
@@ -1226,6 +1235,12 @@ func (d *Decoder) storeAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationR
 	d.avcNALLengthSize = cfg.NALLengthSize
 	d.clearActiveSPS()
 	_ = d.simple.StoreAVCDecoderConfiguration(cfg)
+}
+
+func (d *Decoder) clearPendingSEI() {
+	if d != nil {
+		d.simple.ClearPendingSEI()
+	}
 }
 
 func (d *Decoder) updateAVCDecoderConfiguration(cfg h264.AVCDecoderConfigurationRecord) {

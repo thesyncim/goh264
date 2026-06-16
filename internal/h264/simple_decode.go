@@ -158,6 +158,12 @@ func (d *SimpleDecoder) UpdateParamSets(sps [maxSPSCount]*SPS, pps [maxPPSCount]
 	return nil
 }
 
+func (d *SimpleDecoder) ClearPendingSEI() {
+	if d != nil {
+		d.sei.Reset()
+	}
+}
+
 func (d *SimpleDecoder) DecodeNALUnits(nals []NALUnit) ([]*DecodedFrame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
