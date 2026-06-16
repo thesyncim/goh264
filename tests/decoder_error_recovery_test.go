@@ -4,6 +4,7 @@ package goh264_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -1551,6 +1552,243 @@ func TestDecodeFramesAnnexBRecoversAfterDamagedSlicePacket(t *testing.T) {
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
 }
 
+func TestStatefulDecoderRecoversAcrossBFrameLossAndCorruption(t *testing.T) {
+	data := decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex)
+	annexBHeaders, _ := annexBParameterSetsAndPacket(t, data)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+	annexBSamples := make([][]byte, len(samples))
+	for i, sample := range samples {
+		annexBSamples[i] = avcSampleToAnnexB(t, sample, 4)
+	}
+
+	surfaces := []struct {
+		name      string
+		configure func(t *testing.T, dec *Decoder)
+		decode    func(t *testing.T, dec *Decoder, sample int) ([]*Frame, error)
+		damage    func(t *testing.T, dec *Decoder) ([]*Frame, error)
+	}{
+		{
+			name: "configured-avc",
+			configure: func(t *testing.T, dec *Decoder) {
+				t.Helper()
+				if _, err := dec.ConfigureAVCC(config); err != nil {
+					t.Fatalf("ConfigureAVCC: %v", err)
+				}
+			},
+			decode: func(t *testing.T, dec *Decoder, sample int) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodeConfiguredAVCFrames(samples[sample])
+			},
+			damage: func(t *testing.T, dec *Decoder) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodeConfiguredAVCFrames(truncateFirstVCLAVCPayload(t, samples[1], 4))
+			},
+		},
+		{
+			name: "auto-annexb",
+			configure: func(t *testing.T, dec *Decoder) {
+				t.Helper()
+				frames, err := dec.DecodeFrames(annexBHeaders)
+				if err != nil {
+					t.Fatalf("DecodeFrames Annex B headers: %v", err)
+				}
+				if len(frames) != 0 {
+					t.Fatalf("Annex B headers returned %d frames, want 0", len(frames))
+				}
+			},
+			decode: func(t *testing.T, dec *Decoder, sample int) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodeFrames(annexBSamples[sample])
+			},
+			damage: func(t *testing.T, dec *Decoder) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodeFrames(truncateFirstVCLAnnexBPayload(t, annexBSamples[1]))
+			},
+		},
+		{
+			name: "packet-new-extradata",
+			configure: func(t *testing.T, dec *Decoder) {
+				t.Helper()
+			},
+			decode: func(t *testing.T, dec *Decoder, sample int) ([]*Frame, error) {
+				t.Helper()
+				pkt := Packet{Data: samples[sample]}
+				if sample == 0 {
+					pkt.SideData = []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config}}
+				}
+				return dec.DecodePacketFrames(pkt)
+			},
+			damage: func(t *testing.T, dec *Decoder) ([]*Frame, error) {
+				t.Helper()
+				return dec.DecodePacketFrames(Packet{Data: truncateFirstVCLAVCPayload(t, samples[1], 4)})
+			},
+		},
+	}
+
+	for _, surface := range surfaces {
+		t.Run(surface.name, func(t *testing.T) {
+			for _, tt := range []struct {
+				name      string
+				interrupt func(t *testing.T, dec *Decoder)
+			}{
+				{
+					name: "dropped-middle-access-unit",
+					interrupt: func(t *testing.T, dec *Decoder) {
+						t.Helper()
+					},
+				},
+				{
+					name: "corrupt-middle-access-unit",
+					interrupt: func(t *testing.T, dec *Decoder) {
+						t.Helper()
+						frames, err := surface.damage(t, dec)
+						assertNoFramesInvalidData(t, "corrupt middle access unit", frames, err)
+					},
+				},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					dec := NewDecoder()
+					surface.configure(t, dec)
+
+					frames, err := surface.decode(t, dec, 0)
+					if err != nil {
+						t.Fatalf("%s sample[0]: %v", surface.name, err)
+					}
+					if len(frames) != 0 {
+						t.Fatalf("%s sample[0] returned %d delayed frames before transition/loss, want 0",
+							surface.name, len(frames))
+					}
+
+					tt.interrupt(t, dec)
+
+					frames, err = surface.decode(t, dec, 2)
+					if err != nil {
+						t.Fatalf("%s sample[2] after %s: %v", surface.name, tt.name, err)
+					}
+					assertFrameMD5Strings(t, frames, []string{"2a9d9acd3e52356ad072de93fdbaca3d"})
+
+					frames, err = dec.FlushDelayedFrames()
+					if err != nil {
+						t.Fatalf("%s FlushDelayedFrames after %s: %v", surface.name, tt.name, err)
+					}
+					assertFrameMD5Strings(t, frames, []string{"6e1b566e08d2cb0885c767552b9eddf3"})
+				})
+			}
+		})
+	}
+}
+
+func TestDecodeFramesRecoversAfterMalformedPacketBoundary(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	for _, tt := range []struct {
+		name      string
+		badPacket []byte
+	}{
+		{name: "empty-annexb-start-code", badPacket: []byte{0x00, 0x00, 0x01}},
+		{name: "reserved-forbidden-nal", badPacket: []byte{0x00, 0x00, 0x01, 0x80}},
+		{name: "truncated-avc-length", badPacket: []byte{0x00, 0x00, 0x00, 0x10, 0x41, 0x9a}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder()
+			if frames, err := dec.DecodeFrames(config); err != nil || len(frames) != 0 {
+				t.Fatalf("config frames=%d err=%v", len(frames), err)
+			}
+
+			frames, err := dec.DecodeFrames(avcSampleToAnnexB(t, samples[0], 4))
+			if err != nil {
+				t.Fatalf("DecodeFrames first Annex B sample: %v", err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+			frames, err = dec.DecodeFrames(tt.badPacket)
+			assertNoFramesInvalidData(t, tt.name, frames, err)
+
+			frames, err = dec.DecodeFrames(avcSampleToAnnexB(t, samples[1], 4))
+			if err != nil {
+				t.Fatalf("DecodeFrames after malformed %s packet: %v", tt.name, err)
+			}
+			assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+			frames, err = dec.FlushDelayedFrames()
+			if err != nil {
+				t.Fatalf("FlushDelayedFrames after malformed %s packet: %v", tt.name, err)
+			}
+			if len(frames) != 0 {
+				t.Fatalf("FlushDelayedFrames after malformed %s packet returned %d stale frames, want 0", tt.name, len(frames))
+			}
+		})
+	}
+}
+
+func TestDecodeConfiguredAVCFramesRecoversAfterTruncatedNALLength(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ConfigureAVCC(config); err != nil {
+		t.Fatalf("ConfigureAVCC: %v", err)
+	}
+
+	frames, err := dec.DecodeConfiguredAVCFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	for _, badPacket := range [][]byte{
+		samples[1][:1],
+		samples[1][:3],
+		samples[1][:4],
+	} {
+		frames, err = dec.DecodeConfiguredAVCFrames(badPacket)
+		assertNoFramesInvalidData(t, fmt.Sprintf("truncated AVC packet len=%d", len(badPacket)), frames, err)
+	}
+
+	frames, err = dec.DecodeConfiguredAVCFrames(samples[1])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after truncated packets: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func TestDecodeFramesSwitchesFormatsAfterMalformedPacket(t *testing.T) {
+	data := decodeHexFixture(t, black16IPAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 2 {
+		t.Fatalf("samples = %d, want 2", len(samples))
+	}
+
+	dec := NewDecoder()
+	if frames, err := dec.DecodeFrames(config); err != nil || len(frames) != 0 {
+		t.Fatalf("config frames=%d err=%v", len(frames), err)
+	}
+	frames, err := dec.DecodeFrames(samples[0])
+	if err != nil {
+		t.Fatalf("DecodeFrames configured AVC sample[0]: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+
+	frames, err = dec.DecodeFrames([]byte{0x00, 0x00, 0x01})
+	assertNoFramesInvalidData(t, "malformed Annex B boundary", frames, err)
+
+	frames, err = dec.DecodeFrames(avcSampleToAnnexB(t, samples[1], 4))
+	if err != nil {
+		t.Fatalf("DecodeFrames Annex B sample[1] after malformed boundary: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
 func TestDecodeConfiguredAVCFramesReturnsPriorFramesBeforeDamagedSlice(t *testing.T) {
 	data := decodeHexFixture(t, black16IPAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -1763,6 +2001,13 @@ func assertSingleFrameWithDamagedSliceError(t *testing.T, surface string, frame 
 		t.Fatalf("%s valid+damaged packet returned nil frame with error %v", surface, err)
 	}
 	assertFrameMD5Strings(t, []*Frame{frame}, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+}
+
+func assertNoFramesInvalidData(t *testing.T, label string, frames []*Frame, err error) {
+	t.Helper()
+	if !errors.Is(err, ErrInvalidData) || len(frames) != 0 {
+		t.Fatalf("%s = %d frames/%v, want no frames ErrInvalidData", label, len(frames), err)
+	}
 }
 
 func assertDecoderAVCConfigGeometry(t *testing.T, dec *Decoder, nalLengthSize int, width int, height int) {

@@ -14,6 +14,8 @@ func TestDecodeMalformedPublicSurfacesNoPanic(t *testing.T) {
 	validAnnexB := decodeHexFixture(t, black16AnnexBHex)
 	validAVC := annexBToAVC(t, validAnnexB, 4)
 	validConfig, validSamples := annexBToAVCConfigAndSamples(t, validAnnexB, 4)
+	bFrameAnnexB := decodeHexFixture(t, testsrc32CAVLCBFramesAnnexBHex)
+	bFrameConfig, bFrameSamples := annexBToAVCConfigAndSamples(t, bFrameAnnexB, 4)
 
 	cases := []struct {
 		name string
@@ -28,6 +30,8 @@ func TestDecodeMalformedPublicSurfacesNoPanic(t *testing.T) {
 		{name: "truncated avc", data: validAVC[:len(validAVC)-1], aux: validConfig},
 		{name: "truncated configured sample", data: validSamples[0][:len(validSamples[0])/2], aux: validConfig},
 		{name: "truncated config", data: validSamples[0], aux: validConfig[:len(validConfig)-1]},
+		{name: "b-frame reordered stream", data: bFrameAnnexB},
+		{name: "b-frame truncated middle sample", data: bFrameSamples[1][:len(bFrameSamples[1])/2], aux: bFrameConfig},
 	}
 
 	for _, tt := range cases {
@@ -41,6 +45,8 @@ func FuzzDecodePublicSurfacesNoPanic(f *testing.F) {
 	validAnnexB := decodeHexFixtureForFuzz(f, black16AnnexBHex)
 	validAVC := annexBToAVCForFuzz(f, validAnnexB, 4)
 	validConfig, validPacket := annexBToAVCConfigAndPacketForFuzz(f, validAnnexB, 4)
+	bFrameAnnexB := decodeHexFixtureForFuzz(f, testsrc32CAVLCBFramesAnnexBHex)
+	bFrameConfig, bFramePacket := annexBToAVCConfigAndPacketForFuzz(f, bFrameAnnexB, 4)
 
 	f.Add([]byte{}, []byte{})
 	f.Add([]byte{0x00, 0x00, 0x01}, []byte{})
@@ -50,6 +56,9 @@ func FuzzDecodePublicSurfacesNoPanic(f *testing.F) {
 	f.Add(validPacket, validConfig)
 	f.Add(validPacket[:len(validPacket)/2], validConfig)
 	f.Add(validPacket, validConfig[:len(validConfig)-1])
+	f.Add(bFrameAnnexB, []byte{})
+	f.Add(bFramePacket, bFrameConfig)
+	f.Add(bFramePacket[:len(bFramePacket)/2], bFrameConfig)
 
 	f.Fuzz(func(t *testing.T, data []byte, aux []byte) {
 		if len(data) > 4096 || len(aux) > 4096 {
