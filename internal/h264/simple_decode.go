@@ -198,6 +198,7 @@ func (d *SimpleDecoder) FlushDelayedFrame() (*DecodedFrame, error) {
 	}
 	snap := d.dpb.snapshot()
 	frames, err := d.dpb.drainOutputFrames(true)
+	d.sei.Reset()
 	if len(frames) == 1 {
 		return frames[0], err
 	}
