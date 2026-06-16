@@ -3,144 +3,38 @@
 package goh264_test
 
 import (
-	"fmt"
 	"log"
+	"os"
 
 	"github.com/thesyncim/goh264"
 )
 
 func ExampleDecoder_DecodeFrames() {
-	cfg := goh264.DefaultAnnexBEncoderConfig(16, 16)
-
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	frame := cfg.I420Frame(
-		make([]byte, cfg.StrideY*cfg.Height),
-		make([]byte, cfg.StrideCb*(cfg.Height/2)),
-		make([]byte, cfg.StrideCr*(cfg.Height/2)),
-		0,
-	)
-	encoded, err := enc.Encode(frame)
+	data, err := os.ReadFile("testdata/h264/high10_inter_cavlc_idrp.h264")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	dec := goh264.NewDecoder()
-	frames, err := dec.DecodeFrames(encoded.Data)
+	frames, err := dec.DecodeFrames(data)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(len(frames), frames[0].KeyFrame)
-	// Output: 1 true
-}
-
-func ExampleDecoder_DecodeConfiguredAVCFrames() {
-	cfg := goh264.DefaultAVCEncoderConfig(16, 16)
-
-	headers, err := cfg.ParameterSets()
-	if err != nil {
-		log.Fatal(err)
-	}
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	frame := cfg.I420Frame(
-		make([]byte, cfg.StrideY*cfg.Height),
-		make([]byte, cfg.StrideCb*(cfg.Height/2)),
-		make([]byte, cfg.StrideCr*(cfg.Height/2)),
-		0,
-	)
-	encoded, err := enc.Encode(frame)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	dec := goh264.NewDecoder()
-	headerAVCC, err := headers.AVCCData()
-	if err != nil {
-		log.Fatal(err)
-	}
-	avcc, err := dec.ConfigureAVCC(headerAVCC)
-	if err != nil {
-		log.Fatal(err)
-	}
-	frames, err := dec.DecodeConfiguredAVCFrames(encoded.Data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(avcc.NALLengthSize, len(frames), frames[0].Width, frames[0].Height)
-	// Output: 4 1 16 16
-}
-
-func ExampleEncoder_EncodeInto() {
-	cfg := goh264.DefaultAnnexBEncoderConfig(16, 16)
-	cfg.MaxEncodeTimeUS = 0
-
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := enc.SetBitrate(700_000, 900_000); err != nil {
-		log.Fatal(err)
-	}
-	if err := enc.SetQP(26, 10, 42); err != nil {
-		log.Fatal(err)
-	}
-
-	frame := enc.I420Frame(
-		make([]byte, cfg.StrideY*cfg.Height),
-		make([]byte, cfg.StrideCb*(cfg.Height/2)),
-		make([]byte, cfg.StrideCr*(cfg.Height/2)),
-		0,
-	)
-	if err := enc.ValidateFrame(frame); err != nil {
-		log.Fatal(err)
-	}
-
-	buf := make([]byte, 0, 4096)
-	encoded, err := enc.EncodeInto(buf, frame)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(len(encoded.NALUnits), encoded.KeyFrame)
-	// Output: 3 true
-}
-
-func ExampleEncoder_SetRTPPacketCallback() {
-	cfg := goh264.DefaultRTPEncoderConfig(16, 16)
-	cfg.FrameDrop = goh264.EncoderFrameDropDisabled
-	cfg.MaxEncodeTimeUS = 0
-
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var first goh264.EncoderRTPPacketMetadata
-	callbacks := 0
-	enc.SetRTPPacketCallback(func(_ goh264.EncoderRTPPacket, meta goh264.EncoderRTPPacketMetadata) {
-		if callbacks == 0 {
-			first = meta
+	for _, frame := range frames {
+		_, err := frame.AppendRawYUVBytesLE(nil)
+		if err != nil {
+			log.Fatal(err)
 		}
-		callbacks++
-	})
+	}
+}
 
-	frame := enc.I420Frame(
-		make([]byte, cfg.StrideY*cfg.Height),
-		make([]byte, cfg.StrideCb*(cfg.Height/2)),
-		make([]byte, cfg.StrideCr*(cfg.Height/2)),
-		0,
-	)
-	encoded, err := enc.Encode(frame)
+func ExampleInspectAnnexBHeaders() {
+	data, err := os.ReadFile("testdata/h264/high10_inter_cavlc_idrp.h264")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println(encoded.IDR, len(encoded.RTPPackets), callbacks, first.PacketIndex, first.PacketCount, first.IDR)
-	// Output: true 3 3 0 3 true
+	if _, err := goh264.InspectAnnexBHeaders(data); err != nil {
+		log.Fatal(err)
+	}
 }

@@ -1,5 +1,4 @@
-// Package goh264 provides a pure-Go H.264 decoder and a realtime-oriented
-// encoder surface.
+// Package goh264 provides a pure-Go, decoder-only H.264/AVC implementation.
 //
 // Decoder API shape:
 //
@@ -10,23 +9,12 @@
 //     to travel with the compressed packet.
 //   - Use DecodeAnnexBFrames and DecodeAVCFrames for complete, known-format
 //     inputs where stateful packet streaming is not needed.
+//   - Use InspectAnnexBHeaders, InspectAVCHeaders, and InspectAVCC for metadata
+//     inspection without decoder-state mutation.
 //   - Use the single-frame helpers only when exactly one output frame is
 //     expected; they return ErrUnsupported for zero-frame or multi-frame
 //     packets that otherwise decode successfully.
 //
-// Encoder API shape:
-//
-//   - Start from DefaultRTPEncoderConfig, DefaultAnnexBEncoderConfig, or
-//     DefaultAVCEncoderConfig, normalize or validate it, then construct an
-//     Encoder with NewEncoder.
-//   - Use explicit runtime setters for ordinary bitrate, frame-rate, GOP,
-//     geometry, slice, header, packetization, RTP, and recovery-SEI controls.
-//   - Use Reconfigure only for grouped low-level updates, grouped Limits, or
-//     fields without a dedicated setter.
-//   - Use EncodeInto when the caller owns access-unit storage, and Encode when
-//     encoder-owned storage is sufficient.
-//
-// The decoder is the best-covered side of the module. The encoder deliberately
-// admits a narrower Constrained Baseline I420 subset while its broader
-// quality evidence and coding coverage expand.
+// This package does not provide an H.264 encoder and does not grant patent
+// rights. See PATENTS.md in the repository for the user-facing patent notice.
 package goh264

@@ -126,8 +126,8 @@ func TestAppendNALAnnexBAndAVCRoundTripThroughParsers(t *testing.T) {
 }
 
 func TestAppendAVCDecoderConfigurationRecordRoundTrip(t *testing.T) {
-	spsRBSP := testEncoderBaselineSPSRBSP(t)
-	ppsRBSP := testEncoderBaselinePPSRBSP(t)
+	spsRBSP := testBaselineSPSRBSP(t)
+	ppsRBSP := testBaselinePPSRBSP(t)
 	spsRaw, err := AppendNAL(nil, 3, NALSPS, spsRBSP)
 	if err != nil {
 		t.Fatal(err)
@@ -233,11 +233,11 @@ func TestAppendAVCPackagingRejectsOverflowedDestination(t *testing.T) {
 		t.Fatalf("AppendAVCNAL overflow got len=%d err=%v, want original buffer and ErrInvalidData", len(got), err)
 	}
 
-	spsRaw, err := AppendNAL(nil, 3, NALSPS, testEncoderBaselineSPSRBSP(t))
+	spsRaw, err := AppendNAL(nil, 3, NALSPS, testBaselineSPSRBSP(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	ppsRaw, err := AppendNAL(nil, 3, NALPPS, testEncoderBaselinePPSRBSP(t))
+	ppsRaw, err := AppendNAL(nil, 3, NALPPS, testBaselinePPSRBSP(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func fakeH264SliceLen[T any](ptr *T, n int) []T {
 	return *(*[]T)(unsafe.Pointer(&h))
 }
 
-func testEncoderBaselineSPSRBSP(t *testing.T) []byte {
+func testBaselineSPSRBSP(t *testing.T) []byte {
 	t.Helper()
 	var bw BitWriter
 	if err := bw.WriteBits(66, 8); err != nil {
@@ -312,7 +312,7 @@ func testEncoderBaselineSPSRBSP(t *testing.T) []byte {
 	return bw.Bytes()
 }
 
-func testEncoderBaselinePPSRBSP(t *testing.T) []byte {
+func testBaselinePPSRBSP(t *testing.T) []byte {
 	t.Helper()
 	var bw BitWriter
 	for _, v := range []uint32{

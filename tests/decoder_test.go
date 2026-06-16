@@ -632,8 +632,8 @@ func TestDecodePacketFramesIgnoresOverflowedSideDataListWithoutDroppingPacket(t 
 }
 
 func TestDecodePacketRejectsOverflowedPacketDataBeforeNewExtradata(t *testing.T) {
-	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	config16, samples16, frames16 := decoderAVCTestStream(t, 16, 16)
+	config32, _, _ := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) == 0 || len(frames16) == 0 {
 		t.Fatalf("16x16 stream samples/frames = %d/%d, want nonzero", len(samples16), len(frames16))
 	}
@@ -652,7 +652,7 @@ func TestDecodePacketRejectsOverflowedPacketDataBeforeNewExtradata(t *testing.T)
 		if err != nil {
 			t.Fatalf("DecodeConfiguredAVCFrames after overflowed packet data: %v", err)
 		}
-		assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+		assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[0]))
 	}
 
 	for _, tt := range []struct {
@@ -1665,8 +1665,8 @@ func TestAVCCConvenienceAPIsMatchConfigurationRecordBehavior(t *testing.T) {
 }
 
 func TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset(t *testing.T) {
-	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	config16, samples16, frames16 := decoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) != 2 || len(samples32) != 2 {
 		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
 	}
@@ -1676,18 +1676,18 @@ func TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeAVCCFrames 16x16 IDR: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[0]))
 	out, err = dec.DecodeConfiguredAVCFrames(samples16[1])
 	if err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames 16x16 P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[1]))
 
 	out, err = dec.DecodeAVCCFrames(config32, samples32[0])
 	if err != nil {
 		t.Fatalf("DecodeAVCCFrames 32x16 IDR after 16x16 stream: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 	got, err := dec.AVCConfig()
 	if err != nil {
 		t.Fatalf("AVCConfig after 32x16 switch: %v", err)
@@ -1699,12 +1699,12 @@ func TestDecodeAVCCFramesSwitchesValidConfigurationWithoutReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames 32x16 P-skip after switch: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[1]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[1]))
 }
 
 func TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference(t *testing.T) {
-	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	config16, samples16, _ := decoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) != 2 || len(samples32) != 2 {
 		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
 	}
@@ -1727,12 +1727,12 @@ func TestDecodeAVCCFramesIncompatibleConfigurationDoesNotUseStalePFrameReference
 	if err != nil {
 		t.Fatalf("DecodeAVCCFrames 32x16 IDR after stale P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 }
 
 func TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference(t *testing.T) {
-	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	config16, samples16, _ := decoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) != 2 || len(samples32) != 2 {
 		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
 	}
@@ -1761,12 +1761,12 @@ func TestDecodePacketFramesNewExtradataIncompatibleConfigurationDoesNotUseStaleP
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 32x16 IDR after stale P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 }
 
 func TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUseStalePFrameReference(t *testing.T) {
-	extradata16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
-	extradata32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	extradata16, packets16, _ := decoderAnnexBTestStream(t, 16, 16)
+	extradata32, packets32, frames32 := decoderAnnexBTestStream(t, 32, 16)
 	if len(packets16) != 2 || len(packets32) != 2 {
 		t.Fatalf("packet counts = %d/%d, want 2/2", len(packets16), len(packets32))
 	}
@@ -1795,12 +1795,12 @@ func TestDecodePacketFramesAnnexBNewExtradataIncompatibleConfigurationDoesNotUse
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 32x16 Annex B IDR after stale P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 }
 
 func TestDecodeFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference(t *testing.T) {
-	headers16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
-	headers32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	headers16, packets16, _ := decoderAnnexBTestStream(t, 16, 16)
+	headers32, packets32, frames32 := decoderAnnexBTestStream(t, 32, 16)
 	if len(packets16) != 2 || len(packets32) != 2 {
 		t.Fatalf("packet counts = %d/%d, want 2/2", len(packets16), len(packets32))
 	}
@@ -1825,12 +1825,12 @@ func TestDecodeFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference
 	if err != nil {
 		t.Fatalf("DecodeFrames 32x16 IDR after in-band stale P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 }
 
 func TestDecodePacketFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference(t *testing.T) {
-	headers16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
-	headers32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	headers16, packets16, _ := decoderAnnexBTestStream(t, 16, 16)
+	headers32, packets32, frames32 := decoderAnnexBTestStream(t, 32, 16)
 	if len(packets16) != 2 || len(packets32) != 2 {
 		t.Fatalf("packet counts = %d/%d, want 2/2", len(packets16), len(packets32))
 	}
@@ -1855,12 +1855,12 @@ func TestDecodePacketFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameRef
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 32x16 IDR after in-band stale P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 }
 
 func TestDecodeConfiguredAVCFramesInBandIncompatibleParameterSetsDoNotUseStalePFrameReference(t *testing.T) {
-	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
-	headers32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	config16, samples16, _ := decoderAVCTestStream(t, 16, 16)
+	headers32, packets32, frames32 := decoderAnnexBTestStream(t, 32, 16)
 	if len(samples16) != 2 || len(packets32) != 2 {
 		t.Fatalf("sample/packet counts = %d/%d, want 2/2", len(samples16), len(packets32))
 	}
@@ -1888,12 +1888,12 @@ func TestDecodeConfiguredAVCFramesInBandIncompatibleParameterSetsDoNotUseStalePF
 	if err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames 32x16 IDR after in-band stale P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 }
 
 func TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference(t *testing.T) {
-	headers16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
-	headers32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
+	headers16, packets16, _ := decoderAnnexBTestStream(t, 16, 16)
+	headers32, packets32, frames32 := decoderAnnexBTestStream(t, 32, 16)
 	if len(packets16) != 2 || len(packets32) != 2 {
 		t.Fatalf("packet counts = %d/%d, want 2/2", len(packets16), len(packets32))
 	}
@@ -1929,12 +1929,12 @@ func TestParseHeadersAnnexBIncompatibleHeadersDoNotUseStalePFrameReference(t *te
 	if err != nil {
 		t.Fatalf("DecodeFrames 32x16 IDR after ParseHeadersAnnexB stale P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 }
 
 func TestParseHeadersAVCIncompatibleHeadersDoNotUseStalePFrameReference(t *testing.T) {
-	_, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
-	_, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	_, samples16, _ := decoderAVCTestStream(t, 16, 16)
+	_, samples32, frames32 := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) != 2 || len(samples32) != 2 {
 		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
 	}
@@ -1972,418 +1972,29 @@ func TestParseHeadersAVCIncompatibleHeadersDoNotUseStalePFrameReference(t *testi
 	if err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames 32x16 IDR after ParseHeadersAVC stale P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
-}
-
-func TestDecodeAVCCFramesMultiSPSConfigurationUsesPacketActiveSPSForDPBReset(t *testing.T) {
-	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
-	multiConfig, _ := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
-	pps1PSkip := decoderPSkipAVCSampleWithPPSID(t, 32, 16, 1, 1)
-
-	dec := NewDecoder()
-	out, err := dec.DecodeAVCCFrames(config16, samples16[0])
-	if err != nil {
-		t.Fatalf("DecodeAVCCFrames 16x16 IDR: %v", err)
-	}
-	if len(out) != 1 {
-		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
-	}
-
-	out, err = dec.DecodeAVCCFrames(multiConfig, pps1PSkip)
-	if err != nil || len(out) != 0 {
-		t.Fatalf("32x16 PPS1 P-skip after multi-SPS avcC update = frames %d err %v, want no stale-reference output", len(out), err)
-	}
-
-	out, err = dec.DecodeAVCCFrames(config32, samples32[0])
-	if err != nil {
-		t.Fatalf("DecodeAVCCFrames 32x16 IDR after multi-SPS stale P-skip: %v", err)
-	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
-}
-
-func TestDecodeFramesStandaloneMultiSPSConfigurationResetsForNonFirstActiveSPS(t *testing.T) {
-	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
-	multiConfig, _ := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
-	pps1PSkip := decoderPSkipAVCSampleWithPPSID(t, 32, 16, 1, 1)
-
-	dec := NewDecoder()
-	out, err := dec.DecodeFrames(config16)
-	if err != nil || len(out) != 0 {
-		t.Fatalf("DecodeFrames 16x16 avcC config frames=%d err=%v, want no output/error", len(out), err)
-	}
-	out, err = dec.DecodeFrames(samples16[0])
-	if err != nil {
-		t.Fatalf("DecodeFrames 16x16 IDR: %v", err)
-	}
-	if len(out) != 1 {
-		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
-	}
-
-	out, err = dec.DecodeFrames(multiConfig)
-	if err != nil || len(out) != 0 {
-		t.Fatalf("DecodeFrames standalone multi-SPS avcC config frames=%d err=%v, want no output/error", len(out), err)
-	}
-	out, err = dec.DecodeFrames(pps1PSkip)
-	if err != nil || len(out) != 0 {
-		t.Fatalf("32x16 PPS1 P-skip after standalone multi-SPS avcC = frames %d err %v, want no stale-reference output", len(out), err)
-	}
-	got, err := dec.AVCConfig()
-	if err != nil {
-		t.Fatalf("AVCConfig after standalone multi-SPS PPS1 P-skip: %v", err)
-	}
-	if got.NALLengthSize != 4 || got.StreamInfo.SPSID != 1 || got.StreamInfo.Width != 32 || got.StreamInfo.Height != 16 {
-		t.Fatalf("AVCConfig after standalone multi-SPS PPS1 P-skip = %+v, want active SPS1 32x16", got)
-	}
-
-	out, err = dec.DecodeFrames(config32)
-	if err != nil || len(out) != 0 {
-		t.Fatalf("DecodeFrames 32x16 avcC after standalone multi-SPS stale P-skip frames=%d err=%v, want no output/error", len(out), err)
-	}
-	out, err = dec.DecodeFrames(samples32[0])
-	if err != nil {
-		t.Fatalf("DecodeFrames 32x16 IDR after standalone multi-SPS stale P-skip: %v", err)
-	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
-}
-
-func TestDecodePacketFramesMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset(t *testing.T) {
-	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
-	multiConfig, _ := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
-	pps1PSkip := decoderPSkipAVCSampleWithPPSID(t, 32, 16, 1, 1)
-
-	dec := NewDecoder()
-	out, err := dec.DecodePacketFrames(Packet{
-		Data:     samples16[0],
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config16}},
-	})
-	if err != nil {
-		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
-	}
-	if len(out) != 1 {
-		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
-	}
-
-	out, err = dec.DecodePacketFrames(Packet{
-		Data:     pps1PSkip,
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: multiConfig}},
-	})
-	if err != nil || len(out) != 0 {
-		t.Fatalf("32x16 PPS1 P-skip after multi-SPS NEW_EXTRADATA = frames %d err %v, want no stale-reference output", len(out), err)
-	}
-
-	out, err = dec.DecodePacketFrames(Packet{
-		Data:     samples32[0],
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config32}},
-	})
-	if err != nil {
-		t.Fatalf("DecodePacketFrames 32x16 IDR after multi-SPS stale P-skip: %v", err)
-	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
-}
-
-func TestDecodePacketFramesAnnexBMultiSPSNewExtradataUsesPacketActiveSPSForDPBReset(t *testing.T) {
-	extradata16, packets16, _ := encodeDecoderAnnexBTestStream(t, 16, 16)
-	extradata32, packets32, frames32 := encodeDecoderAnnexBTestStream(t, 32, 16)
-	_, multiAnnexB := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
-	pps1PSkip := decoderPSkipAnnexBSampleWithPPSID(t, 32, 16, 1, 1)
-
-	dec := NewDecoder()
-	out, err := dec.DecodePacketFrames(Packet{
-		Data:     packets16[0],
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata16}},
-	})
-	if err != nil {
-		t.Fatalf("DecodePacketFrames 16x16 Annex B NEW_EXTRADATA IDR: %v", err)
-	}
-	if len(out) != 1 {
-		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
-	}
-
-	out, err = dec.DecodePacketFrames(Packet{
-		Data:     pps1PSkip,
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: multiAnnexB}},
-	})
-	if err != nil || len(out) != 0 {
-		t.Fatalf("32x16 PPS1 Annex B P-skip after multi-SPS NEW_EXTRADATA = frames %d err %v, want no stale-reference output", len(out), err)
-	}
-
-	out, err = dec.DecodePacketFrames(Packet{
-		Data:     packets32[0],
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: extradata32}},
-	})
-	if err != nil {
-		t.Fatalf("DecodePacketFrames 32x16 Annex B IDR after multi-SPS stale P-skip: %v", err)
-	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
-}
-
-func TestDecoderAVCConfigUsesAVCCFirstSPSForMultiSPSConfiguration(t *testing.T) {
-	first := decoderParameterSetNALs(t, 32, 16, 1, 1)
-	second := decoderParameterSetNALs(t, 16, 16, 0, 0)
-	config, err := h264.AppendAVCDecoderConfigurationRecord(nil, 66, 0xc0, 31, 4,
-		[][]byte{first.SPS, second.SPS},
-		[][]byte{first.PPS, second.PPS},
-	)
-	if err != nil {
-		t.Fatalf("AppendAVCDecoderConfigurationRecord reversed multi-SPS config: %v", err)
-	}
-
-	dec := NewDecoder()
-	cfg, err := dec.ConfigureAVCC(config)
-	if err != nil {
-		t.Fatalf("ConfigureAVCC reversed multi-SPS config: %v", err)
-	}
-	if cfg.NALLengthSize != 4 || cfg.StreamInfo.SPSID != 1 || cfg.StreamInfo.Width != 32 || cfg.StreamInfo.Height != 16 {
-		t.Fatalf("ConfigureAVCC reversed multi-SPS config = %+v, want SPS1 32x16", cfg)
-	}
-
-	got, err := dec.AVCConfig()
-	if err != nil {
-		t.Fatalf("AVCConfig after reversed multi-SPS ConfigureAVCC: %v", err)
-	}
-	if got != cfg {
-		t.Fatalf("AVCConfig after reversed multi-SPS ConfigureAVCC = %+v, want %+v", got, cfg)
-	}
-
-	dec = NewDecoder()
-	frames, err := dec.DecodeFrames(config)
-	if err != nil {
-		t.Fatalf("DecodeFrames reversed multi-SPS avcC config: %v", err)
-	}
-	if len(frames) != 0 {
-		t.Fatalf("DecodeFrames reversed multi-SPS avcC config frames = %d, want 0", len(frames))
-	}
-	got, err = dec.AVCConfig()
-	if err != nil {
-		t.Fatalf("AVCConfig after auto-detected reversed multi-SPS avcC: %v", err)
-	}
-	if got != cfg {
-		t.Fatalf("AVCConfig after auto-detected reversed multi-SPS avcC = %+v, want %+v", got, cfg)
-	}
-}
-
-func TestDecoderAVCConfigUsesPacketActiveSPSForMultiSPSConfiguration(t *testing.T) {
-	config16, samples16, _ := encodeDecoderAVCTestStream(t, 16, 16)
-	multiConfig, _ := decoderMultiSPSPPSUpdate(t, 16, 16, 32, 16)
-	pps1PSkip := decoderPSkipAVCSampleWithPPSID(t, 32, 16, 1, 1)
-
-	dec := NewDecoder()
-	out, err := dec.DecodeAVCCFrames(config16, samples16[0])
-	if err != nil {
-		t.Fatalf("DecodeAVCCFrames 16x16 IDR: %v", err)
-	}
-	if len(out) != 1 {
-		t.Fatalf("16x16 IDR output frames = %d, want 1", len(out))
-	}
-
-	out, err = dec.DecodeAVCCFrames(multiConfig, pps1PSkip)
-	if err != nil || len(out) != 0 {
-		t.Fatalf("DecodeAVCCFrames multi-SPS PPS1 P-skip frames=%d err=%v, want no output/error", len(out), err)
-	}
-	got, err := dec.AVCConfig()
-	if err != nil {
-		t.Fatalf("AVCConfig after multi-SPS PPS1 P-skip: %v", err)
-	}
-	if got.NALLengthSize != 4 || got.StreamInfo.SPSID != 1 || got.StreamInfo.Width != 32 || got.StreamInfo.Height != 16 {
-		t.Fatalf("AVCConfig after multi-SPS PPS1 P-skip = %+v, want active SPS1 32x16", got)
-	}
-
-	dec = NewDecoder()
-	out, err = dec.DecodePacketFrames(Packet{
-		Data:     samples16[0],
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config16}},
-	})
-	if err != nil {
-		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
-	}
-	if len(out) != 1 {
-		t.Fatalf("16x16 packet IDR output frames = %d, want 1", len(out))
-	}
-	out, err = dec.DecodePacketFrames(Packet{
-		Data:     pps1PSkip,
-		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: multiConfig}},
-	})
-	if err != nil || len(out) != 0 {
-		t.Fatalf("DecodePacketFrames multi-SPS PPS1 P-skip frames=%d err=%v, want no output/error", len(out), err)
-	}
-	got, err = dec.AVCConfig()
-	if err != nil {
-		t.Fatalf("AVCConfig after packet multi-SPS PPS1 P-skip: %v", err)
-	}
-	if got.NALLengthSize != 4 || got.StreamInfo.SPSID != 1 || got.StreamInfo.Width != 32 || got.StreamInfo.Height != 16 {
-		t.Fatalf("AVCConfig after packet multi-SPS PPS1 P-skip = %+v, want active SPS1 32x16", got)
-	}
-}
-
-func encodeDecoderAVCTestStream(t *testing.T, width int, height int) ([]byte, [][]byte, []goh264.EncoderFrame) {
-	t.Helper()
-	cfg := goh264.DefaultEncoderConfig(width, height)
-	cfg.OutputFormat = goh264.EncoderOutputAVC
-	cfg.RTPMaxPayloadSize = 0
-	cfg.DeblockMode = goh264.EncoderDeblockDisabled
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder %dx%d: %v", width, height, err)
-	}
-	headers, err := enc.ParameterSets()
-	if err != nil {
-		t.Fatalf("ParameterSets %dx%d: %v", width, height, err)
-	}
-	first := patternedI420EncoderFrame(width, height)
-	firstOut, err := enc.Encode(first)
-	if err != nil {
-		t.Fatalf("Encode first %dx%d: %v", width, height, err)
-	}
-	second := first
-	second.PTS = int64(cfg.RTPTimestampIncrement)
-	secondOut, err := enc.Encode(second)
-	if err != nil {
-		t.Fatalf("Encode second %dx%d: %v", width, height, err)
-	}
-	if !firstOut.IDR || secondOut.IDR || len(firstOut.Data) == 0 || len(secondOut.Data) == 0 {
-		t.Fatalf("encoded %dx%d IDR/P state first idr=%v bytes=%d second idr=%v bytes=%d",
-			width, height, firstOut.IDR, len(firstOut.Data), secondOut.IDR, len(secondOut.Data))
-	}
-	return headers.AVCDecoderConfigurationRecord, [][]byte{firstOut.Data, secondOut.Data}, []goh264.EncoderFrame{first, second}
-}
-
-func encodeDecoderAnnexBTestStream(t *testing.T, width int, height int) ([]byte, [][]byte, []goh264.EncoderFrame) {
-	t.Helper()
-	cfg := goh264.DefaultEncoderConfig(width, height)
-	cfg.OutputFormat = goh264.EncoderOutputAnnexB
-	cfg.SPSPPSMode = goh264.EncoderSPSPPSOutOfBand
-	cfg.RTPMaxPayloadSize = 0
-	cfg.DeblockMode = goh264.EncoderDeblockDisabled
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder %dx%d Annex B: %v", width, height, err)
-	}
-	headers, err := enc.ParameterSets()
-	if err != nil {
-		t.Fatalf("ParameterSets %dx%d Annex B: %v", width, height, err)
-	}
-	first := patternedI420EncoderFrame(width, height)
-	firstOut, err := enc.Encode(first)
-	if err != nil {
-		t.Fatalf("Encode first %dx%d Annex B: %v", width, height, err)
-	}
-	second := first
-	second.PTS = int64(cfg.RTPTimestampIncrement)
-	secondOut, err := enc.Encode(second)
-	if err != nil {
-		t.Fatalf("Encode second %dx%d Annex B: %v", width, height, err)
-	}
-	if !firstOut.IDR || secondOut.IDR || len(firstOut.Data) == 0 || len(secondOut.Data) == 0 || len(headers.AnnexB) == 0 {
-		t.Fatalf("encoded %dx%d Annex B IDR/P state first idr=%v bytes=%d second idr=%v bytes=%d extradata=%d",
-			width, height, firstOut.IDR, len(firstOut.Data), secondOut.IDR, len(secondOut.Data), len(headers.AnnexB))
-	}
-	return append([]byte(nil), headers.AnnexB...),
-		[][]byte{append([]byte(nil), firstOut.Data...), append([]byte(nil), secondOut.Data...)},
-		[]goh264.EncoderFrame{first, second}
-}
-
-func decoderMultiSPSPPSUpdate(t *testing.T, firstWidth int, firstHeight int, nextWidth int, nextHeight int) ([]byte, []byte) {
-	t.Helper()
-	first := decoderParameterSetNALs(t, firstWidth, firstHeight, 0, 0)
-	next := decoderParameterSetNALs(t, nextWidth, nextHeight, 1, 1)
-
-	avcc, err := h264.AppendAVCDecoderConfigurationRecord(nil, 66, 0xc0, 31, 4,
-		[][]byte{first.SPS, next.SPS},
-		[][]byte{first.PPS, next.PPS},
-	)
-	if err != nil {
-		t.Fatalf("AppendAVCDecoderConfigurationRecord multi-SPS update: %v", err)
-	}
-
-	annexB := appendAnnexBNAL(nil, first.SPS)
-	annexB = appendAnnexBNAL(annexB, first.PPS)
-	annexB = appendAnnexBNAL(annexB, next.SPS)
-	annexB = appendAnnexBNAL(annexB, next.PPS)
-	return avcc, annexB
-}
-
-func decoderParameterSetNALs(t *testing.T, width int, height int, spsID uint32, ppsID uint32) h264.EncoderParameterSetNALs {
-	t.Helper()
-	sets, err := h264.BuildEncoderParameterSetNALs(h264.EncoderParameterSetConfig{
-		ProfileIDC:         66,
-		ConstraintSetFlags: 0x03,
-		LevelIDC:           31,
-		SPSID:              spsID,
-		PPSID:              ppsID,
-		Width:              width,
-		Height:             height,
-		FrameRateNum:       30,
-		FrameRateDen:       1,
-		MaxReferenceFrames: 1,
-		InitialQP:          26,
-		NALLengthSize:      4,
-	})
-	if err != nil {
-		t.Fatalf("BuildEncoderParameterSetNALs %dx%d ids %d/%d: %v", width, height, spsID, ppsID, err)
-	}
-	return sets
-}
-
-func decoderPSkipAVCSampleWithPPSID(t *testing.T, width int, height int, ppsID uint32, frameNum uint32) []byte {
-	t.Helper()
-	rbsp := decoderPSkipRBSPWithPPSID(t, width, height, ppsID, frameNum)
-	out, err := h264.AppendAVCNAL(nil, 4, 2, h264.NALSlice, rbsp)
-	if err != nil {
-		t.Fatalf("AppendAVCNAL PPS%d P-skip: %v", ppsID, err)
-	}
-	return out
-}
-
-func decoderPSkipAnnexBSampleWithPPSID(t *testing.T, width int, height int, ppsID uint32, frameNum uint32) []byte {
-	t.Helper()
-	rbsp := decoderPSkipRBSPWithPPSID(t, width, height, ppsID, frameNum)
-	out, err := h264.AppendAnnexBNAL(nil, 2, h264.NALSlice, rbsp)
-	if err != nil {
-		t.Fatalf("AppendAnnexBNAL PPS%d P-skip: %v", ppsID, err)
-	}
-	return out
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 }
 
 func decoderAVCParameterSetHeaders(t *testing.T, width int, height int, spsID uint32, ppsID uint32) []byte {
 	t.Helper()
-	sets := decoderParameterSetNALs(t, width, height, spsID, ppsID)
-	out := appendAVCNALUnit(t, nil, sets.SPS, 4)
-	return appendAVCNALUnit(t, out, sets.PPS, 4)
-}
-
-func decoderPSkipRBSPWithPPSID(t *testing.T, width int, height int, ppsID uint32, frameNum uint32) []byte {
-	t.Helper()
-	bw := h264.NewBitWriter(make([]byte, 0, 16))
-	if err := bw.WriteUEGolomb(0); err != nil { // first_mb_in_slice
-		t.Fatalf("write first_mb_in_slice: %v", err)
+	if spsID != 0 || ppsID != 0 {
+		t.Fatalf("static decoder parameter-set fixtures only include SPS/PPS id 0, got %d/%d", spsID, ppsID)
 	}
-	if err := bw.WriteUEGolomb(0); err != nil { // slice_type P
-		t.Fatalf("write slice_type: %v", err)
+	headers, _, _ := decoderAnnexBTestStream(t, width, height)
+	nals, err := h264.SplitAnnexB(headers)
+	if err != nil {
+		t.Fatalf("SplitAnnexB %dx%d headers: %v", width, height, err)
 	}
-	if err := bw.WriteUEGolomb(ppsID); err != nil {
-		t.Fatalf("write pic_parameter_set_id: %v", err)
+	var out []byte
+	for _, nal := range nals {
+		if nal.Type == h264.NALSPS || nal.Type == h264.NALPPS {
+			out = appendAVCNALUnit(t, out, nal.Raw, 4)
+		}
 	}
-	if err := bw.WriteBits(frameNum, 8); err != nil {
-		t.Fatalf("write frame_num: %v", err)
+	if out == nil {
+		t.Fatalf("static %dx%d headers did not include SPS/PPS", width, height)
 	}
-	bw.WriteBit(0)                              // num_ref_idx_active_override_flag
-	bw.WriteBit(0)                              // ref_pic_list_modification_flag_l0
-	bw.WriteBit(0)                              // adaptive_ref_pic_marking_mode_flag
-	if err := bw.WriteSEGolomb(0); err != nil { // slice_qp_delta
-		t.Fatalf("write slice_qp_delta: %v", err)
-	}
-	if err := bw.WriteUEGolomb(1); err != nil { // disable_deblocking_filter_idc
-		t.Fatalf("write disable_deblocking_filter_idc: %v", err)
-	}
-	mbCount := ((width + 15) >> 4) * ((height + 15) >> 4)
-	if err := bw.WriteUEGolomb(uint32(mbCount)); err != nil {
-		t.Fatalf("write mb_skip_run: %v", err)
-	}
-	bw.WriteRBSPTrailingBits()
-	return bw.Bytes()
+	return out
 }
 
 func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
@@ -2420,9 +2031,7 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 	if inspectedRecord != inspected {
 		t.Fatalf("InspectAVCC = %+v, want InspectAVCC result %+v", inspectedRecord, inspected)
 	}
-	sets32 := decoderParameterSetNALs(t, 32, 16, 0, 0)
-	headers32AnnexB := appendAnnexBNAL(nil, sets32.SPS)
-	headers32AnnexB = appendAnnexBNAL(headers32AnnexB, sets32.PPS)
+	headers32AnnexB, _, _ := decoderAnnexBTestStream(t, 32, 16)
 	headerInfo, err := InspectAnnexBHeaders(headers32AnnexB)
 	if err != nil {
 		t.Fatalf("InspectAnnexBHeaders 32x16: %v", err)
@@ -2430,8 +2039,7 @@ func TestPackageAVCCParsersDoNotMutateDecoderState(t *testing.T) {
 	if headerInfo.Width != 32 || headerInfo.Height != 16 {
 		t.Fatalf("InspectAnnexBHeaders 32x16 = %+v, want 32x16", headerInfo)
 	}
-	headers32AVC := appendAVCNALUnit(t, nil, sets32.SPS, 4)
-	headers32AVC = appendAVCNALUnit(t, headers32AVC, sets32.PPS, 4)
+	headers32AVC := decoderAVCParameterSetHeaders(t, 32, 16, 0, 0)
 	headerInfo, err = InspectAVCHeaders(headers32AVC, 4)
 	if err != nil {
 		t.Fatalf("InspectAVCHeaders 32x16: %v", err)
@@ -2885,8 +2493,8 @@ func TestDecodePacketFramesNewExtradataAVC(t *testing.T) {
 }
 
 func TestDecodePacketFramesDuplicateNewExtradataFirstEntryWins(t *testing.T) {
-	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	config16, samples16, frames16 := decoderAVCTestStream(t, 16, 16)
+	config32, _, _ := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) != 2 {
 		t.Fatalf("16x16 samples = %d, want 2", len(samples16))
 	}
@@ -2899,7 +2507,7 @@ func TestDecodePacketFramesDuplicateNewExtradataFirstEntryWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[0]))
 
 	out, err = dec.DecodePacketFrames(Packet{
 		Data: samples16[1],
@@ -2911,7 +2519,7 @@ func TestDecodePacketFramesDuplicateNewExtradataFirstEntryWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodePacketFrames duplicate NEW_EXTRADATA P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[1]))
 	got, err := dec.AVCConfig()
 	if err != nil {
 		t.Fatalf("AVCConfig after duplicate NEW_EXTRADATA: %v", err)
@@ -2922,8 +2530,8 @@ func TestDecodePacketFramesDuplicateNewExtradataFirstEntryWins(t *testing.T) {
 }
 
 func TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries(t *testing.T) {
-	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	config16, samples16, frames16 := decoderAVCTestStream(t, 16, 16)
+	config32, _, _ := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) != 2 {
 		t.Fatalf("16x16 samples = %d, want 2", len(samples16))
 	}
@@ -2936,7 +2544,7 @@ func TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries(
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[0]))
 
 	out, err = dec.DecodePacketFrames(Packet{
 		Data: samples16[1],
@@ -2948,7 +2556,7 @@ func TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries(
 	if err != nil {
 		t.Fatalf("DecodePacketFrames malformed first duplicate NEW_EXTRADATA P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[1]))
 	got, err := dec.AVCConfig()
 	if err != nil {
 		t.Fatalf("AVCConfig after malformed duplicate NEW_EXTRADATA: %v", err)
@@ -2959,8 +2567,8 @@ func TestDecodePacketFramesMalformedDuplicateNewExtradataSuppressesLaterEntries(
 }
 
 func TestDecodePacketFramesEmptyDuplicateNewExtradataSuppressesLaterEntries(t *testing.T) {
-	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	config16, samples16, frames16 := decoderAVCTestStream(t, 16, 16)
+	config32, _, _ := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) != 2 {
 		t.Fatalf("16x16 samples = %d, want 2", len(samples16))
 	}
@@ -2973,7 +2581,7 @@ func TestDecodePacketFramesEmptyDuplicateNewExtradataSuppressesLaterEntries(t *t
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[0]))
 
 	out, err = dec.DecodePacketFrames(goh264.Packet{
 		Data: samples16[1],
@@ -2985,7 +2593,7 @@ func TestDecodePacketFramesEmptyDuplicateNewExtradataSuppressesLaterEntries(t *t
 	if err != nil {
 		t.Fatalf("DecodePacketFrames empty first duplicate NEW_EXTRADATA P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[1]))
 	got, err := dec.AVCConfig()
 	if err != nil {
 		t.Fatalf("AVCConfig after empty duplicate NEW_EXTRADATA: %v", err)
@@ -2996,8 +2604,8 @@ func TestDecodePacketFramesEmptyDuplicateNewExtradataSuppressesLaterEntries(t *t
 }
 
 func TestDecodePacketFramesOverflowedDuplicateNewExtradataSuppressesLaterEntries(t *testing.T) {
-	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, _, _ := encodeDecoderAVCTestStream(t, 32, 16)
+	config16, samples16, frames16 := decoderAVCTestStream(t, 16, 16)
+	config32, _, _ := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) != 2 {
 		t.Fatalf("16x16 samples = %d, want 2", len(samples16))
 	}
@@ -3010,7 +2618,7 @@ func TestDecodePacketFramesOverflowedDuplicateNewExtradataSuppressesLaterEntries
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[0]))
 
 	out, err = dec.DecodePacketFrames(goh264.Packet{
 		Data: samples16[1],
@@ -3022,7 +2630,7 @@ func TestDecodePacketFramesOverflowedDuplicateNewExtradataSuppressesLaterEntries
 	if err != nil {
 		t.Fatalf("DecodePacketFrames overflowed first duplicate NEW_EXTRADATA P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[1]))
 	got, err := dec.AVCConfig()
 	if err != nil {
 		t.Fatalf("AVCConfig after overflowed duplicate NEW_EXTRADATA: %v", err)
@@ -3033,8 +2641,8 @@ func TestDecodePacketFramesOverflowedDuplicateNewExtradataSuppressesLaterEntries
 }
 
 func TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration(t *testing.T) {
-	config16, samples16, frames16 := encodeDecoderAVCTestStream(t, 16, 16)
-	config32, samples32, frames32 := encodeDecoderAVCTestStream(t, 32, 16)
+	config16, samples16, frames16 := decoderAVCTestStream(t, 16, 16)
+	config32, samples32, frames32 := decoderAVCTestStream(t, 32, 16)
 	if len(samples16) != 2 || len(samples32) != 2 {
 		t.Fatalf("sample counts = %d/%d, want 2/2", len(samples16), len(samples32))
 	}
@@ -3047,12 +2655,12 @@ func TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration(t *testing.
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 16x16 NEW_EXTRADATA IDR: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[0]))
 	out, err = dec.DecodePacketFrames(Packet{Data: samples16[1]})
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 16x16 P-skip: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames16[1]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames16[1]))
 
 	out, err = dec.DecodePacketFrames(Packet{
 		Data:     samples32[0],
@@ -3061,7 +2669,7 @@ func TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration(t *testing.
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 32x16 NEW_EXTRADATA IDR after 16x16 stream: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[0]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[0]))
 	got, err := dec.AVCConfig()
 	if err != nil {
 		t.Fatalf("AVCConfig after packet side-data 32x16 switch: %v", err)
@@ -3073,7 +2681,7 @@ func TestDecodePacketFramesNewExtradataSwitchesValidAVCConfiguration(t *testing.
 	if err != nil {
 		t.Fatalf("DecodePacketFrames 32x16 P-skip after switch: %v", err)
 	}
-	assertDecodedEncoderFrameBytes(t, out, appendI420FrameBytes(nil, frames32[1]))
+	assertDecodedFrameBytes(t, out, appendI420DecoderFrameBytes(nil, frames32[1]))
 }
 
 func TestDecodePacketFramesEmptyPacketIgnoresNewExtradata(t *testing.T) {

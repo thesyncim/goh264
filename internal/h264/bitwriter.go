@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Source-shaped port of the bounded MSB-first pieces of FFmpeg n8.0.1
-// libavcodec/put_bits.h and libavcodec/golomb.h needed by the H.264 encoder
-// path. Acceleration and table shortcuts stay out of this first writer slice.
+// libavcodec/put_bits.h and libavcodec/golomb.h utilities used by tests and
+// packet/header fixtures. Acceleration and table shortcuts stay out of this
+// writer slice.
 
 package h264
 

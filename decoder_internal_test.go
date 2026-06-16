@@ -4,37 +4,17 @@ package goh264
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/thesyncim/goh264/internal/h264"
 )
 
 func TestParseHeadersDoesNotCommitPartialStateOnError(t *testing.T) {
-	enc, err := NewEncoder(DefaultEncoderConfig(16, 16))
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	sets, err := enc.ParameterSets()
-	if err != nil {
-		t.Fatalf("ParameterSets: %v", err)
-	}
-	nals, err := h264.SplitAnnexB(sets.AnnexB)
-	if err != nil {
-		t.Fatalf("SplitAnnexB parameter sets: %v", err)
-	}
-	var sps h264.NALUnit
-	for _, nal := range nals {
-		if nal.Type == h264.NALSPS {
-			sps = nal
-			break
-		}
-	}
-	if sps.Type != h264.NALSPS {
-		t.Fatal("generated parameter sets did not include SPS")
-	}
+	sps := decoderInternalTestNAL(t, h264.NALSPS)
 
 	dec := NewDecoder()
-	_, err = dec.parseHeaders([]h264.NALUnit{
+	_, err := dec.parseHeaders([]h264.NALUnit{
 		sps,
 		{Type: h264.NALPPS, Raw: []byte{byte(h264.NALPPS)}, RBSP: nil},
 	})
@@ -57,31 +37,38 @@ func TestParseHeadersDoesNotCommitPartialStateOnError(t *testing.T) {
 }
 
 func TestParseHeadersDoesNotRetainSliceHeaders(t *testing.T) {
-	enc, err := NewEncoder(DefaultEncoderConfig(16, 16))
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	frame := EncoderFrame{
-		Width:    16,
-		Height:   16,
-		StrideY:  16,
-		StrideCb: 8,
-		StrideCr: 8,
-		Y:        make([]byte, 16*16),
-		Cb:       make([]byte, 8*8),
-		Cr:       make([]byte, 8*8),
-	}
-	out, err := enc.Encode(frame)
-	if err != nil {
-		t.Fatalf("Encode IDR: %v", err)
-	}
+	data := decoderInternalTestAnnexB(t)
 	dec := NewDecoder()
 	for i := 0; i < 3; i++ {
-		if _, err := dec.ParseHeadersAnnexB(out.Data); err != nil {
+		if _, err := dec.ParseHeadersAnnexB(data); err != nil {
 			t.Fatalf("ParseHeadersAnnexB iteration %d: %v", i, err)
 		}
 		if len(dec.slices) != 0 {
 			t.Fatalf("ParseHeadersAnnexB iteration %d retained %d slice headers, want 0", i, len(dec.slices))
 		}
 	}
+}
+
+func decoderInternalTestNAL(t *testing.T, typ h264.NALUnitType) h264.NALUnit {
+	t.Helper()
+	nals, err := h264.SplitAnnexB(decoderInternalTestAnnexB(t))
+	if err != nil {
+		t.Fatalf("SplitAnnexB: %v", err)
+	}
+	for _, nal := range nals {
+		if nal.Type == typ {
+			return nal
+		}
+	}
+	t.Fatalf("test vector missing NAL type %v", typ)
+	return h264.NALUnit{}
+}
+
+func decoderInternalTestAnnexB(t *testing.T) []byte {
+	t.Helper()
+	data, err := os.ReadFile("testdata/h264/high10_inter_cavlc_idrp.h264")
+	if err != nil {
+		t.Fatalf("read test vector: %v", err)
+	}
+	return data
 }

@@ -19,7 +19,7 @@ var (
 	ErrInvalidData = h264.ErrInvalidData
 
 	// ErrUnsupported reports valid inputs or controls outside the supported
-	// decoder or encoder contract.
+	// decoder contract.
 	//
 	// Errors can wrap this sentinel with additional detail; use errors.Is to
 	// test for it.
@@ -3191,6 +3191,62 @@ func cloneUint16Slice(src []uint16) []uint16 {
 		return nil
 	}
 	return append([]uint16(nil), src...)
+}
+
+func appendPublicBytes(dst []byte, src []byte) ([]byte, error) {
+	if len(dst) > maxInt/2 || len(src) > maxInt/2 {
+		return dst, ErrInvalidData
+	}
+	n, err := checkedAddInt(len(dst), len(src))
+	if err != nil || n > maxInt/2 {
+		return dst, ErrInvalidData
+	}
+	if cap(dst) >= n && byteSlicesOverlap(dst[:n], src) {
+		out := make([]byte, n)
+		copy(out, dst)
+		copy(out[len(dst):], src)
+		return out, nil
+	}
+	return append(dst, src...), nil
+}
+
+func appendPublicSlice[T any](dst []T, src []T, maxLen int) ([]T, error) {
+	if len(dst) > maxLen || len(src) > maxLen {
+		return dst, ErrInvalidData
+	}
+	n, err := checkedAddInt(len(dst), len(src))
+	if err != nil || n > maxLen {
+		return dst, ErrInvalidData
+	}
+	if cap(dst) >= n && slicesOverlap(dst[:n], src) {
+		out := make([]T, n)
+		copy(out, dst)
+		copy(out[len(dst):], src)
+		return out, nil
+	}
+	return append(dst, src...), nil
+}
+
+func byteSlicesOverlap(a []byte, b []byte) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	aStart := uintptr(unsafe.Pointer(&a[0]))
+	aEnd := aStart + uintptr(len(a))
+	bStart := uintptr(unsafe.Pointer(&b[0]))
+	bEnd := bStart + uintptr(len(b))
+	return aStart < bEnd && bStart < aEnd
+}
+
+func slicesOverlap[T any](a []T, b []T) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	aStart := uintptr(unsafe.Pointer(&a[0]))
+	aEnd := aStart + uintptr(len(a))*unsafe.Sizeof(a[0])
+	bStart := uintptr(unsafe.Pointer(&b[0]))
+	bEnd := bStart + uintptr(len(b))*unsafe.Sizeof(b[0])
+	return aStart < bEnd && bStart < aEnd
 }
 
 func frameChromaSize(width int, height int, chromaFormatIDC uint32) (int, int, error) {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"testing"
 
-	goh264 "github.com/thesyncim/goh264"
 	"github.com/thesyncim/goh264/internal/h264"
 )
 
@@ -1550,100 +1549,6 @@ func TestDecodeFramesAnnexBRecoversAfterDamagedSlicePacket(t *testing.T) {
 		t.Fatalf("decode after damaged packet: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
-}
-
-func TestDecodePublicSurfacesRecoverAfterDamagedLaterMultiSlice(t *testing.T) {
-	cfg := goh264.DefaultEncoderConfig(48, 16)
-	cfg.OutputFormat = goh264.EncoderOutputAnnexB
-	cfg.DeblockMode = goh264.EncoderDeblockDisabled
-	cfg.RTPMaxPayloadSize = 0
-	cfg.SliceCount = 3
-	enc, err := goh264.NewEncoder(cfg)
-	if err != nil {
-		t.Fatalf("NewEncoder: %v", err)
-	}
-	firstFrame := patternedI420EncoderFrame(48, 16)
-	first, err := enc.Encode(firstFrame)
-	if err != nil {
-		t.Fatalf("Encode multi-slice IDR: %v", err)
-	}
-	secondFrame := firstFrame
-	secondFrame.PTS = int64(cfg.RTPTimestampIncrement)
-	second, err := enc.Encode(secondFrame)
-	if err != nil {
-		t.Fatalf("Encode multi-slice P-skip: %v", err)
-	}
-	if len(first.NALUnits) != 5 || len(second.NALUnits) != 3 {
-		t.Fatalf("encoded NAL counts first/second = %d/%d, want 5/3", len(first.NALUnits), len(second.NALUnits))
-	}
-
-	wantFirst := appendI420FrameBytes(nil, firstFrame)
-	wantSecond := appendI420FrameBytes(nil, secondFrame)
-	config, avcSamples := annexBToAVCConfigAndSamples(t, append(append([]byte(nil), first.Data...), second.Data...), 4)
-	if len(avcSamples) != 2 {
-		t.Fatalf("AVC samples = %d, want 2", len(avcSamples))
-	}
-	firstAnnexB := append([]byte(nil), first.Data...)
-	secondAnnexB := append([]byte(nil), second.Data...)
-	damagedSecondAnnexB := truncateVCLAnnexBPayloadAt(t, secondAnnexB, 1)
-	damagedSecondAVC := truncateVCLAVCPayloadAt(t, avcSamples[1], 4, 1)
-
-	t.Run("annexb", func(t *testing.T) {
-		dec := goh264.NewDecoder()
-		frames, err := dec.DecodeFrames(firstAnnexB)
-		if err != nil {
-			t.Fatalf("DecodeFrames first: %v", err)
-		}
-		assertDecodedEncoderFrameBytes(t, frames, wantFirst)
-		if out, err := dec.DecodeFrames(damagedSecondAnnexB); err == nil || len(out) != 0 {
-			t.Fatalf("DecodeFrames damaged later slice frames=%d err=%v, want no frames with error", len(out), err)
-		}
-		frames, err = dec.DecodeFrames(secondAnnexB)
-		if err != nil {
-			t.Fatalf("DecodeFrames recovered second: %v", err)
-		}
-		assertDecodedEncoderFrameBytes(t, frames, wantSecond)
-	})
-
-	t.Run("configured-avc", func(t *testing.T) {
-		dec := goh264.NewDecoder()
-		if _, err := dec.ConfigureAVCC(config); err != nil {
-			t.Fatalf("ConfigureAVCC: %v", err)
-		}
-		frames, err := dec.DecodeConfiguredAVCFrames(avcSamples[0])
-		if err != nil {
-			t.Fatalf("DecodeConfiguredAVCFrames first: %v", err)
-		}
-		assertDecodedEncoderFrameBytes(t, frames, wantFirst)
-		if out, err := dec.DecodeConfiguredAVCFrames(damagedSecondAVC); err == nil || len(out) != 0 {
-			t.Fatalf("DecodeConfiguredAVCFrames damaged later slice frames=%d err=%v, want no frames with error", len(out), err)
-		}
-		frames, err = dec.DecodeConfiguredAVCFrames(avcSamples[1])
-		if err != nil {
-			t.Fatalf("DecodeConfiguredAVCFrames recovered second: %v", err)
-		}
-		assertDecodedEncoderFrameBytes(t, frames, wantSecond)
-	})
-
-	t.Run("packet-new-extradata", func(t *testing.T) {
-		dec := goh264.NewDecoder()
-		frames, err := dec.DecodePacketFrames(goh264.Packet{
-			Data:     avcSamples[0],
-			SideData: []goh264.PacketSideData{{Type: goh264.PacketSideDataNewExtradata, Data: config}},
-		})
-		if err != nil {
-			t.Fatalf("DecodePacketFrames first: %v", err)
-		}
-		assertDecodedEncoderFrameBytes(t, frames, wantFirst)
-		if out, err := dec.DecodePacketFrames(goh264.Packet{Data: damagedSecondAVC}); err == nil || len(out) != 0 {
-			t.Fatalf("DecodePacketFrames damaged later slice frames=%d err=%v, want no frames with error", len(out), err)
-		}
-		frames, err = dec.DecodePacketFrames(goh264.Packet{Data: avcSamples[1]})
-		if err != nil {
-			t.Fatalf("DecodePacketFrames recovered second: %v", err)
-		}
-		assertDecodedEncoderFrameBytes(t, frames, wantSecond)
-	})
 }
 
 func TestDecodeConfiguredAVCFramesReturnsPriorFramesBeforeDamagedSlice(t *testing.T) {

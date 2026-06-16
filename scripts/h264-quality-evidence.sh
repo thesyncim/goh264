@@ -36,7 +36,6 @@ run_env_gate() {
     printf 'date_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'go=%s\n' "$(go version)"
     printf 'decoder_dir=%s\n' "$out_dir/decoder"
-    printf 'encoder_dir=%s\n' "$out_dir/encoder"
 } >"$summary"
 
 printf 'writing full quality evidence to %s\n' "$out_dir" >&2
@@ -63,7 +62,6 @@ else
         fi
     } | tee -a "$summary"
     export GOH264_QUALITY_ALLOW_DIRTY="${GOH264_QUALITY_ALLOW_DIRTY:-1}"
-    export GOH264_ENCODER_QUALITY_ALLOW_DIRTY="${GOH264_ENCODER_QUALITY_ALLOW_DIRTY:-1}"
 fi
 
 run_gate go-test-race go test -race ./...
@@ -72,10 +70,5 @@ run_env_gate decoder-quality-evidence \
     GOH264_QUALITY_EVIDENCE_DIR="$out_dir/decoder" \
     GOH264_QUALITY_EVIDENCE_TIMESTAMP="$timestamp" \
     scripts/h264-decoder-quality-evidence.sh
-
-run_env_gate encoder-quality-evidence \
-    GOH264_ENCODER_QUALITY_DIR="$out_dir/encoder" \
-    GOH264_ENCODER_QUALITY_TIMESTAMP="$timestamp" \
-    scripts/h264-encoder-quality-evidence.sh
 
 printf '\nall full quality-evidence gates passed\n' | tee -a "$summary"
