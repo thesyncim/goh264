@@ -3948,6 +3948,18 @@ func TestDecodePacketFramesSEIOnlyPacketDoesNotLeakAfterDamagedFrame(t *testing.
 	})
 }
 
+func TestDecodeFramesFlushClearsPendingSEIOnlySideData(t *testing.T) {
+	dec := NewDecoder()
+	assertFlushClearsPendingSEIOnlySideData(t, dec.DecodeFrames, dec.FlushDelayedFrames)
+}
+
+func TestDecodePacketFramesFlushClearsPendingSEIOnlySideData(t *testing.T) {
+	dec := NewDecoder()
+	assertFlushClearsPendingSEIOnlySideData(t, func(data []byte) ([]*Frame, error) {
+		return dec.DecodePacketFrames(Packet{Data: data})
+	}, dec.FlushDelayedFrames)
+}
+
 func assertSEIOnlyPacketAppliesToNextFrame(t *testing.T, decode func([]byte) ([]*Frame, error)) {
 	t.Helper()
 
@@ -4020,6 +4032,36 @@ func assertSEIOnlyPacketDoesNotLeakAfterDamagedFrame(t *testing.T, decode func([
 	side := frames[0].SideData
 	if side.ActiveFormat != nil || len(side.A53ClosedCaptions) != 0 || len(side.LCEVC) != 0 {
 		t.Fatalf("SEI-only side data leaked after damaged frame: %+v", side)
+	}
+}
+
+func assertFlushClearsPendingSEIOnlySideData(t *testing.T, decode func([]byte) ([]*Frame, error), flush func() ([]*Frame, error)) {
+	t.Helper()
+
+	seiOnly := appendAnnexBNAL(nil, decoderTestSEINAL(
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredAFDPayload(0x0d)},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredA53Payload([]byte{0x01, 0x02, 0x03})},
+		decoderSEITestMessage{typ: decoderSEITypeUserDataRegisteredITUTT35, payload: decoderSEIRegisteredLCEVCPayload([]byte{0x7e, 0x01, 0x00, 0x03, 0x02})},
+	))
+
+	frames, err := decode(seiOnly)
+	if err != nil || len(frames) != 0 {
+		t.Fatalf("SEI-only packet = frames %d err %v, want no frames and nil error", len(frames), err)
+	}
+
+	frames, err = flush()
+	if err != nil || len(frames) != 0 {
+		t.Fatalf("flush after SEI-only packet = frames %d err %v, want no frames and nil error", len(frames), err)
+	}
+
+	frames, err = decode(decodeHexFixture(t, black16AnnexBHex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"8aaefe0adcea094cfb5161a060bab4e2"})
+	side := frames[0].SideData
+	if side.ActiveFormat != nil || len(side.A53ClosedCaptions) != 0 || len(side.LCEVC) != 0 {
+		t.Fatalf("SEI-only side data leaked after flush: %+v", side)
 	}
 }
 

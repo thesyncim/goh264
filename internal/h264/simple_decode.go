@@ -187,7 +187,9 @@ func (d *SimpleDecoder) FlushDelayedFrames() ([]*DecodedFrame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
 	}
-	return d.dpb.drainOutputFrames(true)
+	frames, err := d.dpb.drainOutputFrames(true)
+	d.sei.Reset()
+	return frames, err
 }
 
 func (d *SimpleDecoder) FlushDelayedFrame() (*DecodedFrame, error) {
