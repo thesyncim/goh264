@@ -615,6 +615,57 @@ func TestDecodeAVCCEmptyPacketIncompatibleConfigPreservesSingleDelayedFlush(t *t
 	}
 }
 
+func TestDecodeAVCCFramesNonEmptyConfigSwitchDoesNotLeakDelayedFrame(t *testing.T) {
+	dec := decoderWithPendingCAVLCBFrameFlush(t)
+	config32, sample32 := incompatibleCAVLCBFrameConfigAndFirstSample(t)
+
+	frames, err := dec.DecodeAVCCFrames(config32, sample32)
+	if err != nil {
+		t.Fatalf("non-empty incompatible configuration-record switch: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"2a9d9acd3e52356ad072de93fdbaca3d"})
+	assertDecoderStored32x32AVCConfig(t, dec)
+
+	frames, err = dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("FlushDelayedFrames after non-empty incompatible configuration-record switch: %v", err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("FlushDelayedFrames after non-empty incompatible configuration-record switch = %d frames, want 0", len(frames))
+	}
+}
+
+func TestDecodePacketFramesNonEmptyNewExtradataSwitchDoesNotLeakDelayedFrame(t *testing.T) {
+	dec := decoderWithPendingCAVLCBFrameFlush(t)
+	config32, sample32 := incompatibleCAVLCBFrameConfigAndFirstSample(t)
+
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data:     sample32,
+		SideData: []PacketSideData{{Type: PacketSideDataNewExtradata, Data: config32}},
+	})
+	if err != nil {
+		t.Fatalf("non-empty incompatible NEW_EXTRADATA switch: %v", err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("non-empty incompatible NEW_EXTRADATA switch returned %d frames, want 0 before explicit flush", len(frames))
+	}
+	assertDecoderStored32x32AVCConfig(t, dec)
+
+	frames, err = dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("FlushDelayedFrames after non-empty incompatible NEW_EXTRADATA switch: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"2a9d9acd3e52356ad072de93fdbaca3d"})
+
+	frames, err = dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("second FlushDelayedFrames after non-empty incompatible NEW_EXTRADATA switch: %v", err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("second FlushDelayedFrames after non-empty incompatible NEW_EXTRADATA switch = %d frames, want 0", len(frames))
+	}
+}
+
 func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
@@ -738,6 +789,88 @@ func TestDecodePacketIgnoresNewExtradataOnSingleFrameFlush(t *testing.T) {
 	frames, err := dec.DecodeConfiguredAVCFrames(samples4[0])
 	if err != nil {
 		t.Fatalf("DecodeConfiguredAVCFrames after single-frame empty packet NEW_EXTRADATA: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"4296e3dc95829cc27071a8685a428494"})
+}
+
+func TestDecodePacketFramesEmptyFlushIgnoresIncompatibleNewExtradata(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config16, samples16 := annexBToAVCConfigAndSamples(t, data, 4)
+	config32, _ := incompatibleCAVLCBFrameConfigAndFirstSample(t)
+	if len(samples16) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples16))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ConfigureAVCC(config16); err != nil {
+		t.Fatal(err)
+	}
+	for i, sample := range samples16 {
+		if _, err := dec.DecodeConfiguredAVCFrames(sample); err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+	}
+
+	frames, err := dec.DecodePacketFrames(Packet{
+		SideData: []PacketSideData{
+			{Type: PacketSideDataNewExtradata, Data: config32},
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0xfe}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("empty packet flush with incompatible NEW_EXTRADATA: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"aa778b981f96d21489196f6a0faa0959"})
+	for i, frame := range frames {
+		if len(frame.SideData.A53ClosedCaptions) != 0 {
+			t.Fatalf("flushed frame[%d] side data = %+v, want no packet side data", i, frame.SideData)
+		}
+	}
+	assertDecoderStoredAVCConfig(t, dec, 4, 16, 16)
+
+	frames, err = dec.DecodeConfiguredAVCFrames(samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after ignored incompatible empty-packet NEW_EXTRADATA: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"4296e3dc95829cc27071a8685a428494"})
+}
+
+func TestDecodePacketEmptySingleFlushIgnoresIncompatibleNewExtradata(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config16, samples16 := annexBToAVCConfigAndSamples(t, data, 4)
+	config32, _ := incompatibleCAVLCBFrameConfigAndFirstSample(t)
+	if len(samples16) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples16))
+	}
+
+	dec := NewDecoder()
+	if _, err := dec.ConfigureAVCC(config16); err != nil {
+		t.Fatal(err)
+	}
+	for i, sample := range samples16 {
+		if _, err := dec.DecodeConfiguredAVCFrames(sample); err != nil {
+			t.Fatalf("sample[%d]: %v", i, err)
+		}
+	}
+
+	frame, err := dec.DecodePacket(Packet{
+		SideData: []PacketSideData{
+			{Type: PacketSideDataNewExtradata, Data: config32},
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0xfe}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("single-frame empty packet flush with incompatible NEW_EXTRADATA: %v", err)
+	}
+	assertFrameMD5Strings(t, []*Frame{frame}, []string{"aa778b981f96d21489196f6a0faa0959"})
+	if len(frame.SideData.A53ClosedCaptions) != 0 {
+		t.Fatalf("flushed frame side data = %+v, want no packet side data", frame.SideData)
+	}
+	assertDecoderStoredAVCConfig(t, dec, 4, 16, 16)
+
+	frames, err := dec.DecodeConfiguredAVCFrames(samples16[0])
+	if err != nil {
+		t.Fatalf("DecodeConfiguredAVCFrames after single-frame ignored incompatible empty-packet NEW_EXTRADATA: %v", err)
 	}
 	assertFrameMD5Strings(t, frames, []string{"4296e3dc95829cc27071a8685a428494"})
 }
@@ -1299,12 +1432,18 @@ func incompatibleCAVLCBFrameConfigAndFirstSample(t *testing.T) ([]byte, []byte) 
 
 func assertDecoderStored32x32AVCConfig(t *testing.T, dec *Decoder) {
 	t.Helper()
+	assertDecoderStoredAVCConfig(t, dec, 4, 32, 32)
+}
+
+func assertDecoderStoredAVCConfig(t *testing.T, dec *Decoder, nalLengthSize int, width int, height int) {
+	t.Helper()
 	cfg, err := dec.AVCConfig()
 	if err != nil {
-		t.Fatalf("AVCConfig after incompatible empty configuration-record flush: %v", err)
+		t.Fatalf("AVCConfig: %v", err)
 	}
-	if cfg.NALLengthSize != 4 || cfg.StreamInfo.Width != 32 || cfg.StreamInfo.Height != 32 {
-		t.Fatalf("AVCConfig after incompatible empty configuration-record flush = %+v, want 32x32 length-size 4", cfg)
+	if cfg.NALLengthSize != nalLengthSize || cfg.StreamInfo.Width != width || cfg.StreamInfo.Height != height {
+		t.Fatalf("AVCConfig = length %d %dx%d, want length %d %dx%d",
+			cfg.NALLengthSize, cfg.StreamInfo.Width, cfg.StreamInfo.Height, nalLengthSize, width, height)
 	}
 }
 
