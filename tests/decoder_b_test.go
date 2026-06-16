@@ -760,6 +760,70 @@ func TestDecodePacketSideDataFollowsDelayedBFrames(t *testing.T) {
 	}
 }
 
+func TestDecodePacketFramesDamagedBFrameSideDataDoesNotLeak(t *testing.T) {
+	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
+	config, samples := annexBToAVCConfigAndSamples(t, data, 4)
+	if len(samples) != 3 {
+		t.Fatalf("samples = %d, want 3", len(samples))
+	}
+
+	dec := NewDecoder()
+	frames, err := dec.DecodePacketFrames(Packet{
+		Data: samples[0],
+		SideData: []PacketSideData{
+			{Type: PacketSideDataNewExtradata, Data: config},
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0x01}},
+			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(100, 10)},
+		},
+	})
+	assertNoFramesNoError(t, "initial B-frame reference packet", frames, err)
+
+	damagedSideData := []PacketSideData{
+		{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0xee}},
+		{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(0xeeee, 0xeeee)},
+	}
+	frames, err = dec.DecodePacketFrames(Packet{
+		Data:     truncateFirstVCLAVCPayload(t, samples[1], 4),
+		SideData: damagedSideData,
+	})
+	assertNoFramesInvalidData(t, "damaged middle B-frame packet", frames, err)
+	for i := range damagedSideData {
+		for j := range damagedSideData[i].Data {
+			damagedSideData[i].Data[j] = 0xdd
+		}
+	}
+
+	frames, err = dec.DecodePacketFrames(Packet{
+		Data: samples[2],
+		SideData: []PacketSideData{
+			{Type: PacketSideDataA53ClosedCaptions, Data: []byte{0x03}},
+			{Type: PacketSideDataContentLightLevel, Data: decoderPacketContentLightSideData(300, 30)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("decode recovery packet after damaged B-frame: %v", err)
+	}
+	assertFrameMD5Strings(t, frames, []string{"4296e3dc95829cc27071a8685a428494"})
+	assertFramePacketSideData(t, "reordered prefix frame", frames[0], []byte{0x01}, 100)
+
+	flushed, err := dec.FlushDelayedFrames()
+	if err != nil {
+		t.Fatalf("flush after damaged B-frame: %v", err)
+	}
+	assertFrameMD5Strings(t, flushed, []string{"038e1a4af0b75d737abde2b8ab7f25f9"})
+	assertFramePacketSideData(t, "recovered delayed frame", flushed[0], []byte{0x03}, 300)
+}
+
+func assertFramePacketSideData(t *testing.T, label string, frame *Frame, wantA53 []byte, wantMaxCLL uint32) {
+	t.Helper()
+	if got := frame.SideData.A53ClosedCaptions; !bytes.Equal(got, wantA53) {
+		t.Fatalf("%s packet a53 = %x, want %x", label, got, wantA53)
+	}
+	if frame.SideData.ContentLight == nil || frame.SideData.ContentLight.MaxContentLightLevel != wantMaxCLL {
+		t.Fatalf("%s packet content light = %+v, want max CLL %d", label, frame.SideData.ContentLight, wantMaxCLL)
+	}
+}
+
 func TestDecodePacketIgnoresNewExtradataOnSingleFrameFlush(t *testing.T) {
 	data := decodeHexFixture(t, testsrc16CAVLCBFramesAnnexBHex)
 	config4, samples4 := annexBToAVCConfigAndSamples(t, data, 4)
