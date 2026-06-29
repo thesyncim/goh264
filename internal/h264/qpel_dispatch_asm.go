@@ -70,6 +70,12 @@ func h264QpelMCPutHVXYASM(dst *uint8, src *uint8, dstStride int, srcStride int, 
 func h264QpelMCAvgHVXYASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32)
 
 //go:noescape
+func h264QpelMCPutHVBlendASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32)
+
+//go:noescape
+func h264QpelMCAvgHVBlendASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32)
+
+//go:noescape
 func h264QpelMC4Put00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
 
 //go:noescape
@@ -225,6 +231,22 @@ func h264QpelMCStridesKernel(dst []uint8, dstOffset int, dstStride int, src []ui
 				h264QpelMCAvgHVXYASM(dstPtr, srcPtr, dstStride, srcStride, size, mx, my)
 			} else {
 				h264QpelMCPutHVXYASM(dstPtr, srcPtr, dstStride, srcStride, size, mx, my)
+			}
+			return
+		default:
+			h264QpelMCStridesScalar(dst, dstOffset, dstStride, src, srcOffset, srcStride, int(size), int(mx), int(my), avg)
+			return
+		}
+	}
+	if (mx == 2 && (my == 1 || my == 3)) || (my == 2 && (mx == 1 || mx == 3)) {
+		switch size {
+		case 16, 8:
+			dstPtr := &dst[dstOffset]
+			srcPtr := &src[srcOffset]
+			if avg {
+				h264QpelMCAvgHVBlendASM(dstPtr, srcPtr, dstStride, srcStride, size, mx, my)
+			} else {
+				h264QpelMCPutHVBlendASM(dstPtr, srcPtr, dstStride, srcStride, size, mx, my)
 			}
 			return
 		default:

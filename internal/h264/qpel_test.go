@@ -18,6 +18,10 @@ func TestH264QpelPutRepresentativeModes(t *testing.T) {
 		{name: "h_lowpass", size: 4, mx: 2, my: 0, want: [4]uint8{101, 128, 117, 144}},
 		{name: "hv_lowpass", size: 8, mx: 2, my: 2, want: [4]uint8{25, 99, 141, 36}},
 		{name: "diagonal_half", size: 16, mx: 3, my: 3, want: [4]uint8{27, 194, 143, 190}},
+		{name: "hv_blend_21", size: 16, mx: 2, my: 1, want: [4]uint8{63, 228, 183, 102}},
+		{name: "hv_blend_12", size: 16, mx: 1, my: 2, want: [4]uint8{21, 229, 180, 143}},
+		{name: "hv_blend_32", size: 16, mx: 3, my: 2, want: [4]uint8{25, 230, 185, 148}},
+		{name: "hv_blend_23", size: 16, mx: 2, my: 3, want: [4]uint8{27, 192, 143, 186}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dst, src := makeQpelUnitFixture(stride, 48)
@@ -52,6 +56,24 @@ func TestH264QpelAvgRepresentativeMode(t *testing.T) {
 	}
 	if dst[offset+4] != 226 {
 		t.Fatalf("padding byte changed to %d, want 226", dst[offset+4])
+	}
+}
+
+func TestH264QpelAvgHVBlendRepresentativeMode(t *testing.T) {
+	const stride = 48
+	const offset = 6*stride + 6
+	dst, src := makeQpelUnitFixture(stride, 48)
+
+	if err := h264AvgH264QpelMC(dst, offset, src, offset, stride, 8, 3, 2); err != nil {
+		t.Fatal(err)
+	}
+	got := [4]uint8{dst[offset], dst[offset+7], dst[offset+7*stride], dst[offset+7*stride+7]}
+	want := [4]uint8{104, 59, 91, 77}
+	if got != want {
+		t.Fatalf("selected hv-blend avg samples = %v, want %v", got, want)
+	}
+	if dst[offset+8] != 14 {
+		t.Fatalf("padding byte changed to %d, want 14", dst[offset+8])
 	}
 }
 
@@ -221,6 +243,38 @@ func BenchmarkH264QpelMC16Avg33(b *testing.B) {
 	benchmarkH264QpelMC(b, 16, 3, 3, true)
 }
 
+func BenchmarkH264QpelMC16Put21(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 2, 1, false)
+}
+
+func BenchmarkH264QpelMC16Avg21(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 2, 1, true)
+}
+
+func BenchmarkH264QpelMC16Put12(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 1, 2, false)
+}
+
+func BenchmarkH264QpelMC16Avg12(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 1, 2, true)
+}
+
+func BenchmarkH264QpelMC16Put32(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 3, 2, false)
+}
+
+func BenchmarkH264QpelMC16Avg32(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 3, 2, true)
+}
+
+func BenchmarkH264QpelMC16Put23(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 2, 3, false)
+}
+
+func BenchmarkH264QpelMC16Avg23(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 2, 3, true)
+}
+
 func BenchmarkH264QpelMC8Put00(b *testing.B) {
 	benchmarkH264QpelMCCopy(b, 8, false)
 }
@@ -315,6 +369,38 @@ func BenchmarkH264QpelMC8Put33(b *testing.B) {
 
 func BenchmarkH264QpelMC8Avg33(b *testing.B) {
 	benchmarkH264QpelMC(b, 8, 3, 3, true)
+}
+
+func BenchmarkH264QpelMC8Put21(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 2, 1, false)
+}
+
+func BenchmarkH264QpelMC8Avg21(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 2, 1, true)
+}
+
+func BenchmarkH264QpelMC8Put12(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 1, 2, false)
+}
+
+func BenchmarkH264QpelMC8Avg12(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 1, 2, true)
+}
+
+func BenchmarkH264QpelMC8Put32(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 3, 2, false)
+}
+
+func BenchmarkH264QpelMC8Avg32(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 3, 2, true)
+}
+
+func BenchmarkH264QpelMC8Put23(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 2, 3, false)
+}
+
+func BenchmarkH264QpelMC8Avg23(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 2, 3, true)
 }
 
 func BenchmarkH264QpelMC4Put00(b *testing.B) {
