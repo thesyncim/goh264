@@ -380,6 +380,9 @@ func checkH264QpelArgsHigh(dst []uint16, dstOffset int, dstStride int, src []uin
 	if dstOffset < 0 || srcOffset < 0 || dstStride <= 0 || srcStride <= 0 || mx < 0 || mx >= 4 || my < 0 || my >= 4 {
 		return ErrInvalidData
 	}
+	if dstOffset > maxInt/2 || srcOffset > maxInt/2 || dstStride > maxInt/2 || srcStride > maxInt/2 {
+		return ErrInvalidData
+	}
 	if size != 2 && size != 4 && size != 8 && size != 16 {
 		return ErrInvalidData
 	}

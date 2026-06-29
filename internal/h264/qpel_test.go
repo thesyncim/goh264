@@ -427,6 +427,18 @@ func BenchmarkH264QpelMC2Fractional(b *testing.B) {
 	benchmarkH264QpelMCFractional(b, 2, true)
 }
 
+func BenchmarkH264QpelMCHigh10Copy(b *testing.B) {
+	const bitDepth = 10
+	for _, size := range []int{16, 8, 4, 2} {
+		b.Run("Put"+itoaSmall(size), func(b *testing.B) {
+			benchmarkH264QpelMCHigh(b, size, 0, 0, false, bitDepth)
+		})
+		b.Run("Avg"+itoaSmall(size), func(b *testing.B) {
+			benchmarkH264QpelMCHigh(b, size, 0, 0, true, bitDepth)
+		})
+	}
+}
+
 func benchmarkH264QpelMCCopy(b *testing.B, size int, avg bool) {
 	benchmarkH264QpelMC(b, size, 0, 0, avg)
 }
@@ -474,6 +486,21 @@ func benchmarkH264QpelMC(b *testing.B, size int, mx int, my int, avg bool) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := h264QpelMCStrides(dst, offset, stride, src, offset, stride, size, mx, my, avg); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func benchmarkH264QpelMCHigh(b *testing.B, size int, mx int, my int, avg bool, bitDepth int) {
+	const stride = 64
+	const rows = 32
+	const offset = 6*stride + 6
+	dst, src := makeQpelUnitFixtureHigh(stride, rows, bitDepth)
+	b.ReportAllocs()
+	b.SetBytes(int64(size * size * 2))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := h264QpelMCStridesHigh(dst, offset, stride, src, offset, stride, size, mx, my, avg, bitDepth); err != nil {
 			b.Fatal(err)
 		}
 	}

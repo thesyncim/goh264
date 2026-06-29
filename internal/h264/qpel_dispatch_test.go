@@ -90,6 +90,42 @@ func TestH264QpelMCHighDispatchMatchesScalar(t *testing.T) {
 	}
 }
 
+func TestH264QpelMCHighDispatchMatchesScalarWithSeparateStrides(t *testing.T) {
+	const dstStride = 64
+	const srcStride = 80
+	const rows = 48
+	const dstOffset = 6*dstStride + 6
+	const srcOffset = 6*srcStride + 6
+
+	for _, bitDepth := range []int{9, 10, 12, 14} {
+		for _, avg := range []bool{false, true} {
+			for _, size := range []int{2, 4, 8, 16} {
+				for my := 0; my < 4; my++ {
+					for mx := 0; mx < 4; mx++ {
+						t.Run(qpelDispatchCaseName(avg, size, mx, my), func(t *testing.T) {
+							dstKernel, _ := makeQpelUnitFixtureHigh(dstStride, rows, bitDepth)
+							_, src := makeQpelUnitFixtureHigh(srcStride, rows, bitDepth)
+							dstScalar := append([]uint16(nil), dstKernel...)
+
+							h264QpelMCStridesHighKernel(dstKernel, dstOffset, dstStride, src, srcOffset, srcStride, int32(size), int32(mx), int32(my), avg, int32(bitDepth))
+							h264QpelMCStridesHighScalar(dstScalar, dstOffset, dstStride, src, srcOffset, srcStride, size, mx, my, avg, bitDepth)
+
+							if len(dstKernel) != len(dstScalar) {
+								t.Fatalf("kernel len = %d, scalar len = %d", len(dstKernel), len(dstScalar))
+							}
+							for i := range dstKernel {
+								if dstKernel[i] != dstScalar[i] {
+									t.Fatalf("kernel[%d] = %d, scalar = %d", i, dstKernel[i], dstScalar[i])
+								}
+							}
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
 func qpelDispatchCaseName(avg bool, size int, mx int, my int) string {
 	op := "put"
 	if avg {

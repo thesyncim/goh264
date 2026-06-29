@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
+//go:build purego || (!amd64 && !arm64)
 
 package h264
 
