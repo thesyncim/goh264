@@ -148,131 +148,131 @@ func h264BiweightPixelsHigh(dst []uint16, src []uint16, stride int, height int, 
 }
 
 func h264VLoopFilterLuma(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
-	return h264LoopFilterLuma(pix, offset, stride, 1, 4, alpha, beta, tc0)
+	return h264LoopFilterLumaDispatch(pix, offset, stride, 1, 4, alpha, beta, tc0)
 }
 
 func h264HLoopFilterLuma(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
-	return h264LoopFilterLuma(pix, offset, 1, stride, 4, alpha, beta, tc0)
+	return h264LoopFilterLumaDispatch(pix, offset, 1, stride, 4, alpha, beta, tc0)
 }
 
 func h264HLoopFilterLumaMBAFF(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
-	return h264LoopFilterLuma(pix, offset, 1, stride, 2, alpha, beta, tc0)
+	return h264LoopFilterLumaDispatch(pix, offset, 1, stride, 2, alpha, beta, tc0)
 }
 
 func h264VLoopFilterLumaIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
-	return h264LoopFilterLumaIntra(pix, offset, stride, 1, 4, alpha, beta)
+	return h264LoopFilterLumaIntraDispatch(pix, offset, stride, 1, 4, alpha, beta)
 }
 
 func h264HLoopFilterLumaIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
-	return h264LoopFilterLumaIntra(pix, offset, 1, stride, 4, alpha, beta)
+	return h264LoopFilterLumaIntraDispatch(pix, offset, 1, stride, 4, alpha, beta)
 }
 
 func h264HLoopFilterLumaMBAFFIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
-	return h264LoopFilterLumaIntra(pix, offset, 1, stride, 2, alpha, beta)
+	return h264LoopFilterLumaIntraDispatch(pix, offset, 1, stride, 2, alpha, beta)
 }
 
 func h264VLoopFilterChroma(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
-	return h264LoopFilterChroma(pix, offset, stride, 1, 2, alpha, beta, tc0)
+	return h264LoopFilterChromaDispatch(pix, offset, stride, 1, 2, alpha, beta, tc0)
 }
 
 func h264HLoopFilterChroma(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
-	return h264LoopFilterChroma(pix, offset, 1, stride, 2, alpha, beta, tc0)
+	return h264LoopFilterChromaDispatch(pix, offset, 1, stride, 2, alpha, beta, tc0)
 }
 
 func h264HLoopFilterChromaMBAFF(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
-	return h264LoopFilterChroma(pix, offset, 1, stride, 1, alpha, beta, tc0)
+	return h264LoopFilterChromaDispatch(pix, offset, 1, stride, 1, alpha, beta, tc0)
 }
 
 func h264HLoopFilterChroma422(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
-	return h264LoopFilterChroma(pix, offset, 1, stride, 4, alpha, beta, tc0)
+	return h264LoopFilterChromaDispatch(pix, offset, 1, stride, 4, alpha, beta, tc0)
 }
 
 func h264HLoopFilterChroma422MBAFF(pix []uint8, offset int, stride int, alpha int, beta int, tc0 *[4]int8) error {
-	return h264LoopFilterChroma(pix, offset, 1, stride, 2, alpha, beta, tc0)
+	return h264LoopFilterChromaDispatch(pix, offset, 1, stride, 2, alpha, beta, tc0)
 }
 
 func h264VLoopFilterChromaIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
-	return h264LoopFilterChromaIntra(pix, offset, stride, 1, 2, alpha, beta)
+	return h264LoopFilterChromaIntraDispatch(pix, offset, stride, 1, 2, alpha, beta)
 }
 
 func h264HLoopFilterChromaIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
-	return h264LoopFilterChromaIntra(pix, offset, 1, stride, 2, alpha, beta)
+	return h264LoopFilterChromaIntraDispatch(pix, offset, 1, stride, 2, alpha, beta)
 }
 
 func h264HLoopFilterChromaMBAFFIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
-	return h264LoopFilterChromaIntra(pix, offset, 1, stride, 1, alpha, beta)
+	return h264LoopFilterChromaIntraDispatch(pix, offset, 1, stride, 1, alpha, beta)
 }
 
 func h264HLoopFilterChroma422Intra(pix []uint8, offset int, stride int, alpha int, beta int) error {
-	return h264LoopFilterChromaIntra(pix, offset, 1, stride, 4, alpha, beta)
+	return h264LoopFilterChromaIntraDispatch(pix, offset, 1, stride, 4, alpha, beta)
 }
 
 func h264HLoopFilterChroma422MBAFFIntra(pix []uint8, offset int, stride int, alpha int, beta int) error {
-	return h264LoopFilterChromaIntra(pix, offset, 1, stride, 2, alpha, beta)
+	return h264LoopFilterChromaIntraDispatch(pix, offset, 1, stride, 2, alpha, beta)
 }
 
 func h264VLoopFilterLumaHigh(pix []uint16, offset int, stride int, alpha int, beta int, tc0 *[4]int8, bitDepth int) error {
-	return h264LoopFilterLumaHigh(pix, offset, stride, 1, 4, alpha, beta, tc0, bitDepth)
+	return h264LoopFilterLumaHighDispatch(pix, offset, stride, 1, 4, alpha, beta, tc0, bitDepth)
 }
 
 func h264HLoopFilterLumaHigh(pix []uint16, offset int, stride int, alpha int, beta int, tc0 *[4]int8, bitDepth int) error {
-	return h264LoopFilterLumaHigh(pix, offset, 1, stride, 4, alpha, beta, tc0, bitDepth)
+	return h264LoopFilterLumaHighDispatch(pix, offset, 1, stride, 4, alpha, beta, tc0, bitDepth)
 }
 
 func h264HLoopFilterLumaMBAFFHigh(pix []uint16, offset int, stride int, alpha int, beta int, tc0 *[4]int8, bitDepth int) error {
-	return h264LoopFilterLumaHigh(pix, offset, 1, stride, 2, alpha, beta, tc0, bitDepth)
+	return h264LoopFilterLumaHighDispatch(pix, offset, 1, stride, 2, alpha, beta, tc0, bitDepth)
 }
 
 func h264VLoopFilterLumaIntraHigh(pix []uint16, offset int, stride int, alpha int, beta int, bitDepth int) error {
-	return h264LoopFilterLumaIntraHigh(pix, offset, stride, 1, 4, alpha, beta, bitDepth)
+	return h264LoopFilterLumaIntraHighDispatch(pix, offset, stride, 1, 4, alpha, beta, bitDepth)
 }
 
 func h264HLoopFilterLumaIntraHigh(pix []uint16, offset int, stride int, alpha int, beta int, bitDepth int) error {
-	return h264LoopFilterLumaIntraHigh(pix, offset, 1, stride, 4, alpha, beta, bitDepth)
+	return h264LoopFilterLumaIntraHighDispatch(pix, offset, 1, stride, 4, alpha, beta, bitDepth)
 }
 
 func h264HLoopFilterLumaMBAFFIntraHigh(pix []uint16, offset int, stride int, alpha int, beta int, bitDepth int) error {
-	return h264LoopFilterLumaIntraHigh(pix, offset, 1, stride, 2, alpha, beta, bitDepth)
+	return h264LoopFilterLumaIntraHighDispatch(pix, offset, 1, stride, 2, alpha, beta, bitDepth)
 }
 
 func h264VLoopFilterChromaHigh(pix []uint16, offset int, stride int, alpha int, beta int, tc0 *[4]int8, bitDepth int) error {
-	return h264LoopFilterChromaHigh(pix, offset, stride, 1, 2, alpha, beta, tc0, bitDepth)
+	return h264LoopFilterChromaHighDispatch(pix, offset, stride, 1, 2, alpha, beta, tc0, bitDepth)
 }
 
 func h264HLoopFilterChromaHigh(pix []uint16, offset int, stride int, alpha int, beta int, tc0 *[4]int8, bitDepth int) error {
-	return h264LoopFilterChromaHigh(pix, offset, 1, stride, 2, alpha, beta, tc0, bitDepth)
+	return h264LoopFilterChromaHighDispatch(pix, offset, 1, stride, 2, alpha, beta, tc0, bitDepth)
 }
 
 func h264HLoopFilterChromaMBAFFHigh(pix []uint16, offset int, stride int, alpha int, beta int, tc0 *[4]int8, bitDepth int) error {
-	return h264LoopFilterChromaHigh(pix, offset, 1, stride, 1, alpha, beta, tc0, bitDepth)
+	return h264LoopFilterChromaHighDispatch(pix, offset, 1, stride, 1, alpha, beta, tc0, bitDepth)
 }
 
 func h264HLoopFilterChroma422High(pix []uint16, offset int, stride int, alpha int, beta int, tc0 *[4]int8, bitDepth int) error {
-	return h264LoopFilterChromaHigh(pix, offset, 1, stride, 4, alpha, beta, tc0, bitDepth)
+	return h264LoopFilterChromaHighDispatch(pix, offset, 1, stride, 4, alpha, beta, tc0, bitDepth)
 }
 
 func h264HLoopFilterChroma422MBAFFHigh(pix []uint16, offset int, stride int, alpha int, beta int, tc0 *[4]int8, bitDepth int) error {
-	return h264LoopFilterChromaHigh(pix, offset, 1, stride, 2, alpha, beta, tc0, bitDepth)
+	return h264LoopFilterChromaHighDispatch(pix, offset, 1, stride, 2, alpha, beta, tc0, bitDepth)
 }
 
 func h264VLoopFilterChromaIntraHigh(pix []uint16, offset int, stride int, alpha int, beta int, bitDepth int) error {
-	return h264LoopFilterChromaIntraHigh(pix, offset, stride, 1, 2, alpha, beta, bitDepth)
+	return h264LoopFilterChromaIntraHighDispatch(pix, offset, stride, 1, 2, alpha, beta, bitDepth)
 }
 
 func h264HLoopFilterChromaIntraHigh(pix []uint16, offset int, stride int, alpha int, beta int, bitDepth int) error {
-	return h264LoopFilterChromaIntraHigh(pix, offset, 1, stride, 2, alpha, beta, bitDepth)
+	return h264LoopFilterChromaIntraHighDispatch(pix, offset, 1, stride, 2, alpha, beta, bitDepth)
 }
 
 func h264HLoopFilterChromaMBAFFIntraHigh(pix []uint16, offset int, stride int, alpha int, beta int, bitDepth int) error {
-	return h264LoopFilterChromaIntraHigh(pix, offset, 1, stride, 1, alpha, beta, bitDepth)
+	return h264LoopFilterChromaIntraHighDispatch(pix, offset, 1, stride, 1, alpha, beta, bitDepth)
 }
 
 func h264HLoopFilterChroma422IntraHigh(pix []uint16, offset int, stride int, alpha int, beta int, bitDepth int) error {
-	return h264LoopFilterChromaIntraHigh(pix, offset, 1, stride, 4, alpha, beta, bitDepth)
+	return h264LoopFilterChromaIntraHighDispatch(pix, offset, 1, stride, 4, alpha, beta, bitDepth)
 }
 
 func h264HLoopFilterChroma422MBAFFIntraHigh(pix []uint16, offset int, stride int, alpha int, beta int, bitDepth int) error {
-	return h264LoopFilterChromaIntraHigh(pix, offset, 1, stride, 2, alpha, beta, bitDepth)
+	return h264LoopFilterChromaIntraHighDispatch(pix, offset, 1, stride, 2, alpha, beta, bitDepth)
 }
 
 func h264LoopFilterLuma(pix []uint8, offset int, xstride int, ystride int, innerIters int, alpha int, beta int, tc0 *[4]int8) error {
