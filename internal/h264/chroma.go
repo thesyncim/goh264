@@ -128,6 +128,9 @@ func h264ChromaMCStridesScalar(dst []uint8, src []uint8, dstStride int, srcStrid
 }
 
 func h264ChromaMCStridesHigh(dst []uint16, src []uint16, dstStride int, srcStride int, height int, x int, y int, width int, avg bool, bitDepth int) error {
+	if !fitsCInt(bitDepth) {
+		return ErrInvalidData
+	}
 	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
 		return err
 	}
@@ -199,6 +202,9 @@ func h264ChromaMCStoreHigh(dst []uint16, offset int, v int, avg bool) {
 }
 
 func checkChromaMCArgs(dst []uint8, src []uint8, dstStride int, srcStride int, height int, x int, y int, width int) error {
+	if !fitsCInt(height) || !fitsCInt(x) || !fitsCInt(y) || !fitsCInt(width) {
+		return ErrInvalidData
+	}
 	if dstStride <= 0 || srcStride <= 0 || height < 0 || x < 0 || x >= 8 || y < 0 || y >= 8 {
 		return ErrInvalidData
 	}
@@ -211,16 +217,22 @@ func checkChromaMCArgs(dst []uint8, src []uint8, dstStride int, srcStride int, h
 	if height == 0 {
 		return nil
 	}
-	dstNeeded := (height-1)*dstStride + width
+	dstNeeded, err := h264ChromaMCNeeded(height-1, dstStride, width)
+	if err != nil {
+		return err
+	}
 	srcNeeded := dstNeeded
 	if x != 0 && y != 0 {
-		srcNeeded = height*srcStride + width + 1
+		srcNeeded, err = h264ChromaMCNeeded(height, srcStride, width+1)
 	} else if x != 0 {
-		srcNeeded = (height-1)*srcStride + width + 1
+		srcNeeded, err = h264ChromaMCNeeded(height-1, srcStride, width+1)
 	} else if y != 0 {
-		srcNeeded = height*srcStride + width
+		srcNeeded, err = h264ChromaMCNeeded(height, srcStride, width)
 	} else {
-		srcNeeded = (height-1)*srcStride + width
+		srcNeeded, err = h264ChromaMCNeeded(height-1, srcStride, width)
+	}
+	if err != nil {
+		return err
 	}
 	if len(dst) < dstNeeded || len(src) < srcNeeded {
 		return ErrInvalidData
@@ -229,6 +241,9 @@ func checkChromaMCArgs(dst []uint8, src []uint8, dstStride int, srcStride int, h
 }
 
 func checkChromaMCArgsHigh(dst []uint16, src []uint16, dstStride int, srcStride int, height int, x int, y int, width int) error {
+	if !fitsCInt(height) || !fitsCInt(x) || !fitsCInt(y) || !fitsCInt(width) {
+		return ErrInvalidData
+	}
 	if dstStride <= 0 || srcStride <= 0 || height < 0 || x < 0 || x >= 8 || y < 0 || y >= 8 {
 		return ErrInvalidData
 	}
@@ -241,19 +256,33 @@ func checkChromaMCArgsHigh(dst []uint16, src []uint16, dstStride int, srcStride 
 	if height == 0 {
 		return nil
 	}
-	dstNeeded := (height-1)*dstStride + width
+	dstNeeded, err := h264ChromaMCNeeded(height-1, dstStride, width)
+	if err != nil {
+		return err
+	}
 	srcNeeded := dstNeeded
 	if x != 0 && y != 0 {
-		srcNeeded = height*srcStride + width + 1
+		srcNeeded, err = h264ChromaMCNeeded(height, srcStride, width+1)
 	} else if x != 0 {
-		srcNeeded = (height-1)*srcStride + width + 1
+		srcNeeded, err = h264ChromaMCNeeded(height-1, srcStride, width+1)
 	} else if y != 0 {
-		srcNeeded = height*srcStride + width
+		srcNeeded, err = h264ChromaMCNeeded(height, srcStride, width)
 	} else {
-		srcNeeded = (height-1)*srcStride + width
+		srcNeeded, err = h264ChromaMCNeeded(height-1, srcStride, width)
+	}
+	if err != nil {
+		return err
 	}
 	if len(dst) < dstNeeded || len(src) < srcNeeded {
 		return ErrInvalidData
 	}
 	return nil
+}
+
+func h264ChromaMCNeeded(rowsBeforeLast int, stride int, rowWidth int) (int, error) {
+	n, err := checkedMulInt(rowsBeforeLast, stride)
+	if err != nil {
+		return 0, err
+	}
+	return checkedAddInt(n, rowWidth)
 }

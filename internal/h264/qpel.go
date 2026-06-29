@@ -107,6 +107,9 @@ func h264QpelMCStridesScalar(dst []uint8, dstOffset int, dstStride int, src []ui
 }
 
 func h264QpelMCStridesHigh(dst []uint16, dstOffset int, dstStride int, src []uint16, srcOffset int, srcStride int, size int, mx int, my int, avg bool, bitDepth int) error {
+	if !fitsCInt(bitDepth) {
+		return ErrInvalidData
+	}
 	if err := checkH264DSPHighBitDepth(bitDepth); err != nil {
 		return err
 	}
@@ -335,6 +338,9 @@ func h264QpelStorePredHigh(dst []uint16, dstOffset int, stride int, pred *[16 * 
 }
 
 func checkH264QpelArgs(dst []uint8, dstOffset int, dstStride int, src []uint8, srcOffset int, srcStride int, size int, mx int, my int) error {
+	if !fitsCInt(size) || !fitsCInt(mx) || !fitsCInt(my) {
+		return ErrInvalidData
+	}
 	if dstOffset < 0 || srcOffset < 0 || dstStride <= 0 || srcStride <= 0 || mx < 0 || mx >= 4 || my < 0 || my >= 4 {
 		return ErrInvalidData
 	}
@@ -344,14 +350,23 @@ func checkH264QpelArgs(dst []uint8, dstOffset int, dstStride int, src []uint8, s
 	if dstStride < size || srcStride < size {
 		return ErrInvalidData
 	}
-	dstMax := dstOffset + (size-1)*dstStride + size - 1
+	dstMax, err := h264QpelMaxIndex(dstOffset, dstStride, size)
+	if err != nil {
+		return err
+	}
 	if dstMax >= len(dst) {
 		return ErrInvalidData
 	}
 
 	minX, minY, maxX, maxY := h264QpelSourceBounds(size, mx, my)
-	minIndex := srcOffset + minY*srcStride + minX
-	maxIndex := srcOffset + maxY*srcStride + maxX
+	minIndex, err := h264QpelSourceIndex(srcOffset, srcStride, minX, minY)
+	if err != nil {
+		return err
+	}
+	maxIndex, err := h264QpelSourceIndex(srcOffset, srcStride, maxX, maxY)
+	if err != nil {
+		return err
+	}
 	if minIndex < 0 || maxIndex >= len(src) {
 		return ErrInvalidData
 	}
@@ -359,6 +374,9 @@ func checkH264QpelArgs(dst []uint8, dstOffset int, dstStride int, src []uint8, s
 }
 
 func checkH264QpelArgsHigh(dst []uint16, dstOffset int, dstStride int, src []uint16, srcOffset int, srcStride int, size int, mx int, my int) error {
+	if !fitsCInt(size) || !fitsCInt(mx) || !fitsCInt(my) {
+		return ErrInvalidData
+	}
 	if dstOffset < 0 || srcOffset < 0 || dstStride <= 0 || srcStride <= 0 || mx < 0 || mx >= 4 || my < 0 || my >= 4 {
 		return ErrInvalidData
 	}
@@ -368,18 +386,62 @@ func checkH264QpelArgsHigh(dst []uint16, dstOffset int, dstStride int, src []uin
 	if dstStride < size || srcStride < size {
 		return ErrInvalidData
 	}
-	dstMax := dstOffset + (size-1)*dstStride + size - 1
+	dstMax, err := h264QpelMaxIndex(dstOffset, dstStride, size)
+	if err != nil {
+		return err
+	}
 	if dstMax >= len(dst) {
 		return ErrInvalidData
 	}
 
 	minX, minY, maxX, maxY := h264QpelSourceBounds(size, mx, my)
-	minIndex := srcOffset + minY*srcStride + minX
-	maxIndex := srcOffset + maxY*srcStride + maxX
+	minIndex, err := h264QpelSourceIndex(srcOffset, srcStride, minX, minY)
+	if err != nil {
+		return err
+	}
+	maxIndex, err := h264QpelSourceIndex(srcOffset, srcStride, maxX, maxY)
+	if err != nil {
+		return err
+	}
 	if minIndex < 0 || maxIndex >= len(src) {
 		return ErrInvalidData
 	}
 	return nil
+}
+
+func h264QpelMaxIndex(offset int, stride int, size int) (int, error) {
+	row, err := checkedMulInt(size-1, stride)
+	if err != nil {
+		return 0, err
+	}
+	idx, err := checkedAddInt(offset, row)
+	if err != nil {
+		return 0, err
+	}
+	return checkedAddInt(idx, size-1)
+}
+
+func h264QpelSourceIndex(offset int, stride int, x int, y int) (int, error) {
+	row, err := h264QpelSignedStrideOffset(stride, y)
+	if err != nil {
+		return 0, err
+	}
+	idx, err := checkedAddInt(offset, row)
+	if err != nil {
+		return 0, err
+	}
+	return checkedAddInt(idx, x)
+}
+
+func h264QpelSignedStrideOffset(stride int, y int) (int, error) {
+	if y >= 0 {
+		return checkedMulInt(y, stride)
+	}
+	magnitude := -y
+	if stride > maxInt/magnitude {
+		return 0, ErrInvalidData
+	}
+	return -(stride * magnitude), nil
 }
 
 func h264QpelSourceBounds(size int, mx int, my int) (int, int, int, int) {

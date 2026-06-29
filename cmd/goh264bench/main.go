@@ -27,6 +27,7 @@ import (
 	"time"
 
 	goh264 "github.com/thesyncim/goh264"
+	h264internal "github.com/thesyncim/goh264/internal/h264"
 )
 
 type benchReport struct {
@@ -713,7 +714,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 			meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli-fair-cpu-lanes"
 		}
 	}
-	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes preflight both pure C vs pure Go and native C+asm vs Go+asm comparison contracts. Primary quality_status is the manifest rawvideo oracle when available; peer_quality_status records each FFmpeg lane's rawvideo match or mismatch against the measured Go lane. Go result backend_kind remains explicit, so a build without Go assembly is reported as go-pure and is not a Go+asm performance claim. FFmpeg timing remains a process-per-iteration CLI baseline."
+	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes preflight both pure C vs pure Go and native C+asm vs Go+asm comparison contracts. Primary quality_status is the manifest rawvideo oracle when available; peer_quality_status records each FFmpeg lane's rawvideo match or mismatch against the measured Go lane. Go result backend_kind remains explicit, so purego builds report go-pure and default builds with partial assembly report go-partial-asm until all decoder kernels are ported. FFmpeg timing remains a process-per-iteration CLI baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
 }
 
@@ -1777,11 +1778,13 @@ func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawO
 	}
 	result.InputBytesPerIter = int64(len(data))
 	result.BaselineKind = "in-process-go"
-	result.BackendKind = "go-pure"
+	result.BackendKind = h264internal.DecoderBackendKind()
 	result.ProcessPerIter = false
 	result.InputReadTimed = false
 	result.StdoutPipeTimed = false
-	result.Notes = append(result.Notes, "Go decoder backend is pure Go in this build; the native C+asm vs Go+asm fair lane remains quality-valid but is not a Go+asm performance claim until Go assembly is added.")
+	if note := h264internal.DecoderBackendNote(); note != "" {
+		result.Notes = append(result.Notes, note)
+	}
 	annotateBenchRates(&result)
 	return result, nil
 }

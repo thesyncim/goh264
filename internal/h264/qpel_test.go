@@ -104,6 +104,25 @@ func TestH264QpelValidatesGeometry(t *testing.T) {
 	if err := h264PutH264QpelMCHigh(make([]uint16, 16), 0, make([]uint16, 16), 0, 4, 4, 2, 0, 10); err != ErrInvalidData {
 		t.Fatalf("missing high horizontal margin error = %v, want ErrInvalidData", err)
 	}
+	if err := h264QpelMCStrides(make([]uint8, 16), 0, maxInt, make([]uint8, 16), 0, maxInt, 16, 0, 0, false); err != ErrInvalidData {
+		t.Fatalf("overflowed qpel geometry error = %v, want ErrInvalidData", err)
+	}
+	if err := h264QpelMCStridesHigh(make([]uint16, 16), 0, maxInt, make([]uint16, 16), 0, maxInt, 16, 0, 0, false, 10); err != ErrInvalidData {
+		t.Fatalf("overflowed high qpel geometry error = %v, want ErrInvalidData", err)
+	}
+	if err := h264QpelMCStrides(make([]uint8, 16*16), 0, 16, make([]uint8, 16), 0, maxInt, 16, 0, 2, false); err != ErrInvalidData {
+		t.Fatalf("overflowed qpel source geometry error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestH264QpelRejectsCIntOverflow(t *testing.T) {
+	tooLarge := intAboveCInt(t)
+	if err := h264QpelMCStrides(make([]uint8, 16), 0, 4, make([]uint8, 16), 0, 4, tooLarge, 0, 0, false); err != ErrInvalidData {
+		t.Fatalf("oversized C int size error = %v, want ErrInvalidData", err)
+	}
+	if err := h264QpelMCStridesHigh(make([]uint16, 16), 0, 4, make([]uint16, 16), 0, 4, 4, 0, 0, false, tooLarge); err != ErrInvalidData {
+		t.Fatalf("oversized high C int bit depth error = %v, want ErrInvalidData", err)
+	}
 }
 
 func makeQpelUnitFixture(stride int, rows int) ([]uint8, []uint8) {

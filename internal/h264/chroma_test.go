@@ -102,6 +102,33 @@ func TestH264ChromaMCValidatesGeometry(t *testing.T) {
 	if err := h264PutH264ChromaMC8High(make([]uint16, 8), make([]uint16, 8), 8, 1, 1, 1, 10); err != ErrInvalidData {
 		t.Fatalf("short high bilinear source error = %v, want ErrInvalidData", err)
 	}
+	if err := h264ChromaMC(make([]uint8, 8), make([]uint8, 8), maxInt, 2, 0, 0, 8, false); err != ErrInvalidData {
+		t.Fatalf("overflowed chroma geometry error = %v, want ErrInvalidData", err)
+	}
+	if err := h264ChromaMCHigh(make([]uint16, 8), make([]uint16, 8), maxInt, 2, 0, 0, 8, false, 10); err != ErrInvalidData {
+		t.Fatalf("overflowed high chroma geometry error = %v, want ErrInvalidData", err)
+	}
+}
+
+func TestH264ChromaMCRejectsCIntOverflow(t *testing.T) {
+	tooLarge := intAboveCInt(t)
+	if err := h264PutH264ChromaMC8(make([]uint8, 8), make([]uint8, 8), 8, tooLarge, 0, 0); err != ErrInvalidData {
+		t.Fatalf("oversized C int height error = %v, want ErrInvalidData", err)
+	}
+	if err := h264PutH264ChromaMC8High(make([]uint16, 8), make([]uint16, 8), 8, tooLarge, 0, 0, 10); err != ErrInvalidData {
+		t.Fatalf("oversized high C int height error = %v, want ErrInvalidData", err)
+	}
+	if err := h264PutH264ChromaMC8High(make([]uint16, 8), make([]uint16, 8), 8, 1, 0, 0, tooLarge); err != ErrInvalidData {
+		t.Fatalf("oversized high C int bit depth error = %v, want ErrInvalidData", err)
+	}
+}
+
+func intAboveCInt(t *testing.T) int {
+	t.Helper()
+	if maxInt <= maxCInt {
+		t.Skip("native int cannot exceed C int on this platform")
+	}
+	return int(int64(maxCInt) + 1)
 }
 
 func BenchmarkH264ChromaMC8Put00(b *testing.B) {

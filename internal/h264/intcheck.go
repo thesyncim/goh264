@@ -4,6 +4,15 @@ package h264
 
 const maxInt = int(^uint(0) >> 1)
 
+const (
+	minCInt = -1 << 31
+	maxCInt = 1<<31 - 1
+)
+
+func fitsCInt(v int) bool {
+	return v >= minCInt && v <= maxCInt
+}
+
 func checkedAddInt(a int, b int) (int, error) {
 	if b > 0 && a > maxInt-b {
 		return 0, ErrInvalidData

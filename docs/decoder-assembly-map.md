@@ -29,11 +29,12 @@ that sample.
 - Unsupported architectures use the scalar path by default.
 - Benchmark evidence should include both default and `purego` lanes once an
   assembly kernel is enabled.
-- Assembly-facing types must mirror the pinned FFmpeg prototypes: byte-backed
-  `uint8_t` buffers map to `uint8`, high-bit-depth scalar pixels map to
+- Assembly-facing types must mirror the pinned FFmpeg prototypes:
+  `uint8_t` buffers map directly to `uint8`, high-bit-depth scalar pixels map to
   `uint16_t`/`uint16` only inside Go scalar helpers, `ptrdiff_t` strides and
   offsets stay native signed pointer width, and C `int` selector arguments use
-  32-bit Go values at dispatch boundaries.
+  32-bit Go values at dispatch boundaries. Public/internal Go wrappers reject
+  out-of-range C `int` values before narrowing to assembly kernels.
 
 ## Upstream Families
 
