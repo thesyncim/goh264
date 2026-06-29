@@ -16,20 +16,24 @@ mkdir -p "$out_dir"
 benchstat_out="$out_dir/benchstat.txt"
 bench_json="$out_dir/goh264bench.json"
 bench_log="$out_dir/goh264bench.stderr.txt"
+bench_json_purego="$out_dir/goh264bench.purego.json"
+bench_log_purego="$out_dir/goh264bench.purego.stderr.txt"
 metadata="$out_dir/metadata.txt"
 cpu_profile="$out_dir/cpu.pprof"
 mem_profile="$out_dir/heap.pprof"
+cpu_profile_purego="$out_dir/cpu.purego.pprof"
+mem_profile_purego="$out_dir/heap.purego.pprof"
 
-export GOH264_BENCH_ITERS="${GOH264_BENCH_ITERS:-1}"
-export GOH264_BENCH_REPEATS="${GOH264_BENCH_REPEATS:-2}"
-export GOH264_BENCH_WARMUP="${GOH264_BENCH_WARMUP:-1}"
+export GOH264_BENCH_ITERS="${GOH264_BENCH_ITERS:-10}"
+export GOH264_BENCH_REPEATS="${GOH264_BENCH_REPEATS:-5}"
+export GOH264_BENCH_WARMUP="${GOH264_BENCH_WARMUP:-2}"
 export GOH264_BENCH_MAX_ENTRIES="${GOH264_BENCH_MAX_ENTRIES:-1}"
-export GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER="${GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER:-64000000}"
-export GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER="${GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER:-10000}"
+export GOH264_BENCH_FFMPEG="${GOH264_BENCH_FFMPEG:-1}"
+export GOH264_BENCH_FAIR_CPU_LANES="${GOH264_BENCH_FAIR_CPU_LANES:-1}"
+export GOH264_BENCH_FORBID_GO_ALLOCATIONS="${GOH264_BENCH_FORBID_GO_ALLOCATIONS:-1}"
 export GOH264_BENCHSTAT_PATTERN="${GOH264_BENCHSTAT_PATTERN:-Benchmark(Decode.*AnnexB.*High10IDRP|FrameAppendRawYUVBytesLEHigh10IDRP)}"
 export GOH264_BENCHSTAT_TIME="${GOH264_BENCHSTAT_TIME:-${GOH264_BENCHSTAT_BENCHTIME:-100ms}}"
-export GOH264_BENCH_CPU_PROFILE="$cpu_profile"
-export GOH264_BENCH_MEM_PROFILE="$mem_profile"
+run_purego="${GOH264_PERF_RUN_PUREGO:-1}"
 
 {
     printf 'commit=%s\n' "$(git -C "$ROOT" rev-parse HEAD)"
@@ -44,17 +48,38 @@ export GOH264_BENCH_MEM_PROFILE="$mem_profile"
     printf 'bench_repeats=%s\n' "$GOH264_BENCH_REPEATS"
     printf 'bench_warmup=%s\n' "$GOH264_BENCH_WARMUP"
     printf 'bench_max_entries=%s\n' "$GOH264_BENCH_MAX_ENTRIES"
-    printf 'max_go_alloc_bytes_per_iter=%s\n' "$GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER"
-    printf 'max_go_allocs_per_iter=%s\n' "$GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER"
+    printf 'bench_ffmpeg=%s\n' "$GOH264_BENCH_FFMPEG"
+    printf 'bench_fair_cpu_lanes=%s\n' "$GOH264_BENCH_FAIR_CPU_LANES"
+    printf 'bench_forbid_go_allocations=%s\n' "$GOH264_BENCH_FORBID_GO_ALLOCATIONS"
+    printf 'bench_run_purego=%s\n' "$run_purego"
+    printf 'max_go_alloc_bytes_per_iter=%s\n' "${GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER:-unset}"
+    printf 'max_go_allocs_per_iter=%s\n' "${GOH264_BENCH_MAX_GO_ALLOCS_PER_ITER:-unset}"
 } >"$metadata"
 
 printf 'writing performance evidence to %s\n' "$out_dir" >&2
 "$ROOT/scripts/h264-benchstat-canary.sh" | tee "$benchstat_out"
+export GOH264_BENCH_CPU_PROFILE="$cpu_profile"
+export GOH264_BENCH_MEM_PROFILE="$mem_profile"
 "$ROOT/scripts/h264-real-vector-bench.sh" "$filter" "$@" >"$bench_json" 2>"$bench_log"
+if [[ "$run_purego" == "1" ]]; then
+    export GOH264_BENCH_CPU_PROFILE="$cpu_profile_purego"
+    export GOH264_BENCH_MEM_PROFILE="$mem_profile_purego"
+    purego_go_flags="${GOFLAGS:-}"
+    purego_go_flags="${purego_go_flags:+$purego_go_flags }-tags=purego"
+    GOFLAGS="$purego_go_flags" "$ROOT/scripts/h264-real-vector-bench.sh" "$filter" "$@" >"$bench_json_purego" 2>"$bench_log_purego"
+fi
 
 printf 'benchstat=%s\n' "$benchstat_out" >&2
 printf 'benchmark_json=%s\n' "$bench_json" >&2
 printf 'benchmark_log=%s\n' "$bench_log" >&2
+if [[ "$run_purego" == "1" ]]; then
+    printf 'benchmark_purego_json=%s\n' "$bench_json_purego" >&2
+    printf 'benchmark_purego_log=%s\n' "$bench_log_purego" >&2
+fi
 printf 'cpu_profile=%s\n' "$cpu_profile" >&2
 printf 'mem_profile=%s\n' "$mem_profile" >&2
+if [[ "$run_purego" == "1" ]]; then
+    printf 'purego_cpu_profile=%s\n' "$cpu_profile_purego" >&2
+    printf 'purego_mem_profile=%s\n' "$mem_profile_purego" >&2
+fi
 printf 'metadata=%s\n' "$metadata" >&2

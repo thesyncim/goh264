@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	h264internal "github.com/thesyncim/goh264/internal/h264"
 )
 
 func TestSampleStats(t *testing.T) {
@@ -159,6 +161,14 @@ func TestEnforceBenchAllocationBudgetsChecksOnlyMeasuredGoLanes(t *testing.T) {
 	if err := enforceBenchAllocationBudgets(report, benchOptions{maxGoAllocsPerIter: 3}); err == nil || !strings.Contains(err.Error(), "allocs_per_iter") {
 		t.Fatalf("allocs budget err = %v, want allocs_per_iter failure", err)
 	}
+	if err := enforceBenchAllocationBudgets(report, benchOptions{forbidGoAllocations: true}); err == nil || !strings.Contains(err.Error(), "zero-allocation policy") {
+		t.Fatalf("zero allocation policy err = %v, want allocation failure", err)
+	}
+	report.Results[0].AllocBytesPerIter = 0
+	report.Results[0].AllocsPerIter = 0
+	if err := enforceBenchAllocationBudgets(report, benchOptions{forbidGoAllocations: true}); err != nil {
+		t.Fatalf("zero allocation policy err = %v, want pass for zero-allocation Go lane", err)
+	}
 }
 
 func TestBuildBenchReportRejectsGoAllocationBudget(t *testing.T) {
@@ -199,20 +209,24 @@ func TestBuildBenchReportAcceptsManifestBorrowedGoAllocationBudget(t *testing.T)
 }
 
 func TestFFmpegBenchLanesExposeFairCPUComparisons(t *testing.T) {
+	goBackend := h264internal.DecoderBackendKind()
 	lanes := ffmpegBenchLanes(benchOptions{runFFmpeg: true, fairCPULanes: true})
 	if len(lanes) != 2 {
 		t.Fatalf("lanes = %d, want 2", len(lanes))
 	}
-	if lanes[0].name != "ffmpeg-pure-c" || lanes[0].cpuFlags != "0" || lanes[0].comparisonLane != "pure-c-vs-pure-go" {
+	if lanes[0].name != "ffmpeg-pure-c" || lanes[0].cpuFlags != "0" || lanes[0].comparisonLane != "ffmpeg-pure-c-vs-"+goBackend {
 		t.Fatalf("pure-C lane = %+v, want explicit cpuflags 0 lane", lanes[0])
 	}
-	if lanes[1].name != "ffmpeg-native" || lanes[1].cpuFlags != "" || lanes[1].comparisonLane != "native-c+asm-vs-go+asm" {
+	if lanes[1].name != "ffmpeg-native" || lanes[1].cpuFlags != "" || lanes[1].comparisonLane != "ffmpeg-native-c+asm-vs-"+goBackend {
 		t.Fatalf("native lane = %+v, want native C+asm vs Go+asm lane", lanes[1])
 	}
 
 	lanes = ffmpegBenchLanes(benchOptions{runFFmpeg: true, ffmpegCPUFlags: "0"})
 	if len(lanes) != 1 || lanes[0].name != "ffmpeg-pure-c" || lanes[0].backendKind != "ffmpeg-pure-c" {
 		t.Fatalf("single pure-C lane = %+v, want pure-C", lanes)
+	}
+	if lanes[0].comparisonLane != "ffmpeg-pure-c-vs-"+goBackend {
+		t.Fatalf("single pure-C comparison lane = %q, want current Go backend", lanes[0].comparisonLane)
 	}
 }
 

@@ -21,6 +21,9 @@ warmup="${GOH264_BENCH_WARMUP:-2}"
 max_entries="${GOH264_BENCH_MAX_ENTRIES:-0}"
 
 alloc_args=()
+if [[ "${GOH264_BENCH_FORBID_GO_ALLOCATIONS:-0}" == "1" ]]; then
+    alloc_args+=(-forbid-go-allocations)
+fi
 if [[ -n "${GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER:-}" ]]; then
     alloc_args+=(-max-go-alloc-bytes-per-iter "${GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER}")
 fi
@@ -62,6 +65,9 @@ if [[ -n "${GOH264_CORPUS_FILTER:-}" ]]; then
 fi
 printf ' iters=%s repeats=%s warmup=%s max_entries=%s' "$iters" "$repeats" "$warmup" "$max_entries" >&2
 if [[ "${#alloc_args[@]}" -ne 0 ]]; then
+    if [[ "${GOH264_BENCH_FORBID_GO_ALLOCATIONS:-0}" == "1" ]]; then
+        printf ' forbid_go_allocations=1' >&2
+    fi
     if [[ -n "${GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER:-}" ]]; then
         printf ' max_go_alloc_bytes_per_iter=%s' "$GOH264_BENCH_MAX_GO_ALLOC_BYTES_PER_ITER" >&2
     fi

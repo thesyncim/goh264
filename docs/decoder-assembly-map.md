@@ -7,11 +7,14 @@ dispatch, `purego` scalar fallback, and real-vector benchmark coverage.
 
 Current profile evidence on Apple arm64 is dominated by CABAC slice decode,
 motion compensation, and loop filtering. On `caba3` (`cabac`,
-`temporal-direct`, `deblock`), the post-validation-split fair table is still
-well behind FFmpeg: default Go partial-asm is about 2.9x slower than FFmpeg
-pure-C and 4.3x slower than FFmpeg native C+asm, while `-tags=purego` is about
-3.4x slower than FFmpeg pure-C and 5.1x slower than FFmpeg native C+asm. The
-same run shows default partial assembly about 1.17x faster than `purego`.
+`temporal-direct`, `deblock`), the fair table is still well behind FFmpeg after
+using amortized FFmpeg CLI timing over repeated Annex B input, raw-MD5
+validation, truthful Go-backend comparison lanes, and a zero-allocation Go
+gate. With 10 timed iterations, 5 repeats, and 2 warmups, default Go partial-asm
+is about 2.0x slower than FFmpeg pure-C and 2.7x slower than FFmpeg native
+C+asm, while `-tags=purego` is about 2.4x slower than FFmpeg pure-C and 3.1x
+slower than FFmpeg native C+asm. The same run shows default partial assembly
+about 1.19x faster than `purego`.
 Recent profiles no longer put edge emulation at the top; the remaining frontier
 is real SIMD deblock, more motion-comp work where profile-visible, weighted
 prediction, IDCT/add-pixels, intra prediction, and only then CABAC experiments.
