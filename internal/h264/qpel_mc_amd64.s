@@ -812,6 +812,181 @@ qpel8_avg30_clip_done:
 	JNZ  qpel8_avg30_row
 	RET
 
+// func h264QpelMCPut0YASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, my int32)
+TEXT ·h264QpelMCPut0YASM(SB), NOSPLIT, $0-40
+	MOVQ dst+0(FP), DI
+	MOVQ src+8(FP), SI
+	MOVQ dstStride+16(FP), DX
+	MOVQ srcStride+24(FP), CX
+	MOVL size+32(FP), R8
+	MOVL my+36(FP), R15
+qpel_put0y_row:
+	MOVQ DI, R11
+	MOVQ SI, R12
+	MOVL size+32(FP), R9
+qpel_put0y_col:
+	XORL AX, AX
+	MOVB (R12), AX
+	MOVQ R12, R13
+	ADDQ CX, R13
+	XORL BX, BX
+	MOVB (R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	MOVQ R12, R13
+	SUBQ CX, R13
+	XORL AX, AX
+	MOVB (R13), AX
+	MOVQ R12, R13
+	ADDQ CX, R13
+	ADDQ CX, R13
+	XORL BX, BX
+	MOVB (R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	MOVQ R12, R13
+	SUBQ CX, R13
+	SUBQ CX, R13
+	XORL AX, AX
+	MOVB (R13), AX
+	MOVQ R12, R13
+	ADDQ CX, R13
+	ADDQ CX, R13
+	ADDQ CX, R13
+	XORL BX, BX
+	MOVB (R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	ADDL $16, R10
+	SARL $5, R10
+	CMPL R10, $0
+	JGE  qpel_put0y_nonnegative
+	XORL R10, R10
+	JMP  qpel_put0y_clip_done
+qpel_put0y_nonnegative:
+	CMPL R10, $255
+	JLE  qpel_put0y_clip_done
+	MOVL $255, R10
+qpel_put0y_clip_done:
+	CMPL R15, $2
+	JE   qpel_put0y_store
+	XORL AX, AX
+	CMPL R15, $1
+	JNE  qpel_put0y_load_next
+	MOVB (R12), AX
+	JMP  qpel_put0y_l2
+qpel_put0y_load_next:
+	MOVQ R12, R13
+	ADDQ CX, R13
+	MOVB (R13), AX
+qpel_put0y_l2:
+	ADDL AX, R10
+	ADDL $1, R10
+	SHRL $1, R10
+qpel_put0y_store:
+	MOVB R10, (R11)
+	INCQ R11
+	INCQ R12
+	DECL R9
+	JNZ  qpel_put0y_col
+	ADDQ DX, DI
+	ADDQ CX, SI
+	DECL R8
+	JNZ  qpel_put0y_row
+	RET
+
+// func h264QpelMCAvg0YASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, my int32)
+TEXT ·h264QpelMCAvg0YASM(SB), NOSPLIT, $0-40
+	MOVQ dst+0(FP), DI
+	MOVQ src+8(FP), SI
+	MOVQ dstStride+16(FP), DX
+	MOVQ srcStride+24(FP), CX
+	MOVL size+32(FP), R8
+	MOVL my+36(FP), R15
+qpel_avg0y_row:
+	MOVQ DI, R11
+	MOVQ SI, R12
+	MOVL size+32(FP), R9
+qpel_avg0y_col:
+	XORL AX, AX
+	MOVB (R12), AX
+	MOVQ R12, R13
+	ADDQ CX, R13
+	XORL BX, BX
+	MOVB (R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	MOVQ R12, R13
+	SUBQ CX, R13
+	XORL AX, AX
+	MOVB (R13), AX
+	MOVQ R12, R13
+	ADDQ CX, R13
+	ADDQ CX, R13
+	XORL BX, BX
+	MOVB (R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	MOVQ R12, R13
+	SUBQ CX, R13
+	SUBQ CX, R13
+	XORL AX, AX
+	MOVB (R13), AX
+	MOVQ R12, R13
+	ADDQ CX, R13
+	ADDQ CX, R13
+	ADDQ CX, R13
+	XORL BX, BX
+	MOVB (R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	ADDL $16, R10
+	SARL $5, R10
+	CMPL R10, $0
+	JGE  qpel_avg0y_nonnegative
+	XORL R10, R10
+	JMP  qpel_avg0y_clip_done
+qpel_avg0y_nonnegative:
+	CMPL R10, $255
+	JLE  qpel_avg0y_clip_done
+	MOVL $255, R10
+qpel_avg0y_clip_done:
+	CMPL R15, $2
+	JE   qpel_avg0y_pred_done
+	XORL AX, AX
+	CMPL R15, $1
+	JNE  qpel_avg0y_load_next
+	MOVB (R12), AX
+	JMP  qpel_avg0y_l2
+qpel_avg0y_load_next:
+	MOVQ R12, R13
+	ADDQ CX, R13
+	MOVB (R13), AX
+qpel_avg0y_l2:
+	ADDL AX, R10
+	ADDL $1, R10
+	SHRL $1, R10
+qpel_avg0y_pred_done:
+	XORL AX, AX
+	MOVB (R11), AX
+	ADDL AX, R10
+	ADDL $1, R10
+	SHRL $1, R10
+	MOVB R10, (R11)
+	INCQ R11
+	INCQ R12
+	DECL R9
+	JNZ  qpel_avg0y_col
+	ADDQ DX, DI
+	ADDQ CX, SI
+	DECL R8
+	JNZ  qpel_avg0y_row
+	RET
+
 // func h264QpelMC4Put00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
 TEXT ·h264QpelMC4Put00ASM(SB), NOSPLIT, $0-32
 	MOVQ dst+0(FP), DI
