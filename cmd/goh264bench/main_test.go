@@ -225,6 +225,57 @@ func TestFFmpegArgsIncludesCPUFlagsBeforeInput(t *testing.T) {
 	}
 }
 
+func TestBenchFFmpegDefaultsToAmortizedSampleProcess(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "in.264")
+	if err := os.WriteFile(input, []byte("xyz"), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	fake := filepath.Join(dir, "ffmpeg")
+	script := `#!/bin/sh
+input=""
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = "-i" ]; then
+        shift
+        input="$1"
+    fi
+    shift
+done
+bytes=$(wc -c < "$input" | tr -d ' ')
+count=$((bytes / 3))
+i=0
+while [ "$i" -lt "$count" ]; do
+    printf abcd
+    i=$((i + 1))
+done
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake ffmpeg: %v", err)
+	}
+
+	result, err := benchFFmpeg(input, 7, 3, 1, 0, true, fake, "1", "yuv420p", "yuv420p", false, ffmpegBenchLane{
+		name:           "ffmpeg-native",
+		backendKind:    "ffmpeg-native-c+asm",
+		comparisonLane: "native-c+asm-vs-go+asm",
+	})
+	if err != nil {
+		t.Fatalf("benchFFmpeg amortized err = %v", err)
+	}
+	if result.BaselineKind != "ffmpeg-cli-amortized" || result.ProcessPerIter {
+		t.Fatalf("baseline/process = %q/%v, want amortized/non-process-per-iter", result.BaselineKind, result.ProcessPerIter)
+	}
+	if result.BytesPerIter != 4 || result.TotalBytes != 12 {
+		t.Fatalf("bytes = per iter %d total %d, want 4/12", result.BytesPerIter, result.TotalBytes)
+	}
+	if strings.Contains(result.Command, "-stream_loop") {
+		t.Fatalf("command = %q, did not expect unsupported stream_loop path", result.Command)
+	}
+	wantMD5 := md5.Sum([]byte("abcd"))
+	if result.RawMD5 != hex.EncodeToString(wantMD5[:]) {
+		t.Fatalf("raw md5 = %q, want single-iteration md5", result.RawMD5)
+	}
+}
+
 func TestAnnotateFFmpegPeerQuality(t *testing.T) {
 	ff := benchResult{RawOutput: true, RawMD5: "abc", BytesPerIter: 10}
 	goResult := benchResult{RawOutput: true, RawMD5: "abc", BytesPerIter: 10}

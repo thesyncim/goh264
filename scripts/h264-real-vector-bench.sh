@@ -51,6 +51,9 @@ if [[ "${GOH264_BENCH_FFMPEG:-0}" == "1" ]]; then
     elif [[ -n "${GOH264_FFMPEG_CPUFLAGS:-}" ]]; then
         ffmpeg_args+=(-ffmpeg-cpuflags "${GOH264_FFMPEG_CPUFLAGS}")
     fi
+    if [[ "${GOH264_BENCH_FFMPEG_PROCESS_PER_ITER:-0}" == "1" ]]; then
+        ffmpeg_args+=(-ffmpeg-process-per-iter)
+    fi
 fi
 
 printf 'real-vector benchmark cache=%s fetch=%s' "$GOH264_CORPUS_CACHE" "$GOH264_CORPUS_FETCH" >&2
@@ -82,6 +85,11 @@ if [[ "${#ffmpeg_args[@]}" -ne 0 ]]; then
         printf ' ffmpeg_cpuflags=0' >&2
     elif [[ -n "${GOH264_FFMPEG_CPUFLAGS:-}" ]]; then
         printf ' ffmpeg_cpuflags=%s' "$GOH264_FFMPEG_CPUFLAGS" >&2
+    fi
+    if [[ "${GOH264_BENCH_FFMPEG_PROCESS_PER_ITER:-0}" == "1" ]]; then
+        printf ' ffmpeg_process_per_iter=1' >&2
+    else
+        printf ' ffmpeg_amortized=1' >&2
     fi
 fi
 printf '\n' >&2

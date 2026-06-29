@@ -166,6 +166,7 @@ type benchOptions struct {
 	ffmpegThreads          string
 	ffmpegCPUFlags         string
 	ffmpegPixFmt           string
+	ffmpegProcessPerIter   bool
 	fairCPULanes           bool
 	strictPixFmt           bool
 	corpusFilter           string
@@ -227,6 +228,7 @@ func main() {
 	ffmpegCPUFlags := flag.String("ffmpeg-cpuflags", "", "FFmpeg -cpuflags value; empty uses the binary default native C+asm CPU dispatch, 0 forces pure C")
 	ffmpegPureC := flag.Bool("ffmpeg-pure-c", false, "shorthand for -ffmpeg-cpuflags 0")
 	fairCPULanes := flag.Bool("fair-cpu-lanes", false, "with -ffmpeg, emit explicit pure-C-vs-pure-Go and native-C+asm-vs-Go+asm backend lanes")
+	ffmpegProcessPerIter := flag.Bool("ffmpeg-process-per-iter", false, "with -ffmpeg, run one FFmpeg process per timed iteration; default amortizes one FFmpeg process per repeat sample over a prebuilt repeated input")
 	ffmpegPixFmt := flag.String("ffmpeg-pix-fmt", "", "FFmpeg output pixel format for -raw mode; defaults to Go raw pixel format when available")
 	strictPixFmt := flag.Bool("strict-pix-fmt", false, "reject a user-supplied -ffmpeg-pix-fmt that differs from Go raw pixel format")
 	maxGoAllocBytesPerIter := flag.Float64("max-go-alloc-bytes-per-iter", 0, "fail if a timed Go result exceeds this alloc_bytes_per_iter budget; 0 disables")
@@ -258,6 +260,7 @@ func main() {
 		ffmpegThreads:          *ffmpegThreads,
 		ffmpegCPUFlags:         *ffmpegCPUFlags,
 		ffmpegPixFmt:           *ffmpegPixFmt,
+		ffmpegProcessPerIter:   *ffmpegProcessPerIter,
 		fairCPULanes:           *fairCPULanes,
 		strictPixFmt:           *strictPixFmt,
 		corpusFilter:           *corpusFilter,
@@ -571,7 +574,7 @@ func benchOneInput(input string, data []byte, opts benchOptions) ([]benchResult,
 	}
 	if opts.runFFmpeg {
 		for _, lane := range ffmpegBenchLanes(opts) {
-			ffmpegResult, err := benchFFmpeg(input, int64(len(data)), opts.iters, opts.repeats, opts.warmup, opts.rawOutput, opts.ffmpegBin, opts.ffmpegThreads, opts.ffmpegPixFmt, goResult.RawPixelFormat, lane)
+			ffmpegResult, err := benchFFmpeg(input, int64(len(data)), opts.iters, opts.repeats, opts.warmup, opts.rawOutput, opts.ffmpegBin, opts.ffmpegThreads, opts.ffmpegPixFmt, goResult.RawPixelFormat, opts.ffmpegProcessPerIter, lane)
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", lane.name, err)
 			}
@@ -709,12 +712,15 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 	meta.CorpusNotTimed = len(entries) - benchmarked
 	meta.ComparisonKind = "manifest-goh264-in-process"
 	if opts.runFFmpeg {
-		meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli"
+		meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli-amortized"
+		if opts.ffmpegProcessPerIter {
+			meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli-process-per-iter"
+		}
 		if opts.fairCPULanes {
-			meta.ComparisonKind = "manifest-goh264-in-process-vs-ffmpeg-cli-fair-cpu-lanes"
+			meta.ComparisonKind += "-fair-cpu-lanes"
 		}
 	}
-	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes preflight both pure C vs pure Go and native C+asm vs Go+asm comparison contracts. Primary quality_status is the manifest rawvideo oracle when available; peer_quality_status records each FFmpeg lane's rawvideo match or mismatch against the measured Go lane. Go result backend_kind remains explicit, so purego builds report go-pure and default builds with partial assembly report go-partial-asm until all decoder kernels are ported. FFmpeg timing remains a process-per-iteration CLI baseline."
+	meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes preflight both pure C vs pure Go and native C+asm vs Go+asm comparison contracts. Primary quality_status is the manifest rawvideo oracle when available; peer_quality_status records each FFmpeg lane's rawvideo match or mismatch against the measured Go lane. Go result backend_kind remains explicit, so purego builds report go-pure and default builds with partial assembly report go-partial-asm until all decoder kernels are ported. FFmpeg timing defaults to one CLI process per repeat sample over a prebuilt repeated input file, amortizing process startup and CLI setup across timed iterations; -ffmpeg-process-per-iter restores the historical process-per-iteration baseline."
 	return benchReport{Metadata: meta, Results: results}, nil
 }
 
@@ -2010,7 +2016,7 @@ func summarizeGoBorrowedFrames(frames []goh264.Frame, rawOutput bool, scratch *b
 	return decodeGoRun{frames: len(frames), bytes: total, md5Sum: md5Sum, hasMD5: true, pixFmt: pixFmt}, nil
 }
 
-func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup int, rawOutput bool, bin string, threads string, pixFmt string, goPixFmt string, lane ffmpegBenchLane) (benchResult, error) {
+func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup int, rawOutput bool, bin string, threads string, pixFmt string, goPixFmt string, processPerIter bool, lane ffmpegBenchLane) (benchResult, error) {
 	effectivePixFmt := pixFmt
 	autoPixFmt := false
 	if rawOutput && effectivePixFmt == "" && goPixFmt != "" {
@@ -2024,41 +2030,73 @@ func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup 
 		}
 	}
 
-	var bytesPerIter int64
-	var rawMD5 string
-	var samples []benchSample
-	for repeat := 0; repeat < repeats; repeat++ {
-		sample, bytes, sum, err := measureFFmpegSample(bin, args, iters, rawOutput)
+	singleRun, err := runFFmpegOnce(bin, args, rawOutput)
+	if err != nil {
+		return benchResult{}, err
+	}
+	bytesPerIter := singleRun.bytes
+	rawMD5 := singleRun.md5
+	amortizedInput := input
+	if !processPerIter {
+		var cleanup func()
+		amortizedInput, cleanup, err = prepareFFmpegAmortizedInput(input, iters)
 		if err != nil {
 			return benchResult{}, err
 		}
-		if repeat == 0 {
-			bytesPerIter = bytes
-			rawMD5 = sum
+		defer cleanup()
+	}
+	var samples []benchSample
+	for repeat := 0; repeat < repeats; repeat++ {
+		var sample benchSample
+		var bytes int64
+		var sum string
+		var err error
+		if processPerIter {
+			sample, bytes, sum, err = measureFFmpegSampleProcessPerIter(bin, args, iters, rawOutput)
+		} else {
+			amortizedArgs := ffmpegArgs(amortizedInput, rawOutput, threads, effectivePixFmt, lane.cpuFlags)
+			sample, bytes, sum, err = measureFFmpegSampleAmortized(bin, amortizedArgs, iters, rawOutput, bytesPerIter)
+		}
+		if err != nil {
+			return benchResult{}, err
 		}
 		if bytes != bytesPerIter {
 			return benchResult{}, fmt.Errorf("unstable FFmpeg byte count at repeat %d: %d, want %d", repeat, bytes, bytesPerIter)
 		}
-		if sum != rawMD5 {
+		if processPerIter && sum != rawMD5 {
 			return benchResult{}, fmt.Errorf("unstable FFmpeg raw md5 at repeat %d: %s, want %s", repeat, sum, rawMD5)
 		}
 		samples = append(samples, sample)
 	}
 
-	result := resultFromSamples(lane.name, input, iters, repeats, warmup, rawOutput, 0, bytesPerIter, samples, rawMD5, bin+" "+joinArgs(args))
+	commandArgs := args
+	if !processPerIter {
+		commandArgs = ffmpegArgs(amortizedInput, rawOutput, threads, effectivePixFmt, lane.cpuFlags)
+	}
+	result := resultFromSamples(lane.name, input, iters, repeats, warmup, rawOutput, 0, bytesPerIter, samples, rawMD5, bin+" "+joinArgs(commandArgs))
 	result.RawPixelFormat = goPixFmt
 	result.FFmpegPixelFmt = effectivePixFmt
 	result.InputBytesPerIter = inputBytes
-	result.BaselineKind = "ffmpeg-cli"
+	if processPerIter {
+		result.BaselineKind = "ffmpeg-cli-process-per-iter"
+	} else {
+		result.BaselineKind = "ffmpeg-cli-amortized"
+	}
 	result.BackendKind = lane.backendKind
 	result.CPUFlags = lane.cpuFlags
 	result.ComparisonLane = lane.comparisonLane
-	result.ProcessPerIter = true
+	result.ProcessPerIter = processPerIter
 	result.InputReadTimed = true
 	result.StdoutPipeTimed = rawOutput
-	result.Notes = append(result.Notes,
-		"FFmpeg is executed once per timed iteration, so this baseline includes process startup, CLI demux/parser setup, input file reads, and stdout pipe cost.",
-	)
+	if processPerIter {
+		result.Notes = append(result.Notes,
+			"FFmpeg is executed once per timed iteration, so this baseline includes process startup, CLI demux/parser setup, input file reads, and stdout pipe cost per iteration.",
+		)
+	} else {
+		result.Notes = append(result.Notes,
+			"FFmpeg is executed once per repeat sample over a prebuilt repeated input file, so process startup and CLI setup are amortized across the sample. Input file reads and stdout pipe cost remain timed.",
+		)
+	}
 	if autoPixFmt {
 		result.Notes = append(result.Notes, "FFmpeg -pix_fmt was auto-selected from the Go raw pixel format for raw-MD5 parity.")
 	}
@@ -2066,7 +2104,7 @@ func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup 
 	return result, nil
 }
 
-func measureFFmpegSample(bin string, args []string, iters int, rawOutput bool) (benchSample, int64, string, error) {
+func measureFFmpegSampleProcessPerIter(bin string, args []string, iters int, rawOutput bool) (benchSample, int64, string, error) {
 	start := time.Now()
 	var bytesPerIter int64
 	var rawMD5 string
@@ -2085,6 +2123,64 @@ func measureFFmpegSample(bin string, args []string, iters int, rawOutput bool) (
 	}
 	elapsed := time.Since(start)
 	return sampleFromTotals(iters, 0, bytesPerIter, elapsed, 0, 0, rawMD5), bytesPerIter, rawMD5, nil
+}
+
+func measureFFmpegSampleAmortized(bin string, args []string, iters int, rawOutput bool, bytesPerIter int64) (benchSample, int64, string, error) {
+	start := time.Now()
+	run, err := runFFmpegOnce(bin, args, rawOutput)
+	if err != nil {
+		return benchSample{}, 0, "", err
+	}
+	elapsed := time.Since(start)
+	if rawOutput {
+		wantBytes := bytesPerIter * int64(iters)
+		if run.bytes != wantBytes {
+			return benchSample{}, 0, "", fmt.Errorf("FFmpeg amortized byte count = %d, want %d (%d bytes/iter * %d iters)", run.bytes, wantBytes, bytesPerIter, iters)
+		}
+	}
+	return sampleFromTotals(iters, 0, bytesPerIter, elapsed, 0, 0, run.md5), bytesPerIter, run.md5, nil
+}
+
+func prepareFFmpegAmortizedInput(input string, iters int) (string, func(), error) {
+	if iters <= 1 {
+		return input, func() {}, nil
+	}
+	src, err := os.Open(input)
+	if err != nil {
+		return "", nil, err
+	}
+	defer src.Close()
+	ext := filepath.Ext(input)
+	if ext == "" {
+		ext = ".h264"
+	}
+	tmp, err := os.CreateTemp("", "goh264bench-ffmpeg-repeat-*"+ext)
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() {
+		_ = os.Remove(tmp.Name())
+	}
+	ok := false
+	defer func() {
+		_ = tmp.Close()
+		if !ok {
+			cleanup()
+		}
+	}()
+	for i := 0; i < iters; i++ {
+		if _, err := src.Seek(0, io.SeekStart); err != nil {
+			return "", nil, err
+		}
+		if _, err := io.Copy(tmp, src); err != nil {
+			return "", nil, err
+		}
+	}
+	if err := tmp.Close(); err != nil {
+		return "", nil, err
+	}
+	ok = true
+	return tmp.Name(), cleanup, nil
 }
 
 type ffmpegRun struct {
@@ -2313,13 +2409,16 @@ func benchmarkMetadata(input string, data []byte, opts benchOptions) benchMetada
 		MaxGoAllocsPerIter:     opts.maxGoAllocsPerIter,
 	}
 	if opts.runFFmpeg {
-		meta.ComparisonKind = "goh264-in-process-vs-ffmpeg-cli"
+		meta.ComparisonKind = "goh264-in-process-vs-ffmpeg-cli-amortized"
+		if opts.ffmpegProcessPerIter {
+			meta.ComparisonKind = "goh264-in-process-vs-ffmpeg-cli-process-per-iter"
+		}
 		if opts.fairCPULanes {
-			meta.ComparisonKind = "goh264-in-process-vs-ffmpeg-cli-fair-cpu-lanes"
+			meta.ComparisonKind += "-fair-cpu-lanes"
 		}
 		meta.FFmpegVersion = ffmpegVersion(opts.ffmpegBin)
 		meta.FFmpegCPUFlags = ffmpegMetadataCPUFlags(opts)
-		meta.FairnessPolicy = "Single-input mode reports Go and FFmpeg timing samples with explicit backend_kind/cpu_flags fields. Fair CPU lanes name pure C vs pure Go and native C+asm vs Go+asm comparison contracts, while each result's backend_kind records the backend actually measured. FFmpeg peer_quality_status is compared against the Go rawvideo byte count and raw-MD5 when -raw=true; manifest mode is required for an external rawvideo oracle quality_status. FFmpeg timing remains a process-per-iteration CLI baseline."
+		meta.FairnessPolicy = "Single-input mode reports Go and FFmpeg timing samples with explicit backend_kind/cpu_flags fields. Fair CPU lanes name pure C vs pure Go and native C+asm vs Go+asm comparison contracts, while each result's backend_kind records the backend actually measured. FFmpeg peer_quality_status is compared against the Go rawvideo byte count and raw-MD5 when -raw=true; manifest mode is required for an external rawvideo oracle quality_status. FFmpeg timing defaults to one CLI process per repeat sample over a prebuilt repeated input file, amortizing process startup and CLI setup across timed iterations; -ffmpeg-process-per-iter restores the historical process-per-iteration baseline."
 	}
 	return meta
 }
