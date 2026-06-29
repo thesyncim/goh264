@@ -103,8 +103,11 @@ type simpleDecodeState struct {
 	motionScratchHigh      *h264MotionCompScratchHigh
 	motionScratchStore     h264MotionCompScratch
 	motionScratchHighStore h264MotionCompScratchHigh
+	refPlanes              [2][32]h264PicturePlanes
+	refPtrs                [2][32]*h264PicturePlanes
 	highRefPlanes          [2][32]h264PicturePlanesHigh
 	highRefPtrs            [2][32]*h264PicturePlanesHigh
+	cabac                  cabacFrameSliceDecoder
 	dpbSnapshot            simpleFrameDPBSnapshot
 	refScratch             simpleFrameRefContextScratch
 	borrowSideData         bool
@@ -610,6 +613,9 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 					Direct:        direct,
 					PredWeight:    &sh.PredWeightTable,
 					MotionScratch: st.motionScratch,
+					RefPlanes:     &st.refPlanes,
+					RefPtrs:       &st.refPtrs,
+					CABAC:         &st.cabac,
 					X264Build:     direct.X264Build,
 					X264BuildSet:  true,
 				})
@@ -634,6 +640,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 					MotionScratch: st.motionScratchHigh,
 					RefPlanes:     &st.highRefPlanes,
 					RefPtrs:       &st.highRefPtrs,
+					CABAC:         &st.cabac,
 					X264Build:     direct.X264Build,
 					X264BuildSet:  true,
 				})

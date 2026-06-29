@@ -174,19 +174,27 @@ func TestBuildBenchReportRejectsGoAllocationBudget(t *testing.T) {
 	}
 }
 
-func TestBuildBenchReportRejectsManifestGoAllocationBudget(t *testing.T) {
+func TestBuildBenchReportAcceptsManifestBorrowedGoAllocationBudget(t *testing.T) {
 	dir := t.TempDir()
 	entry := writeBenchFixtureEntry(t, dir, "budget-red", "budget.264")
 	manifestPath := filepath.Join(dir, "manifest.jsonl")
 	writeBenchManifestRows(t, manifestPath, entry)
-	if _, err := buildBenchReport("", manifestPath, 0, benchOptions{
-		iters:              1,
-		repeats:            1,
-		rawOutput:          true,
-		failureLedger:      "off",
-		maxGoAllocsPerIter: 1,
-	}); err == nil || !strings.Contains(err.Error(), "budget-red") || !strings.Contains(err.Error(), "allocs_per_iter") {
-		t.Fatalf("manifest budget err = %v, want entry-specific allocs_per_iter failure", err)
+	report, err := buildBenchReport("", manifestPath, 0, benchOptions{
+		iters:                  10,
+		repeats:                1,
+		rawOutput:              true,
+		failureLedger:          "off",
+		maxGoAllocsPerIter:     1,
+		maxGoAllocBytesPerIter: 1,
+	})
+	if err != nil {
+		t.Fatalf("manifest budget err = %v, want borrowed Annex B path under allocation budget", err)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("manifest results = %d, want 1", len(report.Results))
+	}
+	if report.Results[0].AllocsPerIter != 0 || report.Results[0].AllocBytesPerIter != 0 {
+		t.Fatalf("manifest allocs/iter = %.2f allocs %.2f bytes, want zero", report.Results[0].AllocsPerIter, report.Results[0].AllocBytesPerIter)
 	}
 }
 

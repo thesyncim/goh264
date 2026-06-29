@@ -72,6 +72,7 @@ type simpleFrameRefContext struct {
 type simpleFrameRefContextScratch struct {
 	entries       [2][]simpleRefEntry
 	defaults      [2][]simpleRefEntry
+	sortedShort   [2][]*DecodedFrame
 	refs          [2][]*h264PicturePlanes
 	refPlanes     [2][]h264PicturePlanes
 	refsHigh      [2][]*h264PicturePlanesHigh
@@ -628,9 +629,17 @@ func (d *simpleFrameDPB) buildRefContextInto(sh *SliceHeader, frame *DecodedFram
 		if err != nil {
 			return ctx, err
 		}
-		lists, err := d.buildBRefEntries(sh, curPOC)
-		if err != nil {
-			return ctx, err
+		var lists [2][]simpleRefEntry
+		if scratch == nil {
+			lists, err = d.buildBRefEntries(sh, curPOC)
+			if err != nil {
+				return ctx, err
+			}
+		} else {
+			lists, err = d.buildBRefEntriesInto(sh, curPOC, scratch)
+			if err != nil {
+				return ctx, err
+			}
 		}
 		if sh.PPS != nil && sh.PPS.WeightedBipredIDC == 2 {
 			frameMBAFF := sh.PictureStructure == PictureFrame && sh.SPS.FrameMBSOnlyFlag == 0 && sh.SPS.MBAFF != 0
@@ -643,14 +652,33 @@ func (d *simpleFrameDPB) buildRefContextInto(sh *SliceHeader, frame *DecodedFram
 				}
 			}
 		}
-		ctx.Entries[0] = cloneSimpleRefEntries(lists[0])
-		ctx.Entries[1] = cloneSimpleRefEntries(lists[1])
-		if highDepth {
-			refsHigh[0] = simpleFrameEntryPlanesRefsHigh(ctx.Entries[0])
-			refsHigh[1] = simpleFrameEntryPlanesRefsHigh(ctx.Entries[1])
+		if scratch == nil {
+			ctx.Entries[0] = cloneSimpleRefEntries(lists[0])
+			ctx.Entries[1] = cloneSimpleRefEntries(lists[1])
 		} else {
-			refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
-			refs[1] = simpleFrameEntryPlanesRefs(ctx.Entries[1])
+			ctx.Entries[0] = lists[0]
+			ctx.Entries[1] = lists[1]
+		}
+		if highDepth {
+			if scratch == nil {
+				refsHigh[0] = simpleFrameEntryPlanesRefsHigh(ctx.Entries[0])
+				refsHigh[1] = simpleFrameEntryPlanesRefsHigh(ctx.Entries[1])
+			} else {
+				refsHigh[0], scratch.refPlanesHigh[0] = simpleFrameEntryPlanesRefsHighInto(ctx.Entries[0], scratch.refPlanesHigh[0], scratch.refsHigh[0])
+				scratch.refsHigh[0] = refsHigh[0]
+				refsHigh[1], scratch.refPlanesHigh[1] = simpleFrameEntryPlanesRefsHighInto(ctx.Entries[1], scratch.refPlanesHigh[1], scratch.refsHigh[1])
+				scratch.refsHigh[1] = refsHigh[1]
+			}
+		} else {
+			if scratch == nil {
+				refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
+				refs[1] = simpleFrameEntryPlanesRefs(ctx.Entries[1])
+			} else {
+				refs[0], scratch.refPlanes[0] = simpleFrameEntryPlanesRefsInto(ctx.Entries[0], scratch.refPlanes[0], scratch.refs[0])
+				scratch.refs[0] = refs[0]
+				refs[1], scratch.refPlanes[1] = simpleFrameEntryPlanesRefsInto(ctx.Entries[1], scratch.refPlanes[1], scratch.refs[1])
+				scratch.refs[1] = refs[1]
+			}
 		}
 	default:
 		return ctx, ErrUnsupported
@@ -875,6 +903,10 @@ func (d *simpleFrameDPB) buildBRefLists(sh *SliceHeader, curPOC int32) ([2][]*De
 }
 
 func (d *simpleFrameDPB) buildBRefEntries(sh *SliceHeader, curPOC int32) ([2][]simpleRefEntry, error) {
+	return d.buildBRefEntriesInto(sh, curPOC, nil)
+}
+
+func (d *simpleFrameDPB) buildBRefEntriesInto(sh *SliceHeader, curPOC int32, scratch *simpleFrameRefContextScratch) ([2][]simpleRefEntry, error) {
 	var entries [2][]simpleRefEntry
 	if sh.RefCount[0] == 0 || sh.RefCount[1] == 0 {
 		return entries, ErrInvalidData
@@ -886,7 +918,12 @@ func (d *simpleFrameDPB) buildBRefEntries(sh *SliceHeader, curPOC int32) ([2][]s
 	defaults := [2][]simpleRefEntry{}
 	for list := 0; list < 2; list++ {
 		var err error
-		defaults[list], err = d.buildDefaultBRefList(sh, curPOC, list)
+		if scratch == nil {
+			defaults[list], err = d.buildDefaultBRefList(sh, curPOC, list)
+		} else {
+			scratch.defaults[list], scratch.sortedShort[list], err = d.buildDefaultBRefListInto(sh, curPOC, list, scratch.defaults[list][:0], scratch.sortedShort[list][:0])
+			defaults[list] = scratch.defaults[list]
+		}
 		if err != nil {
 			return entries, err
 		}
@@ -895,7 +932,14 @@ func (d *simpleFrameDPB) buildBRefEntries(sh *SliceHeader, curPOC int32) ([2][]s
 		defaults[1][0], defaults[1][1] = defaults[1][1], defaults[1][0]
 	}
 	for list := 0; list < 2; list++ {
-		listEntries, err := d.applyRefModificationsEntries(defaults[list], sh, list)
+		var listEntries []simpleRefEntry
+		var err error
+		if scratch == nil {
+			listEntries, err = d.applyRefModificationsEntries(defaults[list], sh, list)
+		} else {
+			scratch.entries[list], err = d.applyRefModificationsEntriesInto(defaults[list], scratch.entries[list][:0], sh, list)
+			listEntries = scratch.entries[list]
+		}
 		if err != nil {
 			return entries, err
 		}
@@ -905,25 +949,32 @@ func (d *simpleFrameDPB) buildBRefEntries(sh *SliceHeader, curPOC int32) ([2][]s
 }
 
 func (d *simpleFrameDPB) buildDefaultBRefList(sh *SliceHeader, curPOC int32, list int) ([]simpleRefEntry, error) {
+	entries, _, err := d.buildDefaultBRefListInto(sh, curPOC, list, nil, nil)
+	return entries, err
+}
+
+func (d *simpleFrameDPB) buildDefaultBRefListInto(sh *SliceHeader, curPOC int32, list int, entries []simpleRefEntry, sorted []*DecodedFrame) ([]simpleRefEntry, []*DecodedFrame, error) {
 	if list != 0 && list != 1 {
-		return nil, ErrInvalidData
+		return nil, sorted, ErrInvalidData
 	}
-	sorted := d.addSortedShortRefs(curPOC, 1^list)
-	sorted = append(sorted, d.addSortedShortRefs(curPOC, 0^list)...)
-	entries, err := d.buildDefaultEntriesFromFrames(sorted, sh, false)
+	sorted = d.addSortedShortRefsInto(curPOC, 1^list, sorted[:0])
+	sorted = d.addSortedShortRefsInto(curPOC, 0^list, sorted)
+	entries, err := d.buildDefaultEntriesFromFramesInto(sorted, sh, false, entries)
 	if err != nil {
-		return nil, err
+		return nil, sorted, err
 	}
-	longEntries, err := d.buildDefaultEntriesFromFrames(d.long[:], sh, true)
-	if err != nil {
-		return nil, err
-	}
-	entries = append(entries, longEntries...)
-	return entries, nil
+	entries, err = d.buildDefaultEntriesFromFramesInto(d.long[:], sh, true, entries)
+	return entries, sorted, err
 }
 
 func (d *simpleFrameDPB) addSortedShortRefs(curPOC int32, dir int) []*DecodedFrame {
-	out := make([]*DecodedFrame, 0, len(d.short))
+	return d.addSortedShortRefsInto(curPOC, dir, nil)
+}
+
+func (d *simpleFrameDPB) addSortedShortRefsInto(curPOC int32, dir int, out []*DecodedFrame) []*DecodedFrame {
+	if out == nil {
+		out = make([]*DecodedFrame, 0, len(d.short))
+	}
 	limit := curPOC
 	for {
 		bestPOC := int32(math.MaxInt32)

@@ -33,6 +33,11 @@ func h264QpelMCStrides(dst []uint8, dstOffset int, dstStride int, src []uint8, s
 	if err := checkH264QpelArgs(dst, dstOffset, dstStride, src, srcOffset, srcStride, size, mx, my); err != nil {
 		return err
 	}
+	h264QpelMCStridesKernel(dst, dstOffset, dstStride, src, srcOffset, srcStride, int32(size), int32(mx), int32(my), avg)
+	return nil
+}
+
+func h264QpelMCStridesScalar(dst []uint8, dstOffset int, dstStride int, src []uint8, srcOffset int, srcStride int, size int, mx int, my int, avg bool) {
 	var pred [16 * 16]uint8
 	var a [16 * 16]uint8
 	var b [16 * 16]uint8
@@ -95,11 +100,10 @@ func h264QpelMCStrides(dst []uint8, dstOffset int, dstStride int, src []uint8, s
 		h264QpelVPred(&b, src, srcOffset+1, srcStride, size, 0)
 		h264QpelAvgPred(&pred, &a, &b, size)
 	default:
-		return ErrInvalidData
+		return
 	}
 
 	h264QpelStorePred(dst, dstOffset, dstStride, &pred, size, avg)
-	return nil
 }
 
 func h264QpelMCStridesHigh(dst []uint16, dstOffset int, dstStride int, src []uint16, srcOffset int, srcStride int, size int, mx int, my int, avg bool, bitDepth int) error {
@@ -109,6 +113,11 @@ func h264QpelMCStridesHigh(dst []uint16, dstOffset int, dstStride int, src []uin
 	if err := checkH264QpelArgsHigh(dst, dstOffset, dstStride, src, srcOffset, srcStride, size, mx, my); err != nil {
 		return err
 	}
+	h264QpelMCStridesHighKernel(dst, dstOffset, dstStride, src, srcOffset, srcStride, int32(size), int32(mx), int32(my), avg, int32(bitDepth))
+	return nil
+}
+
+func h264QpelMCStridesHighScalar(dst []uint16, dstOffset int, dstStride int, src []uint16, srcOffset int, srcStride int, size int, mx int, my int, avg bool, bitDepth int) {
 	var pred [16 * 16]uint16
 	var a [16 * 16]uint16
 	var b [16 * 16]uint16
@@ -171,11 +180,10 @@ func h264QpelMCStridesHigh(dst []uint16, dstOffset int, dstStride int, src []uin
 		h264QpelVPredHigh(&b, src, srcOffset+1, srcStride, size, 0, bitDepth)
 		h264QpelAvgPredHigh(&pred, &a, &b, size)
 	default:
-		return ErrInvalidData
+		return
 	}
 
 	h264QpelStorePredHigh(dst, dstOffset, dstStride, &pred, size, avg)
-	return nil
 }
 
 func h264QpelCopyPred(out *[16 * 16]uint8, src []uint8, srcOffset int, stride int, size int) {

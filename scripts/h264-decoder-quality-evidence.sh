@@ -217,7 +217,7 @@ run_exact_oracle_go_test_gate() {
     printf 'corpus_cache=%s\n' "${GOH264_CORPUS_CACHE:-/tmp/goh264-fate-probe-cache}"
     printf 'quality_perf_filter=%s\n' "$filter"
     printf 'quality_alloc_filter=%s\n' "${GOH264_QUALITY_ALLOC_FILTER:-canl4}"
-    printf 'benchstat_pattern=%s\n' "${GOH264_BENCHSTAT_PATTERN:-Benchmark(Decode.*AnnexBHigh10IDRP|FrameAppendRawYUVBytesLEHigh10IDRP)}"
+    printf 'benchstat_pattern=%s\n' "${GOH264_BENCHSTAT_PATTERN:-Benchmark(Decode.*AnnexB.*High10IDRP|FrameAppendRawYUVBytesLEHigh10IDRP)}"
     printf 'benchstat_time=%s\n' "$GOH264_BENCHSTAT_TIME"
 } >"$summary"
 

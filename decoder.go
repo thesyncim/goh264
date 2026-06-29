@@ -2126,7 +2126,6 @@ func (f *Frame) RawPixelFormat() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	base := ""
 	if depth == 8 && f.VideoFullRangeFlag == 1 {
 		switch f.ChromaFormatIDC {
 		case 0, 1:
@@ -2141,15 +2140,48 @@ func (f *Frame) RawPixelFormat() (string, error) {
 	}
 	switch f.ChromaFormatIDC {
 	case 0, 1:
-		base = "yuv420p"
+		switch depth {
+		case 8:
+			return "yuv420p", nil
+		case 9:
+			return "yuv420p9le", nil
+		case 10:
+			return "yuv420p10le", nil
+		case 12:
+			return "yuv420p12le", nil
+		case 14:
+			return "yuv420p14le", nil
+		}
 	case 2:
-		base = "yuv422p"
+		switch depth {
+		case 8:
+			return "yuv422p", nil
+		case 9:
+			return "yuv422p9le", nil
+		case 10:
+			return "yuv422p10le", nil
+		case 12:
+			return "yuv422p12le", nil
+		case 14:
+			return "yuv422p14le", nil
+		}
 	case 3:
-		base = "yuv444p"
+		switch depth {
+		case 8:
+			return "yuv444p", nil
+		case 9:
+			return "yuv444p9le", nil
+		case 10:
+			return "yuv444p10le", nil
+		case 12:
+			return "yuv444p12le", nil
+		case 14:
+			return "yuv444p14le", nil
+		}
 	default:
 		return "", ErrInvalidData
 	}
-	return base + rawBitDepthSuffix(depth), nil
+	return "", ErrUnsupported
 }
 
 // RawYUVSize returns the byte count produced by AppendRawYUVBytesLE.
@@ -2509,21 +2541,6 @@ func (f *Frame) rawBitDepth() (int, error) {
 		return 0, ErrUnsupported
 	}
 	return f.BitDepthLuma, nil
-}
-
-func rawBitDepthSuffix(depth int) string {
-	switch depth {
-	case 9:
-		return "9le"
-	case 10:
-		return "10le"
-	case 12:
-		return "12le"
-	case 14:
-		return "14le"
-	default:
-		return ""
-	}
 }
 
 func (f *Frame) rawYUVSampleCount() (int, error) {

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COUNT="${GOH264_BENCHSTAT_COUNT:-5}"
 BENCHTIME="${GOH264_BENCHSTAT_TIME:-${GOH264_BENCHSTAT_BENCHTIME:-100ms}}"
-PATTERN="${GOH264_BENCHSTAT_PATTERN:-Benchmark(Decode.*AnnexBHigh10IDRP|FrameAppendRawYUVBytesLEHigh10IDRP)}"
+PATTERN="${GOH264_BENCHSTAT_PATTERN:-Benchmark(Decode.*AnnexB.*High10IDRP|FrameAppendRawYUVBytesLEHigh10IDRP)}"
 
 cd "$ROOT_DIR"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/goh264-benchstat-canary.XXXXXX")"

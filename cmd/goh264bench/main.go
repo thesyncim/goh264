@@ -1742,6 +1742,11 @@ func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawO
 	var rawMD5 string
 	var pixFmt string
 	var samples []benchSample
+	if annexBInput {
+		if _, _, _, _, _, err := measureGoSample(data, 1, rawOutput, annexBInput); err != nil {
+			return benchResult{}, err
+		}
+	}
 	for repeat := 0; repeat < repeats; repeat++ {
 		sample, frames, bytes, sum, samplePixFmt, err := measureGoSample(data, iters, rawOutput, annexBInput)
 		if err != nil {
@@ -1782,24 +1787,40 @@ func benchGo(input string, data []byte, iters int, repeats int, warmup int, rawO
 }
 
 func measureGoSample(data []byte, iters int, rawOutput bool, annexBInput bool) (benchSample, int, int64, string, string, error) {
+	restoreGOMAXPROCS := 0
+	if annexBInput {
+		restoreGOMAXPROCS = runtime.GOMAXPROCS(1)
+		defer runtime.GOMAXPROCS(restoreGOMAXPROCS)
+	}
 	var dec *goh264.Decoder
 	var borrowed []goh264.Frame
-	var rawScratch []byte
+	var borrowedScratch borrowedGoScratch
 	if annexBInput {
 		dec = goh264.NewDecoder()
 		borrowed = make([]goh264.Frame, 0, 16)
-		run, frames, scratch, err := decodeGoAnnexBBorrowedOnce(dec, borrowed, rawScratch, data, rawOutput)
-		if err != nil {
-			return benchSample{}, 0, 0, "", "", err
-		}
-		borrowed = frames
-		rawScratch = scratch
-		if run.bytes > 0 && int64(cap(rawScratch)) < run.bytes && run.bytes <= math.MaxInt {
-			rawScratch = make([]byte, 0, int(run.bytes))
+		for i := 0; i < 8; i++ {
+			run, frames, err := decodeGoAnnexBBorrowedOnce(dec, borrowed, &borrowedScratch, data, rawOutput)
+			if err != nil {
+				return benchSample{}, 0, 0, "", "", err
+			}
+			borrowed = frames
+			if run.bytes > 0 && int64(cap(borrowedScratch.raw)) < run.bytes && run.bytes <= math.MaxInt {
+				borrowedScratch.raw = make([]byte, 0, int(run.bytes))
+			}
 		}
 	}
 
 	runtime.GC()
+	if annexBInput {
+		run, frames, err := decodeGoAnnexBBorrowedOnce(dec, borrowed, &borrowedScratch, data, rawOutput)
+		if err != nil {
+			return benchSample{}, 0, 0, "", "", err
+		}
+		borrowed = frames
+		if run.bytes > 0 && int64(cap(borrowedScratch.raw)) < run.bytes && run.bytes <= math.MaxInt {
+			borrowedScratch.raw = make([]byte, 0, int(run.bytes))
+		}
+	}
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
 	start := time.Now()
@@ -1807,16 +1828,19 @@ func measureGoSample(data []byte, iters int, rawOutput bool, annexBInput bool) (
 	var framesPerIter int
 	var bytesPerIter int64
 	var rawMD5 string
+	var rawMD5Sum [md5.Size]byte
+	var rawMD5Ready bool
 	var pixFmt string
 	for i := 0; i < iters; i++ {
 		var run decodeGoRun
 		var err error
 		if annexBInput {
 			var frames []goh264.Frame
-			var scratch []byte
-			run, frames, scratch, err = decodeGoAnnexBBorrowedOnce(dec, borrowed, rawScratch, data, rawOutput)
+			frames, err = dec.DecodeAnnexBBorrowedFrames(borrowed, data)
 			borrowed = frames
-			rawScratch = scratch
+			if err == nil {
+				run, err = summarizeGoBorrowedFrames(frames, rawOutput, &borrowedScratch)
+			}
 		} else {
 			run, err = decodeGoOnceForFormat(data, rawOutput, annexBInput)
 		}
@@ -1834,11 +1858,26 @@ func measureGoSample(data []byte, iters int, rawOutput bool, annexBInput bool) (
 		if run.pixFmt != pixFmt {
 			return benchSample{}, 0, 0, "", "", fmt.Errorf("unstable pixel format at iter %d: %s, want %s", i, run.pixFmt, pixFmt)
 		}
-		rawMD5 = run.md5
+		if annexBInput && rawOutput {
+			if !run.hasMD5 {
+				return benchSample{}, 0, 0, "", "", fmt.Errorf("missing raw md5 at iter %d", i)
+			}
+			if !rawMD5Ready {
+				rawMD5Sum = run.md5Sum
+				rawMD5Ready = true
+			} else if run.md5Sum != rawMD5Sum {
+				return benchSample{}, 0, 0, "", "", fmt.Errorf("unstable raw md5 at iter %d", i)
+			}
+		} else {
+			rawMD5 = run.md5
+		}
 	}
 	elapsed := time.Since(start)
 	var after runtime.MemStats
 	runtime.ReadMemStats(&after)
+	if annexBInput && rawMD5Ready {
+		rawMD5 = hex.EncodeToString(rawMD5Sum[:])
+	}
 	sample := sampleFromTotals(iters, framesPerIter, bytesPerIter, elapsed, after.TotalAlloc-before.TotalAlloc, after.Mallocs-before.Mallocs, rawMD5)
 	return sample, framesPerIter, bytesPerIter, rawMD5, pixFmt, nil
 }
@@ -1847,8 +1886,14 @@ type decodeGoRun struct {
 	frames           int
 	bytes            int64
 	md5              string
+	md5Sum           [md5.Size]byte
+	hasMD5           bool
 	pixFmt           string
 	frameDiagnostics []benchFrameDiagnostic
+}
+
+type borrowedGoScratch struct {
+	raw []byte
 }
 
 func decodeGoOnce(data []byte, rawOutput bool) (decodeGoRun, error) {
@@ -1876,13 +1921,13 @@ func decodeGoOnceForFormat(data []byte, rawOutput bool, annexBInput bool) (decod
 	return summarizeGoFrames(frames, rawOutput)
 }
 
-func decodeGoAnnexBBorrowedOnce(dec *goh264.Decoder, dst []goh264.Frame, rawScratch []byte, data []byte, rawOutput bool) (decodeGoRun, []goh264.Frame, []byte, error) {
+func decodeGoAnnexBBorrowedOnce(dec *goh264.Decoder, dst []goh264.Frame, scratch *borrowedGoScratch, data []byte, rawOutput bool) (decodeGoRun, []goh264.Frame, error) {
 	frames, err := dec.DecodeAnnexBBorrowedFrames(dst, data)
 	if err != nil {
-		return decodeGoRun{}, frames, rawScratch, err
+		return decodeGoRun{}, frames, err
 	}
-	run, rawScratch, err := summarizeGoBorrowedFrames(frames, rawOutput, rawScratch)
-	return run, frames, rawScratch, err
+	run, err := summarizeGoBorrowedFrames(frames, rawOutput, scratch)
+	return run, frames, err
 }
 
 func summarizeGoFrames(frames []*goh264.Frame, rawOutput bool) (decodeGoRun, error) {
@@ -1926,37 +1971,40 @@ func summarizeGoFrames(frames []*goh264.Frame, rawOutput bool) (decodeGoRun, err
 	return decodeGoRun{frames: len(frames), bytes: total, md5: hashString(h), pixFmt: pixFmt, frameDiagnostics: frameDiagnostics}, nil
 }
 
-func summarizeGoBorrowedFrames(frames []goh264.Frame, rawOutput bool, scratch []byte) (decodeGoRun, []byte, error) {
+func summarizeGoBorrowedFrames(frames []goh264.Frame, rawOutput bool, scratch *borrowedGoScratch) (decodeGoRun, error) {
 	var pixFmt string
-	h := md5.New()
 	var total int64
+	var localScratch borrowedGoScratch
+	if scratch == nil {
+		scratch = &localScratch
+	}
+	if rawOutput {
+		scratch.raw = scratch.raw[:0]
+	}
 	for i := range frames {
 		frame := &frames[i]
 		framePixFmt, err := frame.RawPixelFormat()
 		if err != nil {
-			return decodeGoRun{}, scratch, err
+			return decodeGoRun{}, err
 		}
 		if i == 0 {
 			pixFmt = framePixFmt
 		} else if framePixFmt != pixFmt {
-			return decodeGoRun{}, scratch, fmt.Errorf("mixed raw pixel formats: frame[0]=%s frame[%d]=%s", pixFmt, i, framePixFmt)
+			return decodeGoRun{}, fmt.Errorf("mixed raw pixel formats: frame[0]=%s frame[%d]=%s", pixFmt, i, framePixFmt)
 		}
 		if rawOutput {
-			scratch = scratch[:0]
-			scratch, err = frame.AppendRawYUVBytesLE(scratch)
+			scratch.raw, err = frame.AppendRawYUVBytesLE(scratch.raw)
 			if err != nil {
-				return decodeGoRun{}, scratch, err
+				return decodeGoRun{}, err
 			}
-			total += int64(len(scratch))
-			if _, err := h.Write(scratch); err != nil {
-				return decodeGoRun{}, scratch, err
-			}
+			total = int64(len(scratch.raw))
 		}
 	}
 	if !rawOutput {
-		return decodeGoRun{frames: len(frames), pixFmt: pixFmt}, scratch, nil
+		return decodeGoRun{frames: len(frames), pixFmt: pixFmt}, nil
 	}
-	return decodeGoRun{frames: len(frames), bytes: total, md5: hashString(h), pixFmt: pixFmt}, scratch, nil
+	md5Sum := md5.Sum(scratch.raw)
+	return decodeGoRun{frames: len(frames), bytes: total, md5Sum: md5Sum, hasMD5: true, pixFmt: pixFmt}, nil
 }
 
 func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup int, rawOutput bool, bin string, threads string, pixFmt string, goPixFmt string, lane ffmpegBenchLane) (benchResult, error) {
@@ -2335,7 +2383,8 @@ func (w *countingWriter) Write(p []byte) (int, error) {
 }
 
 func hashString(h hash.Hash) string {
-	return hex.EncodeToString(h.Sum(nil))
+	var sum [md5.Size]byte
+	return hex.EncodeToString(h.Sum(sum[:0]))
 }
 
 func joinArgs(args []string) string {

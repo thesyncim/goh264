@@ -81,6 +81,11 @@ func h264ChromaMCStrides(dst []uint8, src []uint8, dstStride int, srcStride int,
 	if err := checkChromaMCArgs(dst, src, dstStride, srcStride, height, x, y, width); err != nil {
 		return err
 	}
+	h264ChromaMCStridesKernel(dst, src, dstStride, srcStride, int32(height), int32(x), int32(y), int32(width), avg)
+	return nil
+}
+
+func h264ChromaMCStridesScalar(dst []uint8, src []uint8, dstStride int, srcStride int, height int, x int, y int, width int, avg bool) {
 	a := (8 - x) * (8 - y)
 	b := x * (8 - y)
 	c := (8 - x) * y
@@ -120,7 +125,6 @@ func h264ChromaMCStrides(dst []uint8, src []uint8, dstStride int, srcStride int,
 			}
 		}
 	}
-	return nil
 }
 
 func h264ChromaMCStridesHigh(dst []uint16, src []uint16, dstStride int, srcStride int, height int, x int, y int, width int, avg bool, bitDepth int) error {
@@ -130,6 +134,11 @@ func h264ChromaMCStridesHigh(dst []uint16, src []uint16, dstStride int, srcStrid
 	if err := checkChromaMCArgsHigh(dst, src, dstStride, srcStride, height, x, y, width); err != nil {
 		return err
 	}
+	h264ChromaMCStridesHighKernel(dst, src, dstStride, srcStride, int32(height), int32(x), int32(y), int32(width), avg)
+	return nil
+}
+
+func h264ChromaMCStridesHighScalar(dst []uint16, src []uint16, dstStride int, srcStride int, height int, x int, y int, width int, avg bool) {
 	a := (8 - x) * (8 - y)
 	b := x * (8 - y)
 	c := (8 - x) * y
@@ -169,7 +178,6 @@ func h264ChromaMCStridesHigh(dst []uint16, src []uint16, dstStride int, srcStrid
 			}
 		}
 	}
-	return nil
 }
 
 func h264ChromaMCStore(dst []uint8, offset int, v int, avg bool) {
