@@ -200,3 +200,165 @@ qpel_high0y_store:
 	SUBW  $1, R4, R4
 	CBNZW R4, qpel_high0y_row
 	RET
+
+// func h264QpelMCHigh22ASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, max int32, avg int32)
+TEXT ·h264QpelMCHigh22ASM(SB), NOSPLIT, $32-48
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW size+32(FP), R4
+	MOVW max+36(FP), R15
+	MOVW avg+40(FP), R17
+qpel_high22_row:
+	MOVD R0, R10
+	MOVD R1, R11
+	MOVW size+32(FP), R9
+qpel_high22_col:
+	SUB   R3, R11, R13
+	SUB   R3, R13, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_high22_tmp0-32(SP)
+
+	SUB   R3, R11, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_high22_tmp1-28(SP)
+
+	MOVD  R11, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_high22_tmp2-24(SP)
+
+	ADD   R3, R11, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_high22_tmp3-20(SP)
+
+	ADD   R3, R11, R13
+	ADD   R3, R13, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_high22_tmp4-16(SP)
+
+	ADD   R3, R11, R13
+	ADD   R3, R13, R13
+	ADD   R3, R13, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_high22_tmp5-12(SP)
+
+	MOVW  qpel_high22_tmp2-24(SP), R5
+	MOVW  qpel_high22_tmp3-20(SP), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVW  qpel_high22_tmp1-28(SP), R5
+	MOVW  qpel_high22_tmp4-16(SP), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVW  qpel_high22_tmp0-32(SP), R5
+	MOVW  qpel_high22_tmp5-12(SP), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	ADDW  $512, R12, R12
+	ASRW  $10, R12, R12
+	CMPW  $0, R12
+	BGE   qpel_high22_nonnegative
+	MOVW  ZR, R12
+	B     qpel_high22_clip_done
+qpel_high22_nonnegative:
+	CMPW R15, R12
+	BLE  qpel_high22_clip_done
+	MOVW R15, R12
+qpel_high22_clip_done:
+	CBZW  R17, qpel_high22_store
+	MOVHU (R10), R7
+	ADDW  R7, R12, R12
+	ADDW  $1, R12, R12
+	LSRW  $1, R12, R12
+qpel_high22_store:
+	MOVH  R12, (R10)
+	ADD   $2, R10, R10
+	ADD   $2, R11, R11
+	SUBW  $1, R9, R9
+	CBNZW R9, qpel_high22_col
+	ADD   R2, R0, R0
+	ADD   R3, R1, R1
+	SUBW  $1, R4, R4
+	CBNZW R4, qpel_high22_row
+	RET
