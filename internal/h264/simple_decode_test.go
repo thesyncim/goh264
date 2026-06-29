@@ -170,7 +170,7 @@ func TestSimpleDecoderResetsPartialPictureAfterDamagedSlice(t *testing.T) {
 		t.Fatalf("damaged access unit decoded frames=%d, want error", len(frames))
 	}
 	if dec.st.frame != nil || dec.st.tables != nil || dec.st.motionScratch != nil || dec.st.motionScratchHigh != nil ||
-		dec.st.loopFilterSlices != nil || dec.st.loopFilterRefFrameIDs != nil || dec.st.haveSlice ||
+		len(dec.st.loopFilterSlices) != 0 || len(dec.st.loopFilterRefFrameIDs) != 0 || dec.st.haveSlice ||
 		dec.st.frameComplete || dec.st.fieldPairPending || dec.st.sliceNum != 0 {
 		t.Fatalf("damaged slice left partial picture state: %+v", dec.st)
 	}

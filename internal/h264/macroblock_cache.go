@@ -224,6 +224,28 @@ func newMacroblockTables(mbWidth int, mbHeight int, chromaFormatIDC int) (*macro
 	return m, nil
 }
 
+func (m *macroblockTables) resetForDecode() {
+	if m == nil {
+		return
+	}
+	clear(m.NonZeroCount)
+	clear(m.CBPTable)
+	clear(m.QScaleTable)
+	clear(m.ChromaPred)
+	clear(m.Intra4x4Pred)
+	clear(m.MacroblockTyp)
+	clear(m.DirectTable)
+	clear(m.ListCounts)
+	for i := range m.SliceTable {
+		m.SliceTable[i] = ^uint16(0)
+	}
+	for list := 0; list < 2; list++ {
+		clear(m.RefIndex[list])
+		clear(m.MotionVal[list])
+		clear(m.MVDTable[list])
+	}
+}
+
 func (m *macroblockTables) checkMBXY(mbXY int) error {
 	if m == nil || mbXY < 0 || mbXY >= len(m.NonZeroCount) {
 		return ErrInvalidData

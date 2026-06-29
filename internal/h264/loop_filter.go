@@ -197,15 +197,24 @@ func (p h264LoopFilterSliceParams) ref2FrameForLoopFilter(list int, ref int8, cu
 }
 
 func h264LoopFilterRef2Frame(entries [2][]simpleRefEntry, ids map[*DecodedFrame]int8) ([2][]int8, error) {
+	return h264LoopFilterRef2FrameInto(entries, ids, [2][]int8{})
+}
+
+func h264LoopFilterRef2FrameInto(entries [2][]simpleRefEntry, ids map[*DecodedFrame]int8, dst [2][]int8) ([2][]int8, error) {
 	var out [2][]int8
 	for list := 0; list < 2; list++ {
 		if len(entries[list]) == 0 {
+			out[list] = dst[list][:0]
 			continue
 		}
 		if len(entries[list]) > maxInt/32 {
 			return [2][]int8{}, ErrInvalidData
 		}
-		out[list] = make([]int8, len(entries[list]))
+		if cap(dst[list]) < len(entries[list]) {
+			out[list] = make([]int8, len(entries[list]))
+		} else {
+			out[list] = dst[list][:len(entries[list])]
+		}
 		for i, entry := range entries[list] {
 			id, err := h264LoopFilterRefFrameID(entry.frame, ids)
 			if err != nil {

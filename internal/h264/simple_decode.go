@@ -8,7 +8,10 @@
 
 package h264
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 type DecodedFrame struct {
 	Y, Cb, Cr                      []uint8
@@ -94,18 +97,36 @@ type SimpleDecoder struct {
 }
 
 type simpleDecodeState struct {
-	frame                 *DecodedFrame
-	tables                *macroblockTables
-	motionScratch         *h264MotionCompScratch
-	motionScratchHigh     *h264MotionCompScratchHigh
-	loopFilterSlices      []h264LoopFilterSliceParams
-	loopFilterRefFrameIDs map[*DecodedFrame]int8
-	sliceNum              uint16
-	haveSlice             bool
-	frameComplete         bool
-	fieldPairPending      bool
-	pendingFieldStructure int32
-	pendingFieldFrameNum  uint32
+	frame                  *DecodedFrame
+	tables                 *macroblockTables
+	motionScratch          *h264MotionCompScratch
+	motionScratchHigh      *h264MotionCompScratchHigh
+	motionScratchStore     h264MotionCompScratch
+	motionScratchHighStore h264MotionCompScratchHigh
+	highRefPlanes          [2][32]h264PicturePlanesHigh
+	highRefPtrs            [2][32]*h264PicturePlanesHigh
+	dpbSnapshot            simpleFrameDPBSnapshot
+	refScratch             simpleFrameRefContextScratch
+	borrowSideData         bool
+	cachedSEIRBSP          []byte
+	cachedSEISideData      DecodedFrameSideData
+	pendingBorrowSideData  DecodedFrameSideData
+	framesScratch          []*DecodedFrame
+	drainScratch           []*DecodedFrame
+	loopFilterSlices       []h264LoopFilterSliceParams
+	loopFilterRefScratch   [][2][]int8
+	loopFilterRefFrameIDs  map[*DecodedFrame]int8
+	framePool              []*DecodedFrame
+	spsRaw                 [maxSPSCount][]byte
+	ppsRaw                 [maxPPSCount][]byte
+	sliceHeader            SliceHeader
+	skipOutputReorderPrime bool
+	sliceNum               uint16
+	haveSlice              bool
+	frameComplete          bool
+	fieldPairPending       bool
+	pendingFieldStructure  int32
+	pendingFieldFrameNum   uint32
 }
 
 func (s *simpleDecodeState) resetPicture() {
@@ -116,18 +137,87 @@ func (s *simpleDecodeState) resetPicture() {
 	s.tables = nil
 	s.motionScratch = nil
 	s.motionScratchHigh = nil
-	s.loopFilterSlices = nil
-	s.loopFilterRefFrameIDs = nil
+	s.loopFilterSlices = s.loopFilterSlices[:0]
+	for frame := range s.loopFilterRefFrameIDs {
+		delete(s.loopFilterRefFrameIDs, frame)
+	}
 	s.sliceNum = 0
 	s.haveSlice = false
 	s.frameComplete = false
 	s.fieldPairPending = false
 	s.pendingFieldStructure = 0
 	s.pendingFieldFrameNum = 0
+	s.pendingBorrowSideData = DecodedFrameSideData{}
 }
 
 func (s *simpleDecodeState) hasPendingComplementaryField() bool {
 	return s != nil && s.haveSlice && !s.frameComplete && s.fieldPairPending
+}
+
+func (s *simpleDecodeState) cachedSPSRaw(raw []byte) (uint32, bool) {
+	if s == nil || len(raw) == 0 {
+		return 0, false
+	}
+	for id, cached := range s.spsRaw {
+		if bytes.Equal(cached, raw) {
+			return uint32(id), true
+		}
+	}
+	return 0, false
+}
+
+func (s *simpleDecodeState) cachedPPSRaw(raw []byte) (uint32, bool) {
+	if s == nil || len(raw) == 0 {
+		return 0, false
+	}
+	for id, cached := range s.ppsRaw {
+		if bytes.Equal(cached, raw) {
+			return uint32(id), true
+		}
+	}
+	return 0, false
+}
+
+func (s *simpleDecodeState) storeSPSRaw(id uint32, raw []byte) {
+	if s == nil || id >= maxSPSCount {
+		return
+	}
+	s.spsRaw[id] = append(s.spsRaw[id][:0], raw...)
+}
+
+func (s *simpleDecodeState) storePPSRaw(id uint32, raw []byte) {
+	if s == nil || id >= maxPPSCount {
+		return
+	}
+	s.ppsRaw[id] = append(s.ppsRaw[id][:0], raw...)
+}
+
+func (s *simpleDecodeState) recycleFrame(frame *DecodedFrame) {
+	if s == nil || frame == nil {
+		return
+	}
+	frame.clearForReuse()
+	s.framePool = append(s.framePool, frame)
+}
+
+func (s *simpleDecodeState) takeSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
+	if s == nil {
+		return newSimpleDecodedFrame(sps)
+	}
+	for i := len(s.framePool) - 1; i >= 0; i-- {
+		frame := s.framePool[i]
+		if reusableDecodedFrameForSPS(frame, sps) {
+			s.framePool = append(s.framePool[:i], s.framePool[i+1:]...)
+			if err := resetSimpleDecodedFrame(frame, sps); err != nil {
+				return nil, nil, err
+			}
+			if frame.tables != nil {
+				frame.tables.resetForDecode()
+			}
+			return frame, frame.tables, nil
+		}
+	}
+	return newSimpleDecodedFrame(sps)
 }
 
 func (d *SimpleDecoder) StoreAVCDecoderConfiguration(cfg AVCDecoderConfigurationRecord) error {
@@ -176,6 +266,43 @@ func (d *SimpleDecoder) DecodeNALUnitsWithSideData(nals []NALUnit, packetSideDat
 		return nil, ErrInvalidData
 	}
 	return decodeSimpleNALUnitsWithDecoderState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, &d.st, packetSideData, false)
+}
+
+func (d *SimpleDecoder) DecodeNALUnitsFlush(nals []NALUnit) ([]*DecodedFrame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	return decodeSimpleNALUnitsWithDecoderState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, &d.st, DecodedFrameSideData{}, true)
+}
+
+func (d *SimpleDecoder) DecodeNALUnitsFlushWithoutPrime(nals []NALUnit) ([]*DecodedFrame, error) {
+	if d == nil {
+		return nil, ErrInvalidData
+	}
+	d.st.skipOutputReorderPrime = true
+	d.st.borrowSideData = true
+	frames, err := decodeSimpleNALUnitsWithDecoderState(nals, &d.sps, &d.pps, &d.dpb, &d.sei, &d.st, DecodedFrameSideData{}, true)
+	d.st.skipOutputReorderPrime = false
+	d.st.borrowSideData = false
+	return frames, err
+}
+
+func (d *SimpleDecoder) ResetStreamState() {
+	if d == nil {
+		return
+	}
+	d.dpb.reset()
+	d.sei.Reset()
+	d.st.resetPicture()
+}
+
+func (d *SimpleDecoder) RecycleDecodedFrames(frames []*DecodedFrame) {
+	if d == nil {
+		return
+	}
+	for _, frame := range frames {
+		d.st.recycleFrame(frame)
+	}
 }
 
 func (d *SimpleDecoder) DecodeAVCFrames(data []byte, nalLengthSize int) ([]*DecodedFrame, error) {
@@ -291,10 +418,13 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 	if st.frameComplete {
 		st.resetPicture()
 	}
-	if flushOutput {
+	if flushOutput && !st.skipOutputReorderPrime {
 		dpb.primeOutputReorderDelayFromNALs(nals, spsList, ppsList)
 	}
 	var frames []*DecodedFrame
+	if st.borrowSideData {
+		frames = st.framesScratch[:0]
+	}
 	decodedFrames := 0
 	acceptedStateOnlyNAL := false
 	currentIDRSegmentOutputIndex := -1
@@ -302,6 +432,10 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 	for nalIndex, nal := range nals {
 		switch nal.Type {
 		case NALSPS:
+			if id, ok := st.cachedSPSRaw(nal.Raw); ok && spsList[id] != nil {
+				acceptedStateOnlyNAL = true
+				continue
+			}
 			sps, err := DecodeSPSFromNAL(nal)
 			if err != nil {
 				// FFmpeg keeps malformed parameter-set NALs non-fatal unless
@@ -309,8 +443,13 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				continue
 			}
 			spsList[sps.SPSID] = sps
+			st.storeSPSRaw(sps.SPSID, nal.Raw)
 			acceptedStateOnlyNAL = true
 		case NALPPS:
+			if id, ok := st.cachedPPSRaw(nal.Raw); ok && ppsList[id] != nil {
+				acceptedStateOnlyNAL = true
+				continue
+			}
 			pps, err := DecodePPS(nal.RBSP, spsList)
 			if err != nil {
 				// FFmpeg keeps malformed parameter-set NALs non-fatal unless
@@ -318,6 +457,7 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				continue
 			}
 			ppsList[pps.PPSID] = pps
+			st.storePPSRaw(pps.PPSID, nal.Raw)
 			acceptedStateOnlyNAL = true
 		case NALSEI:
 			if st.frameComplete {
@@ -325,20 +465,31 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 			} else if st.haveSlice {
 				continue
 			}
+			if st.borrowSideData && bytes.Equal(st.cachedSEIRBSP, nal.RBSP) {
+				st.pendingBorrowSideData = st.cachedSEISideData
+				acceptedStateOnlyNAL = true
+				continue
+			}
 			// FFmpeg keeps SEI parse failures non-fatal unless AV_EF_EXPLODE is set.
 			if err := sei.Decode(nal.RBSP, spsList); err == nil {
+				if st.borrowSideData {
+					st.cachedSEIRBSP = append(st.cachedSEIRBSP[:0], nal.RBSP...)
+					st.cachedSEISideData = borrowedFrameSideDataFromSEI(sei)
+					st.pendingBorrowSideData = st.cachedSEISideData
+				}
 				acceptedStateOnlyNAL = true
 			}
 		case NALAUD, NALEndSequence, NALEndStream, NALFillerData:
 			acceptedStateOnlyNAL = true
 		case NALSlice, NALIDRSlice:
-			dpbSnapshot := dpb.snapshot()
+			dpbSnapshot := dpb.snapshotInto(&st.dpbSnapshot)
 			returnSliceError := func(err error) ([]*DecodedFrame, error) {
 				st.resetPicture()
 				dpb.restore(dpbSnapshot)
 				return returnFramesWithDecodeError(frames, dpb, flushOutput, err)
 			}
-			sh, payload, err := parseSliceHeaderWithPayload(nal, ppsList)
+			sh := &st.sliceHeader
+			payload, err := parseSliceHeaderWithPayloadInto(nal, ppsList, sh)
 			if err != nil {
 				return returnSliceError(err)
 			}
@@ -381,11 +532,16 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 						sei.PictureTiming.TimecodeCount = 0
 					}
 				}
-				st.frame, st.tables, err = newSimpleDecodedFrame(sh.SPS)
+				st.frame, st.tables, err = st.takeSimpleDecodedFrame(sh.SPS)
 				if err != nil {
 					return returnSliceError(err)
 				}
-				st.frame.SideData = decodedFrameSideDataFromSEI(sei)
+				if st.borrowSideData {
+					st.frame.SideData = st.pendingBorrowSideData
+					st.pendingBorrowSideData = DecodedFrameSideData{}
+				} else {
+					st.frame.SideData = decodedFrameSideDataFromSEI(sei)
+				}
 				mergePacketSideDataIntoDecodedFrame(&st.frame.SideData, packetSideData)
 				if err := dpb.initFramePOC(st.frame, sh, nal.RefIDC); err != nil {
 					return returnSliceError(err)
@@ -396,11 +552,17 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				dpb.applySimpleRecoveryPoint(st.frame, sh, nal.RefIDC, sei)
 				consumeFrameSideDataFromSEI(sei)
 				if st.frame.BitDepthLuma == 8 {
-					st.motionScratch = newH264MotionCompScratchForFrame(st.frame)
+					st.motionScratch = h264MotionCompScratchForFrame(&st.motionScratchStore, st.frame)
 				} else {
-					st.motionScratchHigh = newH264MotionCompScratchHighForFrame(st.frame)
+					st.motionScratchHigh = h264MotionCompScratchHighForFrame(&st.motionScratchHighStore, st.frame)
 				}
-				st.loopFilterRefFrameIDs = make(map[*DecodedFrame]int8)
+				if st.loopFilterRefFrameIDs == nil {
+					st.loopFilterRefFrameIDs = make(map[*DecodedFrame]int8)
+				} else {
+					for frame := range st.loopFilterRefFrameIDs {
+						delete(st.loopFilterRefFrameIDs, frame)
+					}
+				}
 			} else if err := st.frame.matchesSPS(sh.SPS); err != nil {
 				return returnSliceError(err)
 			} else if startingComplementaryField {
@@ -417,14 +579,22 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 			for len(st.loopFilterSlices) <= int(st.sliceNum) {
 				st.loopFilterSlices = append(st.loopFilterSlices, h264LoopFilterSliceParams{})
 			}
+			for len(st.loopFilterRefScratch) <= int(st.sliceNum) {
+				st.loopFilterRefScratch = append(st.loopFilterRefScratch, [2][]int8{})
+			}
 			st.loopFilterSlices[st.sliceNum] = h264LoopFilterSliceParamsFromHeader(sh)
-			refctx, err := dpb.buildRefContext(sh, st.frame)
+			refctx, err := dpb.buildRefContextInto(sh, st.frame, &st.refScratch)
 			if err != nil {
 				return returnSliceError(fmt.Errorf("build simple ref context slice=%d type=%d frame_num=%d refs=%d/%d mods=%d/%d picture=%d: %w",
 					st.sliceNum, sh.SliceTypeNoS, sh.FrameNum, sh.RefCount[0], sh.RefCount[1],
 					sh.NBRefModifications[0], sh.NBRefModifications[1], sh.PictureStructure, err))
 			}
-			st.loopFilterSlices[st.sliceNum].Ref2Frame, err = h264LoopFilterRef2Frame(refctx.Entries, st.loopFilterRefFrameIDs)
+			if st.borrowSideData {
+				st.loopFilterSlices[st.sliceNum].Ref2Frame, err = h264LoopFilterRef2FrameInto(refctx.Entries, st.loopFilterRefFrameIDs, st.loopFilterRefScratch[st.sliceNum])
+				st.loopFilterRefScratch[st.sliceNum] = st.loopFilterSlices[st.sliceNum].Ref2Frame
+			} else {
+				st.loopFilterSlices[st.sliceNum].Ref2Frame, err = h264LoopFilterRef2Frame(refctx.Entries, st.loopFilterRefFrameIDs)
+			}
 			if err != nil {
 				return returnSliceError(err)
 			}
@@ -462,6 +632,8 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 					Direct:        direct,
 					PredWeight:    &sh.PredWeightTable,
 					MotionScratch: st.motionScratchHigh,
+					RefPlanes:     &st.highRefPlanes,
+					RefPtrs:       &st.highRefPtrs,
 					X264Build:     direct.X264Build,
 					X264BuildSet:  true,
 				})
@@ -510,7 +682,13 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 				if err := dpb.holdOutputFrame(st.frame, sh); err != nil {
 					return returnSliceError(err)
 				}
-				out, err := dpb.drainOutputFrames(false)
+				var out []*DecodedFrame
+				if st.borrowSideData {
+					out, err = dpb.drainOutputFramesInto(st.drainScratch[:0], false)
+					st.drainScratch = out[:0]
+				} else {
+					out, err = dpb.drainOutputFrames(false)
+				}
 				if err != nil {
 					return returnSliceError(err)
 				}
@@ -540,7 +718,14 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 		return returnFramesWithDecodeError(frames, dpb, flushOutput, ErrInvalidData)
 	}
 	if flushOutput {
-		out, err := dpb.drainOutputFrames(true)
+		var out []*DecodedFrame
+		var err error
+		if st.borrowSideData {
+			out, err = dpb.drainOutputFramesInto(st.drainScratch[:0], true)
+			st.drainScratch = out[:0]
+		} else {
+			out, err = dpb.drainOutputFrames(true)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -548,9 +733,15 @@ func decodeSimpleNALUnitsWithDecoderState(nals []NALUnit, spsList *[maxSPSCount]
 	}
 	if decodedFrames == 0 {
 		if !flushOutput && acceptedStateOnlyNAL {
+			if st.borrowSideData {
+				st.framesScratch = frames
+			}
 			return frames, nil
 		}
 		return nil, ErrInvalidData
+	}
+	if st.borrowSideData {
+		st.framesScratch = frames
 	}
 	return frames, nil
 }
@@ -610,6 +801,30 @@ func decodedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
 		MasteringDisplay:     sei.Common.MasteringDisplay,
 		ContentLight:         sei.Common.ContentLight,
 		LCEVC:                cloneByteSlice(sei.Common.LCEVC.Data),
+	}
+}
+
+func borrowedFrameSideDataFromSEI(sei *H264SEIContext) DecodedFrameSideData {
+	if sei == nil {
+		return DecodedFrameSideData{}
+	}
+	return DecodedFrameSideData{
+		UserDataUnregistered: sei.Common.Unregistered.Data,
+		A53ClosedCaptions:    sei.Common.A53Caption.Data,
+		X264Build:            sei.Common.Unregistered.X264Build,
+		PictureTiming:        sei.PictureTiming,
+		RecoveryPoint:        sei.RecoveryPoint,
+		BufferingPeriod:      sei.BufferingPeriod,
+		GreenMetadata:        sei.GreenMetadata,
+		AFD:                  sei.Common.AFD,
+		FramePacking:         sei.Common.FramePacking,
+		DisplayOrientation:   sei.Common.DisplayOrientation,
+		AlternativeTransfer:  sei.Common.AlternativeTransfer,
+		AmbientViewing:       sei.Common.AmbientViewing,
+		FilmGrain:            sei.Common.FilmGrain,
+		MasteringDisplay:     sei.Common.MasteringDisplay,
+		ContentLight:         sei.Common.ContentLight,
+		LCEVC:                sei.Common.LCEVC.Data,
 	}
 }
 
@@ -876,6 +1091,104 @@ func newSimpleDecodedFrame(sps *SPS) (*DecodedFrame, *macroblockTables, error) {
 	return frame, tables, nil
 }
 
+func reusableDecodedFrameForSPS(frame *DecodedFrame, sps *SPS) bool {
+	if frame == nil || sps == nil || frame.tables == nil {
+		return false
+	}
+	mbWidth := int(sps.MBWidth)
+	mbHeight := int(sps.MBHeight)
+	chromaFormatIDC := int(sps.ChromaFormatIDC)
+	if frame.MBWidth != mbWidth || frame.MBHeight != mbHeight ||
+		frame.ChromaFormatIDC != chromaFormatIDC ||
+		frame.BitDepthLuma != int(sps.BitDepthLuma) ||
+		frame.BitDepthChroma != int(sps.BitDepthChroma) ||
+		frame.tables.MBWidth != mbWidth ||
+		frame.tables.MBHeight != mbHeight ||
+		frame.tables.ChromaFormatIDC != chromaFormatIDC {
+		return false
+	}
+	highBitDepth := sps.BitDepthLuma != 8
+	if highBitDepth {
+		if len(frame.Y16) == 0 {
+			return false
+		}
+	} else if len(frame.Y) == 0 {
+		return false
+	}
+	return true
+}
+
+func resetSimpleDecodedFrame(frame *DecodedFrame, sps *SPS) error {
+	if frame == nil || sps == nil {
+		return ErrInvalidData
+	}
+	y, cb, cr := frame.Y, frame.Cb, frame.Cr
+	y16, cb16, cr16 := frame.Y16, frame.Cb16, frame.Cr16
+	tables := frame.tables
+	refEntries := frame.refEntries
+	fieldRefEntries := frame.fieldRefEntries
+	*frame = DecodedFrame{
+		Y:                              y,
+		Cb:                             cb,
+		Cr:                             cr,
+		Y16:                            y16,
+		Cb16:                           cb16,
+		Cr16:                           cr16,
+		LumaStride:                     int(sps.MBWidth) * 16,
+		Width:                          int(sps.Width),
+		Height:                         int(sps.Height),
+		CropLeft:                       int(sps.CropLeft),
+		CropTop:                        int(sps.CropTop),
+		MBWidth:                        int(sps.MBWidth),
+		MBHeight:                       int(sps.MBHeight),
+		ChromaFormatIDC:                int(sps.ChromaFormatIDC),
+		BitDepthLuma:                   int(sps.BitDepthLuma),
+		BitDepthChroma:                 int(sps.BitDepthChroma),
+		frameMBSOnlyFlag:               sps.FrameMBSOnlyFlag,
+		SARNum:                         sps.VUI.SARNum,
+		SARDen:                         sps.VUI.SARDen,
+		VideoFormat:                    sps.VUI.VideoFormat,
+		VideoFullRangeFlag:             sps.VUI.VideoFullRangeFlag,
+		ColorPrimaries:                 sps.VUI.ColourPrimaries,
+		ColorTransfer:                  sps.VUI.TransferCharacteristics,
+		ColorMatrix:                    sps.VUI.MatrixCoeffs,
+		ChromaLocation:                 sps.VUI.ChromaLocation,
+		ChromaSampleLocTypeTopField:    sps.VUI.ChromaSampleLocTypeTopField,
+		ChromaSampleLocTypeBottomField: sps.VUI.ChromaSampleLocTypeBottomField,
+		TimingInfoPresentFlag:          sps.TimingInfoPresentFlag,
+		NumUnitsInTick:                 sps.NumUnitsInTick,
+		TimeScale:                      sps.TimeScale,
+		FixedFrameRateFlag:             sps.FixedFrameRateFlag,
+		tables:                         tables,
+		refEntries:                     refEntries,
+		fieldRefEntries:                fieldRefEntries,
+	}
+	if sps.ChromaFormatIDC != 0 {
+		chromaWidth, _, err := h264ChromaFrameSizeChecked(int(sps.MBWidth), int(sps.MBHeight), int(sps.ChromaFormatIDC))
+		if err != nil {
+			return err
+		}
+		frame.ChromaStride = chromaWidth
+	}
+	return nil
+}
+
+func (f *DecodedFrame) clearForReuse() {
+	if f == nil {
+		return
+	}
+	f.SideData = DecodedFrameSideData{}
+	for i := range f.refEntries {
+		f.refEntries[i] = f.refEntries[i][:0]
+	}
+	for i := range f.fieldRefEntries {
+		for j := range f.fieldRefEntries[i] {
+			f.fieldRefEntries[i][j] = f.fieldRefEntries[i][j][:0]
+		}
+	}
+	f.invalidGap = false
+}
+
 func (f *DecodedFrame) picturePlanes() h264PicturePlanes {
 	if f == nil {
 		return h264PicturePlanes{}
@@ -926,8 +1239,15 @@ func (f *DecodedFrame) matchesSPS(sps *SPS) error {
 }
 
 func newH264MotionCompScratchForFrame(f *DecodedFrame) *h264MotionCompScratch {
+	return h264MotionCompScratchForFrame(&h264MotionCompScratch{}, f)
+}
+
+func h264MotionCompScratchForFrame(scratch *h264MotionCompScratch, f *DecodedFrame) *h264MotionCompScratch {
 	if f == nil {
 		return nil
+	}
+	if scratch == nil {
+		scratch = &h264MotionCompScratch{}
 	}
 	lumaStride := f.LumaStride
 	chromaStride := f.ChromaStride
@@ -962,17 +1282,23 @@ func newH264MotionCompScratchForFrame(f *DecodedFrame) *h264MotionCompScratch {
 			edge = chromaEdge
 		}
 	}
-	return &h264MotionCompScratch{
-		Y:    make([]uint8, yLen),
-		Cb:   make([]uint8, len(f.Cb)),
-		Cr:   make([]uint8, len(f.Cr)),
-		Edge: make([]uint8, edge),
-	}
+	scratch.Y = resizeUint8Scratch(scratch.Y, yLen)
+	scratch.Cb = resizeUint8Scratch(scratch.Cb, len(f.Cb))
+	scratch.Cr = resizeUint8Scratch(scratch.Cr, len(f.Cr))
+	scratch.Edge = resizeUint8Scratch(scratch.Edge, edge)
+	return scratch
 }
 
 func newH264MotionCompScratchHighForFrame(f *DecodedFrame) *h264MotionCompScratchHigh {
+	return h264MotionCompScratchHighForFrame(&h264MotionCompScratchHigh{}, f)
+}
+
+func h264MotionCompScratchHighForFrame(scratch *h264MotionCompScratchHigh, f *DecodedFrame) *h264MotionCompScratchHigh {
 	if f == nil {
 		return nil
+	}
+	if scratch == nil {
+		scratch = &h264MotionCompScratchHigh{}
 	}
 	lumaStride := f.LumaStride
 	chromaStride := f.ChromaStride
@@ -1007,12 +1333,31 @@ func newH264MotionCompScratchHighForFrame(f *DecodedFrame) *h264MotionCompScratc
 			edge = chromaEdge
 		}
 	}
-	return &h264MotionCompScratchHigh{
-		Y:    make([]uint16, yLen),
-		Cb:   make([]uint16, len(f.Cb16)),
-		Cr:   make([]uint16, len(f.Cr16)),
-		Edge: make([]uint16, edge),
+	scratch.Y = resizeUint16Scratch(scratch.Y, yLen)
+	scratch.Cb = resizeUint16Scratch(scratch.Cb, len(f.Cb16))
+	scratch.Cr = resizeUint16Scratch(scratch.Cr, len(f.Cr16))
+	scratch.Edge = resizeUint16Scratch(scratch.Edge, edge)
+	return scratch
+}
+
+func resizeUint8Scratch(buf []uint8, n int) []uint8 {
+	if n == 0 {
+		return buf[:0]
 	}
+	if cap(buf) < n {
+		return make([]uint8, n)
+	}
+	return buf[:n]
+}
+
+func resizeUint16Scratch(buf []uint16, n int) []uint16 {
+	if n == 0 {
+		return buf[:0]
+	}
+	if cap(buf) < n {
+		return make([]uint16, n)
+	}
+	return buf[:n]
 }
 
 func checkedH264EdgeScratchSize(stride int, blockW int, blockH int) (int, bool) {

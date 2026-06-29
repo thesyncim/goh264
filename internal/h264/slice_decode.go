@@ -26,6 +26,8 @@ type h264FrameSliceDecodeInputHigh struct {
 	Direct        h264DirectMotionContext
 	PredWeight    *PredWeightTable
 	MotionScratch *h264MotionCompScratchHigh
+	RefPlanes     *[2][32]h264PicturePlanesHigh
+	RefPtrs       *[2][32]*h264PicturePlanesHigh
 	X264Build     int32
 	X264BuildSet  bool
 }
@@ -215,9 +217,14 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 			return result, fmt.Errorf("validate high cavlc mb_xy=%d type=%#x cbp=%#x table=%#x sub=%#x: %w",
 				cur.MBXY, mb.MBType, mb.CBP, mb.CBPTable, mb.Inter.SubMBType, err)
 		}
-		var refPlanes [2][32]h264PicturePlanesHigh
-		var refPtrs [2][32]*h264PicturePlanesHigh
-		reconDst, reconMBY, reconRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, cur, mb.MBType, in.Refs, &refPlanes, &refPtrs)
+		refPlanes, refPtrs := in.RefPlanes, in.RefPtrs
+		if refPlanes == nil || refPtrs == nil {
+			var localRefPlanes [2][32]h264PicturePlanesHigh
+			var localRefPtrs [2][32]*h264PicturePlanesHigh
+			refPlanes = &localRefPlanes
+			refPtrs = &localRefPtrs
+		}
+		reconDst, reconMBY, reconRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, cur, mb.MBType, in.Refs, refPlanes, refPtrs)
 		if err != nil {
 			return result, fmt.Errorf("reconstruct high cavlc mb_xy=%d view: %w", cur.MBXY, err)
 		}
@@ -243,9 +250,7 @@ func (m *macroblockTables) decodeCAVLCFrameSliceHigh(gb *bitReader, dst *h264Pic
 				return result, fmt.Errorf("validate high cavlc mb_xy=%d type=%#x cbp=%#x table=%#x sub=%#x: %w",
 					bottom.MBXY, bottomMB.MBType, bottomMB.CBP, bottomMB.CBPTable, bottomMB.Inter.SubMBType, err)
 			}
-			var bottomRefPlanes [2][32]h264PicturePlanesHigh
-			var bottomRefPtrs [2][32]*h264PicturePlanesHigh
-			bottomDst, bottomMBY, bottomRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, bottom, bottomMB.MBType, in.Refs, &bottomRefPlanes, &bottomRefPtrs)
+			bottomDst, bottomMBY, bottomRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, bottom, bottomMB.MBType, in.Refs, refPlanes, refPtrs)
 			if err != nil {
 				return result, fmt.Errorf("reconstruct high cavlc mb_xy=%d view: %w", bottom.MBXY, err)
 			}
@@ -394,9 +399,14 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 			return result, fmt.Errorf("validate high cabac mb_xy=%d type=%#x cbp=%#x table=%#x sub=%#x: %w",
 				cur.MBXY, mb.MBType, mb.CBP, mb.CBPTable, mb.Inter.SubMBType, err)
 		}
-		var refPlanes [2][32]h264PicturePlanesHigh
-		var refPtrs [2][32]*h264PicturePlanesHigh
-		reconDst, reconMBY, reconRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, cur, mb.MBType, in.Refs, &refPlanes, &refPtrs)
+		refPlanes, refPtrs := in.RefPlanes, in.RefPtrs
+		if refPlanes == nil || refPtrs == nil {
+			var localRefPlanes [2][32]h264PicturePlanesHigh
+			var localRefPtrs [2][32]*h264PicturePlanesHigh
+			refPlanes = &localRefPlanes
+			refPtrs = &localRefPtrs
+		}
+		reconDst, reconMBY, reconRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, cur, mb.MBType, in.Refs, refPlanes, refPtrs)
 		if err != nil {
 			return result, fmt.Errorf("reconstruct high cabac mb_xy=%d view: %w", cur.MBXY, err)
 		}
@@ -425,9 +435,7 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 				return result, fmt.Errorf("validate high cabac mb_xy=%d type=%#x cbp=%#x table=%#x sub=%#x: %w",
 					bottom.MBXY, bottomMB.MBType, bottomMB.CBP, bottomMB.CBPTable, bottomMB.Inter.SubMBType, err)
 			}
-			var bottomRefPlanes [2][32]h264PicturePlanesHigh
-			var bottomRefPtrs [2][32]*h264PicturePlanesHigh
-			bottomDst, bottomMBY, bottomRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, bottom, bottomMB.MBType, in.Refs, &bottomRefPlanes, &bottomRefPtrs)
+			bottomDst, bottomMBY, bottomRefs, err := h264FrameMBAFFReconstructViewHigh(&dstView, bottom, bottomMB.MBType, in.Refs, refPlanes, refPtrs)
 			if err != nil {
 				return result, fmt.Errorf("reconstruct high cabac mb_xy=%d view: %w", bottom.MBXY, err)
 			}

@@ -65,15 +65,21 @@ const (
 )
 
 func SplitAnnexB(data []byte) ([]NALUnit, error) {
+	out, _, err := SplitAnnexBInto(nil, nil, data)
+	return out, err
+}
+
+func SplitAnnexBInto(out []NALUnit, rbspScratch []byte, data []byte) ([]NALUnit, []byte, error) {
 	if nalInputTooLarge(data) {
-		return nil, ErrInvalidData
+		return out[:0], rbspScratch[:0], ErrInvalidData
 	}
 
-	var out []NALUnit
+	out = out[:0]
+	rbspScratch = rbspScratch[:0]
 
 	start, prefixLen, ok := findStartCode(data, 0)
 	if !ok {
-		return nil, ErrInvalidData
+		return out, rbspScratch, ErrInvalidData
 	}
 
 	for ok {
@@ -85,10 +91,13 @@ func SplitAnnexB(data []byte) ([]NALUnit, error) {
 		}
 
 		if nalEnd > nalStart {
-			nal, err := parseNAL(data[nalStart:nalEnd])
+			rbspStart := len(rbspScratch)
+			nal, nextRBSP, err := parseNALInto(data[nalStart:nalEnd], rbspScratch)
 			if err != nil {
-				return nil, err
+				return out, rbspScratch, err
 			}
+			rbspScratch = nextRBSP
+			nal.RBSP = rbspScratch[rbspStart:len(rbspScratch)]
 			out = append(out, nal)
 		}
 
@@ -99,9 +108,9 @@ func SplitAnnexB(data []byte) ([]NALUnit, error) {
 	}
 
 	if len(out) == 0 {
-		return nil, ErrInvalidData
+		return out, rbspScratch, ErrInvalidData
 	}
-	return out, nil
+	return out, rbspScratch, nil
 }
 
 func DecodeAVCDecoderConfigurationRecord(data []byte) (AVCDecoderConfigurationRecord, error) {
@@ -245,17 +254,23 @@ func parseAVCConfigNAL(raw []byte, wantType NALUnitType) (NALUnit, error) {
 }
 
 func SplitAVCC(data []byte, nalLengthSize int) ([]NALUnit, error) {
+	out, _, err := SplitAVCCInto(nil, nil, data, nalLengthSize)
+	return out, err
+}
+
+func SplitAVCCInto(out []NALUnit, rbspScratch []byte, data []byte, nalLengthSize int) ([]NALUnit, []byte, error) {
 	if nalLengthSize < 1 || nalLengthSize > 4 {
-		return nil, ErrInvalidData
+		return out[:0], rbspScratch[:0], ErrInvalidData
 	}
 	if nalInputTooLarge(data) {
-		return nil, ErrInvalidData
+		return out[:0], rbspScratch[:0], ErrInvalidData
 	}
 
-	var out []NALUnit
+	out = out[:0]
+	rbspScratch = rbspScratch[:0]
 	for pos := 0; pos < len(data); {
 		if pos >= len(data)-nalLengthSize {
-			return nil, ErrInvalidData
+			return out, rbspScratch, ErrInvalidData
 		}
 
 		nalSize := 0
@@ -264,21 +279,24 @@ func SplitAVCC(data []byte, nalLengthSize int) ([]NALUnit, error) {
 			pos++
 		}
 		if nalSize <= 0 || nalSize > len(data)-pos {
-			return nil, ErrInvalidData
+			return out, rbspScratch, ErrInvalidData
 		}
 
-		nal, err := parseNAL(data[pos : pos+nalSize])
+		rbspStart := len(rbspScratch)
+		nal, nextRBSP, err := parseNALInto(data[pos:pos+nalSize], rbspScratch)
 		if err != nil {
-			return nil, err
+			return out, rbspScratch, err
 		}
+		rbspScratch = nextRBSP
+		nal.RBSP = rbspScratch[rbspStart:len(rbspScratch)]
 		out = append(out, nal)
 		pos += nalSize
 	}
 
 	if len(out) == 0 {
-		return nil, ErrInvalidData
+		return out, rbspScratch, ErrInvalidData
 	}
-	return out, nil
+	return out, rbspScratch, nil
 }
 
 // SplitAutoPacket ports FFmpeg's nal_length_size==4 is_avc sniffing branch
@@ -339,26 +357,32 @@ func be32(data []byte, off int) uint32 {
 }
 
 func parseNAL(raw []byte) (NALUnit, error) {
+	nal, _, err := parseNALInto(raw, nil)
+	return nal, err
+}
+
+func parseNALInto(raw []byte, rbspScratch []byte) (NALUnit, []byte, error) {
 	if len(raw) == 0 {
-		return NALUnit{}, ErrInvalidData
+		return NALUnit{}, rbspScratch, ErrInvalidData
 	}
 
 	header := raw[0]
 	if header&0x80 != 0 {
-		return NALUnit{}, ErrInvalidData
+		return NALUnit{}, rbspScratch, ErrInvalidData
 	}
 
-	rbsp, err := AppendRBSP(nil, raw[1:])
+	rbspStart := len(rbspScratch)
+	rbspScratch, err := AppendRBSP(rbspScratch, raw[1:])
 	if err != nil {
-		return NALUnit{}, err
+		return NALUnit{}, rbspScratch, err
 	}
 
 	return NALUnit{
 		RefIDC: (header >> 5) & 3,
 		Type:   NALUnitType(header & 0x1f),
 		Raw:    raw,
-		RBSP:   rbsp,
-	}, nil
+		RBSP:   rbspScratch[rbspStart:],
+	}, rbspScratch, nil
 }
 
 func findStartCode(data []byte, from int) (start int, prefixLen int, ok bool) {

@@ -19,13 +19,14 @@ var (
 	benchmarkDecodeFramesSink int
 	benchmarkDecodeBytesSink  int
 	benchmarkDecodeRawSink    []byte
+	benchmarkBorrowedSink     []Frame
 )
 
-func benchmarkAnnexBFixture(b *testing.B) []byte {
-	b.Helper()
+func benchmarkAnnexBFixture(tb testing.TB) []byte {
+	tb.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", "h264", "high10_inter_cavlc_idrp.h264"))
 	if err != nil {
-		b.Fatal(err)
+		tb.Fatal(err)
 	}
 	return data
 }
@@ -166,6 +167,93 @@ func BenchmarkDecodeAnnexBHigh10IDRPRawYUV(b *testing.B) {
 	}
 	benchmarkDecodeBytesSink = len(raw)
 	benchmarkDecodeRawSink = raw
+}
+
+func BenchmarkDecodeAnnexBBorrowedHigh10IDRPRawYUV(b *testing.B) {
+	data := benchmarkAnnexBFixture(b)
+	dec := NewDecoder()
+	frames := make([]Frame, 0, benchmarkHigh10IDRPFrames)
+	raw := make([]byte, 0, benchmarkHigh10IDRPRawBytes)
+	var err error
+	frames, err = dec.DecodeAnnexBBorrowedFrames(frames, data)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if len(frames) != benchmarkHigh10IDRPFrames {
+		b.Fatalf("warm frames = %d, want %d", len(frames), benchmarkHigh10IDRPFrames)
+	}
+
+	b.ReportAllocs()
+	b.SetBytes(int64(len(data)))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		frames, err = dec.DecodeAnnexBBorrowedFrames(frames[:0], data)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(frames) != benchmarkHigh10IDRPFrames {
+			b.Fatalf("frames = %d, want %d", len(frames), benchmarkHigh10IDRPFrames)
+		}
+		raw = raw[:0]
+		for i := range frames {
+			raw, err = frames[i].AppendRawYUVBytesLE(raw)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		if len(raw) != benchmarkHigh10IDRPRawBytes {
+			b.Fatalf("raw bytes = %d, want %d", len(raw), benchmarkHigh10IDRPRawBytes)
+		}
+	}
+	benchmarkDecodeBytesSink = len(raw)
+	benchmarkDecodeRawSink = raw
+	benchmarkBorrowedSink = frames
+}
+
+func TestDecodeAnnexBBorrowedHigh10IDRPRawYUVNoAllocation(t *testing.T) {
+	if goh264RaceEnabled {
+		t.Skip("allocation canary is not stable under race instrumentation")
+	}
+	data := benchmarkAnnexBFixture(t)
+	dec := NewDecoder()
+	frames := make([]Frame, 0, benchmarkHigh10IDRPFrames)
+	raw := make([]byte, 0, benchmarkHigh10IDRPRawBytes)
+
+	var err error
+	frames, err = dec.DecodeAnnexBBorrowedFrames(frames, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != benchmarkHigh10IDRPFrames {
+		t.Fatalf("warm frames = %d, want %d", len(frames), benchmarkHigh10IDRPFrames)
+	}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		frames, err = dec.DecodeAnnexBBorrowedFrames(frames[:0], data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(frames) != benchmarkHigh10IDRPFrames {
+			t.Fatalf("frames = %d, want %d", len(frames), benchmarkHigh10IDRPFrames)
+		}
+		raw = raw[:0]
+		for i := range frames {
+			raw, err = frames[i].AppendRawYUVBytesLE(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if len(raw) != benchmarkHigh10IDRPRawBytes {
+			t.Fatalf("raw bytes = %d, want %d", len(raw), benchmarkHigh10IDRPRawBytes)
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("DecodeAnnexBBorrowedFrames+AppendRawYUVBytesLE allocations/run = %.0f, want 0", allocs)
+	}
+	benchmarkDecodeBytesSink = len(raw)
+	benchmarkDecodeRawSink = raw
+	benchmarkBorrowedSink = frames
 }
 
 func BenchmarkFrameAppendRawYUVBytesLEHigh10IDRP(b *testing.B) {

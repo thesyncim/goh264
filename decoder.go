@@ -27,15 +27,22 @@ var (
 )
 
 type Decoder struct {
-	sps              [32]*h264.SPS
-	pps              [256]*h264.PPS
-	activeSPSID      uint32
-	activeSPS        *h264.SPS
-	avcFirstSPSID    uint32
-	avcFirstSPSValid bool
-	slices           []h264.SliceHeader
-	avcNALLengthSize int
-	simple           h264.SimpleDecoder
+	sps                     [32]*h264.SPS
+	pps                     [256]*h264.PPS
+	activeSPSID             uint32
+	activeSPS               *h264.SPS
+	avcFirstSPSID           uint32
+	avcFirstSPSValid        bool
+	slices                  []h264.SliceHeader
+	avcNALLengthSize        int
+	simple                  h264.SimpleDecoder
+	nalScratch              []h264.NALUnit
+	rbspScratch             []byte
+	borrowedFrames          []*h264.DecodedFrame
+	borrowedDataPtr         *byte
+	borrowedDataLen         int
+	borrowedTimecodeScratch []Timecode
+	borrowedRecoveryScratch []RecoveryPoint
 }
 
 type StreamInfo struct {
@@ -753,6 +760,7 @@ func (d *Decoder) Reset() error {
 	if d == nil {
 		return ErrInvalidData
 	}
+	d.releaseBorrowedFrames()
 	*d = Decoder{}
 	return nil
 }
@@ -868,6 +876,46 @@ func (d *Decoder) DecodeAnnexBFrames(data []byte) ([]*Frame, error) {
 		return framesFromH264WithError(frames, err)
 	}
 	return framesFromH264(frames), nil
+}
+
+// DecodeAnnexBBorrowedFrames decodes a complete Annex B byte stream and appends
+// borrowed frame views to dst.
+//
+// The returned frames are valid only until the next decode call on d or Reset.
+// Plane slices in the returned frames alias decoder-owned storage. Call Clone
+// on individual frames before retaining or mutating them.
+func (d *Decoder) DecodeAnnexBBorrowedFrames(dst []Frame, data []byte) ([]Frame, error) {
+	if d == nil {
+		return dst, ErrInvalidData
+	}
+	sameInput := len(data) != 0 && d.borrowedDataPtr == unsafe.SliceData(data) && d.borrowedDataLen == len(data)
+	d.releaseBorrowedFrames()
+	nals, rbsp, err := h264.SplitAnnexBInto(d.nalScratch, d.rbspScratch, data)
+	d.nalScratch = nals
+	d.rbspScratch = rbsp
+	if err != nil {
+		d.clearPendingSEI()
+		return dst, err
+	}
+	d.simple.ResetStreamState()
+	var frames []*h264.DecodedFrame
+	if sameInput {
+		frames, err = d.simple.DecodeNALUnitsFlushWithoutPrime(d.nalScratch)
+	} else {
+		frames, err = d.simple.DecodeNALUnitsFlush(d.nalScratch)
+	}
+	if len(data) != 0 {
+		d.borrowedDataPtr = unsafe.SliceData(data)
+		d.borrowedDataLen = len(data)
+	} else {
+		d.borrowedDataPtr = nil
+		d.borrowedDataLen = 0
+	}
+	d.borrowedFrames = frames
+	if err != nil {
+		return d.borrowedFramesFromH264WithError(dst, frames, err)
+	}
+	return d.borrowedFramesFromH264(dst, frames), nil
 }
 
 // DecodeAVC decodes a complete AVC packet stream with the supplied NAL length
@@ -1067,6 +1115,80 @@ func framesFromH264(frames []*h264.DecodedFrame) []*Frame {
 		out[i] = frameFromH264(frame)
 	}
 	return out
+}
+
+func (d *Decoder) borrowedFramesFromH264WithError(dst []Frame, frames []*h264.DecodedFrame, err error) ([]Frame, error) {
+	if len(frames) != 0 {
+		return d.borrowedFramesFromH264(dst, frames), err
+	}
+	return dst, err
+}
+
+func (d *Decoder) borrowedFramesFromH264(dst []Frame, frames []*h264.DecodedFrame) []Frame {
+	if len(frames) == 0 || len(frames) > maxInt/8 {
+		return dst[:0]
+	}
+	dst = dst[:0]
+	timecodeScratch := d.borrowedTimecodeScratch[:0]
+	recoveryScratch := d.borrowedRecoveryScratch[:0]
+	for _, frame := range frames {
+		var out Frame
+		out, timecodeScratch, recoveryScratch = borrowedFrameFromH264(frame, timecodeScratch, recoveryScratch)
+		dst = append(dst, out)
+	}
+	d.borrowedTimecodeScratch = timecodeScratch
+	d.borrowedRecoveryScratch = recoveryScratch
+	return dst
+}
+
+func borrowedFrameFromH264(src *h264.DecodedFrame, timecodeScratch []Timecode, recoveryScratch []RecoveryPoint) (Frame, []Timecode, []RecoveryPoint) {
+	if src == nil {
+		return Frame{}, timecodeScratch, recoveryScratch
+	}
+	return Frame{
+		Width:                          src.Width,
+		Height:                         src.Height,
+		CropLeft:                       src.CropLeft,
+		CropTop:                        src.CropTop,
+		ChromaFormatIDC:                uint32(src.ChromaFormatIDC),
+		BitDepthLuma:                   src.BitDepthLuma,
+		BitDepthChroma:                 src.BitDepthChroma,
+		SARNum:                         src.SARNum,
+		SARDen:                         src.SARDen,
+		VideoFormat:                    src.VideoFormat,
+		VideoFullRangeFlag:             src.VideoFullRangeFlag,
+		ColorPrimaries:                 src.ColorPrimaries,
+		ColorTransfer:                  src.ColorTransfer,
+		ColorMatrix:                    src.ColorMatrix,
+		ChromaLocation:                 src.ChromaLocation,
+		ChromaSampleLocTypeTopField:    src.ChromaSampleLocTypeTopField,
+		ChromaSampleLocTypeBottomField: src.ChromaSampleLocTypeBottomField,
+		TimingInfoPresentFlag:          src.TimingInfoPresentFlag,
+		NumUnitsInTick:                 src.NumUnitsInTick,
+		TimeScale:                      src.TimeScale,
+		FixedFrameRateFlag:             src.FixedFrameRateFlag,
+		RepeatPict:                     src.RepeatPict,
+		InterlacedFrame:                src.InterlacedFrame,
+		TopFieldFirst:                  src.TopFieldFirst,
+		KeyFrame:                       src.KeyFrame,
+		YStride:                        src.LumaStride,
+		CStride:                        src.ChromaStride,
+		Y:                              src.Y,
+		Cb:                             src.Cb,
+		Cr:                             src.Cr,
+		Y16:                            src.Y16,
+		Cb16:                           src.Cb16,
+		Cr16:                           src.Cr16,
+		SideData:                       borrowedFrameSideDataFromH264(src.SideData, src.TimeScale, src.NumUnitsInTick, &timecodeScratch, &recoveryScratch),
+	}, timecodeScratch, recoveryScratch
+}
+
+func (d *Decoder) releaseBorrowedFrames() {
+	if d == nil || len(d.borrowedFrames) == 0 {
+		return
+	}
+	d.simple.RecycleDecodedFrames(d.borrowedFrames)
+	d.borrowedFrames = d.borrowedFrames[:0]
 }
 
 // ParseHeadersAnnexB parses Annex B parameter sets, stores SPS/PPS state for
@@ -2745,6 +2867,154 @@ func frameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numU
 	if len(src.LCEVC) != 0 {
 		out.LCEVC = cloneByteSlice(src.LCEVC)
 	}
+	if src.ReferenceDisplays.Present != 0 {
+		out.ReferenceDisplays = referenceDisplaysFromPacketSideDataValue(src.ReferenceDisplays)
+	}
+	return out
+}
+
+func borrowedFrameSideDataFromH264(src h264.DecodedFrameSideData, timeScale uint32, numUnitsInTick uint32, timecodeScratch *[]Timecode, recoveryScratch *[]RecoveryPoint) FrameSideData {
+	out := FrameSideData{
+		UserDataUnregistered: src.UserDataUnregistered,
+		A53ClosedCaptions:    src.A53ClosedCaptions,
+		X264Build:            int(src.X264Build),
+		S12MTimecodes:        src.S12MTimecodes,
+	}
+	if src.PictureTiming.Present != 0 {
+		pt := PictureTiming{
+			PicStruct:       src.PictureTiming.PicStruct,
+			CTType:          src.PictureTiming.CTType,
+			DPBOutputDelay:  src.PictureTiming.DPBOutputDelay,
+			CPBRemovalDelay: src.PictureTiming.CPBRemovalDelay,
+		}
+		count := int(src.PictureTiming.TimecodeCount)
+		if count > len(src.PictureTiming.Timecode) {
+			count = len(src.PictureTiming.Timecode)
+		}
+		if count > 0 {
+			var tcs []Timecode
+			if timecodeScratch != nil {
+				scratch := *timecodeScratch
+				start := len(scratch)
+				need := start + count
+				if cap(scratch) < need {
+					next := make([]Timecode, need)
+					copy(next, scratch)
+					scratch = next
+				} else {
+					scratch = scratch[:need]
+				}
+				tcs = scratch[start:need]
+				*timecodeScratch = scratch
+			} else {
+				tcs = make([]Timecode, count)
+			}
+			for i := 0; i < count; i++ {
+				tc := src.PictureTiming.Timecode[i]
+				tcs[i] = Timecode{
+					Full:      tc.Full != 0,
+					Frame:     tc.Frame,
+					Seconds:   tc.Seconds,
+					Minutes:   tc.Minutes,
+					Hours:     tc.Hours,
+					DropFrame: tc.DropFrame != 0,
+				}
+			}
+			pt.Timecode = tcs
+		}
+		out.PictureTiming = &pt
+	}
+	if src.RecoveryPoint.RecoveryFrameCount >= 0 {
+		if recoveryScratch != nil {
+			scratch := *recoveryScratch
+			start := len(scratch)
+			need := start + 1
+			if cap(scratch) < need {
+				next := make([]RecoveryPoint, need)
+				copy(next, scratch)
+				scratch = next
+			} else {
+				scratch = scratch[:need]
+			}
+			scratch[start] = RecoveryPoint{RecoveryFrameCount: src.RecoveryPoint.RecoveryFrameCount}
+			out.RecoveryPoint = &scratch[start]
+			*recoveryScratch = scratch
+		} else {
+			out.RecoveryPoint = &RecoveryPoint{RecoveryFrameCount: src.RecoveryPoint.RecoveryFrameCount}
+		}
+	}
+	if src.BufferingPeriod.Present != 0 {
+		out.BufferingPeriod = &BufferingPeriod{InitialCPBRemovalDelay: src.BufferingPeriod.InitialCPBRemovalDelay}
+	}
+	if src.GreenMetadata.Present != 0 {
+		out.GreenMetadata = &GreenMetadata{
+			GreenMetadataType:                   src.GreenMetadata.GreenMetadataType,
+			PeriodType:                          src.GreenMetadata.PeriodType,
+			NumSeconds:                          src.GreenMetadata.NumSeconds,
+			NumPictures:                         src.GreenMetadata.NumPictures,
+			PercentNonZeroMacroblocks:           src.GreenMetadata.PercentNonZeroMacroblocks,
+			PercentIntraCodedMacroblocks:        src.GreenMetadata.PercentIntraCodedMacroblocks,
+			PercentSixTapFiltering:              src.GreenMetadata.PercentSixTapFiltering,
+			PercentAlphaPointDeblockingInstance: src.GreenMetadata.PercentAlphaPointDeblockingInstance,
+			XSDMetricType:                       src.GreenMetadata.XSDMetricType,
+			XSDMetricValue:                      src.GreenMetadata.XSDMetricValue,
+		}
+	}
+	if src.AFD.Present != 0 {
+		out.ActiveFormat = &ActiveFormat{Description: src.AFD.ActiveFormatDescription}
+	}
+	if src.FramePacking.Present != 0 {
+		out.FramePacking = &FramePackingArrangement{
+			ArrangementID:               src.FramePacking.ArrangementID,
+			ArrangementCancelFlag:       src.FramePacking.ArrangementCancelFlag != 0,
+			ArrangementType:             src.FramePacking.ArrangementType,
+			ArrangementRepetitionPeriod: src.FramePacking.ArrangementRepetitionPeriod,
+			ContentInterpretationType:   src.FramePacking.ContentInterpretationType,
+			QuincunxSamplingFlag:        src.FramePacking.QuincunxSamplingFlag != 0,
+			CurrentFrameIsFrame0Flag:    src.FramePacking.CurrentFrameIsFrame0Flag != 0,
+		}
+		out.Stereo3D = stereo3DFromFramePacking(src.FramePacking)
+	}
+	out.DisplayOrientation = displayOrientationFromH264(src.DisplayOrientation)
+	if src.Stereo3D.Present != 0 {
+		out.Stereo3D = stereo3DFromPacketSideDataValue(src.Stereo3D)
+	}
+	if src.Spherical.Present != 0 {
+		out.Spherical = sphericalFromPacketSideDataValue(src.Spherical)
+	}
+	if src.DisplayMatrix.Present != 0 {
+		out.DisplayOrientation = displayOrientationFromPacketMatrix(src.DisplayMatrix)
+	}
+	if src.AlternativeTransfer.Present != 0 {
+		out.AlternativeTransfer = &AlternativeTransfer{
+			PreferredTransferCharacteristics: src.AlternativeTransfer.PreferredTransferCharacteristics,
+		}
+	}
+	if src.AmbientViewing.Present != 0 {
+		out.AmbientViewing = &AmbientViewingEnvironment{
+			AmbientIlluminance: src.AmbientViewing.AmbientIlluminance,
+			AmbientLightX:      src.AmbientViewing.AmbientLightX,
+			AmbientLightY:      src.AmbientViewing.AmbientLightY,
+		}
+	}
+	if src.FilmGrain.Present != 0 {
+		out.FilmGrain = filmGrainFromH264(src.FilmGrain)
+	}
+	if src.MasteringMetadata.Present != 0 {
+		out.MasteringDisplay = masteringDisplayFromPacketMetadata(src.MasteringMetadata)
+	}
+	if src.MasteringDisplay.Present != 0 {
+		out.MasteringDisplay = masteringDisplayFromH264(src.MasteringDisplay)
+	}
+	if src.ContentLight.Present != 0 {
+		out.ContentLight = &ContentLight{
+			MaxContentLightLevel:    src.ContentLight.MaxContentLightLevel,
+			MaxPicAverageLightLevel: src.ContentLight.MaxPicAverageLightLevel,
+		}
+	}
+	out.ICCProfile = src.ICCProfile
+	out.DynamicHDR10Plus = src.DynamicHDR10Plus
+	out.LCEVC = src.LCEVC
 	if src.ReferenceDisplays.Present != 0 {
 		out.ReferenceDisplays = referenceDisplaysFromPacketSideDataValue(src.ReferenceDisplays)
 	}

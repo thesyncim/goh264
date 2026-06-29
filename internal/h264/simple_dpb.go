@@ -69,6 +69,15 @@ type simpleFrameRefContext struct {
 	Entries  [2][]simpleRefEntry
 }
 
+type simpleFrameRefContextScratch struct {
+	entries       [2][]simpleRefEntry
+	defaults      [2][]simpleRefEntry
+	refs          [2][]*h264PicturePlanes
+	refPlanes     [2][]h264PicturePlanes
+	refsHigh      [2][]*h264PicturePlanesHigh
+	refPlanesHigh [2][]h264PicturePlanesHigh
+}
+
 type simplePOCContext struct {
 	pocLSB             int32
 	pocMSB             int32
@@ -103,11 +112,27 @@ func (d *simpleFrameDPB) snapshot() simpleFrameDPBSnapshot {
 	if d == nil {
 		return simpleFrameDPBSnapshot{}
 	}
-	snap := simpleFrameDPBSnapshot{
-		short:              append([]*DecodedFrame(nil), d.short...),
+	return d.snapshotInto(nil)
+}
+
+func (d *simpleFrameDPB) snapshotInto(dst *simpleFrameDPBSnapshot) simpleFrameDPBSnapshot {
+	if d == nil {
+		return simpleFrameDPBSnapshot{}
+	}
+	if dst == nil {
+		dst = &simpleFrameDPBSnapshot{}
+	}
+	short := dst.short[:0]
+	delayed := dst.delayed[:0]
+	refMask := dst.refMask
+	for frame := range refMask {
+		delete(refMask, frame)
+	}
+	out := simpleFrameDPBSnapshot{
+		short:              append(short, d.short...),
 		long:               d.long,
 		poc:                d.poc,
-		delayed:            append([]*DecodedFrame(nil), d.delayed...),
+		delayed:            append(delayed, d.delayed...),
 		hasBFrames:         d.hasBFrames,
 		lastPOCs:           d.lastPOCs,
 		lastPOCsInit:       d.lastPOCsInit,
@@ -118,22 +143,26 @@ func (d *simpleFrameDPB) snapshot() simpleFrameDPBSnapshot {
 		validRecoveryPoint: d.validRecoveryPoint,
 		recoveryFrame:      d.recoveryFrame,
 		frameRecovered:     d.frameRecovered,
+		refMask:            refMask,
 	}
 	for i, frame := range d.delayed {
-		if i == len(snap.delayedRecovered) {
+		if i == len(out.delayedRecovered) {
 			break
 		}
 		if frame != nil {
-			snap.delayedRecovered[i] = frame.recovered
+			out.delayedRecovered[i] = frame.recovered
 		}
 	}
 	if len(d.refMask) != 0 {
-		snap.refMask = make(map[*DecodedFrame]int32, len(d.refMask))
+		if out.refMask == nil {
+			out.refMask = make(map[*DecodedFrame]int32, len(d.refMask))
+		}
 		for frame, mask := range d.refMask {
-			snap.refMask[frame] = mask
+			out.refMask[frame] = mask
 		}
 	}
-	return snap
+	*dst = out
+	return out
 }
 
 func (d *simpleFrameDPB) restore(snap simpleFrameDPBSnapshot) {
@@ -145,10 +174,15 @@ func (d *simpleFrameDPB) restore(snap simpleFrameDPBSnapshot) {
 		d.short = nil
 	}
 	d.long = snap.long
-	if len(snap.refMask) == 0 {
-		d.refMask = nil
-	} else {
-		d.refMask = make(map[*DecodedFrame]int32, len(snap.refMask))
+	if d.refMask != nil {
+		for frame := range d.refMask {
+			delete(d.refMask, frame)
+		}
+	}
+	if len(snap.refMask) != 0 {
+		if d.refMask == nil {
+			d.refMask = make(map[*DecodedFrame]int32, len(snap.refMask))
+		}
 		for frame, mask := range snap.refMask {
 			d.refMask[frame] = mask
 		}
@@ -254,7 +288,9 @@ func (d *simpleFrameDPB) resetRefs() {
 		for i := range d.long {
 			d.long[i] = nil
 		}
-		d.refMask = nil
+		for frame := range d.refMask {
+			delete(d.refMask, frame)
+		}
 	}
 }
 
@@ -534,6 +570,10 @@ func (d *simpleFrameDPB) buildRefListsHigh(sh *SliceHeader, frame *DecodedFrame)
 }
 
 func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (simpleFrameRefContext, error) {
+	return d.buildRefContextInto(sh, frame, nil)
+}
+
+func (d *simpleFrameDPB) buildRefContextInto(sh *SliceHeader, frame *DecodedFrame, scratch *simpleFrameRefContextScratch) (simpleFrameRefContext, error) {
 	var ctx simpleFrameRefContext
 	var refs [2][]*h264PicturePlanes
 	var refsHigh [2][]*h264PicturePlanesHigh
@@ -547,15 +587,38 @@ func (d *simpleFrameDPB) buildRefContext(sh *SliceHeader, frame *DecodedFrame) (
 
 	switch sh.SliceTypeNoS {
 	case PictureTypeP:
-		list, err := d.buildPRefEntries(sh)
-		if err != nil {
-			return ctx, err
-		}
-		ctx.Entries[0] = cloneSimpleRefEntries(list)
-		if highDepth {
-			refsHigh[0] = simpleFrameEntryPlanesRefsHigh(ctx.Entries[0])
+		var err error
+		if scratch == nil {
+			list, err := d.buildPRefEntries(sh)
+			if err != nil {
+				return ctx, err
+			}
+			ctx.Entries[0] = cloneSimpleRefEntries(list)
 		} else {
-			refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
+			scratch.defaults[0], err = d.buildDefaultPRefListInto(sh, scratch.defaults[0][:0])
+			if err != nil {
+				return ctx, err
+			}
+			scratch.entries[0], err = d.applyRefModificationsEntriesInto(scratch.defaults[0], scratch.entries[0][:0], sh, 0)
+			if err != nil {
+				return ctx, err
+			}
+			ctx.Entries[0] = scratch.entries[0]
+		}
+		if highDepth {
+			if scratch == nil {
+				refsHigh[0] = simpleFrameEntryPlanesRefsHigh(ctx.Entries[0])
+			} else {
+				refsHigh[0], scratch.refPlanesHigh[0] = simpleFrameEntryPlanesRefsHighInto(ctx.Entries[0], scratch.refPlanesHigh[0], scratch.refsHigh[0])
+				scratch.refsHigh[0] = refsHigh[0]
+			}
+		} else {
+			if scratch == nil {
+				refs[0] = simpleFrameEntryPlanesRefs(ctx.Entries[0])
+			} else {
+				refs[0], scratch.refPlanes[0] = simpleFrameEntryPlanesRefsInto(ctx.Entries[0], scratch.refPlanes[0], scratch.refs[0])
+				scratch.refs[0] = refs[0]
+			}
 		}
 	case PictureTypeB:
 		if frame == nil {
@@ -645,15 +708,20 @@ func (f *DecodedFrame) saveRefEntries(entries [2][]simpleRefEntry, pictureStruct
 	if f == nil {
 		return
 	}
-	f.refEntries = cloneSimpleRefEntries2(entries)
+	f.refEntries[0] = cloneSimpleRefEntriesInto(f.refEntries[0], entries[0])
+	f.refEntries[1] = cloneSimpleRefEntriesInto(f.refEntries[1], entries[1])
 	switch pictureStructure {
 	case PictureTopField:
-		f.fieldRefEntries[0] = cloneSimpleRefEntries2(entries)
+		f.fieldRefEntries[0][0] = cloneSimpleRefEntriesInto(f.fieldRefEntries[0][0], entries[0])
+		f.fieldRefEntries[0][1] = cloneSimpleRefEntriesInto(f.fieldRefEntries[0][1], entries[1])
 	case PictureBottomField:
-		f.fieldRefEntries[1] = cloneSimpleRefEntries2(entries)
+		f.fieldRefEntries[1][0] = cloneSimpleRefEntriesInto(f.fieldRefEntries[1][0], entries[0])
+		f.fieldRefEntries[1][1] = cloneSimpleRefEntriesInto(f.fieldRefEntries[1][1], entries[1])
 	case PictureFrame:
-		f.fieldRefEntries[0] = cloneSimpleRefEntries2(entries)
-		f.fieldRefEntries[1] = cloneSimpleRefEntries2(entries)
+		f.fieldRefEntries[0][0] = cloneSimpleRefEntriesInto(f.fieldRefEntries[0][0], entries[0])
+		f.fieldRefEntries[0][1] = cloneSimpleRefEntriesInto(f.fieldRefEntries[0][1], entries[1])
+		f.fieldRefEntries[1][0] = cloneSimpleRefEntriesInto(f.fieldRefEntries[1][0], entries[0])
+		f.fieldRefEntries[1][1] = cloneSimpleRefEntriesInto(f.fieldRefEntries[1][1], entries[1])
 	}
 }
 
@@ -666,32 +734,74 @@ func cloneSimpleRefEntries(entries []simpleRefEntry) []simpleRefEntry {
 	return out
 }
 
-func simpleFrameEntryPlanesRefs(list []simpleRefEntry) []*h264PicturePlanes {
-	if len(list) == 0 || len(list) > maxInt/32 {
+func cloneSimpleRefEntriesInto(dst []simpleRefEntry, entries []simpleRefEntry) []simpleRefEntry {
+	if len(entries) == 0 {
+		return dst[:0]
+	}
+	if len(entries) > maxInt/32 {
 		return nil
 	}
-	planes := make([]h264PicturePlanes, len(list))
-	refs := make([]*h264PicturePlanes, len(list))
+	if cap(dst) < len(entries) {
+		dst = make([]simpleRefEntry, len(entries))
+	} else {
+		dst = dst[:len(entries)]
+	}
+	copy(dst, entries)
+	return dst
+}
+
+func simpleFrameEntryPlanesRefs(list []simpleRefEntry) []*h264PicturePlanes {
+	refs, _ := simpleFrameEntryPlanesRefsInto(list, nil, nil)
+	return refs
+}
+
+func simpleFrameEntryPlanesRefsInto(list []simpleRefEntry, planes []h264PicturePlanes, refs []*h264PicturePlanes) ([]*h264PicturePlanes, []h264PicturePlanes) {
+	if len(list) == 0 || len(list) > maxInt/32 {
+		return nil, planes[:0]
+	}
+	if cap(planes) < len(list) {
+		planes = make([]h264PicturePlanes, len(list))
+	} else {
+		planes = planes[:len(list)]
+	}
+	if cap(refs) < len(list) {
+		refs = make([]*h264PicturePlanes, len(list))
+	} else {
+		refs = refs[:len(list)]
+	}
 	for i, entry := range list {
 		planes[i] = entry.frame.picturePlanes()
 		applySimpleFieldRefPlane(&planes[i], entry.pictureStructure)
 		refs[i] = &planes[i]
 	}
-	return refs
+	return refs, planes
 }
 
 func simpleFrameEntryPlanesRefsHigh(list []simpleRefEntry) []*h264PicturePlanesHigh {
+	refs, _ := simpleFrameEntryPlanesRefsHighInto(list, nil, nil)
+	return refs
+}
+
+func simpleFrameEntryPlanesRefsHighInto(list []simpleRefEntry, planes []h264PicturePlanesHigh, refs []*h264PicturePlanesHigh) ([]*h264PicturePlanesHigh, []h264PicturePlanesHigh) {
 	if len(list) == 0 || len(list) > maxInt/32 {
-		return nil
+		return nil, planes[:0]
 	}
-	planes := make([]h264PicturePlanesHigh, len(list))
-	refs := make([]*h264PicturePlanesHigh, len(list))
+	if cap(planes) < len(list) {
+		planes = make([]h264PicturePlanesHigh, len(list))
+	} else {
+		planes = planes[:len(list)]
+	}
+	if cap(refs) < len(list) {
+		refs = make([]*h264PicturePlanesHigh, len(list))
+	} else {
+		refs = refs[:len(list)]
+	}
 	for i, entry := range list {
 		planes[i] = entry.frame.picturePlanesHigh()
 		applySimpleFieldRefPlaneHigh(&planes[i], entry.pictureStructure)
 		refs[i] = &planes[i]
 	}
-	return refs
+	return refs, planes
 }
 
 func simpleFrameEntryFrames(list []simpleRefEntry) []*DecodedFrame {
@@ -861,11 +971,17 @@ func simpleRefListsSameFrames(a []simpleRefEntry, b []simpleRefEntry) bool {
 }
 
 func (d *simpleFrameDPB) buildDefaultEntriesFromFrames(frames []*DecodedFrame, sh *SliceHeader, long bool) ([]simpleRefEntry, error) {
+	return d.buildDefaultEntriesFromFramesInto(frames, sh, long, nil)
+}
+
+func (d *simpleFrameDPB) buildDefaultEntriesFromFramesInto(frames []*DecodedFrame, sh *SliceHeader, long bool, entries []simpleRefEntry) ([]simpleRefEntry, error) {
 	if len(frames) > simpleMaxShortRefs {
 		return nil, ErrInvalidData
 	}
 	if sh.PictureStructure == PictureFrame {
-		entries := make([]simpleRefEntry, 0, len(frames))
+		if entries == nil {
+			entries = make([]simpleRefEntry, 0, len(frames))
+		}
 		for i, frame := range frames {
 			if frame == nil {
 				continue
@@ -889,7 +1005,9 @@ func (d *simpleFrameDPB) buildDefaultEntriesFromFrames(frames []*DecodedFrame, s
 	}
 
 	entryCap := len(frames) * 2
-	entries := make([]simpleRefEntry, 0, entryCap)
+	if entries == nil {
+		entries = make([]simpleRefEntry, 0, entryCap)
+	}
 	index := [2]int{}
 	sel := sh.PictureStructure
 	other := simpleOppositeField(sel)
@@ -953,6 +1071,10 @@ func (d *simpleFrameDPB) applyRefModifications(list []simpleRefEntry, sh *SliceH
 }
 
 func (d *simpleFrameDPB) applyRefModificationsEntries(list []simpleRefEntry, sh *SliceHeader, listIndex int) ([]simpleRefEntry, error) {
+	return d.applyRefModificationsEntriesInto(list, nil, sh, listIndex)
+}
+
+func (d *simpleFrameDPB) applyRefModificationsEntriesInto(list []simpleRefEntry, out []simpleRefEntry, sh *SliceHeader, listIndex int) ([]simpleRefEntry, error) {
 	if listIndex != 0 && listIndex != 1 {
 		return nil, ErrInvalidData
 	}
@@ -1044,12 +1166,16 @@ func (d *simpleFrameDPB) applyRefModificationsEntries(list []simpleRefEntry, sh 
 		list[index] = entry
 	}
 
-	out := make([]simpleRefEntry, refCount)
-	for i := range out {
+	if out == nil {
+		out = make([]simpleRefEntry, 0, refCount)
+	} else {
+		out = out[:0]
+	}
+	for i := 0; i < refCount; i++ {
 		if list[i].frame == nil {
 			list[i] = defaultRef
 		}
-		out[i] = list[i]
+		out = append(out, list[i])
 	}
 	return out, nil
 }
@@ -1200,15 +1326,18 @@ func implicitMBAFFFieldRefPOC(list []simpleRefEntry, ref int, field int) (int, b
 }
 
 func (d *simpleFrameDPB) buildDefaultPRefList(sh *SliceHeader) ([]simpleRefEntry, error) {
-	list, err := d.buildDefaultEntriesFromFrames(d.short, sh, false)
+	return d.buildDefaultPRefListInto(sh, nil)
+}
+
+func (d *simpleFrameDPB) buildDefaultPRefListInto(sh *SliceHeader, dst []simpleRefEntry) ([]simpleRefEntry, error) {
+	list, err := d.buildDefaultEntriesFromFramesInto(d.short, sh, false, dst)
 	if err != nil {
 		return nil, err
 	}
-	longEntries, err := d.buildDefaultEntriesFromFrames(d.long[:], sh, true)
+	list, err = d.buildDefaultEntriesFromFramesInto(d.long[:], sh, true, list)
 	if err != nil {
 		return nil, err
 	}
-	list = append(list, longEntries...)
 	return list, nil
 }
 
@@ -1461,10 +1590,16 @@ func (d *simpleFrameDPB) resetLastPOCs() {
 }
 
 func (d *simpleFrameDPB) drainOutputFrames(flush bool) ([]*DecodedFrame, error) {
+	return d.drainOutputFramesInto(nil, flush)
+}
+
+func (d *simpleFrameDPB) drainOutputFramesInto(out []*DecodedFrame, flush bool) ([]*DecodedFrame, error) {
 	if d == nil {
 		return nil, ErrInvalidData
 	}
-	var out []*DecodedFrame
+	if out != nil {
+		out = out[:0]
+	}
 	for len(d.delayed) != 0 {
 		outIdx := d.nextOutputFrameIndex()
 		if outIdx < 0 || outIdx >= len(d.delayed) {
@@ -1880,9 +2015,6 @@ func (d *simpleFrameDPB) setFrameRefMask(frame *DecodedFrame, mask int32) {
 	if mask == 0 {
 		if d.refMask != nil {
 			delete(d.refMask, frame)
-			if len(d.refMask) == 0 {
-				d.refMask = nil
-			}
 		}
 		return
 	}
