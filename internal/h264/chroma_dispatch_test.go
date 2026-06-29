@@ -84,6 +84,37 @@ func TestH264ChromaMCHighDispatchMatchesScalar(t *testing.T) {
 	}
 }
 
+func TestH264ChromaMCHighDispatchMatchesScalarSeparateStrides(t *testing.T) {
+	for _, bitDepth := range []int{9, 10, 12, 14} {
+		for _, avg := range []bool{false, true} {
+			for _, width := range []int{1, 2, 4, 8} {
+				for _, xy := range [][2]int{{0, 0}, {3, 0}, {0, 5}, {3, 5}} {
+					t.Run(chromaDispatchCaseName(avg, width, xy[0], xy[1]), func(t *testing.T) {
+						const dstStride = 13
+						const srcStride = 17
+						const height = 6
+						dstKernel := makeChromaUnitDstHigh(dstStride, height, bitDepth)
+						dstScalar := append([]uint16(nil), dstKernel...)
+						src := makeChromaUnitSrcHigh(srcStride, height+1, bitDepth)
+
+						h264ChromaMCStridesHighKernel(dstKernel, src, dstStride, srcStride, int32(height), int32(xy[0]), int32(xy[1]), int32(width), avg)
+						h264ChromaMCStridesHighScalar(dstScalar, src, dstStride, srcStride, height, xy[0], xy[1], width, avg)
+
+						if len(dstKernel) != len(dstScalar) {
+							t.Fatalf("kernel len = %d, scalar len = %d", len(dstKernel), len(dstScalar))
+						}
+						for i := range dstKernel {
+							if dstKernel[i] != dstScalar[i] {
+								t.Fatalf("kernel[%d] = %d, scalar = %d", i, dstKernel[i], dstScalar[i])
+							}
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 func chromaDispatchCaseName(avg bool, width int, x int, y int) string {
 	op := "put"
 	if avg {

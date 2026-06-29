@@ -247,6 +247,9 @@ func checkChromaMCArgsHigh(dst []uint16, src []uint16, dstStride int, srcStride 
 	if dstStride <= 0 || srcStride <= 0 || height < 0 || x < 0 || x >= 8 || y < 0 || y >= 8 {
 		return ErrInvalidData
 	}
+	if dstStride > maxInt/2 || srcStride > maxInt/2 {
+		return ErrInvalidData
+	}
 	if width != 1 && width != 2 && width != 4 && width != 8 {
 		return ErrInvalidData
 	}

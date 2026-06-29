@@ -2,7 +2,10 @@
 
 package h264
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestH264ChromaMCPutBranches(t *testing.T) {
 	for _, c := range []struct {
@@ -259,6 +262,23 @@ func BenchmarkH264ChromaMC1Avg35(b *testing.B) {
 	benchmarkH264ChromaMC(b, 1, 3, 5, true)
 }
 
+func BenchmarkH264ChromaMCHigh10(b *testing.B) {
+	const bitDepth = 10
+	for _, width := range []int{8, 4, 2, 1} {
+		for _, xy := range [][2]int{{0, 0}, {3, 0}, {0, 5}, {3, 5}} {
+			for _, avg := range []bool{false, true} {
+				op := "Put"
+				if avg {
+					op = "Avg"
+				}
+				b.Run(fmt.Sprintf("W%d%s%d%d", width, op, xy[0], xy[1]), func(b *testing.B) {
+					benchmarkH264ChromaMCHigh(b, width, xy[0], xy[1], avg, bitDepth)
+				})
+			}
+		}
+	}
+}
+
 func benchmarkH264ChromaMCCopy(b *testing.B, width int, avg bool) {
 	benchmarkH264ChromaMC(b, width, 0, 0, avg)
 }
@@ -273,6 +293,21 @@ func benchmarkH264ChromaMC(b *testing.B, width int, x int, y int, avg bool) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := h264ChromaMCStrides(dst, src, stride, stride, height, x, y, width, avg); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func benchmarkH264ChromaMCHigh(b *testing.B, width int, x int, y int, avg bool, bitDepth int) {
+	const stride = 64
+	const height = 8
+	dst := makeChromaUnitDstHigh(stride, height, bitDepth)
+	src := makeChromaUnitSrcHigh(stride, height+1, bitDepth)
+	b.ReportAllocs()
+	b.SetBytes(int64(width * height * 2))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := h264ChromaMCStridesHigh(dst, src, stride, stride, height, x, y, width, avg, bitDepth); err != nil {
 			b.Fatal(err)
 		}
 	}
