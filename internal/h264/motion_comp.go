@@ -52,20 +52,20 @@ func h264HLMotionFrameCore(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes,
 	}
 
 	if is16x16(mbType) {
-		return h264MCPartFrame(dst, refs, cache, mbX, mbY, mbType, 0, 0, true, 16, 0, 0, 0, 16, 8, 16, listCount, pwt, scratch, weightMBY)
+		return h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, mbType, 0, 0, true, 16, 0, 0, 0, 16, 8, 16, listCount, pwt, scratch, weightMBY)
 	}
 	if is16x8(mbType) {
-		if err := h264MCPartFrame(dst, refs, cache, mbX, mbY, mbType, 0, 0, false, 8, 8, 0, 0, 8, 8, 16, listCount, pwt, scratch, weightMBY); err != nil {
+		if err := h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, mbType, 0, 0, false, 8, 8, 0, 0, 8, 8, 16, listCount, pwt, scratch, weightMBY); err != nil {
 			return err
 		}
-		return h264MCPartFrame(dst, refs, cache, mbX, mbY, mbType, 1, 8, false, 8, 8, 0, 4, 8, 8, 16, listCount, pwt, scratch, weightMBY)
+		return h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, mbType, 1, 8, false, 8, 8, 0, 4, 8, 8, 16, listCount, pwt, scratch, weightMBY)
 	}
 	if is8x16(mbType) {
 		delta := 8 * dst.LumaStride
-		if err := h264MCPartFrame(dst, refs, cache, mbX, mbY, mbType, 0, 0, false, 16, delta, 0, 0, 8, 4, 8, listCount, pwt, scratch, weightMBY); err != nil {
+		if err := h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, mbType, 0, 0, false, 16, delta, 0, 0, 8, 4, 8, listCount, pwt, scratch, weightMBY); err != nil {
 			return err
 		}
-		return h264MCPartFrame(dst, refs, cache, mbX, mbY, mbType, 1, 4, false, 16, delta, 4, 0, 8, 4, 8, listCount, pwt, scratch, weightMBY)
+		return h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, mbType, 1, 4, false, 16, delta, 4, 0, 8, 4, 8, listCount, pwt, scratch, weightMBY)
 	}
 	if !is8x8(mbType) {
 		return ErrUnsupported
@@ -79,29 +79,29 @@ func h264HLMotionFrameCore(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes,
 		yOffset := (i & 2) << 1
 
 		if isSub8x8(subType) {
-			if err := h264MCPartFrame(dst, refs, cache, mbX, mbY, partType, 0, n, true, 8, 0, xOffset, yOffset, 8, 4, 8, listCount, pwt, scratch, weightMBY); err != nil {
+			if err := h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, partType, 0, n, true, 8, 0, xOffset, yOffset, 8, 4, 8, listCount, pwt, scratch, weightMBY); err != nil {
 				return err
 			}
 		} else if isSub8x4(subType) {
-			if err := h264MCPartFrame(dst, refs, cache, mbX, mbY, partType, 0, n, false, 4, 4, xOffset, yOffset, 4, 4, 8, listCount, pwt, scratch, weightMBY); err != nil {
+			if err := h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, partType, 0, n, false, 4, 4, xOffset, yOffset, 4, 4, 8, listCount, pwt, scratch, weightMBY); err != nil {
 				return err
 			}
-			if err := h264MCPartFrame(dst, refs, cache, mbX, mbY, partType, 0, n+2, false, 4, 4, xOffset, yOffset+2, 4, 4, 8, listCount, pwt, scratch, weightMBY); err != nil {
+			if err := h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, partType, 0, n+2, false, 4, 4, xOffset, yOffset+2, 4, 4, 8, listCount, pwt, scratch, weightMBY); err != nil {
 				return err
 			}
 		} else if isSub4x8(subType) {
 			delta := 4 * dst.LumaStride
-			if err := h264MCPartFrame(dst, refs, cache, mbX, mbY, partType, 0, n, false, 8, delta, xOffset, yOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY); err != nil {
+			if err := h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, partType, 0, n, false, 8, delta, xOffset, yOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY); err != nil {
 				return err
 			}
-			if err := h264MCPartFrame(dst, refs, cache, mbX, mbY, partType, 0, n+1, false, 8, delta, xOffset+2, yOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY); err != nil {
+			if err := h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, partType, 0, n+1, false, 8, delta, xOffset+2, yOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY); err != nil {
 				return err
 			}
 		} else if isSub4x4(subType) {
 			for j := 0; j < 4; j++ {
 				subXOffset := xOffset + 2*(j&1)
 				subYOffset := yOffset + (j & 2)
-				if err := h264MCPartFrame(dst, refs, cache, mbX, mbY, partType, 0, n+j, true, 4, 0, subXOffset, subYOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY); err != nil {
+				if err := h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, partType, 0, n+j, true, 4, 0, subXOffset, subYOffset, 4, 2, 4, listCount, pwt, scratch, weightMBY); err != nil {
 					return err
 				}
 			}
@@ -119,6 +119,15 @@ func h264MCPartFrame(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, cache
 		return h264MCPartFrameWeighted(dst, refs, cache, mbX, mbY, mbType, part, n, square, height, delta, xOffset, yOffset, qpelSize, chromaWidth, lumaWeightWidth, listCount, pwt, scratch, weightMBY)
 	}
 	return h264MCPartFrameStd(dst, refs, cache, mbX, mbY, mbType, part, n, square, height, delta, xOffset, yOffset, qpelSize, chromaWidth, listCount, scratch)
+}
+
+func h264MCPartFrameValidated(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, cache *macroblockMotionCache, mbX int, mbY int, mbType uint32, part int, n int, square bool, height int, delta int, xOffset int, yOffset int, qpelSize int, chromaWidth int, lumaWeightWidth int, listCount int, pwt *PredWeightTable, scratch *h264MotionCompScratch, weightMBY int) error {
+	list0 := isDir(mbType, part, 0)
+	list1 := isDir(mbType, part, 1)
+	if h264MCPartUsesWeighted(pwt, cache, mbType, n, list0, list1, weightMBY) {
+		return h264MCPartFrameWeightedCore(dst, refs, cache, mbX, mbY, mbType, part, n, square, height, delta, xOffset, yOffset, qpelSize, chromaWidth, lumaWeightWidth, listCount, pwt, scratch, weightMBY, true)
+	}
+	return h264MCPartFrameStdCore(dst, refs, cache, mbX, mbY, mbType, part, n, square, height, delta, xOffset, yOffset, qpelSize, chromaWidth, listCount, scratch, true)
 }
 
 func h264ImplicitWeightIndexes(mbType uint32, refn0 int, refn1 int, mbY int) (int, int) {
@@ -149,6 +158,10 @@ func h264MCPartUsesWeighted(pwt *PredWeightTable, cache *macroblockMotionCache, 
 }
 
 func h264MCPartFrameStd(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, cache *macroblockMotionCache, mbX int, mbY int, mbType uint32, part int, n int, square bool, height int, delta int, xOffset int, yOffset int, qpelSize int, chromaWidth int, listCount int, scratch *h264MotionCompScratch) error {
+	return h264MCPartFrameStdCore(dst, refs, cache, mbX, mbY, mbType, part, n, square, height, delta, xOffset, yOffset, qpelSize, chromaWidth, listCount, scratch, false)
+}
+
+func h264MCPartFrameStdCore(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, cache *macroblockMotionCache, mbX int, mbY int, mbType uint32, part int, n int, square bool, height int, delta int, xOffset int, yOffset int, qpelSize int, chromaWidth int, listCount int, scratch *h264MotionCompScratch, dstValidated bool) error {
 	list0 := isDir(mbType, part, 0)
 	list1 := isDir(mbType, part, 1)
 	if (!list0 && !list1) || qpelSize <= 0 {
@@ -170,7 +183,7 @@ func h264MCPartFrameStd(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, ca
 		if err != nil {
 			return err
 		}
-		if err := h264MCDirPartFrame(dst, ref, cache, n, square, height, delta, 0, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch); err != nil {
+		if err := h264MCDirPartFrameMaybeValidated(dst, ref, cache, n, square, height, delta, 0, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch, dstValidated); err != nil {
 			return err
 		}
 		avg = true
@@ -180,7 +193,7 @@ func h264MCPartFrameStd(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, ca
 		if err != nil {
 			return err
 		}
-		if err := h264MCDirPartFrame(dst, ref, cache, n, square, height, delta, 1, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch); err != nil {
+		if err := h264MCDirPartFrameMaybeValidated(dst, ref, cache, n, square, height, delta, 1, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch, dstValidated); err != nil {
 			return err
 		}
 	}
@@ -188,6 +201,10 @@ func h264MCPartFrameStd(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, ca
 }
 
 func h264MCPartFrameWeighted(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, cache *macroblockMotionCache, mbX int, mbY int, mbType uint32, part int, n int, square bool, height int, delta int, xOffset int, yOffset int, qpelSize int, chromaWidth int, lumaWeightWidth int, listCount int, pwt *PredWeightTable, scratch *h264MotionCompScratch, weightMBY int) error {
+	return h264MCPartFrameWeightedCore(dst, refs, cache, mbX, mbY, mbType, part, n, square, height, delta, xOffset, yOffset, qpelSize, chromaWidth, lumaWeightWidth, listCount, pwt, scratch, weightMBY, false)
+}
+
+func h264MCPartFrameWeightedCore(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, cache *macroblockMotionCache, mbX int, mbY int, mbType uint32, part int, n int, square bool, height int, delta int, xOffset int, yOffset int, qpelSize int, chromaWidth int, lumaWeightWidth int, listCount int, pwt *PredWeightTable, scratch *h264MotionCompScratch, weightMBY int, dstValidated bool) error {
 	list0 := isDir(mbType, part, 0)
 	list1 := isDir(mbType, part, 1)
 	if (!list0 && !list1) || qpelSize <= 0 || lumaWeightWidth <= 0 || pwt == nil {
@@ -219,10 +236,10 @@ func h264MCPartFrameWeighted(dst *h264PicturePlanes, refs [2][]*h264PicturePlane
 		if scratch == nil || !scratch.valid(dst, height, lumaWeightWidth, chromaHeight, chromaWeightWidth) {
 			return ErrInvalidData
 		}
-		if err := h264MCDirPartFrame(dst, ref0, cache, n, square, height, delta, 0, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, false, scratch); err != nil {
+		if err := h264MCDirPartFrameMaybeValidated(dst, ref0, cache, n, square, height, delta, 0, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, false, scratch, dstValidated); err != nil {
 			return err
 		}
-		if err := h264MCDirPartFramePlanes(scratch.Y, scratch.Cb, scratch.Cr, dst.LumaStride, dst.ChromaStride, dst.ChromaFormatIDC, dst.PictureStructure, ref1, cache, n, square, height, delta, 1, 0, 0, 0, srcXOffset, srcYOffset, qpelSize, chromaWidth, false, scratch); err != nil {
+		if err := h264MCDirPartFramePlanesMaybeValidated(scratch.Y, scratch.Cb, scratch.Cr, dst.LumaStride, dst.ChromaStride, dst.ChromaFormatIDC, dst.PictureStructure, ref1, cache, n, square, height, delta, 1, 0, 0, 0, srcXOffset, srcYOffset, qpelSize, chromaWidth, false, scratch, dstValidated); err != nil {
 			return err
 		}
 		refn0 := int(cache.Ref[0][h264Scan8[n]])
@@ -272,7 +289,7 @@ func h264MCPartFrameWeighted(dst *h264PicturePlanes, refs [2][]*h264PicturePlane
 	if refn < 0 || refn >= len(pwt.LumaWeight) {
 		return ErrInvalidData
 	}
-	if err := h264MCDirPartFrame(dst, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, false, scratch); err != nil {
+	if err := h264MCDirPartFrameMaybeValidated(dst, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, false, scratch, dstValidated); err != nil {
 		return err
 	}
 	if err := h264WeightPixels(dst.Y[dstY:], dst.LumaStride, height, int(pwt.LumaLog2WeightDenom), int(pwt.LumaWeight[refn][list][0]), int(pwt.LumaWeight[refn][list][1]), lumaWeightWidth); err != nil {
@@ -426,19 +443,76 @@ func h264MCDirPartFrame(dst *h264PicturePlanes, ref *h264PicturePlanes, cache *m
 	if err := h264CheckMotionPlanePair(dst, ref); err != nil {
 		return err
 	}
-	return h264MCDirPartFramePlanes(dst.Y, dst.Cb, dst.Cr, dst.LumaStride, dst.ChromaStride, dst.ChromaFormatIDC, dst.PictureStructure, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch)
+	return h264MCDirPartFrameChecked(dst, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch)
 }
 
 func h264MCDirPartFramePlanes(dstYPlane []uint8, dstCbPlane []uint8, dstCrPlane []uint8, dstLumaStride int, dstChromaStride int, chromaFormatIDC int, dstPictureStructure int32, ref *h264PicturePlanes, cache *macroblockMotionCache, n int, square bool, height int, delta int, list int, dstY int, dstCb int, dstCr int, srcXOffset int, srcYOffset int, qpelSize int, chromaWidth int, avg bool, scratch *h264MotionCompScratch) error {
-	if ref == nil || cache == nil || n < 0 || n >= 16 || list < 0 || list > 1 || dstLumaStride <= 0 || dstChromaStride < 0 || chromaFormatIDC < 0 || chromaFormatIDC > 3 || height <= 0 || delta < 0 {
+	if err := h264CheckMCDirPartFramePlanesArgs(dstLumaStride, dstChromaStride, chromaFormatIDC, ref, cache, n, height, delta, list); err != nil {
+		return err
+	}
+	if err := ref.validate(); err != nil {
+		return err
+	}
+	return h264MCDirPartFramePlanesChecked(dstYPlane, dstCbPlane, dstCrPlane, dstLumaStride, dstChromaStride, chromaFormatIDC, dstPictureStructure, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch)
+}
+
+func h264MCDirPartFrameMaybeValidated(dst *h264PicturePlanes, ref *h264PicturePlanes, cache *macroblockMotionCache, n int, square bool, height int, delta int, list int, dstY int, dstCb int, dstCr int, srcXOffset int, srcYOffset int, qpelSize int, chromaWidth int, avg bool, scratch *h264MotionCompScratch, dstValidated bool) error {
+	if !dstValidated {
+		return h264MCDirPartFrame(dst, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch)
+	}
+	if ref == nil {
 		return ErrInvalidData
 	}
 	if err := ref.validate(); err != nil {
 		return err
 	}
+	return h264MCDirPartFrameChecked(dst, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch)
+}
+
+func h264MCDirPartFrameChecked(dst *h264PicturePlanes, ref *h264PicturePlanes, cache *macroblockMotionCache, n int, square bool, height int, delta int, list int, dstY int, dstCb int, dstCr int, srcXOffset int, srcYOffset int, qpelSize int, chromaWidth int, avg bool, scratch *h264MotionCompScratch) error {
+	if dst == nil || ref == nil || cache == nil || n < 0 || n >= 16 || list < 0 || list > 1 || height <= 0 || delta < 0 {
+		return ErrInvalidData
+	}
+	if err := h264CheckMotionPlanePairShape(dst, ref); err != nil {
+		return err
+	}
+	return h264MCDirPartFramePlanesChecked(dst.Y, dst.Cb, dst.Cr, dst.LumaStride, dst.ChromaStride, dst.ChromaFormatIDC, dst.PictureStructure, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch)
+}
+
+func h264MCDirPartFramePlanesMaybeValidated(dstYPlane []uint8, dstCbPlane []uint8, dstCrPlane []uint8, dstLumaStride int, dstChromaStride int, chromaFormatIDC int, dstPictureStructure int32, ref *h264PicturePlanes, cache *macroblockMotionCache, n int, square bool, height int, delta int, list int, dstY int, dstCb int, dstCr int, srcXOffset int, srcYOffset int, qpelSize int, chromaWidth int, avg bool, scratch *h264MotionCompScratch, dstValidated bool) error {
+	if !dstValidated {
+		return h264MCDirPartFramePlanes(dstYPlane, dstCbPlane, dstCrPlane, dstLumaStride, dstChromaStride, chromaFormatIDC, dstPictureStructure, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch)
+	}
+	if ref == nil {
+		return ErrInvalidData
+	}
+	if err := ref.validate(); err != nil {
+		return err
+	}
+	return h264MCDirPartFramePlanesChecked(dstYPlane, dstCbPlane, dstCrPlane, dstLumaStride, dstChromaStride, chromaFormatIDC, dstPictureStructure, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch)
+}
+
+func h264MCDirPartFramePlanesChecked(dstYPlane []uint8, dstCbPlane []uint8, dstCrPlane []uint8, dstLumaStride int, dstChromaStride int, chromaFormatIDC int, dstPictureStructure int32, ref *h264PicturePlanes, cache *macroblockMotionCache, n int, square bool, height int, delta int, list int, dstY int, dstCb int, dstCr int, srcXOffset int, srcYOffset int, qpelSize int, chromaWidth int, avg bool, scratch *h264MotionCompScratch) error {
+	if err := h264CheckMCDirPartFramePlanesArgs(dstLumaStride, dstChromaStride, chromaFormatIDC, ref, cache, n, height, delta, list); err != nil {
+		return err
+	}
 	if dstLumaStride != ref.LumaStride || (chromaFormatIDC != 0 && dstChromaStride != ref.ChromaStride) {
 		return ErrInvalidData
 	}
+	if ref.ChromaFormatIDC != chromaFormatIDC {
+		return ErrInvalidData
+	}
+	return h264MCDirPartFramePlanesCore(dstYPlane, dstCbPlane, dstCrPlane, dstLumaStride, dstChromaStride, chromaFormatIDC, dstPictureStructure, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch)
+}
+
+func h264CheckMCDirPartFramePlanesArgs(dstLumaStride int, dstChromaStride int, chromaFormatIDC int, ref *h264PicturePlanes, cache *macroblockMotionCache, n int, height int, delta int, list int) error {
+	if ref == nil || cache == nil || n < 0 || n >= 16 || list < 0 || list > 1 || dstLumaStride <= 0 || dstChromaStride < 0 || chromaFormatIDC < 0 || chromaFormatIDC > 3 || height <= 0 || delta < 0 {
+		return ErrInvalidData
+	}
+	return nil
+}
+
+func h264MCDirPartFramePlanesCore(dstYPlane []uint8, dstCbPlane []uint8, dstCrPlane []uint8, dstLumaStride int, dstChromaStride int, chromaFormatIDC int, dstPictureStructure int32, ref *h264PicturePlanes, cache *macroblockMotionCache, n int, square bool, height int, delta int, list int, dstY int, dstCb int, dstCr int, srcXOffset int, srcYOffset int, qpelSize int, chromaWidth int, avg bool, scratch *h264MotionCompScratch) error {
 	mv := cache.MV[list][h264Scan8[n]]
 	mx := int(mv[0]) + srcXOffset*8
 	my := int(mv[1]) + srcYOffset*8
@@ -681,6 +755,13 @@ func h264CheckMotionPlanePair(dst *h264PicturePlanes, ref *h264PicturePlanes) er
 	}
 	if err := ref.validate(); err != nil {
 		return err
+	}
+	return h264CheckMotionPlanePairShape(dst, ref)
+}
+
+func h264CheckMotionPlanePairShape(dst *h264PicturePlanes, ref *h264PicturePlanes) error {
+	if dst == nil || ref == nil {
+		return ErrInvalidData
 	}
 	if dst.MBWidth != ref.MBWidth ||
 		dst.MBHeight != ref.MBHeight ||
