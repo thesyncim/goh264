@@ -3,9 +3,9 @@
 
 #include "textflag.h"
 
-// The luma deblock leaves below are raw arm64 encodings for the FFmpeg n8.0.1
-// NEON kernels ff_h264_v_loop_filter_luma_neon and
-// ff_h264_h_loop_filter_luma_neon. Go's arm64 assembler does not recognize
+// The deblock leaves below are raw arm64 encodings for the FFmpeg n8.0.1
+// NEON kernels ff_h264_v/h_loop_filter_luma_neon and
+// ff_h264_v/h_loop_filter_chroma_neon. Go's arm64 assembler does not recognize
 // several required signed/saturating NEON mnemonics, so the instruction words
 // are emitted directly after the Go ABI arguments are moved into the same
 // x0..x4/w2..w3 registers used by the upstream ABI.
@@ -262,4 +262,144 @@ TEXT ·h264HLoopFilterLuma8ASM(SB), NOSPLIT, $0-32
 	WORD $0x4d819010 // st1.s {v16}[3], [x0], x1
 	WORD $0x4d819000 // st1.s {v0}[3], [x0], x1
 	WORD $0x4d819013 // st1.s {v19}[3], [x0], x1
+	WORD $0xd65f03c0 // ret
+
+// func h264VLoopFilterChroma8ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+TEXT ·h264VLoopFilterChroma8ASM(SB), NOSPLIT, $0-32
+	MOVD pix+0(FP), R0
+	MOVD stride+8(FP), R1
+	MOVW alpha+16(FP), R2
+	MOVW beta+20(FP), R3
+	MOVD tc0+24(FP), R4
+
+	WORD $0x7100005f // cmp w2, #0x0
+	WORD $0xb9400086 // ldr w6, [x4]
+	WORD $0x7a401860 // ccmp w3, #0x0, #0x0, ne
+	WORD $0x4e041cd8 // mov.s v24[0], w6
+	WORD $0x0a0640c8 // and w8, w6, w6, lsl #16
+	WORD $0x54000060 // b.eq +0x0c
+	WORD $0x6a082108 // ands w8, w8, w8, lsl #8
+	WORD $0x5400004a // b.ge +0x08
+	WORD $0xd65f03c0 // ret
+	WORD $0xcb010400 // sub x0, x0, x1, lsl #1
+	WORD $0x0cc17012 // ld1.8b {v18}, [x0], x1
+	WORD $0x0cc17010 // ld1.8b {v16}, [x0], x1
+	WORD $0x0cc17000 // ld1.8b {v0}, [x0], x1
+	WORD $0x0c407002 // ld1.8b {v2}, [x0]
+	WORD $0x0e010c56 // dup.8b v22, w2
+	WORD $0x0e010c77 // dup.8b v23, w3
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x2e20761a // uabd.8b v26, v16, v0
+	WORD $0x2e30765c // uabd.8b v28, v18, v16
+	WORD $0x2e20745e // uabd.8b v30, v2, v0
+	WORD $0x2e3a36da // cmhi.8b v26, v22, v26
+	WORD $0x2e3c36fc // cmhi.8b v28, v23, v28
+	WORD $0x2e3e36fe // cmhi.8b v30, v23, v30
+	WORD $0x2f08a404 // ushll.8h v4, v0, #0
+	WORD $0x0e3c1f5a // and.8b v26, v26, v28
+	WORD $0x2e303084 // usubw.8h v4, v4, v16
+	WORD $0x0e3e1f5a // and.8b v26, v26, v30
+	WORD $0x4f125484 // shl.8h v4, v4, #2
+	WORD $0x4e083f48 // mov.d x8, v26[0]
+	WORD $0x6f185718 // sli.8h v24, v24, #8
+	WORD $0x2e321084 // uaddw.8h v4, v4, v18
+	WORD $0xb4000208 // cbz x8, +0x40
+	WORD $0x2e223084 // usubw.8h v4, v4, v2
+	WORD $0x0f0d8c84 // rshrn.8b v4, v4, #3
+	WORD $0x0e386c84 // smin.8b v4, v4, v24
+	WORD $0x2e20bb19 // neg.8b v25, v24
+	WORD $0x0e396484 // smax.8b v4, v4, v25
+	WORD $0x2f08a416 // ushll.8h v22, v0, #0
+	WORD $0x0e3a1c84 // and.8b v4, v4, v26
+	WORD $0x2f08a61c // ushll.8h v28, v16, #0
+	WORD $0x0e24139c // saddw.8h v28, v28, v4
+	WORD $0x0e2432d6 // ssubw.8h v22, v22, v4
+	WORD $0x2e212b90 // sqxtun.8b v16, v28
+	WORD $0x2e212ac0 // sqxtun.8b v0, v22
+	WORD $0xcb010400 // sub x0, x0, x1, lsl #1
+	WORD $0x0c817010 // st1.8b {v16}, [x0], x1
+	WORD $0x0c817000 // st1.8b {v0}, [x0], x1
+	WORD $0xd65f03c0 // ret
+
+// func h264HLoopFilterChroma8ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+TEXT ·h264HLoopFilterChroma8ASM(SB), NOSPLIT, $0-32
+	MOVD pix+0(FP), R0
+	MOVD stride+8(FP), R1
+	MOVW alpha+16(FP), R2
+	MOVW beta+20(FP), R3
+	MOVD tc0+24(FP), R4
+
+	WORD $0x7100005f // cmp w2, #0x0
+	WORD $0xb9400086 // ldr w6, [x4]
+	WORD $0x7a401860 // ccmp w3, #0x0, #0x0, ne
+	WORD $0x4e041cd8 // mov.s v24[0], w6
+	WORD $0x0a0640c8 // and w8, w6, w6, lsl #16
+	WORD $0x54000060 // b.eq +0x0c
+	WORD $0x6a082108 // ands w8, w8, w8, lsl #8
+	WORD $0x5400004a // b.ge +0x08
+	WORD $0xd65f03c0 // ret
+	WORD $0xd1000800 // sub x0, x0, #2
+	WORD $0x0dc18012 // ld1.s {v18}[0], [x0], x1
+	WORD $0x0dc18010 // ld1.s {v16}[0], [x0], x1
+	WORD $0x0dc18000 // ld1.s {v0}[0], [x0], x1
+	WORD $0x0dc18002 // ld1.s {v2}[0], [x0], x1
+	WORD $0x0dc19012 // ld1.s {v18}[1], [x0], x1
+	WORD $0x0dc19010 // ld1.s {v16}[1], [x0], x1
+	WORD $0x0dc19000 // ld1.s {v0}[1], [x0], x1
+	WORD $0x0dc19002 // ld1.s {v2}[1], [x0], x1
+	WORD $0x0e102a5c // trn1.8b v28, v18, v16
+	WORD $0x0e106a5d // trn2.8b v29, v18, v16
+	WORD $0x0e02281e // trn1.8b v30, v0, v2
+	WORD $0x0e02681f // trn2.8b v31, v0, v2
+	WORD $0x0e5e2b92 // trn1.4h v18, v28, v30
+	WORD $0x0e5e6b80 // trn2.4h v0, v28, v30
+	WORD $0x0e5f2bb0 // trn1.4h v16, v29, v31
+	WORD $0x0e5f6ba2 // trn2.4h v2, v29, v31
+	WORD $0x0e010c56 // dup.8b v22, w2
+	WORD $0x0e010c77 // dup.8b v23, w3
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x2e20761a // uabd.8b v26, v16, v0
+	WORD $0x2e30765c // uabd.8b v28, v18, v16
+	WORD $0x2e20745e // uabd.8b v30, v2, v0
+	WORD $0x2e3a36da // cmhi.8b v26, v22, v26
+	WORD $0x2e3c36fc // cmhi.8b v28, v23, v28
+	WORD $0x2e3e36fe // cmhi.8b v30, v23, v30
+	WORD $0x2f08a404 // ushll.8h v4, v0, #0
+	WORD $0x0e3c1f5a // and.8b v26, v26, v28
+	WORD $0x2e303084 // usubw.8h v4, v4, v16
+	WORD $0x0e3e1f5a // and.8b v26, v26, v30
+	WORD $0x4f125484 // shl.8h v4, v4, #2
+	WORD $0x4e083f48 // mov.d x8, v26[0]
+	WORD $0x6f185718 // sli.8h v24, v24, #8
+	WORD $0x2e321084 // uaddw.8h v4, v4, v18
+	WORD $0xb40003c8 // cbz x8, +0x78
+	WORD $0x2e223084 // usubw.8h v4, v4, v2
+	WORD $0x0f0d8c84 // rshrn.8b v4, v4, #3
+	WORD $0x0e386c84 // smin.8b v4, v4, v24
+	WORD $0x2e20bb19 // neg.8b v25, v24
+	WORD $0x0e396484 // smax.8b v4, v4, v25
+	WORD $0x2f08a416 // ushll.8h v22, v0, #0
+	WORD $0x0e3a1c84 // and.8b v4, v4, v26
+	WORD $0x2f08a61c // ushll.8h v28, v16, #0
+	WORD $0x0e24139c // saddw.8h v28, v28, v4
+	WORD $0x0e2432d6 // ssubw.8h v22, v22, v4
+	WORD $0x2e212b90 // sqxtun.8b v16, v28
+	WORD $0x2e212ac0 // sqxtun.8b v0, v22
+	WORD $0x0e102a5c // trn1.8b v28, v18, v16
+	WORD $0x0e106a5d // trn2.8b v29, v18, v16
+	WORD $0x0e02281e // trn1.8b v30, v0, v2
+	WORD $0x0e02681f // trn2.8b v31, v0, v2
+	WORD $0x0e5e2b92 // trn1.4h v18, v28, v30
+	WORD $0x0e5e6b80 // trn2.4h v0, v28, v30
+	WORD $0x0e5f2bb0 // trn1.4h v16, v29, v31
+	WORD $0x0e5f6ba2 // trn2.4h v2, v29, v31
+	WORD $0xcb010c00 // sub x0, x0, x1, lsl #3
+	WORD $0x0d818012 // st1.s {v18}[0], [x0], x1
+	WORD $0x0d818010 // st1.s {v16}[0], [x0], x1
+	WORD $0x0d818000 // st1.s {v0}[0], [x0], x1
+	WORD $0x0d818002 // st1.s {v2}[0], [x0], x1
+	WORD $0x0d819012 // st1.s {v18}[1], [x0], x1
+	WORD $0x0d819010 // st1.s {v16}[1], [x0], x1
+	WORD $0x0d819000 // st1.s {v0}[1], [x0], x1
+	WORD $0x0d819002 // st1.s {v2}[1], [x0], x1
 	WORD $0xd65f03c0 // ret
