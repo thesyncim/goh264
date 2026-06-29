@@ -411,6 +411,10 @@ func BenchmarkH264QpelMC4Avg00(b *testing.B) {
 	benchmarkH264QpelMCCopy(b, 4, true)
 }
 
+func BenchmarkH264QpelMC4Fractional(b *testing.B) {
+	benchmarkH264QpelMCFractional(b, 4, true)
+}
+
 func BenchmarkH264QpelMC2Put00(b *testing.B) {
 	benchmarkH264QpelMCCopy(b, 2, false)
 }
@@ -419,8 +423,45 @@ func BenchmarkH264QpelMC2Avg00(b *testing.B) {
 	benchmarkH264QpelMCCopy(b, 2, true)
 }
 
+func BenchmarkH264QpelMC2Fractional(b *testing.B) {
+	benchmarkH264QpelMCFractional(b, 2, true)
+}
+
 func benchmarkH264QpelMCCopy(b *testing.B, size int, avg bool) {
 	benchmarkH264QpelMC(b, size, 0, 0, avg)
+}
+
+func benchmarkH264QpelMCFractional(b *testing.B, size int, includeAvg bool) {
+	for _, c := range []struct {
+		name string
+		mx   int
+		my   int
+	}{
+		{name: "10", mx: 1, my: 0},
+		{name: "20", mx: 2, my: 0},
+		{name: "30", mx: 3, my: 0},
+		{name: "01", mx: 0, my: 1},
+		{name: "02", mx: 0, my: 2},
+		{name: "03", mx: 0, my: 3},
+		{name: "22", mx: 2, my: 2},
+		{name: "11", mx: 1, my: 1},
+		{name: "31", mx: 3, my: 1},
+		{name: "13", mx: 1, my: 3},
+		{name: "33", mx: 3, my: 3},
+		{name: "21", mx: 2, my: 1},
+		{name: "12", mx: 1, my: 2},
+		{name: "32", mx: 3, my: 2},
+		{name: "23", mx: 2, my: 3},
+	} {
+		b.Run("Put"+c.name, func(b *testing.B) {
+			benchmarkH264QpelMC(b, size, c.mx, c.my, false)
+		})
+		if includeAvg {
+			b.Run("Avg"+c.name, func(b *testing.B) {
+				benchmarkH264QpelMC(b, size, c.mx, c.my, true)
+			})
+		}
+	}
 }
 
 func benchmarkH264QpelMC(b *testing.B, size int, mx int, my int, avg bool) {
