@@ -274,6 +274,55 @@ done
 	if result.RawMD5 != hex.EncodeToString(wantMD5[:]) {
 		t.Fatalf("raw md5 = %q, want single-iteration md5", result.RawMD5)
 	}
+	wantRepeatedMD5 := md5.Sum([]byte("abcdabcdabcd"))
+	if len(result.Samples) != 1 || result.Samples[0].RawMD5 != hex.EncodeToString(wantRepeatedMD5[:]) {
+		t.Fatalf("sample repeated raw md5 = %+v, want %s", result.Samples, hex.EncodeToString(wantRepeatedMD5[:]))
+	}
+	if notes := strings.Join(result.Notes, "\n"); !strings.Contains(notes, "raw-MD5 is checked") {
+		t.Fatalf("notes = %q, want amortized raw-MD5 check note", notes)
+	}
+}
+
+func TestBenchFFmpegAmortizedRejectsRepeatedOutputMismatch(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "in.264")
+	if err := os.WriteFile(input, []byte("xyz"), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	fake := filepath.Join(dir, "ffmpeg")
+	script := `#!/bin/sh
+input=""
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = "-i" ]; then
+        shift
+        input="$1"
+    fi
+    shift
+done
+bytes=$(wc -c < "$input" | tr -d ' ')
+count=$((bytes / 3))
+i=0
+while [ "$i" -lt "$count" ]; do
+    if [ "$bytes" -gt 3 ]; then
+        printf wxyz
+    else
+        printf abcd
+    fi
+    i=$((i + 1))
+done
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake ffmpeg: %v", err)
+	}
+
+	_, err := benchFFmpeg(input, 7, 2, 1, 0, true, fake, "1", "yuv420p", "yuv420p", false, ffmpegBenchLane{
+		name:           "ffmpeg-native",
+		backendKind:    "ffmpeg-native-c+asm",
+		comparisonLane: "native-c+asm-vs-go+asm",
+	})
+	if err == nil || !strings.Contains(err.Error(), "amortized raw md5") {
+		t.Fatalf("benchFFmpeg err = %v, want amortized raw md5 mismatch", err)
+	}
 }
 
 func TestAnnotateFFmpegPeerQuality(t *testing.T) {
