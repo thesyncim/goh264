@@ -29,6 +29,35 @@ func TestH264QpelMCDispatchMatchesScalar(t *testing.T) {
 	}
 }
 
+func TestH264QpelMCDispatchMatchesScalarWithSeparateStrides(t *testing.T) {
+	const dstStride = 64
+	const srcStride = 80
+	const rows = 48
+	const dstOffset = 6*dstStride + 6
+	const srcOffset = 6*srcStride + 6
+
+	for _, avg := range []bool{false, true} {
+		for _, size := range []int{2, 4, 8, 16} {
+			for my := 0; my < 4; my++ {
+				for mx := 0; mx < 4; mx++ {
+					t.Run(qpelDispatchCaseName(avg, size, mx, my), func(t *testing.T) {
+						dstKernel, _ := makeQpelUnitFixture(dstStride, rows)
+						_, src := makeQpelUnitFixture(srcStride, rows)
+						dstScalar := append([]uint8(nil), dstKernel...)
+
+						h264QpelMCStridesKernel(dstKernel, dstOffset, dstStride, src, srcOffset, srcStride, int32(size), int32(mx), int32(my), avg)
+						h264QpelMCStridesScalar(dstScalar, dstOffset, dstStride, src, srcOffset, srcStride, size, mx, my, avg)
+
+						if string(dstKernel) != string(dstScalar) {
+							t.Fatalf("kernel output differs from scalar")
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 func TestH264QpelMCHighDispatchMatchesScalar(t *testing.T) {
 	const stride = 48
 	const offset = 6*stride + 6

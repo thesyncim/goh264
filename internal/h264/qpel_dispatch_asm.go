@@ -3,6 +3,62 @@
 
 package h264
 
+//go:noescape
+func h264QpelMC16Put00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
+
+//go:noescape
+func h264QpelMC16Avg00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
+
+//go:noescape
+func h264QpelMC8Put00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
+
+//go:noescape
+func h264QpelMC8Avg00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
+
+//go:noescape
+func h264QpelMC4Put00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
+
+//go:noescape
+func h264QpelMC4Avg00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
+
+//go:noescape
+func h264QpelMC2Put00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
+
+//go:noescape
+func h264QpelMC2Avg00ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
+
 func h264QpelMCStridesKernel(dst []uint8, dstOffset int, dstStride int, src []uint8, srcOffset int, srcStride int, size int32, mx int32, my int32, avg bool) {
+	if mx == 0 && my == 0 {
+		dstPtr := &dst[dstOffset]
+		srcPtr := &src[srcOffset]
+		if avg {
+			switch size {
+			case 16:
+				h264QpelMC16Avg00ASM(dstPtr, srcPtr, dstStride, srcStride)
+			case 8:
+				h264QpelMC8Avg00ASM(dstPtr, srcPtr, dstStride, srcStride)
+			case 4:
+				h264QpelMC4Avg00ASM(dstPtr, srcPtr, dstStride, srcStride)
+			case 2:
+				h264QpelMC2Avg00ASM(dstPtr, srcPtr, dstStride, srcStride)
+			default:
+				h264QpelMCStridesScalar(dst, dstOffset, dstStride, src, srcOffset, srcStride, int(size), int(mx), int(my), avg)
+			}
+			return
+		}
+		switch size {
+		case 16:
+			h264QpelMC16Put00ASM(dstPtr, srcPtr, dstStride, srcStride)
+		case 8:
+			h264QpelMC8Put00ASM(dstPtr, srcPtr, dstStride, srcStride)
+		case 4:
+			h264QpelMC4Put00ASM(dstPtr, srcPtr, dstStride, srcStride)
+		case 2:
+			h264QpelMC2Put00ASM(dstPtr, srcPtr, dstStride, srcStride)
+		default:
+			h264QpelMCStridesScalar(dst, dstOffset, dstStride, src, srcOffset, srcStride, int(size), int(mx), int(my), avg)
+		}
+		return
+	}
 	h264QpelMCStridesScalar(dst, dstOffset, dstStride, src, srcOffset, srcStride, int(size), int(mx), int(my), avg)
 }

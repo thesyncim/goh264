@@ -125,6 +125,53 @@ func TestH264QpelRejectsCIntOverflow(t *testing.T) {
 	}
 }
 
+func BenchmarkH264QpelMC16Put00(b *testing.B) {
+	benchmarkH264QpelMCCopy(b, 16, false)
+}
+
+func BenchmarkH264QpelMC16Avg00(b *testing.B) {
+	benchmarkH264QpelMCCopy(b, 16, true)
+}
+
+func BenchmarkH264QpelMC8Put00(b *testing.B) {
+	benchmarkH264QpelMCCopy(b, 8, false)
+}
+
+func BenchmarkH264QpelMC8Avg00(b *testing.B) {
+	benchmarkH264QpelMCCopy(b, 8, true)
+}
+
+func BenchmarkH264QpelMC4Put00(b *testing.B) {
+	benchmarkH264QpelMCCopy(b, 4, false)
+}
+
+func BenchmarkH264QpelMC4Avg00(b *testing.B) {
+	benchmarkH264QpelMCCopy(b, 4, true)
+}
+
+func BenchmarkH264QpelMC2Put00(b *testing.B) {
+	benchmarkH264QpelMCCopy(b, 2, false)
+}
+
+func BenchmarkH264QpelMC2Avg00(b *testing.B) {
+	benchmarkH264QpelMCCopy(b, 2, true)
+}
+
+func benchmarkH264QpelMCCopy(b *testing.B, size int, avg bool) {
+	const stride = 64
+	const rows = 32
+	const offset = 6*stride + 6
+	dst, src := makeQpelUnitFixture(stride, rows)
+	b.ReportAllocs()
+	b.SetBytes(int64(size * size))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := h264QpelMCStrides(dst, offset, stride, src, offset, stride, size, 0, 0, avg); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func makeQpelUnitFixture(stride int, rows int) ([]uint8, []uint8) {
 	dst := make([]uint8, stride*rows)
 	src := make([]uint8, stride*rows)
