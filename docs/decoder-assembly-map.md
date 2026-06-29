@@ -7,9 +7,10 @@ dispatch, `purego` scalar fallback, and real-vector benchmark coverage.
 
 Current profile evidence on Apple arm64 is dominated by CABAC slice decode plus
 qpel/chroma motion compensation on `canl4` (`cabac`, `spatial-direct`,
-`no-deblock`). Deblock is still mapped because it is a large upstream assembly
-surface and expected to matter on deblocked streams, but it was not exercised by
-that sample.
+`no-deblock`). A fresh `caba3` (`cabac`, `temporal-direct`, `deblock`) profile
+after qpel/chroma assembly showed edge emulation as the largest flat local
+helper; the scalar helper now follows FFmpeg's rectangle-copy-and-extend shape,
+after which loop-filter integration and deblock pixel filters become visible.
 
 ## Status Key
 
@@ -44,10 +45,10 @@ that sample.
 | Luma qpel motion compensation | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/h264_qpel_8bit.asm`, `h264_qpel_10bit.asm`, `h264_qpel.c`, plus `x86/fpel.asm` and `x86/qpel.asm` support | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/h264qpel_neon.S`, `h264qpel_init_aarch64.c`, plus mc00 helpers in `aarch64/hpeldsp_neon.S` | `internal/h264/qpel.go`, `internal/h264/qpel_dispatch_asm.go`, `internal/h264/qpel_dispatch_purego.go`, `internal/h264/qpel_dispatch_high_asm.go`, `internal/h264/qpel_dispatch_high.go`, `internal/h264/qpel_mc_amd64.s`, `internal/h264/qpel_mc_arm64.s`, `internal/h264/qpel_hvblend_amd64.s`, `internal/h264/qpel_hvblend_arm64.s`, `internal/h264/qpel_high_amd64.s`, `internal/h264/qpel_high_arm64.s`, call sites in `internal/h264/motion_comp.go` and `internal/h264/motion_comp_high.go` | verified | Largest motion-comp family and a direct profile hit. `h264QpelMCStridesKernel` keeps `uint8_t`/`ptrdiff_t` selector width parity with separate source/destination strides in the Go dispatch wrapper. Enabled leaves: all 8-bit and high-bit-depth qpel positions for sizes 16/8/4/2, put/avg, on amd64 and arm64. High-bit-depth entrypoints use a `uint8_t*` byte-pointer ABI and native byte strides, with Go `[]uint16` wrappers only at the validated scalar boundary. The upstream C oracle covers FFmpeg's put2/4/8/16 and avg4/8/16 leaves; local scalar dispatch parity covers the local avg2 helper. |
 | Weighted prediction | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/h264_weight.asm`, `h264_weight_10bit.asm` | covered by DSP/init paths in the arm64 snapshot when present upstream | `internal/h264/dsp.go`, weighted call sites in `internal/h264/motion_comp.go` and `internal/h264/motion_comp_high.go` | mapped | Explicit and implicit weighted prediction are hot in B/P weighted streams. Must preserve signed offset and rounding behavior. |
 | IDCT and add-pixels | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/h264_idct.asm`, `h264_idct_10bit.asm`, `h264dsp_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/h264idct_neon.S`, `h264dsp_init_aarch64.c` | `internal/h264/idct.go`, `internal/h264/dsp.go`, reconstruction call sites in `internal/h264/reconstruct.go` and `internal/h264/reconstruct_high.go` | mapped | Includes 4x4, 8x8, DC-only, chroma DC, and add-pixels clear variants. Needs exact block clearing semantics. |
-| Loop/deblock filter | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/h264_deblock.asm`, `h264_deblock_10bit.asm`, `h264dsp_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/h264dsp_neon.S`, `h264dsp_init_aarch64.c` | wrappers in `internal/h264/dsp.go`, integration in `internal/h264/loop_filter.go` | mapped | Likely high ROI on larger content. Must preserve MBAFF, chroma 4:2:2, intra/non-intra, and high-bit-depth variants. |
+| Loop/deblock filter | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/h264_deblock.asm`, `h264_deblock_10bit.asm`, `h264dsp_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/h264dsp_neon.S`, `h264dsp_init_aarch64.c` | wrappers in `internal/h264/dsp.go`, integration in `internal/h264/loop_filter.go` | mapped | Visible after the edge-emulation scalar fix on deblocked `caba3`. Must preserve MBAFF, chroma 4:2:2, intra/non-intra, and high-bit-depth variants. |
 | Intra prediction | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/h264_intrapred.asm`, `h264_intrapred_10bit.asm`, `h264_intrapred_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/h264pred_neon.S`, `h264pred_init.c` | `internal/h264/pred.go`, `internal/h264/pred_high.go`, dispatch by mode in `internal/h264/intra_prediction.go` and reconstruction files | mapped | Many small mode-specific kernels. Port after motion-comp and deblock unless profiles show intra-heavy workloads dominating. |
 | CABAC helper optimizations | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/cabac.h`, `h264_cabac.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/cabac.h` | `internal/h264/cabac.go`, `internal/h264/cabac_mb.go`, `internal/h264/cabac_residual.go`, `internal/h264/cabac_frame.go` | mapped | Treat as a later micro-optimization lane. CABAC is profile-visible, but FFmpeg's asm/C helpers are tightly coupled to context layout and refill behavior. |
-| VideoDSP support | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/videodsp.asm`, `videodsp_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/videodsp.S`, `videodsp_init.c` | edge-emulation and prefetch call sites under `internal/h264` | mapped | Track as support code for MC. Port only when a decoder profile shows edge emulation or prefetch wrappers matter. |
+| VideoDSP support | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/videodsp.asm`, `videodsp_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/videodsp.S`, `videodsp_init.c` | edge-emulation and prefetch call sites under `internal/h264/motion_comp.go` and `internal/h264/motion_comp_high.go` | mapped | Edge emulation is profile-visible on `caba3`; the scalar helper now mirrors FFmpeg's valid-rectangle copy plus left/right extension instead of clipping every pixel. Dedicated amd64/arm64 asm remains todo; the pinned upstream arm64 file only wires prefetch, while x86 wires 8-bit SSE2/AVX2 edge emulation. |
 
 ## Implementation Order
 
@@ -55,13 +56,15 @@ that sample.
 2. Chroma MC 8-bit width 8/4/2 put and avg on arm64 first, then amd64.
 3. Chroma MC high-bit-depth width 8/4/2/1 put and avg.
 4. Luma qpel high-bit-depth.
-5. Loop/deblock luma 8-bit vertical/horizontal non-intra; swap with IDCT if
+5. VideoDSP edge-emulation asm if the `caba3` profile keeps it hot after the
+   source-shaped scalar fix.
+6. Loop/deblock luma 8-bit vertical/horizontal non-intra; swap with IDCT if
    fresh deblock profiles stay cold.
-6. Loop/deblock high-bit-depth and chroma/MBAFF variants.
-7. IDCT/add-pixels 4x4, 8x8, and DC-only.
-8. Weighted prediction.
-9. Intra prediction modes.
-10. CABAC helper experiments only after the above have benchmark evidence.
+7. Loop/deblock high-bit-depth and chroma/MBAFF variants.
+8. IDCT/add-pixels 4x4, 8x8, and DC-only.
+9. Weighted prediction.
+10. Intra prediction modes.
+11. CABAC helper experiments only after the above have benchmark evidence.
 
 ## Porting Rules
 
@@ -87,10 +90,11 @@ that sample.
 | --- | --- | --- | --- | --- |
 | 1 | Qpel 8-bit sizes 16/8/4/2 all positions | verified | verified | All qpel positions `mc00` through `mc33` are assembly-backed for sizes 16/8/4/2 in `internal/h264/qpel_mc_amd64.s`, `internal/h264/qpel_mc_arm64.s`, `internal/h264/qpel_hvblend_amd64.s`, and `internal/h264/qpel_hvblend_arm64.s`. Kernel seam in `internal/h264/qpel.go` uses `[]uint8`, native signed pointer-width strides/offsets, and 32-bit C-int selectors. Verified against `TestH264Qpel*`, `qpel_oracle_test.go`, cross-arch symbol builds, focused qpel `-benchmem`, and real-vector `caba3`/`canl4` in default and `purego` lanes. |
 | 2 | Chroma MC 8-bit width 8/4/2 put and avg | verified | verified | Widths 8/4/2/1 copy and fractional x/y put/avg leaves are implemented in `internal/h264/chroma_mc_amd64.s`, `internal/h264/chroma_mc_arm64.s`, `internal/h264/chroma_fractional_amd64.s`, and `internal/h264/chroma_fractional_arm64.s`. Kernel seam uses `[]uint8`, native signed pointer-width strides, and 32-bit C-int selectors/weights. Verified against `TestH264Chroma*`, `chroma_oracle_test.go`, focused `-benchmem`, real-vector `caba3`/`canl4`, and the public benchmark canary. |
-| 3 | Loop filter 8-bit luma/chroma | todo | todo | Needs MBAFF and chroma 4:2:2 rows in the forced-path test. Profile with deblock-heavy rows before enabling. |
+| 3 | VideoDSP edge emulation and prefetch | todo | todo | `h264EmulatedEdgeMC`/`h264EmulatedEdgeMCHigh` now use FFmpeg-shaped scalar rectangle copy plus border extension with 0-alloc focused benchmarks. Add dedicated asm only after default and `purego` real-vector benches show the remaining edge helper cost is still material. |
 | 4 | Qpel high-bit-depth sizes 16/8/4/2 | verified | verified | `mc00` copy/avg, one-axis `mc10/20/30/01/02/03`, center HV `mc22`, odd/odd HV `mc11/mc31/mc13/mc33`, and HV-blend `mc21/mc12/mc32/mc23` filters are implemented in `internal/h264/qpel_high_amd64.s` and `internal/h264/qpel_high_arm64.s` through `h264QpelMCHigh00ASM`, `h264QpelMCHighX0ASM`, `h264QpelMCHigh0YASM`, `h264QpelMCHigh22ASM`, `h264QpelMCHighHVXYASM`, and `h264QpelMCHighHVBlendASM`, which accept `*uint8` buffers and native byte strides after the Go `[]uint16` wrapper validates sample geometry. Verified against high-bit dispatch parity with separate strides, `TestH264QpelUpstreamOracle` default and `purego`, cross-arch symbols, focused High10 qpel `-benchmem`, full default and `purego` test gates, the public benchmark canary, and high-bit real-vector decode. |
 | 5 | Chroma MC high-bit-depth width 8/4/2/1 | verified | verified | Implemented in `internal/h264/chroma_high_amd64.s` and `internal/h264/chroma_high_arm64.s`. `h264ChromaMCHighASM` accepts `*uint8` buffers, native byte strides, 32-bit C-int selectors/weights, and a native byte `step`; Go dispatch validates the `[]uint16` public/internal helper shape and narrows to FFmpeg-shaped byte pointers. Verified against high-bit dispatch parity with separate strides, `TestH264ChromaMCUpstreamOracle` default and `purego`, cross-arch symbols, focused high-bit chroma `-benchmem`, and real-vector `frext-hi422fr13-sony-b` in default and `purego` lanes. |
-| 6 | IDCT/add-pixels 4x4/8x8/DC | todo | todo | Must verify block clearing and transform-bypass exclusions. |
-| 7 | Weighted prediction 8/high | todo | todo | Must preserve signed offsets, implicit B weighting, and high-bit-depth clipping. |
-| 8 | Intra prediction 4x4/8x8/16x16/chroma | todo | todo | Many small kernels; enable in batches by mode. |
-| 9 | CABAC helpers | todo | todo | Evidence-gated; do not start before allocation-free decoder path is stable. |
+| 6 | Loop filter 8-bit luma/chroma | todo | todo | Visible after the scalar edge-emulation fix. Needs MBAFF and chroma 4:2:2 rows in the forced-path test before enabling. |
+| 7 | IDCT/add-pixels 4x4/8x8/DC | todo | todo | Must verify block clearing and transform-bypass exclusions. |
+| 8 | Weighted prediction 8/high | todo | todo | Must preserve signed offsets, implicit B weighting, and high-bit-depth clipping. |
+| 9 | Intra prediction 4x4/8x8/16x16/chroma | todo | todo | Many small kernels; enable in batches by mode. |
+| 10 | CABAC helpers | todo | todo | Evidence-gated; do not start before allocation-free decoder path is stable. |

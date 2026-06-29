@@ -378,13 +378,42 @@ func h264EmulatedEdgeMC(buf []uint8, bufOffset int, bufStride int, src []uint8, 
 	if bufEnd > len(buf) || len(src) < srcNeed {
 		return ErrInvalidData
 	}
+	if srcY >= height {
+		srcY = height - 1
+	} else if srcY <= -blockH {
+		srcY = 1 - blockH
+	}
+	if srcX >= width {
+		srcX = width - 1
+	} else if srcX <= -blockW {
+		srcX = 1 - blockW
+	}
+	startY := max(0, -srcY)
+	startX := max(0, -srcX)
+	endY := min(blockH, height-srcY)
+	endX := min(blockW, width-srcX)
+	copyW := endX - startX
+	srcX += startX
 	for y := 0; y < blockH; y++ {
-		sy := clipInt(srcY+y, 0, height-1)
+		sy := y
+		if sy < startY {
+			sy = startY
+		} else if sy >= endY {
+			sy = endY - 1
+		}
 		dstRow := bufOffset + y*bufStride
-		srcRow := sy * srcStride
-		for x := 0; x < blockW; x++ {
-			sx := clipInt(srcX+x, 0, width-1)
-			buf[dstRow+x] = src[srcRow+sx]
+		copy(buf[dstRow+startX:dstRow+startX+copyW], src[(srcY+sy)*srcStride+srcX:(srcY+sy)*srcStride+srcX+copyW])
+		if startX > 0 {
+			v := buf[dstRow+startX]
+			for x := 0; x < startX; x++ {
+				buf[dstRow+x] = v
+			}
+		}
+		if endX < blockW {
+			v := buf[dstRow+endX-1]
+			for x := endX; x < blockW; x++ {
+				buf[dstRow+x] = v
+			}
 		}
 	}
 	return nil

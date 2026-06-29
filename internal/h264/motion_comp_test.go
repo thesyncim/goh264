@@ -74,6 +74,38 @@ func TestH264EdgeScratchHighRejectsOverflowedGeometry(t *testing.T) {
 	}
 }
 
+func BenchmarkH264EmulatedEdgeMC(b *testing.B) {
+	for _, c := range []struct {
+		name string
+		srcX int
+		srcY int
+	}{
+		{name: "Inside21x21", srcX: 16, srcY: 16},
+		{name: "TopLeft21x21", srcX: -2, srcY: -2},
+		{name: "BottomRight21x21", srcX: 45, srcY: 45},
+	} {
+		b.Run(c.name, func(b *testing.B) {
+			benchmarkH264EmulatedEdgeMC(b, c.srcX, c.srcY)
+		})
+	}
+}
+
+func BenchmarkH264EmulatedEdgeMCHigh10(b *testing.B) {
+	for _, c := range []struct {
+		name string
+		srcX int
+		srcY int
+	}{
+		{name: "Inside21x21", srcX: 16, srcY: 16},
+		{name: "TopLeft21x21", srcX: -2, srcY: -2},
+		{name: "BottomRight21x21", srcX: 45, srcY: 45},
+	} {
+		b.Run(c.name, func(b *testing.B) {
+			benchmarkH264EmulatedEdgeMCHigh(b, c.srcX, c.srcY)
+		})
+	}
+}
+
 func TestH264HLMotionFrameList1OnlyUsesPut(t *testing.T) {
 	dst := makeH264MotionCompPicture(1, 17)
 	ref1 := makeH264MotionCompPicture(1, 99)
@@ -1248,6 +1280,51 @@ func fillH264MotionCompPlaneHigh(p []uint16, seed int, bitDepth int) {
 	mask := (1 << bitDepth) - 1
 	for i := range p {
 		p[i] = uint16((seed + i*13 + (i>>4)*7) & mask)
+	}
+}
+
+func benchmarkH264EmulatedEdgeMC(b *testing.B, srcX int, srcY int) {
+	const (
+		srcStride = 80
+		bufStride = 80
+		width     = 64
+		height    = 64
+		blockW    = 21
+		blockH    = 21
+	)
+	src := make([]uint8, srcStride*height)
+	buf := make([]uint8, h264EdgeScratchSize(bufStride, blockW, blockH))
+	fillH264MotionCompPlane(src, 17)
+	b.ReportAllocs()
+	b.SetBytes(blockW * blockH)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := h264EmulatedEdgeMC(buf, 0, bufStride, src, srcStride, blockW, blockH, srcX, srcY, width, height); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func benchmarkH264EmulatedEdgeMCHigh(b *testing.B, srcX int, srcY int) {
+	const (
+		bitDepth  = 10
+		srcStride = 80
+		bufStride = 80
+		width     = 64
+		height    = 64
+		blockW    = 21
+		blockH    = 21
+	)
+	src := make([]uint16, srcStride*height)
+	buf := make([]uint16, h264EdgeScratchSize(bufStride, blockW, blockH))
+	fillH264MotionCompPlaneHigh(src, 17, bitDepth)
+	b.ReportAllocs()
+	b.SetBytes(blockW * blockH * 2)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := h264EmulatedEdgeMCHigh(buf, 0, bufStride, src, srcStride, blockW, blockH, srcX, srcY, width, height); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
