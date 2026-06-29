@@ -477,6 +477,10 @@ func BenchmarkH264QpelMCHigh10HV(b *testing.B) {
 			{name: "31", mx: 3, my: 1},
 			{name: "13", mx: 1, my: 3},
 			{name: "33", mx: 3, my: 3},
+			{name: "21", mx: 2, my: 1},
+			{name: "12", mx: 1, my: 2},
+			{name: "32", mx: 3, my: 2},
+			{name: "23", mx: 2, my: 3},
 		} {
 			b.Run("Put"+itoaSmall(size)+"_"+c.name, func(b *testing.B) {
 				benchmarkH264QpelMCHigh(b, size, c.mx, c.my, false, bitDepth)

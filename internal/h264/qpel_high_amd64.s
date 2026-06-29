@@ -559,3 +559,303 @@ qpel_highhvxy_store:
 	DECL R8
 	JNZ  qpel_highhvxy_row
 	RET
+
+// func h264QpelMCHighHVBlendASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32, max int32, avg int32)
+TEXT ·h264QpelMCHighHVBlendASM(SB), NOSPLIT, $32-56
+	MOVQ dst+0(FP), DI
+	MOVQ src+8(FP), SI
+	MOVQ dstStride+16(FP), DX
+	MOVQ srcStride+24(FP), CX
+	MOVL size+32(FP), R8
+	MOVL max+44(FP), R14
+qpel_highhvblend_row:
+	MOVQ DI, R11
+	MOVQ SI, R12
+	MOVL size+32(FP), R9
+qpel_highhvblend_col:
+	MOVL mx+36(FP), AX
+	CMPL AX, $2
+	JNE  qpel_highhvblend_vbase
+	MOVQ R12, R13
+	MOVL my+40(FP), AX
+	CMPL AX, $3
+	JNE  qpel_highhvblend_hbase_ptr_ready
+	ADDQ CX, R13
+qpel_highhvblend_hbase_ptr_ready:
+	XORL AX, AX
+	MOVW (R13), AX
+	XORL BX, BX
+	MOVW 2(R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	XORL AX, AX
+	MOVW -2(R13), AX
+	XORL BX, BX
+	MOVW 4(R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	XORL AX, AX
+	MOVW -4(R13), AX
+	XORL BX, BX
+	MOVW 6(R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	ADDL $16, R10
+	SARL $5, R10
+	CMPL R10, $0
+	JGE  qpel_highhvblend_hbase_nonnegative
+	XORL R10, R10
+	JMP  qpel_highhvblend_base_done
+qpel_highhvblend_hbase_nonnegative:
+	CMPL R10, R14
+	JLE  qpel_highhvblend_base_done
+	MOVL R14, R10
+	JMP  qpel_highhvblend_base_done
+qpel_highhvblend_vbase:
+	MOVQ R12, R13
+	MOVL mx+36(FP), AX
+	CMPL AX, $3
+	JNE  qpel_highhvblend_vbase_ptr_ready
+	ADDQ $2, R13
+qpel_highhvblend_vbase_ptr_ready:
+	XORL AX, AX
+	MOVW (R13), AX
+	MOVQ R13, R15
+	ADDQ CX, R15
+	XORL BX, BX
+	MOVW (R15), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	MOVQ R13, R15
+	SUBQ CX, R15
+	XORL AX, AX
+	MOVW (R15), AX
+	MOVQ R13, R15
+	ADDQ CX, R15
+	ADDQ CX, R15
+	XORL BX, BX
+	MOVW (R15), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	MOVQ R13, R15
+	SUBQ CX, R15
+	SUBQ CX, R15
+	XORL AX, AX
+	MOVW (R15), AX
+	MOVQ R13, R15
+	ADDQ CX, R15
+	ADDQ CX, R15
+	ADDQ CX, R15
+	XORL BX, BX
+	MOVW (R15), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	ADDL $16, R10
+	SARL $5, R10
+	CMPL R10, $0
+	JGE  qpel_highhvblend_vbase_nonnegative
+	XORL R10, R10
+	JMP  qpel_highhvblend_base_done
+qpel_highhvblend_vbase_nonnegative:
+	CMPL R10, R14
+	JLE  qpel_highhvblend_base_done
+	MOVL R14, R10
+qpel_highhvblend_base_done:
+	MOVL R10, 24(SP)
+
+	MOVQ R12, R13
+	SUBQ CX, R13
+	SUBQ CX, R13
+	XORL AX, AX
+	MOVW (R13), AX
+	XORL BX, BX
+	MOVW 2(R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	XORL AX, AX
+	MOVW -2(R13), AX
+	XORL BX, BX
+	MOVW 4(R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	XORL AX, AX
+	MOVW -4(R13), AX
+	XORL BX, BX
+	MOVW 6(R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	MOVL R10, 0(SP)
+
+	MOVQ R12, R13
+	SUBQ CX, R13
+	XORL AX, AX
+	MOVW (R13), AX
+	XORL BX, BX
+	MOVW 2(R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	XORL AX, AX
+	MOVW -2(R13), AX
+	XORL BX, BX
+	MOVW 4(R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	XORL AX, AX
+	MOVW -4(R13), AX
+	XORL BX, BX
+	MOVW 6(R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	MOVL R10, 4(SP)
+
+	MOVQ R12, R13
+	XORL AX, AX
+	MOVW (R13), AX
+	XORL BX, BX
+	MOVW 2(R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	XORL AX, AX
+	MOVW -2(R13), AX
+	XORL BX, BX
+	MOVW 4(R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	XORL AX, AX
+	MOVW -4(R13), AX
+	XORL BX, BX
+	MOVW 6(R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	MOVL R10, 8(SP)
+
+	MOVQ R12, R13
+	ADDQ CX, R13
+	XORL AX, AX
+	MOVW (R13), AX
+	XORL BX, BX
+	MOVW 2(R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	XORL AX, AX
+	MOVW -2(R13), AX
+	XORL BX, BX
+	MOVW 4(R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	XORL AX, AX
+	MOVW -4(R13), AX
+	XORL BX, BX
+	MOVW 6(R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	MOVL R10, 12(SP)
+
+	MOVQ R12, R13
+	ADDQ CX, R13
+	ADDQ CX, R13
+	XORL AX, AX
+	MOVW (R13), AX
+	XORL BX, BX
+	MOVW 2(R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	XORL AX, AX
+	MOVW -2(R13), AX
+	XORL BX, BX
+	MOVW 4(R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	XORL AX, AX
+	MOVW -4(R13), AX
+	XORL BX, BX
+	MOVW 6(R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	MOVL R10, 16(SP)
+
+	MOVQ R12, R13
+	ADDQ CX, R13
+	ADDQ CX, R13
+	ADDQ CX, R13
+	XORL AX, AX
+	MOVW (R13), AX
+	XORL BX, BX
+	MOVW 2(R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	XORL AX, AX
+	MOVW -2(R13), AX
+	XORL BX, BX
+	MOVW 4(R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	XORL AX, AX
+	MOVW -4(R13), AX
+	XORL BX, BX
+	MOVW 6(R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	MOVL R10, 20(SP)
+
+	MOVL 8(SP), AX
+	ADDL 12(SP), AX
+	IMULL $20, AX
+	MOVL AX, R10
+	MOVL 4(SP), AX
+	ADDL 16(SP), AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	MOVL 0(SP), AX
+	ADDL 20(SP), AX
+	ADDL AX, R10
+	ADDL $512, R10
+	SARL $10, R10
+	CMPL R10, $0
+	JGE  qpel_highhvblend_hv_nonnegative
+	XORL R10, R10
+	JMP  qpel_highhvblend_hv_done
+qpel_highhvblend_hv_nonnegative:
+	CMPL R10, R14
+	JLE  qpel_highhvblend_hv_done
+	MOVL R14, R10
+qpel_highhvblend_hv_done:
+	MOVL 24(SP), AX
+	ADDL AX, R10
+	ADDL $1, R10
+	SHRL $1, R10
+	MOVL avg+48(FP), AX
+	TESTL AX, AX
+	JZ    qpel_highhvblend_store
+	XORL AX, AX
+	MOVW (R11), AX
+	ADDL AX, R10
+	ADDL $1, R10
+	SHRL $1, R10
+qpel_highhvblend_store:
+	MOVW R10, (R11)
+	ADDQ $2, R11
+	ADDQ $2, R12
+	DECL R9
+	JNZ  qpel_highhvblend_col
+	ADDQ DX, DI
+	ADDQ CX, SI
+	DECL R8
+	JNZ  qpel_highhvblend_row
+	RET

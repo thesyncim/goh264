@@ -469,3 +469,246 @@ qpel_highhvxy_store:
 	SUBW  $1, R4, R4
 	CBNZW R4, qpel_highhvxy_row
 	RET
+
+// func h264QpelMCHighHVBlendASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32, max int32, avg int32)
+TEXT ·h264QpelMCHighHVBlendASM(SB), NOSPLIT, $32-56
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW size+32(FP), R4
+	MOVW max+44(FP), R15
+	MOVW avg+48(FP), R17
+qpel_highhvblend_row:
+	MOVD R0, R10
+	MOVD R1, R11
+	MOVW size+32(FP), R9
+qpel_highhvblend_col:
+	MOVW mx+36(FP), R14
+	CMPW $2, R14
+	BNE  qpel_highhvblend_vbase
+	MOVD R11, R13
+	MOVW my+40(FP), R14
+	CMPW $3, R14
+	BNE  qpel_highhvblend_hbase_ptr_ready
+	ADD  R3, R13, R13
+qpel_highhvblend_hbase_ptr_ready:
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	ADDW  $16, R12, R12
+	ASRW  $5, R12, R12
+	CMPW  $0, R12
+	BGE   qpel_highhvblend_hbase_nonnegative
+	MOVW  ZR, R12
+	B     qpel_highhvblend_base_done
+qpel_highhvblend_hbase_nonnegative:
+	CMPW R15, R12
+	BLE  qpel_highhvblend_base_done
+	MOVW R15, R12
+	B    qpel_highhvblend_base_done
+qpel_highhvblend_vbase:
+	MOVD R11, R13
+	MOVW mx+36(FP), R14
+	CMPW $3, R14
+	BNE  qpel_highhvblend_vbase_ptr_ready
+	ADD  $2, R13, R13
+qpel_highhvblend_vbase_ptr_ready:
+	MOVHU (R13), R5
+	ADD   R3, R13, R16
+	MOVHU (R16), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	SUB   R3, R13, R16
+	MOVHU (R16), R5
+	ADD   R3, R13, R16
+	ADD   R3, R16, R16
+	MOVHU (R16), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	SUB   R3, R13, R16
+	SUB   R3, R16, R16
+	MOVHU (R16), R5
+	ADD   R3, R13, R16
+	ADD   R3, R16, R16
+	ADD   R3, R16, R16
+	MOVHU (R16), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	ADDW  $16, R12, R12
+	ASRW  $5, R12, R12
+	CMPW  $0, R12
+	BGE   qpel_highhvblend_vbase_nonnegative
+	MOVW  ZR, R12
+	B     qpel_highhvblend_base_done
+qpel_highhvblend_vbase_nonnegative:
+	CMPW R15, R12
+	BLE  qpel_highhvblend_base_done
+	MOVW R15, R12
+qpel_highhvblend_base_done:
+	MOVW R12, qpel_highhvblend_base-8(SP)
+
+	SUB   R3, R11, R13
+	SUB   R3, R13, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_highhvblend_tmp0-32(SP)
+
+	SUB   R3, R11, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_highhvblend_tmp1-28(SP)
+
+	MOVD  R11, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_highhvblend_tmp2-24(SP)
+
+	ADD   R3, R11, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_highhvblend_tmp3-20(SP)
+
+	ADD   R3, R11, R13
+	ADD   R3, R13, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_highhvblend_tmp4-16(SP)
+
+	ADD   R3, R11, R13
+	ADD   R3, R13, R13
+	ADD   R3, R13, R13
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	MOVW  R12, qpel_highhvblend_tmp5-12(SP)
+
+	MOVW  qpel_highhvblend_tmp2-24(SP), R5
+	MOVW  qpel_highhvblend_tmp3-20(SP), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVW  qpel_highhvblend_tmp1-28(SP), R5
+	MOVW  qpel_highhvblend_tmp4-16(SP), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVW  qpel_highhvblend_tmp0-32(SP), R5
+	MOVW  qpel_highhvblend_tmp5-12(SP), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	ADDW  $512, R12, R12
+	ASRW  $10, R12, R12
+	CMPW  $0, R12
+	BGE   qpel_highhvblend_hv_nonnegative
+	MOVW  ZR, R12
+	B     qpel_highhvblend_hv_done
+qpel_highhvblend_hv_nonnegative:
+	CMPW R15, R12
+	BLE  qpel_highhvblend_hv_done
+	MOVW R15, R12
+qpel_highhvblend_hv_done:
+	MOVW qpel_highhvblend_base-8(SP), R5
+	ADDW R5, R12, R12
+	ADDW $1, R12, R12
+	LSRW $1, R12, R12
+	CBZW R17, qpel_highhvblend_store
+	MOVHU (R10), R7
+	ADDW  R7, R12, R12
+	ADDW  $1, R12, R12
+	LSRW  $1, R12, R12
+qpel_highhvblend_store:
+	MOVH  R12, (R10)
+	ADD   $2, R10, R10
+	ADD   $2, R11, R11
+	SUBW  $1, R9, R9
+	CBNZW R9, qpel_highhvblend_col
+	ADD   R2, R0, R0
+	ADD   R3, R1, R1
+	SUBW  $1, R4, R4
+	CBNZW R4, qpel_highhvblend_row
+	RET
