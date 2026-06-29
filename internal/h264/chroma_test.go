@@ -105,23 +105,47 @@ func TestH264ChromaMCValidatesGeometry(t *testing.T) {
 }
 
 func BenchmarkH264ChromaMC8Put00(b *testing.B) {
-	benchmarkH264ChromaMC8Copy(b, false)
+	benchmarkH264ChromaMCCopy(b, 8, false)
 }
 
 func BenchmarkH264ChromaMC8Avg00(b *testing.B) {
-	benchmarkH264ChromaMC8Copy(b, true)
+	benchmarkH264ChromaMCCopy(b, 8, true)
 }
 
-func benchmarkH264ChromaMC8Copy(b *testing.B, avg bool) {
+func BenchmarkH264ChromaMC4Put00(b *testing.B) {
+	benchmarkH264ChromaMCCopy(b, 4, false)
+}
+
+func BenchmarkH264ChromaMC4Avg00(b *testing.B) {
+	benchmarkH264ChromaMCCopy(b, 4, true)
+}
+
+func BenchmarkH264ChromaMC2Put00(b *testing.B) {
+	benchmarkH264ChromaMCCopy(b, 2, false)
+}
+
+func BenchmarkH264ChromaMC2Avg00(b *testing.B) {
+	benchmarkH264ChromaMCCopy(b, 2, true)
+}
+
+func BenchmarkH264ChromaMC1Put00(b *testing.B) {
+	benchmarkH264ChromaMCCopy(b, 1, false)
+}
+
+func BenchmarkH264ChromaMC1Avg00(b *testing.B) {
+	benchmarkH264ChromaMCCopy(b, 1, true)
+}
+
+func benchmarkH264ChromaMCCopy(b *testing.B, width int, avg bool) {
 	const stride = 64
 	const height = 8
 	dst := makeChromaUnitDst(stride, height)
 	src := makeChromaUnitSrc(stride, height)
 	b.ReportAllocs()
-	b.SetBytes(8 * height)
+	b.SetBytes(int64(width * height))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := h264ChromaMCStrides(dst, src, stride, stride, height, 0, 0, 8, avg); err != nil {
+		if err := h264ChromaMCStrides(dst, src, stride, stride, height, 0, 0, width, avg); err != nil {
 			b.Fatal(err)
 		}
 	}
