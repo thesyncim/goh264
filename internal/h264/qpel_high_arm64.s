@@ -362,3 +362,110 @@ qpel_high22_store:
 	SUBW  $1, R4, R4
 	CBNZW R4, qpel_high22_row
 	RET
+
+// func h264QpelMCHighHVXYASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32, max int32, avg int32)
+TEXT ·h264QpelMCHighHVXYASM(SB), NOSPLIT, $16-56
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW size+32(FP), R4
+	MOVW max+44(FP), R15
+	MOVW avg+48(FP), R17
+qpel_highhvxy_row:
+	MOVD R0, R10
+	MOVD R1, R11
+	MOVW size+32(FP), R9
+qpel_highhvxy_col:
+	MOVD  R11, R13
+	MOVW  my+40(FP), R14
+	CMPW  $3, R14
+	BNE   qpel_highhvxy_hptr_ready
+	ADD   R3, R13, R13
+qpel_highhvxy_hptr_ready:
+	MOVHU (R13), R5
+	MOVHU 2(R13), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	MOVHU -2(R13), R5
+	MOVHU 4(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	MOVHU -4(R13), R5
+	MOVHU 6(R13), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	ADDW  $16, R12, R12
+	ASRW  $5, R12, R12
+	CMPW  $0, R12
+	BGE   qpel_highhvxy_h_nonnegative
+	MOVW  ZR, R12
+	B     qpel_highhvxy_h_done
+qpel_highhvxy_h_nonnegative:
+	CMPW R15, R12
+	BLE  qpel_highhvxy_h_done
+	MOVW R15, R12
+qpel_highhvxy_h_done:
+	MOVW  R12, qpel_highhvxy_htmp-16(SP)
+	MOVD  R11, R13
+	MOVW  mx+36(FP), R14
+	CMPW  $3, R14
+	BNE   qpel_highhvxy_vptr_ready
+	ADD   $2, R13, R13
+qpel_highhvxy_vptr_ready:
+	MOVHU (R13), R5
+	ADD   R3, R13, R16
+	MOVHU (R16), R6
+	ADDW  R6, R5, R5
+	LSLW  $4, R5, R12
+	ADDW  R5<<2, R12, R12
+	SUB   R3, R13, R16
+	MOVHU (R16), R5
+	ADD   R3, R13, R16
+	ADD   R3, R16, R16
+	MOVHU (R16), R6
+	ADDW  R6, R5, R5
+	ADDW  R5<<2, R5, R5
+	SUBW  R5, R12, R12
+	SUB   R3, R13, R16
+	SUB   R3, R16, R16
+	MOVHU (R16), R5
+	ADD   R3, R13, R16
+	ADD   R3, R16, R16
+	ADD   R3, R16, R16
+	MOVHU (R16), R6
+	ADDW  R6, R5, R5
+	ADDW  R5, R12, R12
+	ADDW  $16, R12, R12
+	ASRW  $5, R12, R12
+	CMPW  $0, R12
+	BGE   qpel_highhvxy_v_nonnegative
+	MOVW  ZR, R12
+	B     qpel_highhvxy_v_done
+qpel_highhvxy_v_nonnegative:
+	CMPW R15, R12
+	BLE  qpel_highhvxy_v_done
+	MOVW R15, R12
+qpel_highhvxy_v_done:
+	MOVW  qpel_highhvxy_htmp-16(SP), R5
+	ADDW  R5, R12, R12
+	ADDW  $1, R12, R12
+	LSRW  $1, R12, R12
+	CBZW  R17, qpel_highhvxy_store
+	MOVHU (R10), R7
+	ADDW  R7, R12, R12
+	ADDW  $1, R12, R12
+	LSRW  $1, R12, R12
+qpel_highhvxy_store:
+	MOVH  R12, (R10)
+	ADD   $2, R10, R10
+	ADD   $2, R11, R11
+	SUBW  $1, R9, R9
+	CBNZW R9, qpel_highhvxy_col
+	ADD   R2, R0, R0
+	ADD   R3, R1, R1
+	SUBW  $1, R4, R4
+	CBNZW R4, qpel_highhvxy_row
+	RET

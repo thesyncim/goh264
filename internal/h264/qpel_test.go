@@ -467,12 +467,24 @@ func BenchmarkH264QpelMCHigh10Axis(b *testing.B) {
 func BenchmarkH264QpelMCHigh10HV(b *testing.B) {
 	const bitDepth = 10
 	for _, size := range []int{16, 8, 4, 2} {
-		b.Run("Put"+itoaSmall(size)+"_22", func(b *testing.B) {
-			benchmarkH264QpelMCHigh(b, size, 2, 2, false, bitDepth)
-		})
-		b.Run("Avg"+itoaSmall(size)+"_22", func(b *testing.B) {
-			benchmarkH264QpelMCHigh(b, size, 2, 2, true, bitDepth)
-		})
+		for _, c := range []struct {
+			name string
+			mx   int
+			my   int
+		}{
+			{name: "22", mx: 2, my: 2},
+			{name: "11", mx: 1, my: 1},
+			{name: "31", mx: 3, my: 1},
+			{name: "13", mx: 1, my: 3},
+			{name: "33", mx: 3, my: 3},
+		} {
+			b.Run("Put"+itoaSmall(size)+"_"+c.name, func(b *testing.B) {
+				benchmarkH264QpelMCHigh(b, size, c.mx, c.my, false, bitDepth)
+			})
+			b.Run("Avg"+itoaSmall(size)+"_"+c.name, func(b *testing.B) {
+				benchmarkH264QpelMCHigh(b, size, c.mx, c.my, true, bitDepth)
+			})
+		}
 	}
 }
 

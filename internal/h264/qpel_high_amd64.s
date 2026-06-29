@@ -432,3 +432,130 @@ qpel_high22_store:
 	DECL R8
 	JNZ  qpel_high22_row
 	RET
+
+// func h264QpelMCHighHVXYASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32, max int32, avg int32)
+TEXT ·h264QpelMCHighHVXYASM(SB), NOSPLIT, $8-56
+	MOVQ dst+0(FP), DI
+	MOVQ src+8(FP), SI
+	MOVQ dstStride+16(FP), DX
+	MOVQ srcStride+24(FP), CX
+	MOVL size+32(FP), R8
+	MOVL max+44(FP), R14
+qpel_highhvxy_row:
+	MOVQ DI, R11
+	MOVQ SI, R12
+	MOVL size+32(FP), R9
+qpel_highhvxy_col:
+	MOVQ R12, R13
+	MOVL my+40(FP), AX
+	CMPL AX, $3
+	JNE  qpel_highhvxy_hptr_ready
+	ADDQ CX, R13
+qpel_highhvxy_hptr_ready:
+	XORL AX, AX
+	MOVW (R13), AX
+	XORL BX, BX
+	MOVW 2(R13), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	XORL AX, AX
+	MOVW -2(R13), AX
+	XORL BX, BX
+	MOVW 4(R13), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	XORL AX, AX
+	MOVW -4(R13), AX
+	XORL BX, BX
+	MOVW 6(R13), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	ADDL $16, R10
+	SARL $5, R10
+	CMPL R10, $0
+	JGE  qpel_highhvxy_h_nonnegative
+	XORL R10, R10
+	JMP  qpel_highhvxy_h_done
+qpel_highhvxy_h_nonnegative:
+	CMPL R10, R14
+	JLE  qpel_highhvxy_h_done
+	MOVL R14, R10
+qpel_highhvxy_h_done:
+	MOVL R10, 0(SP)
+
+	MOVQ R12, R13
+	MOVL mx+36(FP), AX
+	CMPL AX, $3
+	JNE  qpel_highhvxy_vptr_ready
+	ADDQ $2, R13
+qpel_highhvxy_vptr_ready:
+	XORL AX, AX
+	MOVW (R13), AX
+	MOVQ R13, R15
+	ADDQ CX, R15
+	XORL BX, BX
+	MOVW (R15), BX
+	ADDL BX, AX
+	IMULL $20, AX
+	MOVL AX, R10
+	MOVQ R13, R15
+	SUBQ CX, R15
+	XORL AX, AX
+	MOVW (R15), AX
+	MOVQ R13, R15
+	ADDQ CX, R15
+	ADDQ CX, R15
+	XORL BX, BX
+	MOVW (R15), BX
+	ADDL BX, AX
+	LEAL (AX)(AX*4), AX
+	SUBL AX, R10
+	MOVQ R13, R15
+	SUBQ CX, R15
+	SUBQ CX, R15
+	XORL AX, AX
+	MOVW (R15), AX
+	MOVQ R13, R15
+	ADDQ CX, R15
+	ADDQ CX, R15
+	ADDQ CX, R15
+	XORL BX, BX
+	MOVW (R15), BX
+	ADDL BX, AX
+	ADDL AX, R10
+	ADDL $16, R10
+	SARL $5, R10
+	CMPL R10, $0
+	JGE  qpel_highhvxy_v_nonnegative
+	XORL R10, R10
+	JMP  qpel_highhvxy_v_done
+qpel_highhvxy_v_nonnegative:
+	CMPL R10, R14
+	JLE  qpel_highhvxy_v_done
+	MOVL R14, R10
+qpel_highhvxy_v_done:
+	MOVL 0(SP), AX
+	ADDL AX, R10
+	ADDL $1, R10
+	SHRL $1, R10
+	MOVL avg+48(FP), AX
+	TESTL AX, AX
+	JZ    qpel_highhvxy_store
+	XORL AX, AX
+	MOVW (R11), AX
+	ADDL AX, R10
+	ADDL $1, R10
+	SHRL $1, R10
+qpel_highhvxy_store:
+	MOVW R10, (R11)
+	ADDQ $2, R11
+	ADDQ $2, R12
+	DECL R9
+	JNZ  qpel_highhvxy_col
+	ADDQ DX, DI
+	ADDQ CX, SI
+	DECL R8
+	JNZ  qpel_highhvxy_row
+	RET

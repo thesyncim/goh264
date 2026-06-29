@@ -60,6 +60,20 @@ func h264QpelMCStridesHighKernel(dst []uint16, dstOffset int, dstStride int, src
 		)
 		return
 	}
+	if (mx == 1 || mx == 3) && (my == 1 || my == 3) {
+		h264QpelMCHighHVXYASM(
+			(*uint8)(unsafe.Pointer(&dst[dstOffset])),
+			(*uint8)(unsafe.Pointer(&src[srcOffset])),
+			dstStride*2,
+			srcStride*2,
+			size,
+			mx,
+			my,
+			max,
+			avgFlag,
+		)
+		return
+	}
 	h264QpelMCStridesHighScalar(dst, dstOffset, dstStride, src, srcOffset, srcStride, int(size), int(mx), int(my), avg, int(bitDepth))
 }
 
@@ -74,3 +88,6 @@ func h264QpelMCHigh0YASM(dst *uint8, src *uint8, dstStride int, srcStride int, s
 
 //go:noescape
 func h264QpelMCHigh22ASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, max int32, avg int32)
+
+//go:noescape
+func h264QpelMCHighHVXYASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32, max int32, avg int32)
