@@ -33,21 +33,23 @@ func TestH264ChromaMCDispatchMatchesScalar(t *testing.T) {
 func TestH264ChromaMCDispatchMatchesScalarSeparateStrides(t *testing.T) {
 	for _, avg := range []bool{false, true} {
 		for _, width := range []int{1, 2, 4, 8} {
-			t.Run(chromaDispatchCaseName(avg, width, 0, 0), func(t *testing.T) {
-				const dstStride = 13
-				const srcStride = 17
-				const height = 6
-				dstKernel := makeChromaUnitDst(dstStride, height)
-				dstScalar := append([]uint8(nil), dstKernel...)
-				src := makeChromaUnitSrc(srcStride, height)
+			for _, xy := range [][2]int{{0, 0}, {3, 0}, {0, 5}, {3, 5}} {
+				t.Run(chromaDispatchCaseName(avg, width, xy[0], xy[1]), func(t *testing.T) {
+					const dstStride = 13
+					const srcStride = 17
+					const height = 6
+					dstKernel := makeChromaUnitDst(dstStride, height)
+					dstScalar := append([]uint8(nil), dstKernel...)
+					src := makeChromaUnitSrc(srcStride, height+1)
 
-				h264ChromaMCStridesKernel(dstKernel, src, dstStride, srcStride, int32(height), 0, 0, int32(width), avg)
-				h264ChromaMCStridesScalar(dstScalar, src, dstStride, srcStride, height, 0, 0, width, avg)
+					h264ChromaMCStridesKernel(dstKernel, src, dstStride, srcStride, int32(height), int32(xy[0]), int32(xy[1]), int32(width), avg)
+					h264ChromaMCStridesScalar(dstScalar, src, dstStride, srcStride, height, xy[0], xy[1], width, avg)
 
-				if string(dstKernel) != string(dstScalar) {
-					t.Fatalf("kernel output differs from scalar")
-				}
-			})
+					if string(dstKernel) != string(dstScalar) {
+						t.Fatalf("kernel output differs from scalar")
+					}
+				})
+			}
 		}
 	}
 }

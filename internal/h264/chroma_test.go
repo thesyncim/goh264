@@ -139,12 +139,60 @@ func BenchmarkH264ChromaMC8Avg00(b *testing.B) {
 	benchmarkH264ChromaMCCopy(b, 8, true)
 }
 
+func BenchmarkH264ChromaMC8Put30(b *testing.B) {
+	benchmarkH264ChromaMC(b, 8, 3, 0, false)
+}
+
+func BenchmarkH264ChromaMC8Avg30(b *testing.B) {
+	benchmarkH264ChromaMC(b, 8, 3, 0, true)
+}
+
+func BenchmarkH264ChromaMC8Put05(b *testing.B) {
+	benchmarkH264ChromaMC(b, 8, 0, 5, false)
+}
+
+func BenchmarkH264ChromaMC8Avg05(b *testing.B) {
+	benchmarkH264ChromaMC(b, 8, 0, 5, true)
+}
+
+func BenchmarkH264ChromaMC8Put35(b *testing.B) {
+	benchmarkH264ChromaMC(b, 8, 3, 5, false)
+}
+
+func BenchmarkH264ChromaMC8Avg35(b *testing.B) {
+	benchmarkH264ChromaMC(b, 8, 3, 5, true)
+}
+
 func BenchmarkH264ChromaMC4Put00(b *testing.B) {
 	benchmarkH264ChromaMCCopy(b, 4, false)
 }
 
 func BenchmarkH264ChromaMC4Avg00(b *testing.B) {
 	benchmarkH264ChromaMCCopy(b, 4, true)
+}
+
+func BenchmarkH264ChromaMC4Put30(b *testing.B) {
+	benchmarkH264ChromaMC(b, 4, 3, 0, false)
+}
+
+func BenchmarkH264ChromaMC4Avg30(b *testing.B) {
+	benchmarkH264ChromaMC(b, 4, 3, 0, true)
+}
+
+func BenchmarkH264ChromaMC4Put05(b *testing.B) {
+	benchmarkH264ChromaMC(b, 4, 0, 5, false)
+}
+
+func BenchmarkH264ChromaMC4Avg05(b *testing.B) {
+	benchmarkH264ChromaMC(b, 4, 0, 5, true)
+}
+
+func BenchmarkH264ChromaMC4Put35(b *testing.B) {
+	benchmarkH264ChromaMC(b, 4, 3, 5, false)
+}
+
+func BenchmarkH264ChromaMC4Avg35(b *testing.B) {
+	benchmarkH264ChromaMC(b, 4, 3, 5, true)
 }
 
 func BenchmarkH264ChromaMC2Put00(b *testing.B) {
@@ -155,6 +203,30 @@ func BenchmarkH264ChromaMC2Avg00(b *testing.B) {
 	benchmarkH264ChromaMCCopy(b, 2, true)
 }
 
+func BenchmarkH264ChromaMC2Put30(b *testing.B) {
+	benchmarkH264ChromaMC(b, 2, 3, 0, false)
+}
+
+func BenchmarkH264ChromaMC2Avg30(b *testing.B) {
+	benchmarkH264ChromaMC(b, 2, 3, 0, true)
+}
+
+func BenchmarkH264ChromaMC2Put05(b *testing.B) {
+	benchmarkH264ChromaMC(b, 2, 0, 5, false)
+}
+
+func BenchmarkH264ChromaMC2Avg05(b *testing.B) {
+	benchmarkH264ChromaMC(b, 2, 0, 5, true)
+}
+
+func BenchmarkH264ChromaMC2Put35(b *testing.B) {
+	benchmarkH264ChromaMC(b, 2, 3, 5, false)
+}
+
+func BenchmarkH264ChromaMC2Avg35(b *testing.B) {
+	benchmarkH264ChromaMC(b, 2, 3, 5, true)
+}
+
 func BenchmarkH264ChromaMC1Put00(b *testing.B) {
 	benchmarkH264ChromaMCCopy(b, 1, false)
 }
@@ -163,16 +235,44 @@ func BenchmarkH264ChromaMC1Avg00(b *testing.B) {
 	benchmarkH264ChromaMCCopy(b, 1, true)
 }
 
+func BenchmarkH264ChromaMC1Put30(b *testing.B) {
+	benchmarkH264ChromaMC(b, 1, 3, 0, false)
+}
+
+func BenchmarkH264ChromaMC1Avg30(b *testing.B) {
+	benchmarkH264ChromaMC(b, 1, 3, 0, true)
+}
+
+func BenchmarkH264ChromaMC1Put05(b *testing.B) {
+	benchmarkH264ChromaMC(b, 1, 0, 5, false)
+}
+
+func BenchmarkH264ChromaMC1Avg05(b *testing.B) {
+	benchmarkH264ChromaMC(b, 1, 0, 5, true)
+}
+
+func BenchmarkH264ChromaMC1Put35(b *testing.B) {
+	benchmarkH264ChromaMC(b, 1, 3, 5, false)
+}
+
+func BenchmarkH264ChromaMC1Avg35(b *testing.B) {
+	benchmarkH264ChromaMC(b, 1, 3, 5, true)
+}
+
 func benchmarkH264ChromaMCCopy(b *testing.B, width int, avg bool) {
+	benchmarkH264ChromaMC(b, width, 0, 0, avg)
+}
+
+func benchmarkH264ChromaMC(b *testing.B, width int, x int, y int, avg bool) {
 	const stride = 64
 	const height = 8
 	dst := makeChromaUnitDst(stride, height)
-	src := makeChromaUnitSrc(stride, height)
+	src := makeChromaUnitSrc(stride, height+1)
 	b.ReportAllocs()
 	b.SetBytes(int64(width * height))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := h264ChromaMCStrides(dst, src, stride, stride, height, 0, 0, width, avg); err != nil {
+		if err := h264ChromaMCStrides(dst, src, stride, stride, height, x, y, width, avg); err != nil {
 			b.Fatal(err)
 		}
 	}
