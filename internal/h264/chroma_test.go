@@ -104,6 +104,29 @@ func TestH264ChromaMCValidatesGeometry(t *testing.T) {
 	}
 }
 
+func BenchmarkH264ChromaMC8Put00(b *testing.B) {
+	benchmarkH264ChromaMC8Copy(b, false)
+}
+
+func BenchmarkH264ChromaMC8Avg00(b *testing.B) {
+	benchmarkH264ChromaMC8Copy(b, true)
+}
+
+func benchmarkH264ChromaMC8Copy(b *testing.B, avg bool) {
+	const stride = 64
+	const height = 8
+	dst := makeChromaUnitDst(stride, height)
+	src := makeChromaUnitSrc(stride, height)
+	b.ReportAllocs()
+	b.SetBytes(8 * height)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := h264ChromaMCStrides(dst, src, stride, stride, height, 0, 0, 8, avg); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func makeChromaUnitDst(stride int, rows int) []uint8 {
 	dst := make([]uint8, stride*rows)
 	for i := range dst {
