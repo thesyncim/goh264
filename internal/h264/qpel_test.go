@@ -439,6 +439,31 @@ func BenchmarkH264QpelMCHigh10Copy(b *testing.B) {
 	}
 }
 
+func BenchmarkH264QpelMCHigh10Axis(b *testing.B) {
+	const bitDepth = 10
+	for _, size := range []int{16, 8, 4, 2} {
+		for _, c := range []struct {
+			name string
+			mx   int
+			my   int
+		}{
+			{name: "10", mx: 1, my: 0},
+			{name: "20", mx: 2, my: 0},
+			{name: "30", mx: 3, my: 0},
+			{name: "01", mx: 0, my: 1},
+			{name: "02", mx: 0, my: 2},
+			{name: "03", mx: 0, my: 3},
+		} {
+			b.Run("Put"+itoaSmall(size)+"_"+c.name, func(b *testing.B) {
+				benchmarkH264QpelMCHigh(b, size, c.mx, c.my, false, bitDepth)
+			})
+			b.Run("Avg"+itoaSmall(size)+"_"+c.name, func(b *testing.B) {
+				benchmarkH264QpelMCHigh(b, size, c.mx, c.my, true, bitDepth)
+			})
+		}
+	}
+}
+
 func benchmarkH264QpelMCCopy(b *testing.B, size int, avg bool) {
 	benchmarkH264QpelMC(b, size, 0, 0, avg)
 }
