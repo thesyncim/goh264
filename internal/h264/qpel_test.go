@@ -133,12 +133,28 @@ func BenchmarkH264QpelMC16Avg00(b *testing.B) {
 	benchmarkH264QpelMCCopy(b, 16, true)
 }
 
+func BenchmarkH264QpelMC16Put20(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 2, 0, false)
+}
+
+func BenchmarkH264QpelMC16Avg20(b *testing.B) {
+	benchmarkH264QpelMC(b, 16, 2, 0, true)
+}
+
 func BenchmarkH264QpelMC8Put00(b *testing.B) {
 	benchmarkH264QpelMCCopy(b, 8, false)
 }
 
 func BenchmarkH264QpelMC8Avg00(b *testing.B) {
 	benchmarkH264QpelMCCopy(b, 8, true)
+}
+
+func BenchmarkH264QpelMC8Put20(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 2, 0, false)
+}
+
+func BenchmarkH264QpelMC8Avg20(b *testing.B) {
+	benchmarkH264QpelMC(b, 8, 2, 0, true)
 }
 
 func BenchmarkH264QpelMC4Put00(b *testing.B) {
@@ -158,6 +174,10 @@ func BenchmarkH264QpelMC2Avg00(b *testing.B) {
 }
 
 func benchmarkH264QpelMCCopy(b *testing.B, size int, avg bool) {
+	benchmarkH264QpelMC(b, size, 0, 0, avg)
+}
+
+func benchmarkH264QpelMC(b *testing.B, size int, mx int, my int, avg bool) {
 	const stride = 64
 	const rows = 32
 	const offset = 6*stride + 6
@@ -166,7 +186,7 @@ func benchmarkH264QpelMCCopy(b *testing.B, size int, avg bool) {
 	b.SetBytes(int64(size * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := h264QpelMCStrides(dst, offset, stride, src, offset, stride, size, 0, 0, avg); err != nil {
+		if err := h264QpelMCStrides(dst, offset, stride, src, offset, stride, size, mx, my, avg); err != nil {
 			b.Fatal(err)
 		}
 	}
