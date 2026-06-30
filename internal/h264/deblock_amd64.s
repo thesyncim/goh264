@@ -3,6 +3,94 @@
 
 #include "textflag.h"
 
+#define SBUTTERFLY64_BW(A, B) \
+	PUNPCKLBW B, A; \
+	MOVOU A, B; \
+	PSRLDQ $8, B
+
+#define SBUTTERFLY64_WD(A, B) \
+	PUNPCKLWL B, A; \
+	MOVOU A, B; \
+	PSRLDQ $8, B
+
+#define SBUTTERFLY64_DQ(A, B) \
+	PUNPCKLLQ B, A; \
+	MOVOU A, B; \
+	PSRLDQ $8, B
+
+#define H_LUMA8_TRANSPOSE6x8(P2, P1, P0, Q0, Q1, Q2) \
+	MOVQ (R12), X0; \
+	MOVQ (R12)(R14*1), X1; \
+	MOVQ (R12)(R14*2), X2; \
+	MOVQ (R13), X3; \
+	MOVQ (R13)(R14*1), X4; \
+	MOVQ (R13)(R14*2), X5; \
+	MOVQ (R13)(R15*1), X6; \
+	SBUTTERFLY64_BW(X0, X1); \
+	SBUTTERFLY64_BW(X2, X3); \
+	SBUTTERFLY64_BW(X4, X5); \
+	MOVQ X3, P1(R10); \
+	MOVQ (R13)(R14*4), X11; \
+	PUNPCKLBW X11, X6; \
+	MOVOU X6, X7; \
+	PSRLDQ $8, X7; \
+	SBUTTERFLY64_WD(X0, X2); \
+	SBUTTERFLY64_WD(X4, X6); \
+	PUNPCKLLQ X4, X0; \
+	PSRLDQ $8, X0; \
+	MOVQ X0, P2(R10); \
+	MOVQ P1(R10), X11; \
+	PUNPCKLWL X11, X1; \
+	MOVOU X1, X3; \
+	PSRLDQ $8, X3; \
+	SBUTTERFLY64_WD(X5, X7); \
+	SBUTTERFLY64_DQ(X1, X5); \
+	SBUTTERFLY64_DQ(X2, X6); \
+	PUNPCKLLQ X7, X3; \
+	MOVQ X2, P1(R10); \
+	MOVQ X6, P0(R10); \
+	MOVQ X1, Q0(R10); \
+	MOVQ X5, Q1(R10); \
+	MOVQ X3, Q2(R10)
+
+#define H_LUMA8_STORE8x4(P1, P0, Q0, Q1) \
+	MOVQ P1(R10), X0; \
+	MOVQ P0(R10), X1; \
+	MOVQ Q0(R10), X2; \
+	MOVQ Q1(R10), X3; \
+	MOVOU X0, X4; \
+	PSRLDQ $4, X4; \
+	MOVOU X1, X5; \
+	PSRLDQ $4, X5; \
+	MOVOU X2, X6; \
+	PSRLDQ $4, X6; \
+	MOVOU X3, X7; \
+	PSRLDQ $4, X7; \
+	PUNPCKLBW X1, X0; \
+	PUNPCKLBW X3, X2; \
+	MOVOU X0, X1; \
+	PUNPCKLWL X2, X1; \
+	MOVOU X1, X0; \
+	PSRLDQ $8, X0; \
+	MOVL X1, (R12); \
+	PSRLDQ $4, X1; \
+	MOVL X1, (R12)(R14*1); \
+	MOVL X0, (R12)(R14*2); \
+	PSRLDQ $4, X0; \
+	MOVL X0, (R13); \
+	PUNPCKLBW X5, X4; \
+	PUNPCKLBW X7, X6; \
+	MOVOU X4, X5; \
+	PUNPCKLWL X6, X5; \
+	MOVOU X5, X4; \
+	PSRLDQ $8, X4; \
+	MOVL X5, (R13)(R14*1); \
+	PSRLDQ $4, X5; \
+	MOVL X5, (R13)(R14*2); \
+	MOVL X4, (R13)(R15*1); \
+	PSRLDQ $4, X4; \
+	MOVL X4, (R13)(R14*4)
+
 DATA ·h264DeblockPB1+0(SB)/8, $0x0101010101010101
 DATA ·h264DeblockPB1+8(SB)/8, $0x0101010101010101
 GLOBL ·h264DeblockPB1(SB), RODATA, $16
@@ -22,11 +110,15 @@ TEXT ·h264VLoopFilterLuma8ASM(SB), NOSPLIT, $0-32
 	MOVL alpha+16(FP), AX
 	MOVL beta+20(FP), BX
 	MOVQ tc0+24(FP), CX
+	JMP  ·h264Luma8SSE2Core(SB)
 
+// h264Luma8SSE2Core filters 16 8-bit samples with DI=pix, SI=stride,
+// AX=alpha, BX=beta, and CX=tc0.
+TEXT ·h264Luma8SSE2Core(SB), NOSPLIT, $0-0
 	TESTL AX, AX
-	JLE   luma8_v_ret
+	JLE   luma8_sse2_ret
 	TESTL BX, BX
-	JLE   luma8_v_ret
+	JLE   luma8_sse2_ret
 	DECL AX
 	DECL BX
 	MOVQ SI, DX
@@ -160,226 +252,42 @@ TEXT ·h264VLoopFilterLuma8ASM(SB), NOSPLIT, $0-32
 
 	MOVOU X1, (R9)(SI*2)
 	MOVOU X2, (DI)
-luma8_v_ret:
+luma8_sse2_ret:
 	RET
 
 // func h264HLoopFilterLuma8ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
-TEXT ·h264HLoopFilterLuma8ASM(SB), NOSPLIT, $16-32
+TEXT ·h264HLoopFilterLuma8ASM(SB), NOSPLIT, $96-32
 	MOVQ pix+0(FP), R11
-	MOVQ $1, R12
-	MOVQ stride+8(FP), R13
-	MOVL alpha+16(FP), R14
-	MOVQ tc0+24(FP), SI
-	MOVQ $4, 0(SP)
-	JMP  luma8_h_group
+	MOVQ stride+8(FP), R12
+	MOVL alpha+16(FP), AX
+	TESTL AX, AX
+	JLE   luma8_h_ret
+	MOVL beta+20(FP), BX
+	TESTL BX, BX
+	JLE   luma8_h_ret
 
-luma8_h_group:
-	XORL R10, R10
-	MOVB (SI), R10
-	CMPL R10, $128
-	JLT  luma8_h_tc_ready
-	SUBL $256, R10
-luma8_h_tc_ready:
-	CMPL R10, $0
-	JGE  luma8_h_active
-	LEAQ (R11)(R13*4), R11
-	JMP  luma8_h_next_group
-luma8_h_active:
-	MOVQ $4, R15
-luma8_h_inner:
-	MOVQ R11, DI
-	SUBQ R12, DI
-	XORL AX, AX
-	MOVB (DI), AX
-	MOVQ DI, CX
-	SUBQ R12, CX
-	XORL BX, BX
-	MOVB (CX), BX
-	MOVQ CX, DI
-	SUBQ R12, DI
-	XORL CX, CX
-	MOVB (DI), CX
-	XORL DX, DX
-	MOVB (R11), DX
-	MOVQ R11, DI
-	ADDQ R12, DI
-	XORL R9, R9
-	MOVB (DI), R9
+	LEAQ 0(SP), R10
+	MOVQ R12, R14
+	LEAQ (R14)(R14*2), R15
+	LEAQ -4(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_LUMA8_TRANSPOSE6x8(0, 16, 32, 48, 64, 80)
+	LEAQ (R12)(R14*8), R12
+	LEAQ (R13)(R14*8), R13
+	H_LUMA8_TRANSPOSE6x8(8, 24, 40, 56, 72, 88)
 
-	MOVL AX, DI
-	SUBL DX, DI
-	CMPL DI, $0
-	JGE  luma8_h_abs0_done
-	NEGL DI
-luma8_h_abs0_done:
-	CMPL DI, R14
-	JGE  luma8_h_sample_done
+	LEAQ 48(SP), DI
+	MOVQ $16, SI
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+	MOVQ tc0+24(FP), CX
+	CALL ·h264Luma8SSE2Core(SB)
 
-	MOVL BX, DI
-	SUBL AX, DI
-	CMPL DI, $0
-	JGE  luma8_h_abs1_done
-	NEGL DI
-luma8_h_abs1_done:
-	MOVL beta+20(FP), R8
-	CMPL DI, R8
-	JGE  luma8_h_sample_done
-
-	MOVL R9, DI
-	SUBL DX, DI
-	CMPL DI, $0
-	JGE  luma8_h_abs2_done
-	NEGL DI
-luma8_h_abs2_done:
-	MOVL beta+20(FP), R8
-	CMPL DI, R8
-	JGE  luma8_h_sample_done
-
-	MOVL R10, 8(SP)
-
-	MOVL CX, R8
-	SUBL AX, R8
-	CMPL R8, $0
-	JGE  luma8_h_p_abs_done
-	NEGL R8
-luma8_h_p_abs_done:
-	MOVL beta+20(FP), R8
-	MOVL CX, R8
-	SUBL AX, R8
-	CMPL R8, $0
-	JGE  luma8_h_p_abs_cmp
-	NEGL R8
-luma8_h_p_abs_cmp:
-	MOVL beta+20(FP), DI
-	CMPL R8, DI
-	JGE  luma8_h_p_done
-	CMPL R10, $0
-	JE   luma8_h_p_inc
-	MOVL AX, R8
-	ADDL DX, R8
-	ADDL $1, R8
-	SARL $1, R8
-	ADDL CX, R8
-	SARL $1, R8
-	SUBL BX, R8
-	MOVL R10, DI
-	NEGL DI
-	CMPL R8, DI
-	JGE  luma8_h_p_not_low
-	MOVL DI, R8
-luma8_h_p_not_low:
-	CMPL R8, R10
-	JLE  luma8_h_p_clip_done
-	MOVL R10, R8
-luma8_h_p_clip_done:
-	ADDL BX, R8
-	MOVQ R11, DI
-	SUBQ R12, DI
-	SUBQ R12, DI
-	MOVB R8, (DI)
-luma8_h_p_inc:
-	ADDL $1, 8(SP)
-luma8_h_p_done:
-	MOVQ R11, DI
-	ADDQ R12, DI
-	ADDQ R12, DI
-	XORL R8, R8
-	MOVB (DI), R8
-	MOVL R8, DI
-	SUBL DX, DI
-	CMPL DI, $0
-	JGE  luma8_h_q_abs_done
-	NEGL DI
-luma8_h_q_abs_done:
-	MOVL beta+20(FP), R8
-	CMPL DI, R8
-	JGE  luma8_h_delta
-	CMPL R10, $0
-	JE   luma8_h_q_inc
-	MOVQ R11, DI
-	ADDQ R12, DI
-	ADDQ R12, DI
-	XORL R8, R8
-	MOVB (DI), R8
-	MOVL AX, DI
-	ADDL DX, DI
-	ADDL $1, DI
-	SARL $1, DI
-	ADDL R8, DI
-	SARL $1, DI
-	SUBL R9, DI
-	MOVL R10, R8
-	NEGL R8
-	CMPL DI, R8
-	JGE  luma8_h_q_not_low
-	MOVL R8, DI
-luma8_h_q_not_low:
-	CMPL DI, R10
-	JLE  luma8_h_q_clip_done
-	MOVL R10, DI
-luma8_h_q_clip_done:
-	ADDL R9, DI
-	MOVQ R11, R8
-	ADDQ R12, R8
-	MOVB DI, (R8)
-luma8_h_q_inc:
-	ADDL $1, 8(SP)
-
-luma8_h_delta:
-	MOVL DX, R8
-	SUBL AX, R8
-	SHLL $2, R8
-	MOVL BX, DI
-	SUBL R9, DI
-	ADDL DI, R8
-	ADDL $4, R8
-	SARL $3, R8
-	MOVL 8(SP), DI
-	MOVL DI, CX
-	NEGL CX
-	CMPL R8, CX
-	JGE  luma8_h_delta_not_low
-	MOVL CX, R8
-luma8_h_delta_not_low:
-	CMPL R8, DI
-	JLE  luma8_h_delta_clip_done
-	MOVL DI, R8
-luma8_h_delta_clip_done:
-	MOVL AX, DI
-	ADDL R8, DI
-	CMPL DI, $0
-	JGE  luma8_h_p0_nonnegative
-	XORL DI, DI
-	JMP  luma8_h_p0_clip_done
-luma8_h_p0_nonnegative:
-	CMPL DI, $255
-	JLE  luma8_h_p0_clip_done
-	MOVL $255, DI
-luma8_h_p0_clip_done:
-	MOVQ R11, CX
-	SUBQ R12, CX
-	MOVB DI, (CX)
-
-	MOVL DX, DI
-	SUBL R8, DI
-	CMPL DI, $0
-	JGE  luma8_h_q0_nonnegative
-	XORL DI, DI
-	JMP  luma8_h_q0_clip_done
-luma8_h_q0_nonnegative:
-	CMPL DI, $255
-	JLE  luma8_h_q0_clip_done
-	MOVL $255, DI
-luma8_h_q0_clip_done:
-	MOVB DI, (R11)
-
-luma8_h_sample_done:
-	ADDQ R13, R11
-	DECQ R15
-	JNZ  luma8_h_inner
-
-luma8_h_next_group:
-	INCQ SI
-	DECQ 0(SP)
-	JNZ  luma8_h_group
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_LUMA8_STORE8x4(16, 32, 48, 64)
+	LEAQ (R12)(R14*8), R12
+	LEAQ (R13)(R14*8), R13
+	H_LUMA8_STORE8x4(24, 40, 56, 72)
+luma8_h_ret:
 	RET

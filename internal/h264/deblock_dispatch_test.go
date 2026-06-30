@@ -147,18 +147,31 @@ func TestH264LoopFilterLumaDispatchSkipsNegativeTC0(t *testing.T) {
 		beta   = 20
 	)
 	tc0 := [4]int8{2, -2, 0, 3}
-	want := makeLoopFilterUnitFixture(stride, rows)
-	got := append([]uint8(nil), want...)
-	seedLoopFilterLuma8(want, offset, stride, 1, 4)
-	seedLoopFilterLuma8(got, offset, stride, 1, 4)
 
-	if err := h264LoopFilterLuma(want, offset, stride, 1, 4, alpha, beta, &tc0); err != nil {
-		t.Fatalf("scalar: %v", err)
+	cases := []struct {
+		name    string
+		xstride int
+		ystride int
+	}{
+		{name: "Vertical", xstride: stride, ystride: 1},
+		{name: "Horizontal", xstride: 1, ystride: stride},
 	}
-	if err := h264LoopFilterLumaKernel(got, offset, stride, 1, 4, alpha, beta, &tc0); err != nil {
-		t.Fatalf("kernel: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			want := makeLoopFilterUnitFixture(stride, rows)
+			got := append([]uint8(nil), want...)
+			seedLoopFilterLuma8(want, offset, tc.xstride, tc.ystride, 4)
+			seedLoopFilterLuma8(got, offset, tc.xstride, tc.ystride, 4)
+
+			if err := h264LoopFilterLuma(want, offset, tc.xstride, tc.ystride, 4, alpha, beta, &tc0); err != nil {
+				t.Fatalf("scalar: %v", err)
+			}
+			if err := h264LoopFilterLumaKernel(got, offset, tc.xstride, tc.ystride, 4, alpha, beta, &tc0); err != nil {
+				t.Fatalf("kernel: %v", err)
+			}
+			assertUint8SlicesEqual(t, got, want)
+		})
 	}
-	assertUint8SlicesEqual(t, got, want)
 }
 
 func TestH264LoopFilterHighDispatchMatchesScalar(t *testing.T) {
