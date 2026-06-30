@@ -111,10 +111,10 @@ func h264LoopFilterLumaIntraKernel(pix []uint8, offset int, xstride int, ystride
 			return err
 		}
 		switch {
-		case ystride == 1:
+		case ystride == 1 && h264LoopFilterLumaIntraV8ASMEnabled:
 			h264VLoopFilterLumaIntra8ASM(&pix[offset], xstride, alpha, beta)
 			return nil
-		case xstride == 1:
+		case xstride == 1 && h264LoopFilterLumaIntraH8ASMEnabled:
 			h264HLoopFilterLumaIntra8ASM(&pix[offset], ystride, alpha, beta)
 			return nil
 		}

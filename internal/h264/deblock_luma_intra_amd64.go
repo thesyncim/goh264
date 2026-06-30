@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
-//go:build !purego && arm64
+//go:build !purego && amd64
 
 package h264
 
 const h264LoopFilterLumaIntraASMEnabled = true
 const h264LoopFilterLumaIntraV8ASMEnabled = true
-const h264LoopFilterLumaIntraH8ASMEnabled = true
+const h264LoopFilterLumaIntraH8ASMEnabled = false
 
 // h264VLoopFilterLumaIntra8ASM mirrors FFmpeg's 8-bit luma intra deblock ABI shape:
 // uint8_t *pix, ptrdiff_t stride, int alpha/beta.
