@@ -160,19 +160,28 @@ func h264LoopFilterChromaHighKernel(pix []uint16, offset int, xstride int, ystri
 }
 
 func h264LoopFilterChromaIntraKernel(pix []uint8, offset int, xstride int, ystride int, innerIters int, alpha int32, beta int32) error {
-	if h264LoopFilterChromaASMEnabled && innerIters == 2 {
+	if innerIters == 1 {
+		return h264LoopFilterChromaIntra(pix, offset, xstride, ystride, innerIters, int(alpha), int(beta))
+	}
+	if h264LoopFilterChromaASMEnabled {
 		switch {
-		case ystride == 1:
+		case innerIters == 2 && ystride == 1:
 			if err := checkLoopFilterArgs(pix, offset, xstride, ystride, innerIters, 4, 2, 1); err != nil {
 				return err
 			}
 			h264VLoopFilterChromaIntra8ASM(&pix[offset], xstride, alpha, beta)
 			return nil
-		case xstride == 1:
+		case innerIters == 2 && xstride == 1:
 			if err := checkLoopFilterArgs(pix, offset, xstride, ystride, innerIters, 4, 2, 1); err != nil {
 				return err
 			}
 			h264HLoopFilterChromaIntra8ASM(&pix[offset], ystride, alpha, beta)
+			return nil
+		case innerIters == 4 && xstride == 1:
+			if err := checkLoopFilterArgs(pix, offset, xstride, ystride, innerIters, 4, 2, 1); err != nil {
+				return err
+			}
+			h264HLoopFilterChroma422Intra8ASM(&pix[offset], ystride, alpha, beta)
 			return nil
 		}
 	}
