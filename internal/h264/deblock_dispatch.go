@@ -104,6 +104,13 @@ func h264LoopFilterLumaHighKernel(pix []uint16, offset int, xstride int, ystride
 }
 
 func h264LoopFilterLumaIntraKernel(pix []uint8, offset int, xstride int, ystride int, innerIters int, alpha int32, beta int32) error {
+	if h264LoopFilterLumaIntraASMEnabled && innerIters == 4 && ystride == 1 {
+		if err := checkLoopFilterArgs(pix, offset, xstride, ystride, innerIters, 4, 4, 3); err != nil {
+			return err
+		}
+		h264VLoopFilterLumaIntra8ASM(&pix[offset], xstride, alpha, beta)
+		return nil
+	}
 	return h264LoopFilterLumaIntra(pix, offset, xstride, ystride, innerIters, int(alpha), int(beta))
 }
 
