@@ -518,6 +518,61 @@ func BenchmarkH264LoopFilterDeblock(b *testing.B) {
 			}
 		}
 	})
+	b.Run("ChromaIntraVerticalHigh10", func(b *testing.B) {
+		pix := makeLoopFilterHighUnitFixture(stride, rows)
+		seedLoopFilterChromaIntraHigh(pix, offset, stride, 1, 2)
+		b.ReportAllocs()
+		b.SetBytes(8 * 8 * 2)
+		for i := 0; i < b.N; i++ {
+			if err := h264LoopFilterChromaIntraHighKernel(pix, offset, stride, 1, 2, alpha, beta, bitDepth); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("ChromaIntraHorizontalHigh10", func(b *testing.B) {
+		pix := makeLoopFilterHighUnitFixture(stride, rows)
+		seedLoopFilterChromaIntraHigh(pix, offset, 1, stride, 2)
+		b.ReportAllocs()
+		b.SetBytes(8 * 8 * 2)
+		for i := 0; i < b.N; i++ {
+			if err := h264LoopFilterChromaIntraHighKernel(pix, offset, 1, stride, 2, alpha, beta, bitDepth); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("ChromaIntraMBAFFHigh10", func(b *testing.B) {
+		pix := makeLoopFilterHighUnitFixture(stride, rows)
+		seedLoopFilterChromaIntraHigh(pix, offset, 1, stride, 1)
+		b.ReportAllocs()
+		b.SetBytes(8 * 4 * 2)
+		for i := 0; i < b.N; i++ {
+			if err := h264LoopFilterChromaIntraHighKernel(pix, offset, 1, stride, 1, alpha, beta, bitDepth); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("ChromaIntra422High10", func(b *testing.B) {
+		pix := makeLoopFilterHighUnitFixture(stride, rows)
+		seedLoopFilterChromaIntraHigh(pix, offset, 1, stride, 4)
+		b.ReportAllocs()
+		b.SetBytes(8 * 16 * 2)
+		for i := 0; i < b.N; i++ {
+			if err := h264LoopFilterChromaIntraHighKernel(pix, offset, 1, stride, 4, alpha, beta, bitDepth); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("ChromaIntra422MBAFFHigh10", func(b *testing.B) {
+		pix := makeLoopFilterHighUnitFixture(stride, rows)
+		seedLoopFilterChromaIntraHigh(pix, offset, 1, stride, 2)
+		b.ReportAllocs()
+		b.SetBytes(8 * 8 * 2)
+		for i := 0; i < b.N; i++ {
+			if err := h264LoopFilterChromaIntraHighKernel(pix, offset, 1, stride, 2, alpha, beta, bitDepth); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 	b.Run("LumaVerticalHigh10", func(b *testing.B) {
 		pix := makeLoopFilterHighUnitFixture(stride, rows)
 		seedLoopFilterLumaHigh(pix, offset, stride, 1, 4)

@@ -22,3 +22,27 @@ func h264HLoopFilterChromaHigh10ASM(pix *uint8, stride int, alpha int32, beta in
 //
 //go:noescape
 func h264HLoopFilterChroma422High10ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+
+// h264VLoopFilterChromaIntraHigh10ASM mirrors FFmpeg's 10-bit chroma intra deblock ABI shape:
+// uint8_t *pix, ptrdiff_t stride, int alpha/beta.
+//
+//go:noescape
+func h264VLoopFilterChromaIntraHigh10ASM(pix *uint8, stride int, alpha int32, beta int32)
+
+// h264HLoopFilterChromaIntraHigh10ASM mirrors FFmpeg's 10-bit chroma intra deblock ABI shape:
+// uint8_t *pix, ptrdiff_t stride, int alpha/beta.
+//
+//go:noescape
+func h264HLoopFilterChromaIntraHigh10ASM(pix *uint8, stride int, alpha int32, beta int32)
+
+// h264HLoopFilterChromaMBAFFIntraHigh10ASM mirrors FFmpeg's 10-bit chroma MBAFF intra deblock ABI shape:
+// uint8_t *pix, ptrdiff_t stride, int alpha/beta.
+//
+//go:noescape
+func h264HLoopFilterChromaMBAFFIntraHigh10ASM(pix *uint8, stride int, alpha int32, beta int32)
+
+// h264HLoopFilterChroma422IntraHigh10ASM mirrors FFmpeg's 10-bit 4:2:2 chroma intra deblock ABI shape:
+// uint8_t *pix, ptrdiff_t stride, int alpha/beta.
+//
+//go:noescape
+func h264HLoopFilterChroma422IntraHigh10ASM(pix *uint8, stride int, alpha int32, beta int32)
