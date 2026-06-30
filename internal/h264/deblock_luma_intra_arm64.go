@@ -10,3 +10,9 @@ const h264LoopFilterLumaIntraASMEnabled = true
 //
 //go:noescape
 func h264VLoopFilterLumaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
+
+// h264HLoopFilterLumaIntra8ASM mirrors FFmpeg's 8-bit luma intra deblock ABI shape:
+// uint8_t *pix, ptrdiff_t stride, int alpha/beta.
+//
+//go:noescape
+func h264HLoopFilterLumaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)

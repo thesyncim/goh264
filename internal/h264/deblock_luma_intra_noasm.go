@@ -7,3 +7,6 @@ const h264LoopFilterLumaIntraASMEnabled = false
 
 func h264VLoopFilterLumaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32) {
 }
+
+func h264HLoopFilterLumaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32) {
+}
