@@ -91,6 +91,76 @@
 	PSRLDQ $4, X4; \
 	MOVL X4, (R13)(R14*4)
 
+#define H_CHROMA8_LOAD8() \
+	MOVL (R12), AX; \
+	MOVD AX, X0; \
+	MOVL (R12)(R14*1), AX; \
+	MOVD AX, X1; \
+	MOVL (R12)(R14*2), AX; \
+	MOVD AX, X2; \
+	MOVL (R13), AX; \
+	MOVD AX, X3; \
+	MOVL (R13)(R14*1), AX; \
+	MOVD AX, X4; \
+	MOVL (R13)(R14*2), AX; \
+	MOVD AX, X5; \
+	MOVL (R13)(R15*1), AX; \
+	MOVD AX, X6; \
+	MOVL (R13)(R14*4), AX; \
+	MOVD AX, X7
+
+#define H_CHROMA8_STORE8() \
+	MOVQ X0, AX; \
+	MOVL AX, (R12); \
+	MOVQ X1, AX; \
+	MOVL AX, (R12)(R14*1); \
+	MOVQ X2, AX; \
+	MOVL AX, (R12)(R14*2); \
+	MOVQ X3, AX; \
+	MOVL AX, (R13); \
+	MOVQ X4, AX; \
+	MOVL AX, (R13)(R14*1); \
+	MOVQ X5, AX; \
+	MOVL AX, (R13)(R14*2); \
+	MOVQ X6, AX; \
+	MOVL AX, (R13)(R15*1); \
+	MOVQ X7, AX; \
+	MOVL AX, (R13)(R14*4)
+
+#define H_CHROMA8_TRANSPOSE8x4() \
+	PUNPCKLBW X1, X0; \
+	PUNPCKLBW X3, X2; \
+	PUNPCKLBW X5, X4; \
+	PUNPCKLBW X7, X6; \
+	PUNPCKLWL X2, X0; \
+	PUNPCKLWL X6, X4; \
+	MOVOU X0, X2; \
+	PUNPCKHLQ X4, X2; \
+	PUNPCKLLQ X4, X0; \
+	MOVOU X0, X1; \
+	PSRLDQ $8, X1; \
+	MOVOU X2, X3; \
+	PSRLDQ $8, X3
+
+#define H_CHROMA8_TRANSPOSE4x8() \
+	PUNPCKLBW X1, X0; \
+	PUNPCKLBW X3, X2; \
+	MOVOU X0, X4; \
+	PUNPCKHWL X2, X4; \
+	PUNPCKLWL X2, X0; \
+	MOVOU X0, X1; \
+	PSRLDQ $4, X1; \
+	MOVOU X0, X2; \
+	PSRLDQ $8, X2; \
+	MOVOU X0, X3; \
+	PSRLDQ $12, X3; \
+	MOVOU X4, X5; \
+	PSRLDQ $4, X5; \
+	MOVOU X4, X6; \
+	PSRLDQ $8, X6; \
+	MOVOU X4, X7; \
+	PSRLDQ $12, X7
+
 DATA ·h264DeblockPB1+0(SB)/8, $0x0101010101010101
 DATA ·h264DeblockPB1+8(SB)/8, $0x0101010101010101
 GLOBL ·h264DeblockPB1(SB), RODATA, $16
@@ -290,4 +360,306 @@ TEXT ·h264HLoopFilterLuma8ASM(SB), NOSPLIT, $96-32
 	LEAQ (R13)(R14*8), R13
 	H_LUMA8_STORE8x4(24, 40, 56, 72)
 luma8_h_ret:
+	RET
+
+// h264Chroma8SSE2Core filters 8 8-bit chroma samples with X0=p1,
+// X1=p0, X2=q0, X3=q1, AX=alpha, BX=beta, CX=tc0, and DX=tc0 repeat count.
+TEXT ·h264Chroma8SSE2Core(SB), NOSPLIT, $0-0
+	TESTL AX, AX
+	JLE   chroma8_sse2_ret
+	TESTL BX, BX
+	JLE   chroma8_sse2_ret
+	DECL AX
+	DECL BX
+
+	MOVD AX, X4
+	PSHUFLW $0, X4, X4
+	PUNPCKLQDQ X4, X4
+	PACKUSWB X4, X4        // alpha - 1
+	MOVD BX, X5
+	PSHUFLW $0, X5, X5
+	PUNPCKLQDQ X5, X5
+	PACKUSWB X5, X5        // beta - 1
+
+	MOVOU X2, X6
+	MOVOU X1, X7
+	PSUBUSB X1, X6
+	PSUBUSB X2, X7
+	POR X6, X7
+	PSUBUSB X4, X7
+
+	MOVOU X1, X6
+	MOVOU X0, X4
+	PSUBUSB X0, X6
+	PSUBUSB X1, X4
+	POR X6, X4
+	PSUBUSB X5, X4
+	POR X4, X7
+
+	MOVOU X2, X6
+	MOVOU X3, X4
+	PSUBUSB X3, X6
+	PSUBUSB X2, X4
+	POR X6, X4
+	PSUBUSB X5, X4
+	POR X4, X7
+	PXOR X6, X6
+	PCMPEQB X6, X7        // base mask
+
+	MOVD (CX), X6
+	PUNPCKLBW X6, X6
+	CMPL DX, $2
+	JNE  chroma8_tc_ready
+	PUNPCKLBW X6, X6
+chroma8_tc_ready:
+	PAND X6, X7           // masked tc
+
+	PCMPEQB X4, X4
+	MOVOU X1, X5
+	PXOR X2, X5
+	PXOR X4, X3
+	PAND ·h264DeblockPB1(SB), X5
+	PAVGB X0, X3
+	PXOR X1, X4
+	PAVGB ·h264DeblockPB3(SB), X3
+	PAVGB X2, X4
+	PAVGB X5, X3
+	MOVOU ·h264DeblockPBA1(SB), X6
+	PADDUSB X4, X3
+	PSUBUSB X3, X6
+	PSUBUSB ·h264DeblockPBA1(SB), X3
+	PMINUB X7, X6
+	PMINUB X7, X3
+	PSUBUSB X6, X1
+	PSUBUSB X3, X2
+	PADDUSB X3, X1
+	PADDUSB X6, X2
+chroma8_sse2_ret:
+	RET
+
+// h264ChromaIntra8SSE2Core filters 8 8-bit chroma intra samples with
+// X0=p1, X1=p0, X2=q0, X3=q1, AX=alpha, and BX=beta.
+TEXT ·h264ChromaIntra8SSE2Core(SB), NOSPLIT, $0-0
+	TESTL AX, AX
+	JLE   chroma8_intra_sse2_ret
+	TESTL BX, BX
+	JLE   chroma8_intra_sse2_ret
+	DECL AX
+	DECL BX
+
+	MOVD AX, X4
+	PSHUFLW $0, X4, X4
+	PUNPCKLQDQ X4, X4
+	PACKUSWB X4, X4
+	MOVD BX, X5
+	PSHUFLW $0, X5, X5
+	PUNPCKLQDQ X5, X5
+	PACKUSWB X5, X5
+
+	MOVOU X2, X6
+	MOVOU X1, X7
+	PSUBUSB X1, X6
+	PSUBUSB X2, X7
+	POR X6, X7
+	PSUBUSB X4, X7
+
+	MOVOU X1, X6
+	MOVOU X0, X4
+	PSUBUSB X0, X6
+	PSUBUSB X1, X4
+	POR X6, X4
+	PSUBUSB X5, X4
+	POR X4, X7
+
+	MOVOU X2, X6
+	MOVOU X3, X4
+	PSUBUSB X3, X6
+	PSUBUSB X2, X4
+	POR X6, X4
+	PSUBUSB X5, X4
+	POR X4, X7
+	PXOR X6, X6
+	PCMPEQB X6, X7
+
+	MOVOU X1, X5
+	MOVOU X2, X6
+	MOVOU X1, X4
+	PXOR X3, X4
+	PAND ·h264DeblockPB1(SB), X4
+	PAVGB X3, X1
+	PSUBUSB X4, X1
+	PAVGB X0, X1
+	MOVOU X2, X4
+	PXOR X0, X4
+	PAND ·h264DeblockPB1(SB), X4
+	PAVGB X0, X2
+	PSUBUSB X4, X2
+	PAVGB X3, X2
+	PSUBB X5, X1
+	PSUBB X6, X2
+	PAND X7, X1
+	PAND X7, X2
+	PADDB X5, X1
+	PADDB X6, X2
+chroma8_intra_sse2_ret:
+	RET
+
+// func h264VLoopFilterChroma8ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+TEXT ·h264VLoopFilterChroma8ASM(SB), NOSPLIT, $0-32
+	MOVQ pix+0(FP), DI
+	MOVQ stride+8(FP), SI
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+	MOVQ tc0+24(FP), CX
+
+	LEAQ (SI)(SI*1), R8
+	MOVQ DI, R9
+	SUBQ R8, R9
+	MOVQ $1, DX
+	MOVQ (R9), X0
+	MOVQ (R9)(SI*1), X1
+	MOVQ (DI), X2
+	MOVQ (DI)(SI*1), X3
+	CALL ·h264Chroma8SSE2Core(SB)
+	MOVQ X1, (R9)(SI*1)
+	MOVQ X2, (DI)
+	RET
+
+// func h264HLoopFilterChroma8ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+TEXT ·h264HLoopFilterChroma8ASM(SB), NOSPLIT, $16-32
+	MOVQ pix+0(FP), R11
+	MOVQ stride+8(FP), R14
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+	MOVQ tc0+24(FP), CX
+
+	LEAQ (R14)(R14*2), R15
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_LOAD8()
+	H_CHROMA8_TRANSPOSE8x4()
+	MOVQ X0, 0(SP)
+	MOVQ X3, 8(SP)
+	MOVQ $1, DX
+	CALL ·h264Chroma8SSE2Core(SB)
+	MOVQ 0(SP), X0
+	MOVQ 8(SP), X3
+	H_CHROMA8_TRANSPOSE4x8()
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_STORE8()
+	RET
+
+// func h264HLoopFilterChroma4228ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+TEXT ·h264HLoopFilterChroma4228ASM(SB), NOSPLIT, $16-32
+	MOVQ pix+0(FP), R11
+	MOVQ stride+8(FP), R14
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+	MOVQ tc0+24(FP), CX
+
+	LEAQ (R14)(R14*2), R15
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_LOAD8()
+	H_CHROMA8_TRANSPOSE8x4()
+	MOVQ X0, 0(SP)
+	MOVQ X3, 8(SP)
+	MOVQ $2, DX
+	CALL ·h264Chroma8SSE2Core(SB)
+	MOVQ 0(SP), X0
+	MOVQ 8(SP), X3
+	H_CHROMA8_TRANSPOSE4x8()
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_STORE8()
+
+	LEAQ (R11)(R14*8), R11
+	ADDQ $2, CX
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_LOAD8()
+	H_CHROMA8_TRANSPOSE8x4()
+	MOVQ X0, 0(SP)
+	MOVQ X3, 8(SP)
+	MOVQ $2, DX
+	CALL ·h264Chroma8SSE2Core(SB)
+	MOVQ 0(SP), X0
+	MOVQ 8(SP), X3
+	H_CHROMA8_TRANSPOSE4x8()
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_STORE8()
+	RET
+
+// func h264VLoopFilterChromaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
+TEXT ·h264VLoopFilterChromaIntra8ASM(SB), NOSPLIT, $0-24
+	MOVQ pix+0(FP), DI
+	MOVQ stride+8(FP), SI
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+
+	LEAQ (SI)(SI*1), R8
+	MOVQ DI, R9
+	SUBQ R8, R9
+	MOVQ (R9), X0
+	MOVQ (R9)(SI*1), X1
+	MOVQ (DI), X2
+	MOVQ (DI)(SI*1), X3
+	CALL ·h264ChromaIntra8SSE2Core(SB)
+	MOVQ X1, (R9)(SI*1)
+	MOVQ X2, (DI)
+	RET
+
+// func h264HLoopFilterChromaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
+TEXT ·h264HLoopFilterChromaIntra8ASM(SB), NOSPLIT, $0-24
+	MOVQ pix+0(FP), R11
+	MOVQ stride+8(FP), R14
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+
+	LEAQ (R14)(R14*2), R15
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_LOAD8()
+	H_CHROMA8_TRANSPOSE8x4()
+	CALL ·h264ChromaIntra8SSE2Core(SB)
+	H_CHROMA8_TRANSPOSE4x8()
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_STORE8()
+	RET
+
+// func h264HLoopFilterChroma422Intra8ASM(pix *uint8, stride int, alpha int32, beta int32)
+TEXT ·h264HLoopFilterChroma422Intra8ASM(SB), NOSPLIT, $0-24
+	MOVQ pix+0(FP), R11
+	MOVQ stride+8(FP), R14
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+
+	LEAQ (R14)(R14*2), R15
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_LOAD8()
+	H_CHROMA8_TRANSPOSE8x4()
+	CALL ·h264ChromaIntra8SSE2Core(SB)
+	H_CHROMA8_TRANSPOSE4x8()
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_STORE8()
+
+	LEAQ (R11)(R14*8), R11
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_LOAD8()
+	H_CHROMA8_TRANSPOSE8x4()
+	CALL ·h264ChromaIntra8SSE2Core(SB)
+	H_CHROMA8_TRANSPOSE4x8()
+	LEAQ -2(R11), R12
+	LEAQ (R12)(R15*1), R13
+	H_CHROMA8_STORE8()
 	RET

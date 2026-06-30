@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
-//go:build !purego && arm64
+//go:build !purego && amd64
 
 package h264
 
 const h264LoopFilterChromaASMEnabled = true
 const h264LoopFilterChromaV8ASMEnabled = true
-const h264LoopFilterChromaH8ASMEnabled = true
+const h264LoopFilterChromaH8ASMEnabled = false
 const h264LoopFilterChroma422H8ASMEnabled = true
 const h264LoopFilterChromaIntraV8ASMEnabled = true
-const h264LoopFilterChromaIntraH8ASMEnabled = true
+const h264LoopFilterChromaIntraH8ASMEnabled = false
 const h264LoopFilterChroma422IntraH8ASMEnabled = true
 
 // h264VLoopFilterChroma8ASM mirrors FFmpeg's 8-bit chroma deblock ABI shape:

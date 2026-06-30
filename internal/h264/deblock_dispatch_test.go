@@ -174,6 +174,44 @@ func TestH264LoopFilterLumaDispatchSkipsNegativeTC0(t *testing.T) {
 	}
 }
 
+func TestH264LoopFilterChromaDispatchSkipsNegativeTC0(t *testing.T) {
+	const (
+		stride = 32
+		rows   = 32
+		offset = 12*stride + 12
+		alpha  = 20
+		beta   = 20
+	)
+	tc0 := [4]int8{2, -2, 0, 3}
+
+	cases := []struct {
+		name       string
+		xstride    int
+		ystride    int
+		innerIters int
+	}{
+		{name: "Vertical", xstride: stride, ystride: 1, innerIters: 2},
+		{name: "Horizontal", xstride: 1, ystride: stride, innerIters: 2},
+		{name: "Chroma422", xstride: 1, ystride: stride, innerIters: 4},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			want := makeLoopFilterUnitFixture(stride, rows)
+			got := append([]uint8(nil), want...)
+			seedLoopFilterChroma8(want, offset, tc.xstride, tc.ystride, tc.innerIters)
+			seedLoopFilterChroma8(got, offset, tc.xstride, tc.ystride, tc.innerIters)
+
+			if err := h264LoopFilterChroma(want, offset, tc.xstride, tc.ystride, tc.innerIters, alpha, beta, &tc0); err != nil {
+				t.Fatalf("scalar: %v", err)
+			}
+			if err := h264LoopFilterChromaKernel(got, offset, tc.xstride, tc.ystride, tc.innerIters, alpha, beta, &tc0); err != nil {
+				t.Fatalf("kernel: %v", err)
+			}
+			assertUint8SlicesEqual(t, got, want)
+		})
+	}
+}
+
 func TestH264LoopFilterHighDispatchMatchesScalar(t *testing.T) {
 	const (
 		stride   = 32

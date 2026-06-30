@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
-//go:build purego || !arm64
+//go:build purego || (!amd64 && !arm64)
 
 package h264
 
 const h264LoopFilterChromaASMEnabled = false
+const h264LoopFilterChromaV8ASMEnabled = false
+const h264LoopFilterChromaH8ASMEnabled = false
+const h264LoopFilterChroma422H8ASMEnabled = false
+const h264LoopFilterChromaIntraV8ASMEnabled = false
+const h264LoopFilterChromaIntraH8ASMEnabled = false
+const h264LoopFilterChroma422IntraH8ASMEnabled = false
 
 func h264VLoopFilterChroma8ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8) {
 }
