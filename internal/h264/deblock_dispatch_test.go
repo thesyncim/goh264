@@ -408,6 +408,17 @@ func BenchmarkH264LoopFilterDeblock(b *testing.B) {
 			}
 		}
 	})
+	b.Run("Chroma422Horizontal", func(b *testing.B) {
+		pix := makeLoopFilterUnitFixture(stride, rows)
+		seedLoopFilterChroma8(pix, offset, 1, stride, 4)
+		b.ReportAllocs()
+		b.SetBytes(8 * 16)
+		for i := 0; i < b.N; i++ {
+			if err := h264LoopFilterChromaKernel(pix, offset, 1, stride, 4, alpha, beta, &tc0); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 	b.Run("LumaVerticalHigh10", func(b *testing.B) {
 		pix := makeLoopFilterHighUnitFixture(stride, rows)
 		seedLoopFilterLumaHigh(pix, offset, stride, 1, 4)

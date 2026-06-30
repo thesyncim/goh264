@@ -10,3 +10,6 @@ func h264VLoopFilterChroma8ASM(pix *uint8, stride int, alpha int32, beta int32, 
 
 func h264HLoopFilterChroma8ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8) {
 }
+
+func h264HLoopFilterChroma4228ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8) {
+}
