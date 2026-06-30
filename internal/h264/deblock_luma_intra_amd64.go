@@ -5,7 +5,7 @@ package h264
 
 const h264LoopFilterLumaIntraASMEnabled = true
 const h264LoopFilterLumaIntraV8ASMEnabled = true
-const h264LoopFilterLumaIntraH8ASMEnabled = false
+const h264LoopFilterLumaIntraH8ASMEnabled = true
 
 // h264VLoopFilterLumaIntra8ASM mirrors FFmpeg's 8-bit luma intra deblock ABI shape:
 // uint8_t *pix, ptrdiff_t stride, int alpha/beta.

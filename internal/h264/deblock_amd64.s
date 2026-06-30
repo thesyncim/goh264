@@ -161,6 +161,26 @@
 	MOVOU X4, X7; \
 	PSRLDQ $12, X7
 
+#define H_LUMA_INTRA8_LOAD4_TO_STACK(BASE, O0, O1, O2, O3) \
+	LEAQ BASE(R11), R12; \
+	LEAQ (R12)(R15*1), R13; \
+	H_CHROMA8_LOAD8(); \
+	H_CHROMA8_TRANSPOSE8x4(); \
+	MOVQ X0, O0(SP); \
+	MOVQ X1, O1(SP); \
+	MOVQ X2, O2(SP); \
+	MOVQ X3, O3(SP)
+
+#define H_LUMA_INTRA8_STORE4_FROM_STACK(BASE, O0, O1, O2, O3) \
+	MOVQ O0(SP), X0; \
+	MOVQ O1(SP), X1; \
+	MOVQ O2(SP), X2; \
+	MOVQ O3(SP), X3; \
+	H_CHROMA8_TRANSPOSE4x8(); \
+	LEAQ BASE(R11), R12; \
+	LEAQ (R12)(R15*1), R13; \
+	H_CHROMA8_STORE8()
+
 #define LUMA_INTRA8_GOOD(A, B, THR, DST, TMP) \
 	MOVOU B, TMP; \
 	MOVOU A, DST; \
@@ -537,11 +557,16 @@ TEXT ·h264VLoopFilterLumaIntra8ASM(SB), NOSPLIT, $0-24
 	MOVQ pix+0(FP), DI
 	MOVQ stride+8(FP), SI
 	MOVL alpha+16(FP), AX
-	TESTL AX, AX
-	JLE   luma8_intra_v_ret
 	MOVL beta+20(FP), BX
+	JMP  ·h264LumaIntra8SSE2Core(SB)
+
+// h264LumaIntra8SSE2Core filters two 8-byte luma intra edges with
+// DI=pix, SI=stride, AX=alpha, and BX=beta.
+TEXT ·h264LumaIntra8SSE2Core(SB), NOSPLIT, $0-0
+	TESTL AX, AX
+	JLE   luma8_intra_core_ret
 	TESTL BX, BX
-	JLE   luma8_intra_v_ret
+	JLE   luma8_intra_core_ret
 
 	LEAQ (SI)(SI*1), R8
 	LEAQ (SI)(SI*2), R9
@@ -550,7 +575,42 @@ TEXT ·h264VLoopFilterLumaIntra8ASM(SB), NOSPLIT, $0-24
 	SUBQ R10, R11
 	LUMA_INTRA8_PROCESS(0)
 	LUMA_INTRA8_PROCESS(8)
-luma8_intra_v_ret:
+luma8_intra_core_ret:
+	RET
+
+// func h264HLoopFilterLumaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
+TEXT ·h264HLoopFilterLumaIntra8ASM(SB), NOSPLIT, $128-24
+	MOVQ pix+0(FP), R11
+	MOVQ stride+8(FP), R14
+	MOVL alpha+16(FP), AX
+	TESTL AX, AX
+	JLE   luma8_intra_h_ret
+	MOVL beta+20(FP), BX
+	TESTL BX, BX
+	JLE   luma8_intra_h_ret
+
+	LEAQ (R14)(R14*2), R15
+	H_LUMA_INTRA8_LOAD4_TO_STACK(-4, 0, 16, 32, 48)
+	H_LUMA_INTRA8_LOAD4_TO_STACK(0, 64, 80, 96, 112)
+	LEAQ (R11)(R14*8), R11
+	H_LUMA_INTRA8_LOAD4_TO_STACK(-4, 8, 24, 40, 56)
+	H_LUMA_INTRA8_LOAD4_TO_STACK(0, 72, 88, 104, 120)
+
+	LEAQ 64(SP), DI
+	MOVQ $16, SI
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+	CALL ·h264LumaIntra8SSE2Core(SB)
+
+	MOVQ pix+0(FP), R11
+	MOVQ stride+8(FP), R14
+	LEAQ (R14)(R14*2), R15
+	H_LUMA_INTRA8_STORE4_FROM_STACK(-4, 0, 16, 32, 48)
+	H_LUMA_INTRA8_STORE4_FROM_STACK(0, 64, 80, 96, 112)
+	LEAQ (R11)(R14*8), R11
+	H_LUMA_INTRA8_STORE4_FROM_STACK(-4, 8, 24, 40, 56)
+	H_LUMA_INTRA8_STORE4_FROM_STACK(0, 72, 88, 104, 120)
+luma8_intra_h_ret:
 	RET
 
 // h264Chroma8SSE2Core filters 8 8-bit chroma samples with X0=p1,
