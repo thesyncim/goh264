@@ -22,3 +22,15 @@ func h264HLoopFilterChroma8ASM(pix *uint8, stride int, alpha int32, beta int32, 
 //
 //go:noescape
 func h264HLoopFilterChroma4228ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+
+// h264VLoopFilterChromaIntra8ASM mirrors FFmpeg's 8-bit chroma intra deblock ABI shape:
+// uint8_t *pix, ptrdiff_t stride, int alpha/beta.
+//
+//go:noescape
+func h264VLoopFilterChromaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
+
+// h264HLoopFilterChromaIntra8ASM mirrors FFmpeg's 8-bit chroma intra deblock ABI shape:
+// uint8_t *pix, ptrdiff_t stride, int alpha/beta.
+//
+//go:noescape
+func h264HLoopFilterChromaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
