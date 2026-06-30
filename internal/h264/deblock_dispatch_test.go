@@ -485,6 +485,39 @@ func BenchmarkH264LoopFilterDeblock(b *testing.B) {
 			}
 		}
 	})
+	b.Run("ChromaVerticalHigh10", func(b *testing.B) {
+		pix := makeLoopFilterHighUnitFixture(stride, rows)
+		seedLoopFilterChromaHigh(pix, offset, stride, 1, 2)
+		b.ReportAllocs()
+		b.SetBytes(8 * 8 * 2)
+		for i := 0; i < b.N; i++ {
+			if err := h264LoopFilterChromaHighKernel(pix, offset, stride, 1, 2, alpha, beta, &tc0, bitDepth); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("ChromaHorizontalHigh10", func(b *testing.B) {
+		pix := makeLoopFilterHighUnitFixture(stride, rows)
+		seedLoopFilterChromaHigh(pix, offset, 1, stride, 2)
+		b.ReportAllocs()
+		b.SetBytes(8 * 8 * 2)
+		for i := 0; i < b.N; i++ {
+			if err := h264LoopFilterChromaHighKernel(pix, offset, 1, stride, 2, alpha, beta, &tc0, bitDepth); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("Chroma422HorizontalHigh10", func(b *testing.B) {
+		pix := makeLoopFilterHighUnitFixture(stride, rows)
+		seedLoopFilterChromaHigh(pix, offset, 1, stride, 4)
+		b.ReportAllocs()
+		b.SetBytes(8 * 16 * 2)
+		for i := 0; i < b.N; i++ {
+			if err := h264LoopFilterChromaHighKernel(pix, offset, 1, stride, 4, alpha, beta, &tc0, bitDepth); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 	b.Run("LumaVerticalHigh10", func(b *testing.B) {
 		pix := makeLoopFilterHighUnitFixture(stride, rows)
 		seedLoopFilterLumaHigh(pix, offset, stride, 1, 4)

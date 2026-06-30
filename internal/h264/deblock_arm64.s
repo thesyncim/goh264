@@ -404,6 +404,338 @@ TEXT ·h264HLoopFilterChroma8ASM(SB), NOSPLIT, $0-32
 	WORD $0x0d819002 // st1.s {v2}[1], [x0], x1
 	WORD $0xd65f03c0 // ret
 
+// func h264VLoopFilterChromaHigh10ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+TEXT ·h264VLoopFilterChromaHigh10ASM(SB), NOSPLIT, $0-32
+	MOVD pix+0(FP), R0
+	MOVD stride+8(FP), R1
+	MOVW alpha+16(FP), R2
+	MOVW beta+20(FP), R3
+	MOVD tc0+24(FP), R4
+
+	WORD $0x7100005f // cmp w2, #0
+	WORD $0xb9400086 // ldr w6, [x4]
+	WORD $0x7a401860 // ccmp w3, #0, #0, ne
+	WORD $0x531e7442 // lsl w2, w2, #2
+	WORD $0x4e041cd8 // mov.s v24[0], w6
+	WORD $0x531e7463 // lsl w3, w3, #2
+	WORD $0x0a0640c8 // and w8, w6, w6, lsl #16
+	WORD $0x54000060 // b.eq +0x0c
+	WORD $0x6a082108 // ands w8, w8, w8, lsl #8
+	WORD $0x5400004a // b.ge +0x08
+	WORD $0xd65f03c0 // ret
+	WORD $0xaa0003ea // mov x10, x0
+	WORD $0xcb010400 // sub x0, x0, x1, lsl #1
+	WORD $0x4cc17412 // ld1.8h {v18}, [x0], x1
+	WORD $0x4cc17540 // ld1.8h {v0}, [x10], x1
+	WORD $0x4cc17410 // ld1.8h {v16}, [x0], x1
+	WORD $0x4c407542 // ld1.8h {v2}, [x10]
+	WORD $0x4e020c56 // dup.8h v22, w2
+	WORD $0x4e020c77 // dup.8h v23, w3
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x6e60761a // uabd.8h v26, v16, v0
+	WORD $0x6e70765c // uabd.8h v28, v18, v16
+	WORD $0x6e60745e // uabd.8h v30, v2, v0
+	WORD $0x6e7a36da // cmhi.8h v26, v22, v26
+	WORD $0x6e7c36fc // cmhi.8h v28, v23, v28
+	WORD $0x6e7e36fe // cmhi.8h v30, v23, v30
+	WORD $0x4e3c1f5a // and.16b v26, v26, v28
+	WORD $0x4ea01c04 // mov.16b v4, v0
+	WORD $0x6e708484 // sub.8h v4, v4, v16
+	WORD $0x4e3e1f5a // and.16b v26, v26, v30
+	WORD $0x4f125484 // shl.8h v4, v4, #2
+	WORD $0x4e083f48 // mov.d x8, v26[0]
+	WORD $0x4e183f49 // mov.d x9, v26[1]
+	WORD $0x6f185718 // sli.8h v24, v24, #8
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x4e728484 // add.8h v4, v4, v18
+	WORD $0xab090108 // adds x8, x8, x9
+	WORD $0x4f125718 // shl.8h v24, v24, #2
+	WORD $0x54000280 // b.eq +0x50
+	WORD $0x4f00847f // movi.8h v31, #3
+	WORD $0x6e7f2f18 // uqsub.8h v24, v24, v31
+	WORD $0x6e628484 // sub.8h v4, v4, v2
+	WORD $0x4f1d2484 // srshr.8h v4, v4, #3
+	WORD $0x4e786c84 // smin.8h v4, v4, v24
+	WORD $0x6e60bb19 // neg.8h v25, v24
+	WORD $0x4e796484 // smax.8h v4, v4, v25
+	WORD $0x4e3a1c84 // and.16b v4, v4, v26
+	WORD $0x4e648610 // add.8h v16, v16, v4
+	WORD $0x6e648400 // sub.8h v0, v0, v4
+	WORD $0x6f07a784 // mvni.8h v4, #0xfc, lsl #8
+	WORD $0x4f008405 // movi.8h v5, #0
+	WORD $0x4e646c00 // smin.8h v0, v0, v4
+	WORD $0x4e646e10 // smin.8h v16, v16, v4
+	WORD $0x4e656400 // smax.8h v0, v0, v5
+	WORD $0x4e656610 // smax.8h v16, v16, v5
+	WORD $0xcb010540 // sub x0, x10, x1, lsl #1
+	WORD $0x4c817410 // st1.8h {v16}, [x0], x1
+	WORD $0x4c817400 // st1.8h {v0}, [x0], x1
+	WORD $0xd65f03c0 // ret
+
+// func h264HLoopFilterChromaHigh10ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+TEXT ·h264HLoopFilterChromaHigh10ASM(SB), NOSPLIT, $0-32
+	MOVD pix+0(FP), R0
+	MOVD stride+8(FP), R1
+	MOVW alpha+16(FP), R2
+	MOVW beta+20(FP), R3
+	MOVD tc0+24(FP), R4
+
+	WORD $0x7100005f // cmp w2, #0
+	WORD $0xb9400086 // ldr w6, [x4]
+	WORD $0x7a401860 // ccmp w3, #0, #0, ne
+	WORD $0x531e7442 // lsl w2, w2, #2
+	WORD $0x4e041cd8 // mov.s v24[0], w6
+	WORD $0x531e7463 // lsl w3, w3, #2
+	WORD $0x0a0640c8 // and w8, w6, w6, lsl #16
+	WORD $0x54000060 // b.eq +0x0c
+	WORD $0x6a082108 // ands w8, w8, w8, lsl #8
+	WORD $0x5400004a // b.ge +0x08
+	WORD $0xd65f03c0 // ret
+	WORD $0xd1001000 // sub x0, x0, #4
+	WORD $0x8b01080a // add x10, x0, x1, lsl #2
+	WORD $0x0dc18412 // ld1.d {v18}[0], [x0], x1
+	WORD $0x4dc18552 // ld1.d {v18}[1], [x10], x1
+	WORD $0x0dc18410 // ld1.d {v16}[0], [x0], x1
+	WORD $0x4dc18550 // ld1.d {v16}[1], [x10], x1
+	WORD $0x0dc18400 // ld1.d {v0}[0], [x0], x1
+	WORD $0x4dc18540 // ld1.d {v0}[1], [x10], x1
+	WORD $0x0dc18402 // ld1.d {v2}[0], [x0], x1
+	WORD $0x4dc18542 // ld1.d {v2}[1], [x10], x1
+	WORD $0x4e502a5c // trn1.8h v28, v18, v16
+	WORD $0x4e506a5d // trn2.8h v29, v18, v16
+	WORD $0x4e42281e // trn1.8h v30, v0, v2
+	WORD $0x4e42681f // trn2.8h v31, v0, v2
+	WORD $0x4e9e2b92 // trn1.4s v18, v28, v30
+	WORD $0x4e9e6b80 // trn2.4s v0, v28, v30
+	WORD $0x4e9f2bb0 // trn1.4s v16, v29, v31
+	WORD $0x4e9f6ba2 // trn2.4s v2, v29, v31
+	WORD $0x4e020c56 // dup.8h v22, w2
+	WORD $0x4e020c77 // dup.8h v23, w3
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x6e60761a // uabd.8h v26, v16, v0
+	WORD $0x6e70765c // uabd.8h v28, v18, v16
+	WORD $0x6e60745e // uabd.8h v30, v2, v0
+	WORD $0x6e7a36da // cmhi.8h v26, v22, v26
+	WORD $0x6e7c36fc // cmhi.8h v28, v23, v28
+	WORD $0x6e7e36fe // cmhi.8h v30, v23, v30
+	WORD $0x4e3c1f5a // and.16b v26, v26, v28
+	WORD $0x4ea01c04 // mov.16b v4, v0
+	WORD $0x6e708484 // sub.8h v4, v4, v16
+	WORD $0x4e3e1f5a // and.16b v26, v26, v30
+	WORD $0x4f125484 // shl.8h v4, v4, #2
+	WORD $0x4e083f48 // mov.d x8, v26[0]
+	WORD $0x4e183f49 // mov.d x9, v26[1]
+	WORD $0x6f185718 // sli.8h v24, v24, #8
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x4e728484 // add.8h v4, v4, v18
+	WORD $0xab090108 // adds x8, x8, x9
+	WORD $0x4f125718 // shl.8h v24, v24, #2
+	WORD $0x54000440 // b.eq +0x88
+	WORD $0x4f00847f // movi.8h v31, #3
+	WORD $0x6e7f2f18 // uqsub.8h v24, v24, v31
+	WORD $0x6e628484 // sub.8h v4, v4, v2
+	WORD $0x4f1d2484 // srshr.8h v4, v4, #3
+	WORD $0x4e786c84 // smin.8h v4, v4, v24
+	WORD $0x6e60bb19 // neg.8h v25, v24
+	WORD $0x4e796484 // smax.8h v4, v4, v25
+	WORD $0x4e3a1c84 // and.16b v4, v4, v26
+	WORD $0x4e648610 // add.8h v16, v16, v4
+	WORD $0x6e648400 // sub.8h v0, v0, v4
+	WORD $0x6f07a784 // mvni.8h v4, #0xfc, lsl #8
+	WORD $0x4f008405 // movi.8h v5, #0
+	WORD $0x4e646c00 // smin.8h v0, v0, v4
+	WORD $0x4e646e10 // smin.8h v16, v16, v4
+	WORD $0x4e656400 // smax.8h v0, v0, v5
+	WORD $0x4e656610 // smax.8h v16, v16, v5
+	WORD $0x4e502a5c // trn1.8h v28, v18, v16
+	WORD $0x4e506a5d // trn2.8h v29, v18, v16
+	WORD $0x4e42281e // trn1.8h v30, v0, v2
+	WORD $0x4e42681f // trn2.8h v31, v0, v2
+	WORD $0x4e9e2b92 // trn1.4s v18, v28, v30
+	WORD $0x4e9e6b80 // trn2.4s v0, v28, v30
+	WORD $0x4e9f2bb0 // trn1.4s v16, v29, v31
+	WORD $0x4e9f6ba2 // trn2.4s v2, v29, v31
+	WORD $0xcb010d40 // sub x0, x10, x1, lsl #3
+	WORD $0x0d818412 // st1.d {v18}[0], [x0], x1
+	WORD $0x0d818410 // st1.d {v16}[0], [x0], x1
+	WORD $0x0d818400 // st1.d {v0}[0], [x0], x1
+	WORD $0x0d818402 // st1.d {v2}[0], [x0], x1
+	WORD $0x4d818412 // st1.d {v18}[1], [x0], x1
+	WORD $0x4d818410 // st1.d {v16}[1], [x0], x1
+	WORD $0x4d818400 // st1.d {v0}[1], [x0], x1
+	WORD $0x4d818402 // st1.d {v2}[1], [x0], x1
+	WORD $0xd65f03c0 // ret
+
+// func h264HLoopFilterChroma422High10ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+TEXT ·h264HLoopFilterChroma422High10ASM(SB), NOSPLIT, $0-32
+	MOVD pix+0(FP), R0
+	MOVD stride+8(FP), R1
+	MOVW alpha+16(FP), R2
+	MOVW beta+20(FP), R3
+	MOVD tc0+24(FP), R4
+
+	WORD $0x7100005f // cmp w2, #0
+	WORD $0xb9400086 // ldr w6, [x4]
+	WORD $0x7a401860 // ccmp w3, #0, #0, ne
+	WORD $0x531e7442 // lsl w2, w2, #2
+	WORD $0x4e041cd8 // mov.s v24[0], w6
+	WORD $0x531e7463 // lsl w3, w3, #2
+	WORD $0x0a0640c8 // and w8, w6, w6, lsl #16
+	WORD $0x54000060 // b.eq +0x0c
+	WORD $0x6a082108 // ands w8, w8, w8, lsl #8
+	WORD $0x5400004a // b.ge +0x08
+	WORD $0xd65f03c0 // ret
+	WORD $0x8b010005 // add x5, x0, x1
+	WORD $0xd1001000 // sub x0, x0, #4
+	WORD $0x8b010021 // add x1, x1, x1
+	WORD $0x8b01080a // add x10, x0, x1, lsl #2
+	WORD $0x0dc18412 // ld1.d {v18}[0], [x0], x1
+	WORD $0x4dc18552 // ld1.d {v18}[1], [x10], x1
+	WORD $0x0dc18410 // ld1.d {v16}[0], [x0], x1
+	WORD $0x4dc18550 // ld1.d {v16}[1], [x10], x1
+	WORD $0x0dc18400 // ld1.d {v0}[0], [x0], x1
+	WORD $0x4dc18540 // ld1.d {v0}[1], [x10], x1
+	WORD $0x0dc18402 // ld1.d {v2}[0], [x0], x1
+	WORD $0x4dc18542 // ld1.d {v2}[1], [x10], x1
+	WORD $0x4e502a5c // trn1.8h v28, v18, v16
+	WORD $0x4e506a5d // trn2.8h v29, v18, v16
+	WORD $0x4e42281e // trn1.8h v30, v0, v2
+	WORD $0x4e42681f // trn2.8h v31, v0, v2
+	WORD $0x4e9e2b92 // trn1.4s v18, v28, v30
+	WORD $0x4e9e6b80 // trn2.4s v0, v28, v30
+	WORD $0x4e9f2bb0 // trn1.4s v16, v29, v31
+	WORD $0x4e9f6ba2 // trn2.4s v2, v29, v31
+	WORD $0x4e020c56 // dup.8h v22, w2
+	WORD $0x4e020c77 // dup.8h v23, w3
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x6e60761a // uabd.8h v26, v16, v0
+	WORD $0x6e70765c // uabd.8h v28, v18, v16
+	WORD $0x6e60745e // uabd.8h v30, v2, v0
+	WORD $0x6e7a36da // cmhi.8h v26, v22, v26
+	WORD $0x6e7c36fc // cmhi.8h v28, v23, v28
+	WORD $0x6e7e36fe // cmhi.8h v30, v23, v30
+	WORD $0x4e3c1f5a // and.16b v26, v26, v28
+	WORD $0x4ea01c04 // mov.16b v4, v0
+	WORD $0x6e708484 // sub.8h v4, v4, v16
+	WORD $0x4e3e1f5a // and.16b v26, v26, v30
+	WORD $0x4f125484 // shl.8h v4, v4, #2
+	WORD $0x4e083f48 // mov.d x8, v26[0]
+	WORD $0x4e183f49 // mov.d x9, v26[1]
+	WORD $0x6f185718 // sli.8h v24, v24, #8
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x4e728484 // add.8h v4, v4, v18
+	WORD $0xab090108 // adds x8, x8, x9
+	WORD $0x4f125718 // shl.8h v24, v24, #2
+	WORD $0x54000440 // b.eq +0x88
+	WORD $0x4f00847f // movi.8h v31, #3
+	WORD $0x6e7f2f18 // uqsub.8h v24, v24, v31
+	WORD $0x6e628484 // sub.8h v4, v4, v2
+	WORD $0x4f1d2484 // srshr.8h v4, v4, #3
+	WORD $0x4e786c84 // smin.8h v4, v4, v24
+	WORD $0x6e60bb19 // neg.8h v25, v24
+	WORD $0x4e796484 // smax.8h v4, v4, v25
+	WORD $0x4e3a1c84 // and.16b v4, v4, v26
+	WORD $0x4e648610 // add.8h v16, v16, v4
+	WORD $0x6e648400 // sub.8h v0, v0, v4
+	WORD $0x6f07a784 // mvni.8h v4, #0xfc, lsl #8
+	WORD $0x4f008405 // movi.8h v5, #0
+	WORD $0x4e646c00 // smin.8h v0, v0, v4
+	WORD $0x4e646e10 // smin.8h v16, v16, v4
+	WORD $0x4e656400 // smax.8h v0, v0, v5
+	WORD $0x4e656610 // smax.8h v16, v16, v5
+	WORD $0x4e502a5c // trn1.8h v28, v18, v16
+	WORD $0x4e506a5d // trn2.8h v29, v18, v16
+	WORD $0x4e42281e // trn1.8h v30, v0, v2
+	WORD $0x4e42681f // trn2.8h v31, v0, v2
+	WORD $0x4e9e2b92 // trn1.4s v18, v28, v30
+	WORD $0x4e9e6b80 // trn2.4s v0, v28, v30
+	WORD $0x4e9f2bb0 // trn1.4s v16, v29, v31
+	WORD $0x4e9f6ba2 // trn2.4s v2, v29, v31
+	WORD $0xcb010d40 // sub x0, x10, x1, lsl #3
+	WORD $0x0d818412 // st1.d {v18}[0], [x0], x1
+	WORD $0x0d818410 // st1.d {v16}[0], [x0], x1
+	WORD $0x0d818400 // st1.d {v0}[0], [x0], x1
+	WORD $0x0d818402 // st1.d {v2}[0], [x0], x1
+	WORD $0x4d818412 // st1.d {v18}[1], [x0], x1
+	WORD $0x4d818410 // st1.d {v16}[1], [x0], x1
+	WORD $0x4d818400 // st1.d {v0}[1], [x0], x1
+	WORD $0x4d818402 // st1.d {v2}[1], [x0], x1
+	WORD $0xd10010a0 // sub x0, x5, #4
+	WORD $0x4e041cd8 // mov.s v24[0], w6
+	WORD $0x8b01080a // add x10, x0, x1, lsl #2
+	WORD $0x0dc18412 // ld1.d {v18}[0], [x0], x1
+	WORD $0x4dc18552 // ld1.d {v18}[1], [x10], x1
+	WORD $0x0dc18410 // ld1.d {v16}[0], [x0], x1
+	WORD $0x4dc18550 // ld1.d {v16}[1], [x10], x1
+	WORD $0x0dc18400 // ld1.d {v0}[0], [x0], x1
+	WORD $0x4dc18540 // ld1.d {v0}[1], [x10], x1
+	WORD $0x0dc18402 // ld1.d {v2}[0], [x0], x1
+	WORD $0x4dc18542 // ld1.d {v2}[1], [x10], x1
+	WORD $0x4e502a5c // trn1.8h v28, v18, v16
+	WORD $0x4e506a5d // trn2.8h v29, v18, v16
+	WORD $0x4e42281e // trn1.8h v30, v0, v2
+	WORD $0x4e42681f // trn2.8h v31, v0, v2
+	WORD $0x4e9e2b92 // trn1.4s v18, v28, v30
+	WORD $0x4e9e6b80 // trn2.4s v0, v28, v30
+	WORD $0x4e9f2bb0 // trn1.4s v16, v29, v31
+	WORD $0x4e9f6ba2 // trn2.4s v2, v29, v31
+	WORD $0x4e020c56 // dup.8h v22, w2
+	WORD $0x4e020c77 // dup.8h v23, w3
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x6e60761a // uabd.8h v26, v16, v0
+	WORD $0x6e70765c // uabd.8h v28, v18, v16
+	WORD $0x6e60745e // uabd.8h v30, v2, v0
+	WORD $0x6e7a36da // cmhi.8h v26, v22, v26
+	WORD $0x6e7c36fc // cmhi.8h v28, v23, v28
+	WORD $0x6e7e36fe // cmhi.8h v30, v23, v30
+	WORD $0x4e3c1f5a // and.16b v26, v26, v28
+	WORD $0x4ea01c04 // mov.16b v4, v0
+	WORD $0x6e708484 // sub.8h v4, v4, v16
+	WORD $0x4e3e1f5a // and.16b v26, v26, v30
+	WORD $0x4f125484 // shl.8h v4, v4, #2
+	WORD $0x4e083f48 // mov.d x8, v26[0]
+	WORD $0x4e183f49 // mov.d x9, v26[1]
+	WORD $0x6f185718 // sli.8h v24, v24, #8
+	WORD $0x2f08a718 // ushll.8h v24, v24, #0
+	WORD $0x4e728484 // add.8h v4, v4, v18
+	WORD $0xab090108 // adds x8, x8, x9
+	WORD $0x4f125718 // shl.8h v24, v24, #2
+	WORD $0x54000440 // b.eq +0x88
+	WORD $0x4f00847f // movi.8h v31, #3
+	WORD $0x6e7f2f18 // uqsub.8h v24, v24, v31
+	WORD $0x6e628484 // sub.8h v4, v4, v2
+	WORD $0x4f1d2484 // srshr.8h v4, v4, #3
+	WORD $0x4e786c84 // smin.8h v4, v4, v24
+	WORD $0x6e60bb19 // neg.8h v25, v24
+	WORD $0x4e796484 // smax.8h v4, v4, v25
+	WORD $0x4e3a1c84 // and.16b v4, v4, v26
+	WORD $0x4e648610 // add.8h v16, v16, v4
+	WORD $0x6e648400 // sub.8h v0, v0, v4
+	WORD $0x6f07a784 // mvni.8h v4, #0xfc, lsl #8
+	WORD $0x4f008405 // movi.8h v5, #0
+	WORD $0x4e646c00 // smin.8h v0, v0, v4
+	WORD $0x4e646e10 // smin.8h v16, v16, v4
+	WORD $0x4e656400 // smax.8h v0, v0, v5
+	WORD $0x4e656610 // smax.8h v16, v16, v5
+	WORD $0x4e502a5c // trn1.8h v28, v18, v16
+	WORD $0x4e506a5d // trn2.8h v29, v18, v16
+	WORD $0x4e42281e // trn1.8h v30, v0, v2
+	WORD $0x4e42681f // trn2.8h v31, v0, v2
+	WORD $0x4e9e2b92 // trn1.4s v18, v28, v30
+	WORD $0x4e9e6b80 // trn2.4s v0, v28, v30
+	WORD $0x4e9f2bb0 // trn1.4s v16, v29, v31
+	WORD $0x4e9f6ba2 // trn2.4s v2, v29, v31
+	WORD $0xcb010d40 // sub x0, x10, x1, lsl #3
+	WORD $0x0d818412 // st1.d {v18}[0], [x0], x1
+	WORD $0x0d818410 // st1.d {v16}[0], [x0], x1
+	WORD $0x0d818400 // st1.d {v0}[0], [x0], x1
+	WORD $0x0d818402 // st1.d {v2}[0], [x0], x1
+	WORD $0x4d818412 // st1.d {v18}[1], [x0], x1
+	WORD $0x4d818410 // st1.d {v16}[1], [x0], x1
+	WORD $0x4d818400 // st1.d {v0}[1], [x0], x1
+	WORD $0x4d818402 // st1.d {v2}[1], [x0], x1
+	WORD $0xd65f03c0 // ret
+
 // func h264VLoopFilterLumaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
 TEXT ·h264VLoopFilterLumaIntra8ASM(SB), NOSPLIT, $0-24
 	MOVD pix+0(FP), R0

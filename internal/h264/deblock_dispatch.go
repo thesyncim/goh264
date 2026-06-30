@@ -2,6 +2,8 @@
 
 package h264
 
+import "unsafe"
+
 const (
 	minDeblockCInt = -1 << 31
 	maxDeblockCInt = 1<<31 - 1
@@ -156,6 +158,32 @@ func h264LoopFilterChromaKernel(pix []uint8, offset int, xstride int, ystride in
 }
 
 func h264LoopFilterChromaHighKernel(pix []uint16, offset int, xstride int, ystride int, innerIters int, alpha int32, beta int32, tc0 *[4]int8, bitDepth int32) error {
+	if tc0 == nil {
+		return ErrInvalidData
+	}
+	if h264LoopFilterChromaHighASMEnabled && bitDepth == 10 &&
+		tc0[0] >= 0 && tc0[1] >= 0 && tc0[2] >= 0 && tc0[3] >= 0 {
+		switch {
+		case innerIters == 2 && ystride == 1:
+			if err := checkLoopFilterHighArgs(pix, offset, xstride, ystride, innerIters, 4, 2, 1, int(bitDepth)); err != nil {
+				return err
+			}
+			h264VLoopFilterChromaHigh10ASM((*uint8)(unsafe.Pointer(&pix[offset])), xstride*2, alpha, beta, &tc0[0])
+			return nil
+		case innerIters == 2 && xstride == 1:
+			if err := checkLoopFilterHighArgs(pix, offset, xstride, ystride, innerIters, 4, 2, 1, int(bitDepth)); err != nil {
+				return err
+			}
+			h264HLoopFilterChromaHigh10ASM((*uint8)(unsafe.Pointer(&pix[offset])), ystride*2, alpha, beta, &tc0[0])
+			return nil
+		case innerIters == 4 && xstride == 1:
+			if err := checkLoopFilterHighArgs(pix, offset, xstride, ystride, innerIters, 4, 2, 1, int(bitDepth)); err != nil {
+				return err
+			}
+			h264HLoopFilterChroma422High10ASM((*uint8)(unsafe.Pointer(&pix[offset])), ystride*2, alpha, beta, &tc0[0])
+			return nil
+		}
+	}
 	return h264LoopFilterChromaHigh(pix, offset, xstride, ystride, innerIters, int(alpha), int(beta), tc0, int(bitDepth))
 }
 
