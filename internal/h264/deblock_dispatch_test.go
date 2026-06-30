@@ -138,6 +138,29 @@ func TestH264LoopFilterDispatchMatchesScalar(t *testing.T) {
 	}
 }
 
+func TestH264LoopFilterLumaDispatchSkipsNegativeTC0(t *testing.T) {
+	const (
+		stride = 32
+		rows   = 32
+		offset = 12*stride + 12
+		alpha  = 20
+		beta   = 20
+	)
+	tc0 := [4]int8{2, -2, 0, 3}
+	want := makeLoopFilterUnitFixture(stride, rows)
+	got := append([]uint8(nil), want...)
+	seedLoopFilterLuma8(want, offset, stride, 1, 4)
+	seedLoopFilterLuma8(got, offset, stride, 1, 4)
+
+	if err := h264LoopFilterLuma(want, offset, stride, 1, 4, alpha, beta, &tc0); err != nil {
+		t.Fatalf("scalar: %v", err)
+	}
+	if err := h264LoopFilterLumaKernel(got, offset, stride, 1, 4, alpha, beta, &tc0); err != nil {
+		t.Fatalf("kernel: %v", err)
+	}
+	assertUint8SlicesEqual(t, got, want)
+}
+
 func TestH264LoopFilterHighDispatchMatchesScalar(t *testing.T) {
 	const (
 		stride   = 32
