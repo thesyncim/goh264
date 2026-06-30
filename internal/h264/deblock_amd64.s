@@ -515,6 +515,148 @@ TEXT ·h264Luma8SSE2Core(SB), NOSPLIT, $0-0
 luma8_sse2_ret:
 	RET
 
+// h264Luma8MBAFFSSE2Core filters 8 8-bit luma MBAFF samples with
+// DI=pix, SI=stride, AX=alpha, BX=beta, and CX=tc0.
+TEXT ·h264Luma8MBAFFSSE2Core(SB), NOSPLIT, $0-0
+	TESTL AX, AX
+	JLE   luma8_mbaff_sse2_ret
+	TESTL BX, BX
+	JLE   luma8_mbaff_sse2_ret
+	DECL AX
+	DECL BX
+	MOVQ SI, DX
+	LEAQ (SI)(SI*2), R8
+	MOVQ DI, R9
+	SUBQ R8, R9
+
+	MOVQ (R9)(SI*1), X0   // p1
+	MOVQ (R9)(SI*2), X1   // p0
+	MOVQ (DI), X2         // q0
+	MOVQ (DI)(SI*1), X3   // q1
+
+	MOVD AX, X4
+	PSHUFLW $0, X4, X4
+	PUNPCKLQDQ X4, X4
+	PACKUSWB X4, X4        // alpha - 1
+	MOVD BX, X5
+	PSHUFLW $0, X5, X5
+	PUNPCKLQDQ X5, X5
+	PACKUSWB X5, X5        // beta - 1
+
+	MOVOU X2, X6
+	MOVOU X1, X7
+	PSUBUSB X1, X6
+	PSUBUSB X2, X7
+	POR X6, X7
+	PSUBUSB X4, X7
+
+	MOVOU X1, X6
+	MOVOU X0, X4
+	PSUBUSB X0, X6
+	PSUBUSB X1, X4
+	POR X6, X4
+	PSUBUSB X5, X4
+	POR X4, X7
+
+	MOVOU X2, X6
+	MOVOU X3, X4
+	PSUBUSB X3, X6
+	PSUBUSB X2, X4
+	POR X6, X4
+	PSUBUSB X5, X4
+	POR X4, X7
+	PXOR X6, X6
+	PCMPEQB X6, X7        // base mask
+
+	MOVD (CX), X8
+	PUNPCKLBW X8, X8
+	MOVOU X8, X6
+	PCMPEQB X9, X9
+	PCMPGTB X9, X6        // tc0 >= 0
+	PAND X7, X6           // base mask with inactive tc0 lanes cleared
+	MOVOU X6, X9
+	PAND X9, X8           // masked tc0
+
+	MOVQ (R9), X3         // p2
+	MOVOU X3, X7
+	MOVOU X1, X6
+	PSUBUSB X1, X7
+	PSUBUSB X3, X6
+	PSUBUSB X5, X7
+	PSUBUSB X5, X6
+	PCMPEQB X7, X6
+	PAND X9, X6           // |p2-p0| < beta and base mask
+	MOVOU X8, X7
+	PSUBB X6, X7          // tc + p-side increment
+	PAND X8, X6           // p1 clip tc
+
+	MOVOU X1, X4
+	PAVGB X2, X4
+	PAVGB X4, X3
+	MOVQ (R9), X10
+	PXOR X10, X4
+	PAND ·h264DeblockPB1(SB), X4
+	PSUBUSB X4, X3
+	MOVOU X0, X10
+	PSUBUSB X6, X10
+	PADDUSB X0, X6
+	PMAXUB X10, X3
+	PMINUB X6, X3
+	MOVQ X3, (R9)(SI*1)
+
+	MOVQ (DI)(SI*2), X4  // q2
+	MOVOU X4, X3
+	MOVOU X2, X6
+	PSUBUSB X2, X3
+	PSUBUSB X4, X6
+	PSUBUSB X5, X3
+	PSUBUSB X5, X6
+	PCMPEQB X3, X6
+	PAND X9, X6           // |q2-q0| < beta and base mask
+	PAND X6, X8           // q1 clip tc
+	PSUBB X6, X7          // final tc
+	MOVQ (DI)(SI*1), X3  // q1
+
+	MOVOU X1, X6
+	PAVGB X2, X6
+	PAVGB X6, X4
+	MOVQ (DI)(SI*2), X10
+	PXOR X10, X6
+	PAND ·h264DeblockPB1(SB), X6
+	PSUBUSB X6, X4
+	MOVOU X3, X10
+	PSUBUSB X8, X10
+	PADDUSB X3, X8
+	PMAXUB X10, X4
+	PMINUB X8, X4
+	MOVQ X4, (DI)(SI*1)
+
+	PCMPEQB X4, X4
+	MOVOU X1, X5
+	PXOR X2, X5
+	PXOR X4, X3
+	PAND ·h264DeblockPB1(SB), X5
+	PAVGB X0, X3
+	PXOR X1, X4
+	PAVGB ·h264DeblockPB3(SB), X3
+	PAVGB X2, X4
+	PAVGB X5, X3
+	MOVOU ·h264DeblockPBA1(SB), X6
+	PADDUSB X4, X3
+	PSUBUSB X3, X6
+	PSUBUSB ·h264DeblockPBA1(SB), X3
+	PMINUB X7, X6
+	PMINUB X7, X3
+	PSUBUSB X6, X1
+	PSUBUSB X3, X2
+	PADDUSB X3, X1
+	PADDUSB X6, X2
+
+	MOVQ X1, (R9)(SI*2)
+	MOVQ X2, (DI)
+luma8_mbaff_sse2_ret:
+	RET
+
 // func h264HLoopFilterLuma8ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
 TEXT ·h264HLoopFilterLuma8ASM(SB), NOSPLIT, $96-32
 	MOVQ pix+0(FP), R11
@@ -550,6 +692,36 @@ TEXT ·h264HLoopFilterLuma8ASM(SB), NOSPLIT, $96-32
 	LEAQ (R13)(R14*8), R13
 	H_LUMA8_STORE8x4(24, 40, 56, 72)
 luma8_h_ret:
+	RET
+
+// func h264HLoopFilterLumaMBAFF8ASM(pix *uint8, stride int, alpha int32, beta int32, tc0 *int8)
+TEXT ·h264HLoopFilterLumaMBAFF8ASM(SB), NOSPLIT, $128-32
+	MOVQ pix+0(FP), R11
+	MOVQ stride+8(FP), R14
+	MOVL alpha+16(FP), AX
+	TESTL AX, AX
+	JLE   luma8_mbaff_h_ret
+	MOVL beta+20(FP), BX
+	TESTL BX, BX
+	JLE   luma8_mbaff_h_ret
+
+	LEAQ (R14)(R14*2), R15
+	H_LUMA_INTRA8_LOAD4_TO_STACK(-4, 0, 16, 32, 48)
+	H_LUMA_INTRA8_LOAD4_TO_STACK(0, 64, 80, 96, 112)
+
+	LEAQ 64(SP), DI
+	MOVQ $16, SI
+	MOVL alpha+16(FP), AX
+	MOVL beta+20(FP), BX
+	MOVQ tc0+24(FP), CX
+	CALL ·h264Luma8MBAFFSSE2Core(SB)
+
+	MOVQ pix+0(FP), R11
+	MOVQ stride+8(FP), R14
+	LEAQ (R14)(R14*2), R15
+	H_LUMA_INTRA8_STORE4_FROM_STACK(-4, 0, 16, 32, 48)
+	H_LUMA_INTRA8_STORE4_FROM_STACK(0, 64, 80, 96, 112)
+luma8_mbaff_h_ret:
 	RET
 
 // func h264VLoopFilterLumaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
