@@ -9,6 +9,7 @@ const h264LoopFilterChromaH8ASMEnabled = true
 const h264LoopFilterChroma422H8ASMEnabled = true
 const h264LoopFilterChromaIntraV8ASMEnabled = true
 const h264LoopFilterChromaIntraH8ASMEnabled = true
+const h264LoopFilterChromaMBAFFIntraH8ASMEnabled = false
 const h264LoopFilterChroma422IntraH8ASMEnabled = true
 
 // h264VLoopFilterChroma8ASM mirrors FFmpeg's 8-bit chroma deblock ABI shape:
@@ -40,6 +41,12 @@ func h264VLoopFilterChromaIntra8ASM(pix *uint8, stride int, alpha int32, beta in
 //
 //go:noescape
 func h264HLoopFilterChromaIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
+
+// h264HLoopFilterChromaMBAFFIntra8ASM mirrors FFmpeg's 8-bit chroma MBAFF intra deblock ABI shape:
+// uint8_t *pix, ptrdiff_t stride, int alpha/beta.
+//
+//go:noescape
+func h264HLoopFilterChromaMBAFFIntra8ASM(pix *uint8, stride int, alpha int32, beta int32)
 
 // h264HLoopFilterChroma422Intra8ASM mirrors FFmpeg's 8-bit 4:2:2 chroma intra deblock ABI shape:
 // uint8_t *pix, ptrdiff_t stride, int alpha/beta.
