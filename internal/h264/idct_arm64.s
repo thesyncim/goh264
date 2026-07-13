@@ -88,3 +88,33 @@ TEXT ·h264IDCTAddASM(SB), NOSPLIT|NOFRAME, $0-24
 	WORD $0x0d828001 // st1.s {v1}[0], [x0], x2
 	WORD $0x0d829001 // st1.s {v1}[1], [x0], x2
 	RET
+
+// h264IDCTDCAddASM adds one signed DC coefficient to a 4x4 byte block.
+// func h264IDCTDCAddASM(dst *uint8, block *int32, stride int)
+TEXT ·h264IDCTDCAddASM(SB), NOSPLIT|NOFRAME, $0-24
+	MOVD dst+0(FP), R0
+	MOVD block+8(FP), R1
+	MOVD stride+16(FP), R2
+
+	MOVH (R1), R3
+	ADD  $32, R3, R3
+	ASR  $6, R3, R3
+	MOVW ZR, (R1)
+
+	WORD $0x0dc28012 // ld1.s {v18}[0], [x0], x2
+	WORD $0x0dc29012 // ld1.s {v18}[1], [x0], x2
+	WORD $0x0dc29013 // ld1.s {v19}[1], [x0], x2
+	WORD $0x0dc28013 // ld1.s {v19}[0], [x0], x2
+	WORD $0xcb020800 // sub x0, x0, x2, lsl #2
+	WORD $0x4e020c74 // dup.8h v20, w3
+	WORD $0x2f08a658 // uxtl.8h v24, v18
+	WORD $0x2f08a679 // uxtl.8h v25, v19
+	WORD $0x4e748718 // add.8h v24, v24, v20
+	WORD $0x4e748739 // add.8h v25, v25, v20
+	WORD $0x2e212b00 // sqxtun.8b v0, v24
+	WORD $0x2e212b21 // sqxtun.8b v1, v25
+	WORD $0x0d828000 // st1.s {v0}[0], [x0], x2
+	WORD $0x0d829000 // st1.s {v0}[1], [x0], x2
+	WORD $0x0d829001 // st1.s {v1}[1], [x0], x2
+	WORD $0x0d828001 // st1.s {v1}[0], [x0], x2
+	RET

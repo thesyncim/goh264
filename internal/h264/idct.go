@@ -222,7 +222,7 @@ func h264IDCT8AddHigh(dst []uint16, block []int32, stride int, bitDepth int) err
 	return nil
 }
 
-func h264IDCTDCAdd(dst []uint8, block []int32, stride int) error {
+func h264IDCTDCAddScalar(dst []uint8, block []int32, stride int) error {
 	if err := checkTransformAddArgs(dst, block, 1, stride, 4); err != nil {
 		return err
 	}
