@@ -1898,7 +1898,12 @@ func h264FilterMBEdgeHChromaHigh(pix []uint16, offset int, stride int, bS [4]int
 }
 
 func h264LoopFilterThresholds(qp int, alphaOffset int, betaOffset int) (int, int, int, error) {
-	return h264LoopFilterThresholdsForBitDepth(qp, alphaOffset, betaOffset, 8)
+	if qp < 0 || qp > 51 {
+		return 0, 0, 0, ErrInvalidData
+	}
+	indexA := clipInt(qp+alphaOffset, 0, 51)
+	indexB := clipInt(qp+betaOffset, 0, 51)
+	return int(h264LoopFilterAlphaTable[indexA]), int(h264LoopFilterBetaTable[indexB]), indexA, nil
 }
 
 func h264LoopFilterThresholdsForBitDepth(qp int, alphaOffset int, betaOffset int, bitDepth int) (int, int, int, error) {
