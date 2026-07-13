@@ -484,7 +484,6 @@ func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum
 }
 
 func (m *macroblockTables) fillLoopFilterCachesFrameValidatedInto(ctx *h264LoopFilterContext, mbXY int, sliceNum uint16, p *h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) error {
-	*ctx = h264LoopFilterContext{}
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
 	mbType := m.MacroblockTyp[mbXY]
@@ -540,16 +539,14 @@ func (m *macroblockTables) fillLoopFilterCachesFrameValidatedInto(ctx *h264LoopF
 		}
 	}
 
-	*ctx = h264LoopFilterContext{
-		MBXY:      mbXY,
-		TopMBXY:   topXY,
-		LeftMBXY:  leftXY[h264LeftTop],
-		LeftMBXYs: leftXY,
-		TopType:   topType,
-		LeftType:  leftType[h264LeftTop],
-		LeftTypes: leftType,
-		CBP:       m.CBPTable[mbXY],
-	}
+	ctx.MBXY = mbXY
+	ctx.TopMBXY = topXY
+	ctx.LeftMBXY = leftXY[h264LeftTop]
+	ctx.LeftMBXYs = leftXY
+	ctx.TopType = topType
+	ctx.LeftType = leftType[h264LeftTop]
+	ctx.LeftTypes = leftType
+	ctx.CBP = m.CBPTable[mbXY]
 	if isIntra(mbType) {
 		return nil
 	}

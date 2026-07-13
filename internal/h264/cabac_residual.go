@@ -384,7 +384,13 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 			coeffCount++
 		}
 	} else {
-		coeffCount, last = decodeCABACResidualSignificanceDecoder(src, &index, sigCtxBase, lastCtxBase, maxCoeff, isDC && chroma422)
+		if maxCoeff == 16 {
+			coeffCount, last = decodeCABACResidualSignificance4x4Decoder(src, &index, sigCtxBase, lastCtxBase)
+		} else if maxCoeff == 15 {
+			coeffCount, last = decodeCABACResidualSignificanceAC15Decoder(src, &index, sigCtxBase, lastCtxBase)
+		} else {
+			coeffCount, last = decodeCABACResidualSignificanceDecoder(src, &index, sigCtxBase, lastCtxBase, maxCoeff, isDC && chroma422)
+		}
 		if last == maxCoeff-1 {
 			index[coeffCount] = uint8(last)
 			coeffCount++
@@ -413,6 +419,176 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 		return result, err
 	}
 	return result, nil
+}
+
+// decodeCABACResidualSignificance4x4Decoder is the common luma/chroma AC and
+// luma-DC scan. Keeping its fixed 15-bin limit separate avoids carrying the
+// variable block-shape and 4:2:2-DC offset branches through every CABAC bin.
+func decodeCABACResidualSignificance4x4Decoder(src *cabacSyntaxDecoder, index *[64]uint8, sigCtxBase int, lastCtxBase int) (int, int) {
+	c := src.cabac
+	states := src.state
+	low := c.low
+	rng := c.rng
+	bytestream := c.bytestream
+	bytestreamEnd := c.bytestreamEnd
+	buf := c.buf
+	coeffCount := 0
+	last := 0
+	for last = 0; last < 15; last++ {
+		state := (*uint8)(unsafe.Add(unsafe.Pointer(states), uintptr(sigCtxBase+last)))
+		s := int32(*state)
+		rangeLPS := int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
+		rng -= rangeLPS
+		lpsMask := -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+		low -= (rng << (cabacBits + 1)) & lpsMask
+		rng += (rangeLPS - rng) & lpsMask
+		s ^= lpsMask
+		*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+		shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+		rng = int32(uint32(rng) << shift)
+		low = int32(uint32(low) << shift)
+		if low&cabacMask == 0 {
+			xor := uint32(low ^ (low - 1))
+			refillShift := 7 - int(h264CABACTableUnchecked(h264NormShiftOffset+int(xor>>(cabacBits-1))))
+			x := int32(-cabacMask)
+			if bytestream < bytestreamEnd {
+				x += int32(buf[bytestream]) << 9
+			}
+			if bytestream+1 < bytestreamEnd {
+				x += int32(buf[bytestream+1]) << 1
+			}
+			low += x << refillShift
+			if bytestream < bytestreamEnd {
+				bytestream += cabacBits / 8
+			}
+		}
+		if s&1 == 0 {
+			continue
+		}
+
+		index[coeffCount] = uint8(last)
+		coeffCount++
+		state = (*uint8)(unsafe.Add(unsafe.Pointer(states), uintptr(lastCtxBase+last)))
+		s = int32(*state)
+		rangeLPS = int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
+		rng -= rangeLPS
+		lpsMask = -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+		low -= (rng << (cabacBits + 1)) & lpsMask
+		rng += (rangeLPS - rng) & lpsMask
+		s ^= lpsMask
+		*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+		shift = uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+		rng = int32(uint32(rng) << shift)
+		low = int32(uint32(low) << shift)
+		if low&cabacMask == 0 {
+			xor := uint32(low ^ (low - 1))
+			refillShift := 7 - int(h264CABACTableUnchecked(h264NormShiftOffset+int(xor>>(cabacBits-1))))
+			x := int32(-cabacMask)
+			if bytestream < bytestreamEnd {
+				x += int32(buf[bytestream]) << 9
+			}
+			if bytestream+1 < bytestreamEnd {
+				x += int32(buf[bytestream+1]) << 1
+			}
+			low += x << refillShift
+			if bytestream < bytestreamEnd {
+				bytestream += cabacBits / 8
+			}
+		}
+		if s&1 != 0 {
+			last = 16
+			break
+		}
+	}
+	c.low = low
+	c.rng = rng
+	c.bytestream = bytestream
+	return coeffCount, last
+}
+
+// decodeCABACResidualSignificanceAC15Decoder handles AC scans whose separately
+// coded DC coefficient leaves 15 possible positions. Its fixed 14-bin loop
+// preserves the register-only code shape of the dominant 4x4 path.
+func decodeCABACResidualSignificanceAC15Decoder(src *cabacSyntaxDecoder, index *[64]uint8, sigCtxBase int, lastCtxBase int) (int, int) {
+	c := src.cabac
+	states := src.state
+	low := c.low
+	rng := c.rng
+	bytestream := c.bytestream
+	bytestreamEnd := c.bytestreamEnd
+	buf := c.buf
+	coeffCount := 0
+	last := 0
+	for last = 0; last < 14; last++ {
+		state := (*uint8)(unsafe.Add(unsafe.Pointer(states), uintptr(sigCtxBase+last)))
+		s := int32(*state)
+		rangeLPS := int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
+		rng -= rangeLPS
+		lpsMask := -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+		low -= (rng << (cabacBits + 1)) & lpsMask
+		rng += (rangeLPS - rng) & lpsMask
+		s ^= lpsMask
+		*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+		shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+		rng = int32(uint32(rng) << shift)
+		low = int32(uint32(low) << shift)
+		if low&cabacMask == 0 {
+			xor := uint32(low ^ (low - 1))
+			refillShift := 7 - int(h264CABACTableUnchecked(h264NormShiftOffset+int(xor>>(cabacBits-1))))
+			x := int32(-cabacMask)
+			if bytestream < bytestreamEnd {
+				x += int32(buf[bytestream]) << 9
+			}
+			if bytestream+1 < bytestreamEnd {
+				x += int32(buf[bytestream+1]) << 1
+			}
+			low += x << refillShift
+			if bytestream < bytestreamEnd {
+				bytestream += cabacBits / 8
+			}
+		}
+		if s&1 == 0 {
+			continue
+		}
+
+		index[coeffCount] = uint8(last)
+		coeffCount++
+		state = (*uint8)(unsafe.Add(unsafe.Pointer(states), uintptr(lastCtxBase+last)))
+		s = int32(*state)
+		rangeLPS = int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
+		rng -= rangeLPS
+		lpsMask = -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+		low -= (rng << (cabacBits + 1)) & lpsMask
+		rng += (rangeLPS - rng) & lpsMask
+		s ^= lpsMask
+		*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+		shift = uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+		rng = int32(uint32(rng) << shift)
+		low = int32(uint32(low) << shift)
+		if low&cabacMask == 0 {
+			xor := uint32(low ^ (low - 1))
+			refillShift := 7 - int(h264CABACTableUnchecked(h264NormShiftOffset+int(xor>>(cabacBits-1))))
+			x := int32(-cabacMask)
+			if bytestream < bytestreamEnd {
+				x += int32(buf[bytestream]) << 9
+			}
+			if bytestream+1 < bytestreamEnd {
+				x += int32(buf[bytestream+1]) << 1
+			}
+			low += x << refillShift
+			if bytestream < bytestreamEnd {
+				bytestream += cabacBits / 8
+			}
+		}
+		if s&1 != 0 {
+			last = 15
+			break
+		}
+	}
+	c.low = low
+	c.rng = rng
+	c.bytestream = bytestream
+	return coeffCount, last
 }
 
 // decodeCABACResidualSignificanceDecoder keeps the arithmetic decoder's range
