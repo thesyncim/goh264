@@ -447,7 +447,7 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkFieldG
 	if err != nil {
 		return result, err
 	}
-	*work = frameMacroblockDecodeWork{}
+	work.resetForSkip()
 	motionNeighbors := neighbors.motionNeighbors(mbType, 1, PictureTypeP, true, false)
 	motionNeighbors.FrameMBAFF = frameMBAFF
 	if err := m.writeBackCABACPskipMacroblockWithMotion(mbXY, qscale, motionNeighbors, sliceNum, &work.Motion); err != nil {
@@ -487,7 +487,7 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkField
 	if fieldPicture {
 		mbType |= MBTypeInterlaced
 	}
-	*work = frameMacroblockDecodeWork{}
+	work.resetForSkip()
 	frameMBAFF := sh.PictureStructure == PictureFrame && sh.SPS != nil && sh.SPS.MBAFF != 0
 	var neighbors macroblockDecodeNeighbors
 	var err error

@@ -302,7 +302,7 @@ func (m *macroblockTables) writeBackCAVLCFrameSkipMacroblockWithDirectWorkFieldG
 	if err != nil {
 		return result, err
 	}
-	*work = frameMacroblockDecodeWork{}
+	work.resetForSkip()
 	motionNeighbors := neighbors.motionNeighbors(mbType, 1, PictureTypeP, false, false)
 	motionNeighbors.FrameMBAFF = frameMBAFF
 	if err := m.writeBackPskipMacroblockWithMotion(mbXY, qscale, motionNeighbors, sliceNum, &work.Motion); err != nil {
@@ -343,7 +343,7 @@ func (m *macroblockTables) writeBackCAVLCFrameBSkipMacroblockWithDirectWorkField
 	if err != nil {
 		return result, err
 	}
-	*work = frameMacroblockDecodeWork{}
+	work.resetForSkip()
 	if direct.DirectSpatialMVPred {
 		motionNeighbors := neighbors.motionNeighbors(mbType, 2, PictureTypeB, false, true)
 		if err := m.fillMotionDecodeCaches(&work.Motion, motionNeighbors); err != nil {
