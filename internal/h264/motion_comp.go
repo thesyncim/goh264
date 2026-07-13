@@ -471,8 +471,10 @@ func h264MCDirPartFramePlanes(dstYPlane []uint8, dstCbPlane []uint8, dstCrPlane 
 	if err := h264CheckMCDirPartFramePlanesArgs(dstLumaStride, dstChromaStride, chromaFormatIDC, ref, cache, n, height, delta, list); err != nil {
 		return err
 	}
-	if err := ref.validate(); err != nil {
-		return err
+	if !ref.trustedLayout {
+		if err := ref.validate(); err != nil {
+			return err
+		}
 	}
 	return h264MCDirPartFramePlanesChecked(dstYPlane, dstCbPlane, dstCrPlane, dstLumaStride, dstChromaStride, chromaFormatIDC, dstPictureStructure, ref, cache, n, square, height, delta, list, dstY, dstCb, dstCr, srcXOffset, srcYOffset, qpelSize, chromaWidth, avg, scratch, false)
 }
@@ -484,8 +486,10 @@ func h264MCDirPartFrameMaybeValidated(dst *h264PicturePlanes, ref *h264PicturePl
 	if ref == nil {
 		return ErrInvalidData
 	}
-	if err := ref.validate(); err != nil {
-		return err
+	if !ref.trustedLayout {
+		if err := ref.validate(); err != nil {
+			return err
+		}
 	}
 	// The trusted reconstruction entrypoint has already validated the current
 	// picture, macroblock geometry, cache indexes, and DPB reference layout.
