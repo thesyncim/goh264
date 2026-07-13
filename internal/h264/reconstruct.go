@@ -51,21 +51,21 @@ func h264X264BuildUsesUnfiltered8x8LAdd(x264Build int32, x264BuildSet bool) bool
 }
 
 func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstructInput) error {
-	return h264HLDecodeFrameMacroblockCore(dst, in, false, nil)
+	return h264HLDecodeFrameMacroblockCore(dst, &in, false, nil)
 }
 
 // h264HLDecodeFrameMacroblockTrusted is restricted to slice decode, which
 // validates the destination picture before constructing per-macroblock views.
 func h264HLDecodeFrameMacroblockTrusted(dst *h264PicturePlanes, in h264FrameMBReconstructInput) error {
-	return h264HLDecodeFrameMacroblockCore(dst, in, true, nil)
+	return h264HLDecodeFrameMacroblockCore(dst, &in, true, nil)
 }
 
-func h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(dst *h264PicturePlanes, in h264FrameMBReconstructInput, blockOffset *[48]int) error {
+func h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(dst *h264PicturePlanes, in *h264FrameMBReconstructInput, blockOffset *[48]int) error {
 	return h264HLDecodeFrameMacroblockCore(dst, in, true, blockOffset)
 }
 
-func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in h264FrameMBReconstructInput, trustedDst bool, blockOffset *[48]int) error {
-	if dst == nil || in.MBX < 0 || in.MBY < 0 || in.QScale < 0 || in.QScale > qpMaxNum {
+func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in *h264FrameMBReconstructInput, trustedDst bool, blockOffset *[48]int) error {
+	if dst == nil || in == nil || in.MBX < 0 || in.MBY < 0 || in.QScale < 0 || in.QScale > qpMaxNum {
 		return ErrInvalidData
 	}
 	if in.DeblockingFilter || in.ConstrainedIntra444 {
@@ -98,7 +98,7 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in h264FrameMBRecon
 		return err
 	}
 	if dst.ChromaFormatIDC == 3 {
-		return h264HLDecodeFrameMacroblock444(dst, dstY, dstCb, dstCr, blockOffset, in)
+		return h264HLDecodeFrameMacroblock444(dst, dstY, dstCb, dstCr, blockOffset, *in)
 	}
 
 	if in.MBType&MBTypeIntraPCM != 0 {
@@ -108,7 +108,7 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in h264FrameMBRecon
 		return ErrInvalidData
 	}
 	if isIntra(in.MBType) {
-		if err := h264HLDecodeFrameIntraPredict(dst, dstY, dstCb, dstCr, blockOffset, in); err != nil {
+		if err := h264HLDecodeFrameIntraPredict(dst, dstY, dstCb, dstCr, blockOffset, *in); err != nil {
 			return err
 		}
 	} else {

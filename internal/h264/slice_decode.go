@@ -178,7 +178,7 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 		if cur.FrameMBAFF && mb.MBType&MBTypeInterlaced != 0 {
 			reconBlockOffset = nil
 		}
-		if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&reconDst, reconIn, reconBlockOffset); err != nil {
+		if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&reconDst, &reconIn, reconBlockOffset); err != nil {
 			return result, fmt.Errorf("reconstruct cavlc mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
@@ -203,7 +203,7 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 			if bottom.FrameMBAFF && bottomMB.MBType&MBTypeInterlaced != 0 {
 				bottomBlockOffset = nil
 			}
-			if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&bottomDst, bottomIn, bottomBlockOffset); err != nil {
+			if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&bottomDst, &bottomIn, bottomBlockOffset); err != nil {
 				return result, fmt.Errorf("reconstruct cavlc mb_xy=%d: %w", bottom.MBXY, err)
 			}
 			result.Macroblocks++
@@ -372,7 +372,7 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 		if cur.FrameMBAFF && mb.MBType&MBTypeInterlaced != 0 {
 			reconBlockOffset = nil
 		}
-		if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&reconDst, reconIn, reconBlockOffset); err != nil {
+		if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&reconDst, &reconIn, reconBlockOffset); err != nil {
 			return result, fmt.Errorf("reconstruct cabac mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
@@ -400,7 +400,7 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 			if bottom.FrameMBAFF && bottomMB.MBType&MBTypeInterlaced != 0 {
 				bottomBlockOffset = nil
 			}
-			if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&bottomDst, bottomIn, bottomBlockOffset); err != nil {
+			if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&bottomDst, &bottomIn, bottomBlockOffset); err != nil {
 				return result, fmt.Errorf("reconstruct cabac mb_xy=%d: %w", bottom.MBXY, err)
 			}
 			result.Macroblocks++
