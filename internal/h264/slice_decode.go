@@ -347,7 +347,8 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 	var work frameMacroblockDecodeWork
 	var bottomWork frameMacroblockDecodeWork
 	for {
-		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264Validated(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, h264X264BuildInfo{
+		var mb cabacFrameMacroblockResult
+		err = m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264ValidatedInto(&mb, src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, h264X264BuildInfo{
 			Build: in.X264Build,
 			Set:   in.X264BuildSet,
 		}, false)
@@ -382,7 +383,8 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 			if err != nil {
 				return result, err
 			}
-			bottomMB, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264Validated(src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork, h264X264BuildInfo{
+			var bottomMB cabacFrameMacroblockResult
+			err = m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264ValidatedInto(&bottomMB, src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork, h264X264BuildInfo{
 				Build: in.X264Build,
 				Set:   in.X264BuildSet,
 			}, false)
@@ -452,7 +454,8 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 	var work frameMacroblockDecodeWork
 	var bottomWork frameMacroblockDecodeWork
 	for {
-		mb, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264Validated(src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, h264X264BuildInfo{
+		var mb cabacFrameMacroblockResult
+		err = m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264ValidatedInto(&mb, src, sh, &state, cur.MBXY, in.SliceNum, in.Direct, &work, h264X264BuildInfo{
 			Build: in.X264Build,
 			Set:   in.X264BuildSet,
 		}, sh.SliceTypeNoS == PictureTypeB)
@@ -487,7 +490,8 @@ func (m *macroblockTables) decodeCABACFrameSliceHigh(src cabacSyntaxSource, dst 
 			if err != nil {
 				return result, err
 			}
-			bottomMB, err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264Validated(src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork, h264X264BuildInfo{
+			var bottomMB cabacFrameMacroblockResult
+			err = m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264ValidatedInto(&bottomMB, src, sh, &state, bottom.MBXY, in.SliceNum, in.Direct, &bottomWork, h264X264BuildInfo{
 				Build: in.X264Build,
 				Set:   in.X264BuildSet,
 			}, sh.SliceTypeNoS == PictureTypeB)

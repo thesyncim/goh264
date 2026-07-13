@@ -97,6 +97,15 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuardX26
 
 func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264Validated(src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, x264 h264X264BuildInfo, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
+	err := m.decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264ValidatedInto(&result, src, sh, state, mbXY, sliceNum, direct, work, x264, rejectUnsupportedHighB)
+	return result, err
+}
+
+func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuardX264ValidatedInto(result *cabacFrameMacroblockResult, src cabacSyntaxSource, sh *SliceHeader, state *cabacFrameSliceState, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, x264 h264X264BuildInfo, rejectUnsupportedHighB bool) error {
+	if result == nil {
+		return ErrInvalidData
+	}
+	*result = cabacFrameMacroblockResult{}
 	frameMBAFF := sh.PictureStructure == PictureFrame && sh.SPS.MBAFF != 0
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
@@ -112,7 +121,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuardX26
 			skip, err = m.decodeCABACMBSkip(src, mbXY, sh.SliceTypeNoS, sliceNum, sh.PictureStructure != PictureFrame)
 		}
 		if err != nil {
-			return result, err
+			return err
 		}
 		if skip {
 			state.PrevMBSkipped = true
@@ -120,13 +129,13 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuardX26
 			if frameMBAFF && (mbY&1) == 0 {
 				next, err := m.decodeCABACMBSkipMBAFF(src, mbXY+m.MBStride, mbX, mbY+1, sh.SliceTypeNoS, sliceNum, state.MBFieldDecodingFlag)
 				if err != nil {
-					return result, err
+					return err
 				}
 				state.NextMBSkipped = next
 				if !next {
 					flag, err := m.decodeCABACFieldDecodingFlag(src, mbXY, mbX, sliceNum, state.MBFieldDecodingFlag != 0)
 					if err != nil {
-						return result, err
+						return err
 					}
 					state.MBFieldDecodingFlag = flag
 					result.MBFieldDecodingFlag = flag
@@ -135,18 +144,17 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuardX26
 					result.MBType = MBTypeInterlaced
 				}
 			}
-			result, err := m.writeBackCABACFrameSkipMacroblockWithDirectWorkFieldGuard(sh, state.QScale, mbXY, sliceNum, state.MBFieldDecodingFlag, direct, work, rejectUnsupportedHighB)
-			if err != nil {
-				return result, fmt.Errorf("skip field=%d: %w", state.MBFieldDecodingFlag, err)
+			if err := m.writeBackCABACFrameSkipMacroblockWithDirectWorkFieldGuardInto(result, sh, state.QScale, mbXY, sliceNum, state.MBFieldDecodingFlag, direct, work, rejectUnsupportedHighB); err != nil {
+				return fmt.Errorf("skip field=%d: %w", state.MBFieldDecodingFlag, err)
 			}
-			return result, nil
+			return nil
 		}
 	}
 	state.PrevMBSkipped = false
 	if frameMBAFF && (mbY&1) == 0 {
 		flag, err := m.decodeCABACFieldDecodingFlag(src, mbXY, mbX, sliceNum, state.MBFieldDecodingFlag != 0)
 		if err != nil {
-			return result, err
+			return err
 		}
 		state.MBFieldDecodingFlag = flag
 		result.MBFieldDecodingFlag = flag
@@ -159,7 +167,7 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuardX26
 	if frameMBAFF && state.MBFieldDecodingFlag != 0 {
 		refCount = h264MBAFFFieldRefCount(refCount)
 	}
-	result, err := m.decodeCABACFrameMacroblockWithWorkValidated(src, cabacFrameMacroblockInput{
+	err := m.decodeCABACFrameMacroblockWithWorkValidatedInto(result, src, cabacFrameMacroblockInput{
 		MBXY:                   mbXY,
 		SliceNum:               sliceNum,
 		SliceType:              sh.SliceType,
@@ -181,13 +189,13 @@ func (m *macroblockTables) decodeCABACFrameSliceMacroblockWithDirectWorkGuardX26
 		RejectUnsupportedHighB: rejectUnsupportedHighB,
 	}, work)
 	if err != nil {
-		return result, fmt.Errorf("field=%d refs=%d/%d: %w", state.MBFieldDecodingFlag, refCount[0], refCount[1], err)
+		return fmt.Errorf("field=%d refs=%d/%d: %w", state.MBFieldDecodingFlag, refCount[0], refCount[1], err)
 	}
 	state.LastQScaleDiff = result.LastQScaleDiff
 	if result.MBType&MBTypeIntraPCM == 0 {
 		state.QScale = result.QScale
 	}
-	return result, nil
+	return nil
 }
 
 func (m *macroblockTables) decodeCABACFrameMacroblock(src cabacSyntaxSource, in cabacFrameMacroblockInput) (cabacFrameMacroblockResult, error) {
@@ -208,6 +216,14 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 
 func (m *macroblockTables) decodeCABACFrameMacroblockWithWorkValidated(src cabacSyntaxSource, in cabacFrameMacroblockInput, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
+	err := m.decodeCABACFrameMacroblockWithWorkValidatedInto(&result, src, in, work)
+	return result, err
+}
+
+func (m *macroblockTables) decodeCABACFrameMacroblockWithWorkValidatedInto(result *cabacFrameMacroblockResult, src cabacSyntaxSource, in cabacFrameMacroblockInput, work *frameMacroblockDecodeWork) error {
+	if result == nil {
+		return ErrInvalidData
+	}
 	result.MBFieldDecodingFlag = in.MBFieldDecodingFlag
 	work.resetForDecode()
 
@@ -218,11 +234,11 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWorkValidated(src cabac
 	}
 	neighbors, err := m.fillDecodeNeighborsFrameEntropy(in.MBXY, in.SliceNum, neighborMBType, fieldPicture, in.FrameMBAFF)
 	if err != nil {
-		return result, fmt.Errorf("neighbors field=%t: %w", fieldPicture, err)
+		return fmt.Errorf("neighbors field=%t: %w", fieldPicture, err)
 	}
 	base, err := decodeCABACMBTypeForSource(src, in.SliceType, in.SliceTypeNoS, neighbors.LeftType[h264LeftTop], neighbors.TopType)
 	if err != nil {
-		return result, fmt.Errorf("mb_type field=%t left=%#x top=%#x: %w", fieldPicture, neighbors.LeftType[h264LeftTop], neighbors.TopType, err)
+		return fmt.Errorf("mb_type field=%t left=%#x top=%#x: %w", fieldPicture, neighbors.LeftType[h264LeftTop], neighbors.TopType, err)
 	}
 	if fieldPicture {
 		base.MBType |= MBTypeInterlaced
@@ -230,16 +246,16 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWorkValidated(src cabac
 	result.MBType = base.MBType
 	if in.RejectUnsupportedHighB {
 		if err := validateHighFrameSliceBaseMacroblockForDecode(in.SliceTypeNoS, base.MBType); err != nil {
-			return result, fmt.Errorf("validate_base field=%t type=%#x: %w", fieldPicture, base.MBType, err)
+			return fmt.Errorf("validate_base field=%t type=%#x: %w", fieldPicture, base.MBType, err)
 		}
 	}
 	if base.MBType&MBTypeIntraPCM != 0 {
-		return m.decodeCABACFrameIntraPCMMacroblock(src, in, base, result)
+		return m.decodeCABACFrameIntraPCMMacroblockInto(result, src, in, base)
 	}
 
 	listCount, err := cavlcFrameListCount(in.SliceTypeNoS)
 	if err != nil {
-		return result, fmt.Errorf("list_count type=%d: %w", in.SliceTypeNoS, err)
+		return fmt.Errorf("list_count type=%d: %w", in.SliceTypeNoS, err)
 	}
 
 	cacheResult, err := m.fillFrameMacroblockDecodeCachesEntropy(&work.IntraCache, &work.Residual, &work.Motion, frameMacroblockDecodeCacheInput{
@@ -254,34 +270,40 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWorkValidated(src cabac
 		DirectSpatialMVPred:  in.DirectSpatialMVPred,
 	}, in.FrameMBAFF)
 	if err != nil {
-		return result, fmt.Errorf("caches field=%t type=%#x left=%#x top=%#x: %w", fieldPicture, base.MBType, neighbors.LeftType[h264LeftTop], neighbors.TopType, err)
+		return fmt.Errorf("caches field=%t type=%#x left=%#x top=%#x: %w", fieldPicture, base.MBType, neighbors.LeftType[h264LeftTop], neighbors.TopType, err)
 	}
 	result.Neighbors = cacheResult.Neighbors
 
 	if isIntra(base.MBType) {
-		result, err := m.decodeCABACFrameIntraMacroblock(src, in, base, &work.Residual, &work.IntraCache, cacheResult, result)
-		if err != nil {
-			return result, fmt.Errorf("intra field=%t type=%#x cbp=%#x: %w", fieldPicture, base.MBType, base.CBP, err)
+		if err := m.decodeCABACFrameIntraMacroblockInto(result, src, in, base, &work.Residual, &work.IntraCache, cacheResult); err != nil {
+			return fmt.Errorf("intra field=%t type=%#x cbp=%#x: %w", fieldPicture, base.MBType, base.CBP, err)
 		}
-		return result, nil
+		return nil
 	}
-	result, err = m.decodeCABACFrameInterMacroblock(src, in, base, &work.Residual, &work.Motion, listCount, cacheResult, result)
-	if err != nil {
-		return result, fmt.Errorf("inter field=%t type=%#x refs=%d/%d: %w", fieldPicture, base.MBType, in.RefCount[0], in.RefCount[1], err)
+	if err := m.decodeCABACFrameInterMacroblockInto(result, src, in, base, &work.Residual, &work.Motion, listCount, cacheResult); err != nil {
+		return fmt.Errorf("inter field=%t type=%#x refs=%d/%d: %w", fieldPicture, base.MBType, in.RefCount[0], in.RefCount[1], err)
 	}
-	return result, nil
+	return nil
 }
 
 func (m *macroblockTables) decodeCABACFrameIntraPCMMacroblock(src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax, result cabacFrameMacroblockResult) (cabacFrameMacroblockResult, error) {
+	err := m.decodeCABACFrameIntraPCMMacroblockInto(&result, src, in, base)
+	return result, err
+}
+
+func (m *macroblockTables) decodeCABACFrameIntraPCMMacroblockInto(result *cabacFrameMacroblockResult, src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax) error {
+	if result == nil {
+		return ErrInvalidData
+	}
 	pcm, err := readCABACIntraPCMBytes(src, in.SPS)
 	if err != nil {
-		return result, err
+		return err
 	}
 	base.IntraPCM = pcm
 	base.QScale = 0
 	base.CBPTable = 0xf7ef
 	if err := m.writeBackCABACIntraPCMMacroblock(in.MBXY, base.MBType, in.SliceNum); err != nil {
-		return result, err
+		return err
 	}
 	result.MBType = base.MBType
 	result.CBP = 0
@@ -291,7 +313,7 @@ func (m *macroblockTables) decodeCABACFrameIntraPCMMacroblock(src cabacSyntaxSou
 	result.Intra = base
 	result.IntraPCM = pcm
 	result.IsIntra = true
-	return result, nil
+	return nil
 }
 
 func (m *macroblockTables) decodeCABACMBSkip(src cabacSyntaxSource, mbXY int, sliceTypeNoS int32, sliceNum uint16, fieldPicture bool) (bool, error) {
@@ -424,17 +446,26 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkGuard(
 
 func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkFieldGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, mbFieldDecodingFlag int32, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
+	err := m.writeBackCABACFrameSkipMacroblockWithDirectWorkFieldGuardInto(&result, sh, qscale, mbXY, sliceNum, mbFieldDecodingFlag, direct, work, rejectUnsupportedHighB)
+	return result, err
+}
+
+func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkFieldGuardInto(result *cabacFrameMacroblockResult, sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, mbFieldDecodingFlag int32, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) error {
+	if result == nil {
+		return ErrInvalidData
+	}
+	*result = cabacFrameMacroblockResult{}
 	if sh == nil || work == nil {
-		return result, ErrInvalidData
+		return ErrInvalidData
 	}
 	if qscale < 0 || qscale > qpMaxNum {
-		return result, ErrInvalidData
+		return ErrInvalidData
 	}
 	if sh.SliceTypeNoS == PictureTypeB {
-		return m.writeBackCABACFrameBSkipMacroblockWithDirectWorkFieldGuard(sh, qscale, mbXY, sliceNum, mbFieldDecodingFlag, direct, work, rejectUnsupportedHighB)
+		return m.writeBackCABACFrameBSkipMacroblockWithDirectWorkFieldGuardInto(result, sh, qscale, mbXY, sliceNum, mbFieldDecodingFlag, direct, work, rejectUnsupportedHighB)
 	}
 	if sh.SliceTypeNoS != PictureTypeP {
-		return result, ErrUnsupported
+		return ErrUnsupported
 	}
 
 	mbType := MBType16x16 | MBTypeP0L0 | MBTypeP1L0 | MBTypeSkip
@@ -445,13 +476,13 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkFieldG
 	frameMBAFF := sh.PictureStructure == PictureFrame && sh.SPS != nil && sh.SPS.MBAFF != 0
 	neighbors, err := m.fillDecodeNeighborsFrameEntropy(mbXY, sliceNum, mbType, fieldPicture, frameMBAFF)
 	if err != nil {
-		return result, err
+		return err
 	}
 	work.resetForSkip()
 	motionNeighbors := neighbors.motionNeighbors(mbType, 1, PictureTypeP, true, false)
 	motionNeighbors.FrameMBAFF = frameMBAFF
 	if err := m.writeBackCABACPskipMacroblockWithMotion(mbXY, qscale, motionNeighbors, sliceNum, &work.Motion); err != nil {
-		return result, err
+		return err
 	}
 	if fieldPicture {
 		m.MacroblockTyp[mbXY] |= MBTypeInterlaced
@@ -466,7 +497,7 @@ func (m *macroblockTables) writeBackCABACFrameSkipMacroblockWithDirectWorkFieldG
 	result.Neighbors = neighbors
 	result.IsInter = true
 	result.Skipped = true
-	return result, nil
+	return nil
 }
 
 func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWork(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, direct h264DirectMotionContext, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
@@ -479,8 +510,17 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkGuard
 
 func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkFieldGuard(sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, mbFieldDecodingFlag int32, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
+	err := m.writeBackCABACFrameBSkipMacroblockWithDirectWorkFieldGuardInto(&result, sh, qscale, mbXY, sliceNum, mbFieldDecodingFlag, direct, work, rejectUnsupportedHighB)
+	return result, err
+}
+
+func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkFieldGuardInto(result *cabacFrameMacroblockResult, sh *SliceHeader, qscale int, mbXY int, sliceNum uint16, mbFieldDecodingFlag int32, direct h264DirectMotionContext, work *frameMacroblockDecodeWork, rejectUnsupportedHighB bool) error {
+	if result == nil {
+		return ErrInvalidData
+	}
+	*result = cabacFrameMacroblockResult{}
 	if sh == nil || work == nil {
-		return result, ErrInvalidData
+		return ErrInvalidData
 	}
 	mbType := MBTypeL0L1 | MBTypeDirect2 | MBTypeSkip
 	fieldPicture := sh.PictureStructure != PictureFrame || mbFieldDecodingFlag != 0
@@ -503,26 +543,26 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkField
 			DirectSpatialMVPred: true,
 		}, frameMBAFF)
 		if err != nil {
-			return result, err
+			return err
 		}
 		neighbors = cacheResult.Neighbors
 	} else {
 		neighbors, err = m.fillDecodeNeighborsFrameEntropy(mbXY, sliceNum, mbType, fieldPicture, frameMBAFF)
 		if err != nil {
-			return result, err
+			return err
 		}
 	}
 	var subMBType [4]uint32
 	if err := m.predDirectMotionFrame(&work.Motion, mbXY, &mbType, &subMBType, direct); err != nil {
-		return result, fmt.Errorf("bskip direct field=%t type=%#x: %w", fieldPicture, mbType, err)
+		return fmt.Errorf("bskip direct field=%t type=%#x: %w", fieldPicture, mbType, err)
 	}
 	if rejectUnsupportedHighB {
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mbType, &subMBType, 0, 0); err != nil {
-			return result, fmt.Errorf("validate_bskip type=%#x sub=%#x: %w", mbType, subMBType, err)
+			return fmt.Errorf("validate_bskip type=%#x sub=%#x: %w", mbType, subMBType, err)
 		}
 	}
 	if err := m.writeBackBskipMacroblockWithMotion(mbXY, qscale, mbType, true, &subMBType, sliceNum, &work.Motion); err != nil {
-		return result, err
+		return err
 	}
 
 	result.MBType = mbType
@@ -535,10 +575,18 @@ func (m *macroblockTables) writeBackCABACFrameBSkipMacroblockWithDirectWorkField
 	result.Inter.SubMBType = subMBType
 	result.IsInter = true
 	result.Skipped = true
-	return result, nil
+	return nil
 }
 
 func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, intraCache *[h264IntraPredModeCacheSize]int8, cacheResult frameMacroblockDecodeCacheResult, result cabacFrameMacroblockResult) (cabacFrameMacroblockResult, error) {
+	err := m.decodeCABACFrameIntraMacroblockInto(&result, src, in, base, residual, intraCache, cacheResult)
+	return result, err
+}
+
+func (m *macroblockTables) decodeCABACFrameIntraMacroblockInto(result *cabacFrameMacroblockResult, src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, intraCache *[h264IntraPredModeCacheSize]int8, cacheResult frameMacroblockDecodeCacheResult) error {
+	if result == nil {
+		return ErrInvalidData
+	}
 	mb := base
 	var writeBackIntraCache [h264IntraPredModeCacheSize]int8
 	if isIntra4x4(mb.MBType) {
@@ -559,11 +607,11 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 		for i := 0; i < 16; i += di {
 			pred, err := predIntraMode(intraCache, i)
 			if err != nil {
-				return result, err
+				return err
 			}
 			mode := decodeCABACMBIntra4x4PredModeForSource(src, int(pred))
 			if mode < 0 || mode > 8 {
-				return result, ErrInvalidData
+				return ErrInvalidData
 			}
 			if di == 4 {
 				fillIntraPredModeRectangle(intraCache, int(h264Scan8[i]), 2, 2, 8, int8(mode))
@@ -576,12 +624,12 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 		}
 		writeBackIntraCache = *intraCache
 		if err := validateCABACFrameIntra4x4PredModes(intraCache, cacheResult.Intra); err != nil {
-			return result, err
+			return err
 		}
 	} else if isIntra16x16(mb.MBType) {
 		mode, err := checkIntraPredMode(int(mb.Intra16x16PredMode), cacheResult.Intra.TopSamplesAvailable, cacheResult.Intra.LeftSamplesAvailable, false)
 		if err != nil {
-			return result, err
+			return err
 		}
 		mb.Intra16x16PredMode = int8(mode)
 	}
@@ -592,7 +640,7 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 		rawChromaPred = int32(raw)
 		mode, err := checkIntraPredMode(raw, cacheResult.Intra.TopSamplesAvailable, cacheResult.Intra.LeftSamplesAvailable, true)
 		if err != nil {
-			return result, err
+			return err
 		}
 		mb.ChromaPredMode = int32(mode)
 	} else {
@@ -605,19 +653,19 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 			mb.CBP |= decodeCABACMBCBPChromaForSource(src, cacheResult.Residual.LeftCBP, cacheResult.Residual.TopCBP) << 4
 		}
 	} else if (in.SPS.ChromaFormatIDC != 1 && in.SPS.ChromaFormatIDC != 2) && mb.CBP > 15 {
-		return result, ErrInvalidData
+		return ErrInvalidData
 	}
 
 	adjustCABACChroma444DCT8x8NonZeroCache(residual, in.SPS.ChromaFormatIDC, mb.MBType, cacheResult.Neighbors, in.X264Build, in.X264BuildSet)
 	qscale, chromaQP, cbpTable, lastDiff, err := residual.decodeCABACResidualPayload(src, in.PPS, in.SPS, mb.MBType, mb.CBP, in.QScale, in.LastQScaleDiff, cacheResult.Residual)
 	if err != nil {
-		return result, fmt.Errorf("intra_residual field=%t type=%#x cbp=%#x: %w", in.FieldPicture, mb.MBType, mb.CBP, err)
+		return fmt.Errorf("intra_residual field=%t type=%#x cbp=%#x: %w", in.FieldPicture, mb.MBType, mb.CBP, err)
 	}
 	mb.QScale = qscale
 	mb.ChromaQP = chromaQP
 	mb.CBPTable = cbpTable
 	if err := m.writeBackCABACIntraMacroblockWithChromaPred(in.MBXY, &mb, residual, &writeBackIntraCache, int8(rawChromaPred), in.SliceNum); err != nil {
-		return result, err
+		return err
 	}
 
 	result.MBType = mb.MBType
@@ -631,16 +679,24 @@ func (m *macroblockTables) decodeCABACFrameIntraMacroblock(src cabacSyntaxSource
 	result.TopRightAvailable = cacheResult.Intra.TopRightSamplesAvailable
 	result.Intra = mb
 	result.IsIntra = true
-	return result, nil
+	return nil
 }
 
 func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, motion *macroblockMotionCache, listCount int, cacheResult frameMacroblockDecodeCacheResult, result cabacFrameMacroblockResult) (cabacFrameMacroblockResult, error) {
+	err := m.decodeCABACFrameInterMacroblockInto(&result, src, in, base, residual, motion, listCount, cacheResult)
+	return result, err
+}
+
+func (m *macroblockTables) decodeCABACFrameInterMacroblockInto(result *cabacFrameMacroblockResult, src cabacSyntaxSource, in cabacFrameMacroblockInput, base cavlcMacroblockSyntax, residual *cavlcResidualContext, motion *macroblockMotionCache, listCount int, cacheResult frameMacroblockDecodeCacheResult) error {
+	if result == nil {
+		return ErrInvalidData
+	}
 	var mb cavlcInterMacroblockSyntax
 	mb.cavlcMacroblockSyntax = base
 	dct8x8Allowed := in.DCT8x8Allowed
 	if isDirect(base.MBType) {
 		if err := m.predDirectMotionFrame(motion, in.MBXY, &mb.MBType, &mb.SubMBType, in.Direct); err != nil {
-			return result, err
+			return err
 		}
 		fillMVDRectangle(&motion.MVD[0], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
 		fillMVDRectangle(&motion.MVD[1], int(h264Scan8[0]), 4, 4, 8, [2]uint8{})
@@ -648,7 +704,7 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	} else {
 		predCtx := m.frameMotionPredContext(in.MBXY, in.FrameMBAFF, cacheResult.Neighbors, base.MBType, listCount, in.SliceTypeNoS, true, in.DirectSpatialMVPred)
 		if err := m.decodeCABACInterMotionSyntax(src, &mb, motion, in.MBXY, in.SliceTypeNoS, listCount, in.RefCount, in.Direct, predCtx); err != nil {
-			return result, fmt.Errorf("inter_motion field=%t type=%#x parts=%d sub=%#x refs=%d/%d: %w",
+			return fmt.Errorf("inter_motion field=%t type=%#x parts=%d sub=%#x refs=%d/%d: %w",
 				in.FieldPicture, base.MBType, base.PartitionCount, mb.SubMBType, in.RefCount[0], in.RefCount[1], err)
 		}
 	}
@@ -676,7 +732,7 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	adjustCABACChroma444DCT8x8NonZeroCache(residual, in.SPS.ChromaFormatIDC, mb.MBType, cacheResult.Neighbors, in.X264Build, in.X264BuildSet)
 	qscale, chromaQP, cbpTable, lastDiff, err := residual.decodeCABACResidualPayload(src, in.PPS, in.SPS, mb.MBType, mb.CBP, in.QScale, in.LastQScaleDiff, cacheResult.Residual)
 	if err != nil {
-		return result, fmt.Errorf("inter_residual field=%t type=%#x cbp=%#x: %w", in.FieldPicture, mb.MBType, mb.CBP, err)
+		return fmt.Errorf("inter_residual field=%t type=%#x cbp=%#x: %w", in.FieldPicture, mb.MBType, mb.CBP, err)
 	}
 	mb.QScale = qscale
 	mb.ChromaQP = chromaQP
@@ -694,12 +750,12 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 			SPS:              in.SPS,
 		}
 		if err := validateHighFrameSliceMacroblockForReconstructWithSubMB(sh, mb.MBType, &mb.SubMBType, mb.CBP, mb.CBPTable); err != nil {
-			return result, fmt.Errorf("validate_inter type=%#x cbp=%#x table=%#x sub=%#x: %w",
+			return fmt.Errorf("validate_inter type=%#x cbp=%#x table=%#x sub=%#x: %w",
 				mb.MBType, mb.CBP, mb.CBPTable, mb.SubMBType, err)
 		}
 	}
 	if err := m.writeBackCABACInterMacroblock(in.MBXY, &mb, residual, motion, listCount, in.SliceTypeNoS, in.SliceNum); err != nil {
-		return result, err
+		return err
 	}
 
 	result.MBType = mb.MBType
@@ -710,7 +766,7 @@ func (m *macroblockTables) decodeCABACFrameInterMacroblock(src cabacSyntaxSource
 	result.ChromaQP = mb.ChromaQP
 	result.Inter = mb
 	result.IsInter = true
-	return result, nil
+	return nil
 }
 
 func (m *macroblockTables) decodeCABACMBChromaPredMode(src cabacSyntaxSource, n macroblockDecodeNeighbors) int {
