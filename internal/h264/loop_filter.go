@@ -126,7 +126,7 @@ func h264LoopFilterSliceParamsFromHeader(sh *SliceHeader) h264LoopFilterSlicePar
 	}
 }
 
-func (p h264LoopFilterSliceParams) validate() error {
+func (p *h264LoopFilterSliceParams) validate() error {
 	if p.DeblockingFilter < 0 || p.DeblockingFilter > 2 || p.ListCount < 0 || p.ListCount > 2 {
 		return ErrInvalidData
 	}
@@ -150,7 +150,7 @@ func (p h264LoopFilterSliceParams) validate() error {
 	return nil
 }
 
-func (p h264LoopFilterSliceParams) fieldPicture() bool {
+func (p *h264LoopFilterSliceParams) fieldPicture() bool {
 	return p.PPS != nil && p.PPS.SPS != nil && p.PPS.SPS.FrameMBSOnlyFlag == 0 &&
 		p.PictureStructure != PictureFrame
 }
@@ -177,7 +177,7 @@ func h264LoopFilterFieldMBY(mbY int, p h264LoopFilterSliceParams) (int, error) {
 	return 0, ErrInvalidData
 }
 
-func (p h264LoopFilterSliceParams) ref2Frame(list int, ref int8) int8 {
+func (p *h264LoopFilterSliceParams) ref2Frame(list int, ref int8) int8 {
 	if ref == h264ListNotUsed || list < 0 || list > 1 {
 		return ref
 	}
@@ -188,7 +188,7 @@ func (p h264LoopFilterSliceParams) ref2Frame(list int, ref int8) int8 {
 	return refs[ref]
 }
 
-func (p h264LoopFilterSliceParams) ref2FrameForInterlacedLoopFilter(list int, ref int8) int8 {
+func (p *h264LoopFilterSliceParams) ref2FrameForInterlacedLoopFilter(list int, ref int8) int8 {
 	if ref < 0 || list < 0 || list > 1 {
 		return p.ref2Frame(list, ref)
 	}
