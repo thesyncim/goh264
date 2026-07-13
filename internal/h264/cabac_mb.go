@@ -32,12 +32,14 @@ func (d *cabacSyntaxDecoder) get(idx int) int {
 	// 1024-byte state array. The primitive differential test covers this seam.
 	state := (*uint8)(unsafe.Add(unsafe.Pointer(d.state), uintptr(idx)))
 	s := int32(*state)
-	rangeLPS := int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(c.rng&0xc0) + int(s)))
+	rng := c.rng
+	low := c.low
+	rangeLPS := int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
 
-	c.rng -= rangeLPS
-	lpsMask := -int32(uint32((c.rng<<(cabacBits+1))-c.low) >> 31)
-	c.low -= (c.rng << (cabacBits + 1)) & lpsMask
-	c.rng += (rangeLPS - c.rng) & lpsMask
+	rng -= rangeLPS
+	lpsMask := -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+	low -= (rng << (cabacBits + 1)) & lpsMask
+	rng += (rangeLPS - rng) & lpsMask
 
 	s ^= lpsMask
 	*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
@@ -46,10 +48,12 @@ func (d *cabacSyntaxDecoder) get(idx int) int {
 	// The pinned norm-shift table is 0..9. Masking that invariant into the
 	// operand lets arm64 use its native register shift directly; an unconstrained
 	// Go shift otherwise grows two >=64 guards in this per-bin primitive.
-	shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(c.rng))) & 31
-	c.rng = int32(uint32(c.rng) << shift)
-	c.low = int32(uint32(c.low) << shift)
-	if c.low&cabacMask == 0 {
+	shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+	rng = int32(uint32(rng) << shift)
+	low = int32(uint32(low) << shift)
+	c.rng = rng
+	c.low = low
+	if low&cabacMask == 0 {
 		c.refill2()
 	}
 	return int(bit)
