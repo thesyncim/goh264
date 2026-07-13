@@ -220,7 +220,7 @@ func (m *macroblockTables) fillDecodeNeighborsFrameFields(mbXY int, sliceNum uin
 	n.TopType = m.macroblockTypeIfCoded(n.TopXY)
 	n.TopRightType = m.macroblockTypeIfCoded(n.TopRightXY)
 	n.LeftType[0] = m.macroblockTypeIfCoded(n.LeftXY[0])
-	n.LeftType[1] = m.macroblockTypeIfCoded(n.LeftXY[1])
+	n.LeftType[1] = n.LeftType[0]
 
 	if !m.sameSlice(n.TopLeftXY, sliceNum) {
 		n.TopLeftType = 0
