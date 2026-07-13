@@ -123,6 +123,45 @@ func TestAnnotateBenchRatesReportsInputAndRawByteCosts(t *testing.T) {
 	}
 }
 
+func TestAnnotateBenchRatesAccountsForMatchedWorkers(t *testing.T) {
+	result := resultFromSamples("goh264", "in.h264", 2, 1, 1, true, 3, 10, []benchSample{
+		{ElapsedMS: 10, TotalFrames: 24, TotalBytes: 80, AllocBytes: 16, Allocs: 8},
+	}, "", "")
+	result.Workers = 4
+	result.InputBytesPerIter = 5
+	annotateBenchRates(&result)
+	if result.AllocBytesPerIter != 2 || result.AllocsPerIter != 1 {
+		t.Fatalf("alloc rates = %v/%v, want 2 bytes and 1 alloc per worker iteration",
+			result.AllocBytesPerIter, result.AllocsPerIter)
+	}
+	if result.NSPerInputByte != 250000 {
+		t.Fatalf("ns/input-byte = %v, want 250000 across four workers", result.NSPerInputByte)
+	}
+}
+
+func TestBenchGoFairComputeMatchesWorkerTotalsAndParity(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "h264", "high10_inter_cavlc_idrp.h264"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := benchGoFairCompute("fixture.h264", data, 2, 2, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Workers != 2 || result.DecoderThreads != 1 || result.RawOutputTimed {
+		t.Fatalf("fair worker metadata = workers %d threads %d raw_timed %v", result.Workers, result.DecoderThreads, result.RawOutputTimed)
+	}
+	if result.FramesPerIter != 2 || result.TotalFrames != 16 {
+		t.Fatalf("frames = %d/iter %d total, want 2/16", result.FramesPerIter, result.TotalFrames)
+	}
+	if result.RawMD5 == "" || result.RawPixelFormat == "" {
+		t.Fatalf("quality preflight = md5 %q pix_fmt %q, want populated", result.RawMD5, result.RawPixelFormat)
+	}
+	if result.BaselineKind != "goh264-in-process-compute" || result.InputReadTimed || result.StdoutPipeTimed {
+		t.Fatalf("fair measurement metadata = %+v", result)
+	}
+}
+
 func TestEnforceBenchAllocationBudgetsChecksOnlyMeasuredGoLanes(t *testing.T) {
 	report := benchReport{Results: []benchResult{
 		{

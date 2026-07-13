@@ -49,3 +49,14 @@ sizes, or panicking during plane slicing.
 `cmd/goh264bench` records Go benchmark allocation totals and reports allocation
 rates for timed Go lanes. The benchmark scripts can turn those rates into local
 budget gates through their documented environment variables.
+
+For claim-grade FFmpeg comparisons, build the in-process libavcodec helper with
+`scripts/build-libavcodec-bench.sh`, then set
+`GOH264_BENCH_FAIR_LIBAVCODEC=1`. The matched compute lane checks Go and FFmpeg
+rawvideo against the manifest oracle before timing, then excludes process
+startup, file I/O, CLI setup, raw materialization, and hashing on both sides.
+It uses preloaded Annex B input, one decoder thread per independent context,
+equal work counts, and rotating measurement order across repeats. Run
+`GOH264_BENCH_WORKERS=1` for the single-thread lane and the same explicit
+worker count on both sides for multicore throughput. `-fair-cpu-lanes` keeps
+libavcodec pure-C and native C+assembly results separate.

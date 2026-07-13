@@ -57,6 +57,16 @@ if [[ "${GOH264_BENCH_FFMPEG:-0}" == "1" ]]; then
     if [[ "${GOH264_BENCH_FFMPEG_PROCESS_PER_ITER:-0}" == "1" ]]; then
         ffmpeg_args+=(-ffmpeg-process-per-iter)
     fi
+    if [[ "${GOH264_BENCH_FAIR_LIBAVCODEC:-0}" == "1" ]]; then
+        libavcodec_bench_bin="${GOH264_LIBAVCODEC_BENCH_BIN:-$ROOT/.artifacts/bin/goh264-libavcodec-bench}"
+        if [[ -z "${GOH264_LIBAVCODEC_BENCH_BIN:-}" ]]; then
+            "$ROOT/scripts/build-libavcodec-bench.sh" "$libavcodec_bench_bin" >/dev/null
+        fi
+        ffmpeg_args+=(
+            -fair-libavcodec-bin "$libavcodec_bench_bin"
+            -workers "${GOH264_BENCH_WORKERS:-1}"
+        )
+    fi
 fi
 
 printf 'real-vector benchmark cache=%s fetch=%s' "$GOH264_CORPUS_CACHE" "$GOH264_CORPUS_FETCH" >&2
@@ -96,6 +106,9 @@ if [[ "${#ffmpeg_args[@]}" -ne 0 ]]; then
         printf ' ffmpeg_process_per_iter=1' >&2
     else
         printf ' ffmpeg_amortized=1' >&2
+    fi
+    if [[ "${GOH264_BENCH_FAIR_LIBAVCODEC:-0}" == "1" ]]; then
+        printf ' fair_libavcodec=1 workers=%s' "${GOH264_BENCH_WORKERS:-1}" >&2
     fi
 fi
 printf '\n' >&2
