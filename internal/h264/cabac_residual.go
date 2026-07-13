@@ -214,7 +214,9 @@ func decodeCABACResidualInternalSource[S cabacSyntaxSource](c *cavlcResidualCont
 	lastCtxBase := cabacLastCoeffFlagOffset[fieldIdx][cat]
 	absCtxBase := cabacCoeffAbsLevelM1Offset[cat]
 
-	var index [64]int
+	// Coefficient positions are 0..63; byte indexes keep this hot scratch
+	// compact without narrowing any valid scan position.
+	var index [64]uint8
 	coeffCount := 0
 	last := 0
 
@@ -222,7 +224,7 @@ func decodeCABACResidualInternalSource[S cabacSyntaxSource](c *cavlcResidualCont
 		sigOff := cabacSignificantCoeffFlagOffset8x8[fieldIdx]
 		for last = 0; last < 63; last++ {
 			if src.get(sigCtxBase+int(sigOff[last])) != 0 {
-				index[coeffCount] = last
+				index[coeffCount] = uint8(last)
 				coeffCount++
 				lastOff := int(h264CABACTables[h264LastCoeffFlagOffset8x8Offset+last])
 				if src.get(lastCtxBase+lastOff) != 0 {
@@ -232,7 +234,7 @@ func decodeCABACResidualInternalSource[S cabacSyntaxSource](c *cavlcResidualCont
 			}
 		}
 		if last == maxCoeff-1 {
-			index[coeffCount] = last
+			index[coeffCount] = uint8(last)
 			coeffCount++
 		}
 	} else {
@@ -245,7 +247,7 @@ func decodeCABACResidualInternalSource[S cabacSyntaxSource](c *cavlcResidualCont
 				lastOff = sigOff
 			}
 			if src.get(sigCtxBase+sigOff) != 0 {
-				index[coeffCount] = last
+				index[coeffCount] = uint8(last)
 				coeffCount++
 				if src.get(lastCtxBase+lastOff) != 0 {
 					last = maxCoeff
@@ -254,7 +256,7 @@ func decodeCABACResidualInternalSource[S cabacSyntaxSource](c *cavlcResidualCont
 			}
 		}
 		if last == maxCoeff-1 {
-			index[coeffCount] = last
+			index[coeffCount] = uint8(last)
 			coeffCount++
 		}
 	}
@@ -356,7 +358,9 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 	lastCtxBase := cabacLastCoeffFlagOffset[fieldIdx][cat]
 	absCtxBase := cabacCoeffAbsLevelM1Offset[cat]
 
-	var index [64]int
+	// Coefficient positions are 0..63; byte indexes keep this hot scratch
+	// compact without narrowing any valid scan position.
+	var index [64]uint8
 	coeffCount := 0
 	last := 0
 
@@ -364,7 +368,7 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 		sigOff := cabacSignificantCoeffFlagOffset8x8[fieldIdx]
 		for last = 0; last < 63; last++ {
 			if src.get(sigCtxBase+int(sigOff[last])) != 0 {
-				index[coeffCount] = last
+				index[coeffCount] = uint8(last)
 				coeffCount++
 				lastOff := int(h264CABACTables[h264LastCoeffFlagOffset8x8Offset+last])
 				if src.get(lastCtxBase+lastOff) != 0 {
@@ -374,7 +378,7 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 			}
 		}
 		if last == maxCoeff-1 {
-			index[coeffCount] = last
+			index[coeffCount] = uint8(last)
 			coeffCount++
 		}
 	} else {
@@ -387,7 +391,7 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 				lastOff = sigOff
 			}
 			if src.get(sigCtxBase+sigOff) != 0 {
-				index[coeffCount] = last
+				index[coeffCount] = uint8(last)
 				coeffCount++
 				if src.get(lastCtxBase+lastOff) != 0 {
 					last = maxCoeff
@@ -396,7 +400,7 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 			}
 		}
 		if last == maxCoeff-1 {
-			index[coeffCount] = last
+			index[coeffCount] = uint8(last)
 			coeffCount++
 		}
 	}
