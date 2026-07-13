@@ -325,12 +325,13 @@ func (m *macroblockTables) filterFrameMBAt(dst *h264PicturePlanes, params []h264
 	if p.DeblockingFilter == 0 {
 		return nil
 	}
-	ctx, err := m.fillLoopFilterCachesFrameValidated(mbXY, sliceNum, p, params)
-	if err != nil {
+	var ctx h264LoopFilterContext
+	if err := m.fillLoopFilterCachesFrameValidatedInto(&ctx, mbXY, sliceNum, p, params); err != nil {
 		return err
 	}
 	dstView := *dst
 	filterMBY := mbY
+	var err error
 	if p.fieldPicture() {
 		filterMBY, err = h264LoopFilterFieldMBY(mbY, p)
 		if err != nil {
@@ -380,8 +381,8 @@ func (m *macroblockTables) filterField(dst *h264PicturePlanes, params []h264Loop
 			if p.DeblockingFilter == 0 {
 				continue
 			}
-			ctx, err := m.fillLoopFilterCachesFrameValidated(mbXY, sliceNum, p, params)
-			if err != nil {
+			var ctx h264LoopFilterContext
+			if err := m.fillLoopFilterCachesFrameValidatedInto(&ctx, mbXY, sliceNum, p, params); err != nil {
 				return err
 			}
 			dstView := *dst
@@ -443,12 +444,13 @@ func (m *macroblockTables) filterFrameHighMBAt(dst *h264PicturePlanesHigh, param
 	if p.DeblockingFilter == 0 {
 		return nil
 	}
-	ctx, err := m.fillLoopFilterCachesFrameValidated(mbXY, sliceNum, p, params)
-	if err != nil {
+	var ctx h264LoopFilterContext
+	if err := m.fillLoopFilterCachesFrameValidatedInto(&ctx, mbXY, sliceNum, p, params); err != nil {
 		return err
 	}
 	dstView := *dst
 	filterMBY := mbY
+	var err error
 	if p.fieldPicture() {
 		filterMBY, err = h264LoopFilterFieldMBY(mbY, p)
 		if err != nil {
@@ -477,6 +479,12 @@ func (m *macroblockTables) fillLoopFilterCachesFrame(mbXY int, sliceNum uint16, 
 
 func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum uint16, p *h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) (h264LoopFilterContext, error) {
 	var ctx h264LoopFilterContext
+	err := m.fillLoopFilterCachesFrameValidatedInto(&ctx, mbXY, sliceNum, p, params)
+	return ctx, err
+}
+
+func (m *macroblockTables) fillLoopFilterCachesFrameValidatedInto(ctx *h264LoopFilterContext, mbXY int, sliceNum uint16, p *h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) error {
+	*ctx = h264LoopFilterContext{}
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
 	mbType := m.MacroblockTyp[mbXY]
@@ -532,7 +540,7 @@ func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum
 		}
 	}
 
-	ctx = h264LoopFilterContext{
+	*ctx = h264LoopFilterContext{
 		MBXY:      mbXY,
 		TopMBXY:   topXY,
 		LeftMBXY:  leftXY[h264LeftTop],
@@ -543,15 +551,15 @@ func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum
 		CBP:       m.CBPTable[mbXY],
 	}
 	if isIntra(mbType) {
-		return ctx, nil
+		return nil
 	}
 
-	if err := m.fillLoopFilterCachesInterFramePtr(&ctx, mbXY, topXY, leftXY[h264LeftTop], mbType, topType, leftType[h264LeftTop], 0, p, params); err != nil {
-		return ctx, err
+	if err := m.fillLoopFilterCachesInterFramePtr(ctx, mbXY, topXY, leftXY[h264LeftTop], mbType, topType, leftType[h264LeftTop], 0, p, params); err != nil {
+		return err
 	}
 	if p.ListCount == 2 {
-		if err := m.fillLoopFilterCachesInterFramePtr(&ctx, mbXY, topXY, leftXY[h264LeftTop], mbType, topType, leftType[h264LeftTop], 1, p, params); err != nil {
-			return ctx, err
+		if err := m.fillLoopFilterCachesInterFramePtr(ctx, mbXY, topXY, leftXY[h264LeftTop], mbType, topType, leftType[h264LeftTop], 1, p, params); err != nil {
+			return err
 		}
 	}
 
@@ -596,7 +604,7 @@ func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum
 		}
 	}
 
-	return ctx, nil
+	return nil
 }
 
 func h264LoopFilterFrameMBAFF(p *h264LoopFilterSliceParams) bool {
