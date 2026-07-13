@@ -762,10 +762,10 @@ func (m *macroblockTables) copyCurrentMotionForLoopFilter(ctx *h264LoopFilterCon
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
 	src := 4*mbX + 4*mbY*m.BStride
+	if err := checkRange(len(m.MotionVal[list]), src, 3*m.BStride+4); err != nil {
+		return err
+	}
 	for row := 0; row < 4; row++ {
-		if err := checkRange(len(m.MotionVal[list]), src+row*m.BStride, 4); err != nil {
-			return err
-		}
 		copy(ctx.Motion.MV[list][base+row*8:base+row*8+4], m.MotionVal[list][src+row*m.BStride:src+row*m.BStride+4])
 	}
 
