@@ -98,7 +98,7 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in *h264FrameMBReco
 		return err
 	}
 	if dst.ChromaFormatIDC == 3 {
-		return h264HLDecodeFrameMacroblock444(dst, dstY, dstCb, dstCr, blockOffset, *in)
+		return h264HLDecodeFrameMacroblock444(dst, dstY, dstCb, dstCr, blockOffset, in)
 	}
 
 	if in.MBType&MBTypeIntraPCM != 0 {
@@ -108,7 +108,7 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in *h264FrameMBReco
 		return ErrInvalidData
 	}
 	if isIntra(in.MBType) {
-		if err := h264HLDecodeFrameIntraPredict(dst, dstY, dstCb, dstCr, blockOffset, *in); err != nil {
+		if err := h264HLDecodeFrameIntraPredict(dst, dstY, dstCb, dstCr, blockOffset, in); err != nil {
 			return err
 		}
 	} else {
@@ -121,7 +121,7 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in *h264FrameMBReco
 				weightMBY = in.MotionWeightMBY
 			}
 			if trustedDst {
-				if err := h264HLMotionFrameWeightedWithWeightYTrusted(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch); err != nil {
+				if err := h264HLMotionFrameWeightedWithWeightYTrusted(dst, &in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch); err != nil {
 					return err
 				}
 			} else if err := h264HLMotionFrameWeightedWithWeightY(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch); err != nil {
@@ -129,7 +129,7 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in *h264FrameMBReco
 			}
 		} else {
 			if trustedDst {
-				if err := h264HLMotionFrameWithScratchTrusted(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch); err != nil {
+				if err := h264HLMotionFrameWithScratchTrusted(dst, &in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch); err != nil {
 					return err
 				}
 			} else if err := h264HLMotionFrameWithScratch(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch); err != nil {
@@ -148,7 +148,7 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in *h264FrameMBReco
 	return nil
 }
 
-func h264HLDecodeFrameMacroblock444(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, blockOffset *[48]int, in h264FrameMBReconstructInput) error {
+func h264HLDecodeFrameMacroblock444(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, blockOffset *[48]int, in *h264FrameMBReconstructInput) error {
 	if blockOffset == nil {
 		return ErrInvalidData
 	}
@@ -242,7 +242,7 @@ func h264CopyRows(dst []uint8, offset int, stride int, width int, height int, sr
 	return nil
 }
 
-func h264HLDecodeFrameIntraPredict(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, blockOffset *[48]int, in h264FrameMBReconstructInput) error {
+func h264HLDecodeFrameIntraPredict(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, blockOffset *[48]int, in *h264FrameMBReconstructInput) error {
 	if dst.ChromaFormatIDC != 0 {
 		if err := h264PredChromaByMode(dst.Cb, dstCb, dst.ChromaStride, dst.ChromaFormatIDC, int(in.ChromaPredMode)); err != nil {
 			return err
@@ -260,7 +260,7 @@ func h264HLDecodeFrameIntraPredict(dst *h264PicturePlanes, dstY int, dstCb int, 
 	return h264HLDecodeMBPredictLumaIntra16x16(dst.Y, dstY, dst.LumaStride, int(in.Intra16x16PredMode), in.QScale, in.PPS, in.Residual, in.TransformBypass)
 }
 
-func h264HLDecodeFrameIntraPredictLumaPlane(dest []uint8, baseOffset int, stride int, blockOffset *[48]int, in h264FrameMBReconstructInput, plane int) error {
+func h264HLDecodeFrameIntraPredictLumaPlane(dest []uint8, baseOffset int, stride int, blockOffset *[48]int, in *h264FrameMBReconstructInput, plane int) error {
 	if isIntra4x4(in.MBType) {
 		return h264HLDecodeMBPredictLumaIntra4x4Plane(dest, baseOffset, stride, blockOffset, in.MBType, in.Intra4x4PredCache, in.TopLeftAvailable, in.TopRightAvailable, in.Residual, plane, in.TransformBypass, h264ProfileIDCFromPPS(in.PPS), in.X264Build, in.X264BuildSet)
 	}
