@@ -814,12 +814,12 @@ func (m *macroblockTables) writeBackMotionList(mbXY int, mbType uint32, list int
 	mbY := mbXY / m.MBStride
 	bXY := 4*mbX + 4*mbY*m.BStride
 	b8XY := 4 * mbXY
+	if err := checkRange(len(m.MotionVal[list]), bXY, 3*m.BStride+4); err != nil {
+		return err
+	}
 	base := int(h264Scan8[0])
 	for row := 0; row < 4; row++ {
 		dst := bXY + row*m.BStride
-		if err := checkRange(len(m.MotionVal[list]), dst, 4); err != nil {
-			return err
-		}
 		copy(m.MotionVal[list][dst:dst+4], cache.MV[list][base+row*8:base+row*8+4])
 	}
 	if cabac {
