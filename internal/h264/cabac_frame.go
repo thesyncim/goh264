@@ -1081,7 +1081,7 @@ func decodeCABACMVDForPartition(src cabacSyntaxSource, motion *macroblockMotionC
 	var ax int
 	var err error
 	if direct {
-		x, ax, err = decodeCABACMBMVD(dec, 40, int(motion.MVD[list][index-1][0])+int(motion.MVD[list][index-8][0]))
+		x, ax, err = decodeCABACMBMVDDecoder(dec, 40, int(motion.MVD[list][index-1][0])+int(motion.MVD[list][index-8][0]))
 	} else {
 		x, ax, err = decodeCABACMBMVD(src, 40, int(motion.MVD[list][index-1][0])+int(motion.MVD[list][index-8][0]))
 	}
@@ -1091,7 +1091,7 @@ func decodeCABACMVDForPartition(src cabacSyntaxSource, motion *macroblockMotionC
 	var y int32
 	var ay int
 	if direct {
-		y, ay, err = decodeCABACMBMVD(dec, 47, int(motion.MVD[list][index-1][1])+int(motion.MVD[list][index-8][1]))
+		y, ay, err = decodeCABACMBMVDDecoder(dec, 47, int(motion.MVD[list][index-1][1])+int(motion.MVD[list][index-8][1]))
 	} else {
 		y, ay, err = decodeCABACMBMVD(src, 47, int(motion.MVD[list][index-1][1])+int(motion.MVD[list][index-8][1]))
 	}

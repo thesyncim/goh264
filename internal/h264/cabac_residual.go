@@ -7,6 +7,8 @@
 
 package h264
 
+import "unsafe"
+
 var cabacCBFBaseContext = [14]int{
 	85, 89, 93, 97, 101, 1012, 460, 464, 468, 1016, 472, 476, 480, 1020,
 }
@@ -382,23 +384,7 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 			coeffCount++
 		}
 	} else {
-		coefs := maxCoeff - 1
-		for last = 0; last < coefs; last++ {
-			sigOff := last
-			lastOff := last
-			if isDC && chroma422 {
-				sigOff = int(cabacSigCoeffOffsetDC[last])
-				lastOff = sigOff
-			}
-			if src.get(sigCtxBase+sigOff) != 0 {
-				index[coeffCount] = uint8(last)
-				coeffCount++
-				if src.get(lastCtxBase+lastOff) != 0 {
-					last = maxCoeff
-					break
-				}
-			}
-		}
+		coeffCount, last = decodeCABACResidualSignificanceDecoder(src, &index, sigCtxBase, lastCtxBase, maxCoeff, isDC && chroma422)
 		if last == maxCoeff-1 {
 			index[coeffCount] = uint8(last)
 			coeffCount++
@@ -423,59 +409,175 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 		c.NonZeroCountCache[h264Scan8[n]] = uint8(coeffCount)
 	}
 
+	if err := decodeCABACResidualLevelsDecoder(src, block, scantable, qmul, &index, coeffCount, absCtxBase, isDC, chroma422, narrowDCT); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+// decodeCABACResidualSignificanceDecoder keeps the arithmetic decoder's range
+// and low values in registers for the complete non-8x8 significance scan. The
+// generic residual path remains the scripted-source reference implementation.
+func decodeCABACResidualSignificanceDecoder(src *cabacSyntaxDecoder, index *[64]uint8, sigCtxBase int, lastCtxBase int, maxCoeff int, chroma422DC bool) (int, int) {
+	c := src.cabac
+	states := src.state
+	low := c.low
+	rng := c.rng
+	coeffCount := 0
+	last := 0
+	coefs := maxCoeff - 1
+	for last = 0; last < coefs; last++ {
+		sigOff := last
+		if chroma422DC {
+			sigOff = int(cabacSigCoeffOffsetDC[last])
+		}
+
+		state := (*uint8)(unsafe.Add(unsafe.Pointer(states), uintptr(sigCtxBase+sigOff)))
+		s := int32(*state)
+		rangeLPS := int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
+		rng -= rangeLPS
+		lpsMask := -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+		low -= (rng << (cabacBits + 1)) & lpsMask
+		rng += (rangeLPS - rng) & lpsMask
+		s ^= lpsMask
+		*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+		shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+		rng = int32(uint32(rng) << shift)
+		low = int32(uint32(low) << shift)
+		if low&cabacMask == 0 {
+			c.low = low
+			c.rng = rng
+			c.refill2()
+			low = c.low
+		}
+		if s&1 == 0 {
+			continue
+		}
+
+		index[coeffCount] = uint8(last)
+		coeffCount++
+		state = (*uint8)(unsafe.Add(unsafe.Pointer(states), uintptr(lastCtxBase+sigOff)))
+		s = int32(*state)
+		rangeLPS = int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
+		rng -= rangeLPS
+		lpsMask = -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+		low -= (rng << (cabacBits + 1)) & lpsMask
+		rng += (rangeLPS - rng) & lpsMask
+		s ^= lpsMask
+		*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+		shift = uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+		rng = int32(uint32(rng) << shift)
+		low = int32(uint32(low) << shift)
+		if low&cabacMask == 0 {
+			c.low = low
+			c.rng = rng
+			c.refill2()
+			low = c.low
+		}
+		if s&1 != 0 {
+			last = maxCoeff
+			break
+		}
+	}
+	c.low = low
+	c.rng = rng
+	return coeffCount, last
+}
+
+// decodeCABACResidualLevelsDecoder holds CABAC range/low across all coefficient
+// levels in a block. Values >=15 are rare and keep using the shared bypass
+// primitive after synchronizing the local state.
+func decodeCABACResidualLevelsDecoder(src *cabacSyntaxDecoder, block []int32, scantable []uint8, qmul []uint32, index *[64]uint8, coeffCount int, absCtxBase int, isDC bool, chroma422 bool, narrowDCT bool) error {
+	c := src.cabac
+	states := src.state
+	low := c.low
+	rng := c.rng
 	nodeCtx := 0
 	for coeffCount > 0 {
 		coeffCount--
 		scanPos := int(scantable[index[coeffCount]])
-		if scanPos < 0 || scanPos >= len(block) {
-			return result, ErrInvalidData
-		}
-		if !isDC && scanPos >= len(qmul) {
-			return result, ErrInvalidData
+		if scanPos < 0 || scanPos >= len(block) || (!isDC && scanPos >= len(qmul)) {
+			c.low = low
+			c.rng = rng
+			return ErrInvalidData
 		}
 
 		ctx := absCtxBase + int(cabacCoeffAbsLevel1Context[nodeCtx])
-		if src.get(ctx) == 0 {
-			nodeCtx = int(cabacCoeffAbsLevelTransition[0][nodeCtx])
-			if isDC {
-				storeCABACResidualCoeff(block, scanPos, src.bypassSign(-1), narrowDCT)
-			} else {
-				storeCABACResidualCoeff(block, scanPos, (src.bypassSign(-int32(qmul[scanPos]))+32)>>6, narrowDCT)
+		coeffAbs := 1
+		for {
+			state := (*uint8)(unsafe.Add(unsafe.Pointer(states), uintptr(ctx)))
+			s := int32(*state)
+			rangeLPS := int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
+			rng -= rangeLPS
+			lpsMask := -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+			low -= (rng << (cabacBits + 1)) & lpsMask
+			rng += (rangeLPS - rng) & lpsMask
+			s ^= lpsMask
+			*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+			shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+			rng = int32(uint32(rng) << shift)
+			low = int32(uint32(low) << shift)
+			if low&cabacMask == 0 {
+				c.low = low
+				c.rng = rng
+				c.refill2()
+				low = c.low
 			}
-			continue
-		}
+			if s&1 == 0 {
+				if coeffAbs == 1 {
+					nodeCtx = int(cabacCoeffAbsLevelTransition[0][nodeCtx])
+				}
+				break
+			}
 
-		coeffAbs := 2
-		gt1Index := 0
-		if isDC && chroma422 {
-			gt1Index = 1
-		}
-		ctx = absCtxBase + int(cabacCoeffAbsLevelGT1Context[gt1Index][nodeCtx])
-		nodeCtx = int(cabacCoeffAbsLevelTransition[1][nodeCtx])
-
-		for coeffAbs < 15 && src.get(ctx) != 0 {
 			coeffAbs++
-		}
-		if coeffAbs >= 15 {
-			j := 0
-			for src.bypass() != 0 && j < 16+7 {
-				j++
+			if coeffAbs == 2 {
+				gt1Index := 0
+				if isDC && chroma422 {
+					gt1Index = 1
+				}
+				ctx = absCtxBase + int(cabacCoeffAbsLevelGT1Context[gt1Index][nodeCtx])
+				nodeCtx = int(cabacCoeffAbsLevelTransition[1][nodeCtx])
 			}
-			coeffAbs = 1
-			for j > 0 {
-				j--
-				coeffAbs += coeffAbs + src.bypass()
+			if coeffAbs >= 15 {
+				c.low = low
+				c.rng = rng
+				j := 0
+				for src.bypass() != 0 && j < 16+7 {
+					j++
+				}
+				coeffAbs = 1
+				for j > 0 {
+					j--
+					coeffAbs += coeffAbs + src.bypass()
+				}
+				coeffAbs += 14
+				low = c.low
+				rng = c.rng
+				break
 			}
-			coeffAbs += 14
 		}
 
+		low += low
+		if low&cabacMask == 0 {
+			c.low = low
+			c.rng = rng
+			c.refill()
+			low = c.low
+		}
+		rangeValue := rng << (cabacBits + 1)
+		mask := (low - rangeValue) >> 31
+		low -= rangeValue &^ mask
+		value := (int32(-coeffAbs) ^ mask) - mask
 		if isDC {
-			storeCABACResidualCoeff(block, scanPos, src.bypassSign(-int32(coeffAbs)), narrowDCT)
+			storeCABACResidualCoeff(block, scanPos, value, narrowDCT)
 		} else {
-			storeCABACResidualCoeff(block, scanPos, (src.bypassSign(-int32(coeffAbs))*int32(qmul[scanPos])+32)>>6, narrowDCT)
+			storeCABACResidualCoeff(block, scanPos, (value*int32(qmul[scanPos])+32)>>6, narrowDCT)
 		}
 	}
-	return result, nil
+	c.low = low
+	c.rng = rng
+	return nil
 }
 
 func storeCABACResidualCoeff(block []int32, pos int, value int32, narrowDCT bool) {

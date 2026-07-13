@@ -415,6 +415,97 @@ func decodeCABACMBMVD[S cabacSyntaxSource](src S, ctxBase int, amvd int) (int32,
 	return src.bypassSign(int32(-mvd)), mvda, nil
 }
 
+// decodeCABACMBMVDDecoder keeps range/low in registers across the complete
+// production MVD component. Scripted sources continue to use decodeCABACMBMVD.
+func decodeCABACMBMVDDecoder(src *cabacSyntaxDecoder, ctxBase int, amvd int) (int32, int, error) {
+	c := src.cabac
+	states := src.state
+	low := c.low
+	rng := c.rng
+	ctx := cabacMVDContext(ctxBase, amvd)
+	mvd := 0
+	for {
+		state := (*uint8)(unsafe.Add(unsafe.Pointer(states), uintptr(ctx)))
+		s := int32(*state)
+		rangeLPS := int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
+		rng -= rangeLPS
+		lpsMask := -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+		low -= (rng << (cabacBits + 1)) & lpsMask
+		rng += (rangeLPS - rng) & lpsMask
+		s ^= lpsMask
+		*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+		shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+		rng = int32(uint32(rng) << shift)
+		low = int32(uint32(low) << shift)
+		if low&cabacMask == 0 {
+			c.low = low
+			c.rng = rng
+			c.refill2()
+			low = c.low
+		}
+		if s&1 == 0 {
+			break
+		}
+		if mvd == 0 {
+			mvd = 1
+			ctx = ctxBase + 3
+			continue
+		}
+		if mvd >= 8 {
+			mvd = 9
+			break
+		}
+		if mvd < 4 {
+			ctx++
+		}
+		mvd++
+	}
+	if mvd == 0 {
+		c.low = low
+		c.rng = rng
+		return 0, 0, nil
+	}
+
+	mvda := mvd
+	if mvd >= 9 {
+		c.low = low
+		c.rng = rng
+		k := 3
+		for src.bypass() != 0 {
+			mvd += 1 << k
+			k++
+			if k > 24 {
+				return 0, 0, ErrInvalidData
+			}
+		}
+		for k > 0 {
+			k--
+			mvd += src.bypass() << k
+		}
+		mvda = mvd
+		if mvda >= 70 {
+			mvda = 70
+		}
+		low = c.low
+		rng = c.rng
+	}
+
+	low += low
+	if low&cabacMask == 0 {
+		c.low = low
+		c.rng = rng
+		c.refill()
+		low = c.low
+	}
+	rangeValue := rng << (cabacBits + 1)
+	mask := (low - rangeValue) >> 31
+	low -= rangeValue &^ mask
+	value := (int32(-mvd) ^ mask) - mask
+	c.low = low
+	c.rng = rng
+	return value, mvda, nil
+}
+
 func decodeCABACQScaleDiff[S cabacSyntaxSource](src S, qscale int, lastQScaleDiff int, maxQP int) (int, int, error) {
 	ctx := 0
 	if lastQScaleDiff != 0 {

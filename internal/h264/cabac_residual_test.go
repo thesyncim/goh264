@@ -156,6 +156,49 @@ func TestDecodeCABACResidual8x8SkipsCBFWhenNotChroma444(t *testing.T) {
 	wantIndexes(t, src, []int{402, 417, 427})
 }
 
+func TestDecodeCABACResidualInternalDecoderMatchesGeneric(t *testing.T) {
+	buf := make([]byte, 8192)
+	for i := range buf {
+		buf[i] = byte(i*97 + 31)
+	}
+	fastContext, err := initCABACDecoder(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oracleContext := fastContext
+	fastState, err := initH264CABACStates(PictureTypeP, 1, 27, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oracleState := fastState
+	fast := &cabacSyntaxDecoder{cabac: &fastContext, state: &fastState}
+	oracle := &cabacSyntaxDecoder{cabac: &oracleContext, state: &oracleState}
+	var fastResidual, oracleResidual cavlcResidualContext
+	scan := cabacIdentityScan(16)
+	qmul := make([]uint32, 16)
+	for i := range qmul {
+		qmul[i] = uint32(32 + i*7)
+	}
+
+	for i := 0; i < 128; i++ {
+		var gotBlock, wantBlock [16]int32
+		cat := i % 5
+		n := i % 16
+		mbField := i&1 != 0
+		got, gotErr := decodeCABACResidualInternalDecoder(&fastResidual, fast, gotBlock[:], cat, n, scan, qmul, 16, false, mbField, false, false)
+		want, wantErr := decodeCABACResidualInternalSource(&oracleResidual, cabacSyntaxSource(oracle), wantBlock[:], cat, n, scan, qmul, 16, false, mbField, false, false)
+		if got != want || gotBlock != wantBlock || fastResidual != oracleResidual || (gotErr != nil) != (wantErr != nil) {
+			t.Fatalf("step %d result diverged: got (%+v,%v), want (%+v,%v)", i, got, gotErr, want, wantErr)
+		}
+		if fastContext.low != oracleContext.low || fastContext.rng != oracleContext.rng || fastContext.bytestream != oracleContext.bytestream || fastState != oracleState {
+			t.Fatalf("state diverged at step %d", i)
+		}
+		if gotErr != nil {
+			break
+		}
+	}
+}
+
 func cabacIdentityScan(n int) []uint8 {
 	scan := make([]uint8, n)
 	for i := range scan {

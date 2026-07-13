@@ -252,6 +252,44 @@ func TestCABACSyntaxDecoderPrimitivesMatchContext(t *testing.T) {
 	}
 }
 
+func TestDecodeCABACMBMVDDecoderMatchesGeneric(t *testing.T) {
+	buf := make([]byte, 4096)
+	for i := range buf {
+		buf[i] = byte(i*73 + 19)
+	}
+	fastContext, err := initCABACDecoder(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oracleContext := fastContext
+	fastState, err := initH264CABACStates(PictureTypeP, 1, 27, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oracleState := fastState
+	fast := &cabacSyntaxDecoder{cabac: &fastContext, state: &fastState}
+	oracle := &cabacSyntaxDecoder{cabac: &oracleContext, state: &oracleState}
+
+	for i := 0; i < 256; i++ {
+		ctxBase := 40
+		if i&1 != 0 {
+			ctxBase = 47
+		}
+		amvd := (i*29 + 3) % 160
+		got, gotAbs, gotErr := decodeCABACMBMVDDecoder(fast, ctxBase, amvd)
+		want, wantAbs, wantErr := decodeCABACMBMVD(oracle, ctxBase, amvd)
+		if got != want || gotAbs != wantAbs || (gotErr != nil) != (wantErr != nil) {
+			t.Fatalf("step %d got (%d,%d,%v), want (%d,%d,%v)", i, got, gotAbs, gotErr, want, wantAbs, wantErr)
+		}
+		if fastContext.low != oracleContext.low || fastContext.rng != oracleContext.rng || fastContext.bytestream != oracleContext.bytestream || fastState != oracleState {
+			t.Fatalf("state diverged at step %d", i)
+		}
+		if gotErr != nil {
+			break
+		}
+	}
+}
+
 func TestDecodeCABACQScaleDiff(t *testing.T) {
 	src := &scriptedCABACSource{bits: []int{0}}
 	qscale, diff, err := decodeCABACQScaleDiff(src, 26, 0, 51)
