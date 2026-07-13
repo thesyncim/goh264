@@ -6,7 +6,7 @@
 
 package h264
 
-func h264IDCTAdd(dst []uint8, block []int32, stride int) error {
+func h264IDCTAddScalar(dst []uint8, block []int32, stride int) error {
 	if err := checkTransformAddArgs(dst, block, 16, stride, 4); err != nil {
 		return err
 	}
