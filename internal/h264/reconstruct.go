@@ -51,16 +51,20 @@ func h264X264BuildUsesUnfiltered8x8LAdd(x264Build int32, x264BuildSet bool) bool
 }
 
 func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstructInput) error {
-	return h264HLDecodeFrameMacroblockCore(dst, in, false)
+	return h264HLDecodeFrameMacroblockCore(dst, in, false, nil)
 }
 
 // h264HLDecodeFrameMacroblockTrusted is restricted to slice decode, which
 // validates the destination picture before constructing per-macroblock views.
 func h264HLDecodeFrameMacroblockTrusted(dst *h264PicturePlanes, in h264FrameMBReconstructInput) error {
-	return h264HLDecodeFrameMacroblockCore(dst, in, true)
+	return h264HLDecodeFrameMacroblockCore(dst, in, true, nil)
 }
 
-func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in h264FrameMBReconstructInput, trustedDst bool) error {
+func h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(dst *h264PicturePlanes, in h264FrameMBReconstructInput, blockOffset *[48]int) error {
+	return h264HLDecodeFrameMacroblockCore(dst, in, true, blockOffset)
+}
+
+func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in h264FrameMBReconstructInput, trustedDst bool, blockOffset *[48]int) error {
 	if dst == nil || in.MBX < 0 || in.MBY < 0 || in.QScale < 0 || in.QScale > qpMaxNum {
 		return ErrInvalidData
 	}
@@ -80,16 +84,21 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in h264FrameMBRecon
 	if chromaStride == 0 {
 		chromaStride = 1
 	}
-	blockOffset, err := h264FrameBlockOffsets(dst.LumaStride, chromaStride, 0)
-	if err != nil {
-		return err
+	var localBlockOffset [48]int
+	if blockOffset == nil {
+		var err error
+		localBlockOffset, err = h264FrameBlockOffsets(dst.LumaStride, chromaStride, 0)
+		if err != nil {
+			return err
+		}
+		blockOffset = &localBlockOffset
 	}
 	dstY, dstCb, dstCr, err := h264MBDestPartOffsets(dst, in.MBX, in.MBY, 0, 0)
 	if err != nil {
 		return err
 	}
 	if dst.ChromaFormatIDC == 3 {
-		return h264HLDecodeFrameMacroblock444(dst, dstY, dstCb, dstCr, &blockOffset, in)
+		return h264HLDecodeFrameMacroblock444(dst, dstY, dstCb, dstCr, blockOffset, in)
 	}
 
 	if in.MBType&MBTypeIntraPCM != 0 {
@@ -99,7 +108,7 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in h264FrameMBRecon
 		return ErrInvalidData
 	}
 	if isIntra(in.MBType) {
-		if err := h264HLDecodeFrameIntraPredict(dst, dstY, dstCb, dstCr, &blockOffset, in); err != nil {
+		if err := h264HLDecodeFrameIntraPredict(dst, dstY, dstCb, dstCr, blockOffset, in); err != nil {
 			return err
 		}
 	} else {
@@ -130,11 +139,11 @@ func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in h264FrameMBRecon
 	}
 
 	profileIDC := h264ProfileIDCFromPPS(in.PPS)
-	if err := h264HLDecodeMBIDCTLuma(dst.Y, dstY, dst.LumaStride, &blockOffset, in.MBType, in.CBP, in.Residual, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC); err != nil {
+	if err := h264HLDecodeMBIDCTLuma(dst.Y, dstY, dst.LumaStride, blockOffset, in.MBType, in.CBP, in.Residual, in.TransformBypass, int(in.Intra16x16PredMode), profileIDC); err != nil {
 		return err
 	}
 	if dst.ChromaFormatIDC != 0 && in.CBP&0x30 != 0 {
-		return h264HLDecodeMBIDCTChroma(dst.Cb, dst.Cr, dstCb, dstCr, dst.ChromaStride, &blockOffset, dst.ChromaFormatIDC, in.MBType, in.CBP, in.ChromaQP, in.PPS, in.Residual, in.TransformBypass, int(in.ChromaPredMode), profileIDC)
+		return h264HLDecodeMBIDCTChroma(dst.Cb, dst.Cr, dstCb, dstCr, dst.ChromaStride, blockOffset, dst.ChromaFormatIDC, in.MBType, in.CBP, in.ChromaQP, in.PPS, in.Residual, in.TransformBypass, int(in.ChromaPredMode), profileIDC)
 	}
 	return nil
 }

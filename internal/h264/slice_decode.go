@@ -139,6 +139,14 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 	if sh.PictureStructure != PictureFrame {
 		applySimpleFieldRefPlane(&dstView, sh.PictureStructure)
 	}
+	chromaStride := dstView.ChromaStride
+	if chromaStride == 0 {
+		chromaStride = 1
+	}
+	blockOffset, err := h264FrameBlockOffsets(dstView.LumaStride, chromaStride, 0)
+	if err != nil {
+		return result, err
+	}
 	cur, err := newSliceMacroblockCursor(m, sh)
 	if err != nil {
 		return result, err
@@ -166,7 +174,11 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 		reconIn := h264FrameMBReconstructInputFromCAVLC(sh, cur, mb, &work, in)
 		reconIn.MBY = reconMBY
 		reconIn.Refs = reconRefs
-		if err := h264HLDecodeFrameMacroblockTrusted(&reconDst, reconIn); err != nil {
+		reconBlockOffset := &blockOffset
+		if cur.FrameMBAFF && mb.MBType&MBTypeInterlaced != 0 {
+			reconBlockOffset = nil
+		}
+		if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&reconDst, reconIn, reconBlockOffset); err != nil {
 			return result, fmt.Errorf("reconstruct cavlc mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
@@ -187,7 +199,11 @@ func (m *macroblockTables) decodeCAVLCFrameSlice(gb *bitReader, dst *h264Picture
 			bottomIn := h264FrameMBReconstructInputFromCAVLC(sh, bottom, bottomMB, &bottomWork, in)
 			bottomIn.MBY = bottomMBY
 			bottomIn.Refs = bottomRefs
-			if err := h264HLDecodeFrameMacroblockTrusted(&bottomDst, bottomIn); err != nil {
+			bottomBlockOffset := &blockOffset
+			if bottom.FrameMBAFF && bottomMB.MBType&MBTypeInterlaced != 0 {
+				bottomBlockOffset = nil
+			}
+			if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&bottomDst, bottomIn, bottomBlockOffset); err != nil {
 				return result, fmt.Errorf("reconstruct cavlc mb_xy=%d: %w", bottom.MBXY, err)
 			}
 			result.Macroblocks++
@@ -314,6 +330,14 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 	if sh.PictureStructure != PictureFrame {
 		applySimpleFieldRefPlane(&dstView, sh.PictureStructure)
 	}
+	chromaStride := dstView.ChromaStride
+	if chromaStride == 0 {
+		chromaStride = 1
+	}
+	blockOffset, err := h264FrameBlockOffsets(dstView.LumaStride, chromaStride, 0)
+	if err != nil {
+		return result, err
+	}
 	cur, err := newSliceMacroblockCursor(m, sh)
 	if err != nil {
 		return result, err
@@ -344,7 +368,11 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 		reconIn := h264FrameMBReconstructInputFromCABAC(sh, cur, mb, &work, in)
 		reconIn.MBY = reconMBY
 		reconIn.Refs = reconRefs
-		if err := h264HLDecodeFrameMacroblockTrusted(&reconDst, reconIn); err != nil {
+		reconBlockOffset := &blockOffset
+		if cur.FrameMBAFF && mb.MBType&MBTypeInterlaced != 0 {
+			reconBlockOffset = nil
+		}
+		if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&reconDst, reconIn, reconBlockOffset); err != nil {
 			return result, fmt.Errorf("reconstruct cabac mb_xy=%d: %w", cur.MBXY, err)
 		}
 		result.Macroblocks++
@@ -368,7 +396,11 @@ func (m *macroblockTables) decodeCABACFrameSlice(src cabacSyntaxSource, dst *h26
 			bottomIn := h264FrameMBReconstructInputFromCABAC(sh, bottom, bottomMB, &bottomWork, in)
 			bottomIn.MBY = bottomMBY
 			bottomIn.Refs = bottomRefs
-			if err := h264HLDecodeFrameMacroblockTrusted(&bottomDst, bottomIn); err != nil {
+			bottomBlockOffset := &blockOffset
+			if bottom.FrameMBAFF && bottomMB.MBType&MBTypeInterlaced != 0 {
+				bottomBlockOffset = nil
+			}
+			if err := h264HLDecodeFrameMacroblockTrustedWithBlockOffsets(&bottomDst, bottomIn, bottomBlockOffset); err != nil {
 				return result, fmt.Errorf("reconstruct cabac mb_xy=%d: %w", bottom.MBXY, err)
 			}
 			result.Macroblocks++
