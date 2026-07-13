@@ -6,13 +6,22 @@
 package h264
 
 func (m *macroblockTables) fillFrameMacroblockDecodeCachesEntropy(intraCache *[h264IntraPredModeCacheSize]int8, residual *cavlcResidualContext, motion *macroblockMotionCache, in frameMacroblockDecodeCacheInput, frameMBAFF bool) (frameMacroblockDecodeCacheResult, error) {
-	if !frameMBAFF {
-		return m.fillFrameMacroblockDecodeCaches(intraCache, residual, motion, in)
-	}
 	var result frameMacroblockDecodeCacheResult
+	err := m.fillFrameMacroblockDecodeCachesEntropyInto(&result, intraCache, residual, motion, in, frameMBAFF)
+	return result, err
+}
+
+func (m *macroblockTables) fillFrameMacroblockDecodeCachesEntropyInto(result *frameMacroblockDecodeCacheResult, intraCache *[h264IntraPredModeCacheSize]int8, residual *cavlcResidualContext, motion *macroblockMotionCache, in frameMacroblockDecodeCacheInput, frameMBAFF bool) error {
+	if result == nil {
+		return ErrInvalidData
+	}
+	if !frameMBAFF {
+		return m.fillFrameMacroblockDecodeCachesInto(result, intraCache, residual, motion, in)
+	}
+	*result = frameMacroblockDecodeCacheResult{}
 	neighbors, err := m.fillDecodeNeighborsFrameMBAFF(in.MBXY, in.SliceNum, in.MBType)
 	if err != nil {
-		return result, err
+		return err
 	}
 	result.Neighbors = neighbors
 
@@ -20,12 +29,12 @@ func (m *macroblockTables) fillFrameMacroblockDecodeCachesEntropy(intraCache *[h
 		if isIntra(in.MBType) {
 			result.Intra, err = m.fillIntraPredModeCachesMBAFF(intraCache, neighbors.intraPredNeighbors(in.MBType, in.ConstrainedIntraPred))
 			if err != nil {
-				return result, err
+				return err
 			}
 		}
 		result.Residual, err = m.fillResidualDecodeCaches(residual, neighbors.residualNeighbors(in.MBType, in.CABAC))
 		if err != nil {
-			return result, err
+			return err
 		}
 	}
 
@@ -33,18 +42,29 @@ func (m *macroblockTables) fillFrameMacroblockDecodeCachesEntropy(intraCache *[h
 		motionNeighbors := neighbors.motionNeighbors(in.MBType, in.ListCount, in.SliceTypeNoS, in.CABAC, in.DirectSpatialMVPred)
 		motionNeighbors.FrameMBAFF = frameMBAFF
 		if err := m.fillMotionDecodeCaches(motion, motionNeighbors); err != nil {
-			return result, err
+			return err
 		}
 		h264MapMBAFFMotionNeighbors(motion, motionNeighbors)
 	}
-	return result, nil
+	return nil
 }
 
 func (m *macroblockTables) fillDecodeNeighborsFrameEntropy(mbXY int, sliceNum uint16, mbType uint32, fieldPicture bool, frameMBAFF bool) (macroblockDecodeNeighbors, error) {
-	if frameMBAFF {
-		return m.fillDecodeNeighborsFrameMBAFF(mbXY, sliceNum, mbType)
+	var n macroblockDecodeNeighbors
+	err := m.fillDecodeNeighborsFrameEntropyInto(&n, mbXY, sliceNum, mbType, fieldPicture, frameMBAFF)
+	return n, err
+}
+
+func (m *macroblockTables) fillDecodeNeighborsFrameEntropyInto(n *macroblockDecodeNeighbors, mbXY int, sliceNum uint16, mbType uint32, fieldPicture bool, frameMBAFF bool) error {
+	if n == nil {
+		return ErrInvalidData
 	}
-	return m.fillDecodeNeighborsFrameFields(mbXY, sliceNum, mbType, fieldPicture)
+	if frameMBAFF {
+		neighbors, err := m.fillDecodeNeighborsFrameMBAFF(mbXY, sliceNum, mbType)
+		*n = neighbors
+		return err
+	}
+	return m.fillDecodeNeighborsFrameFieldsInto(n, mbXY, sliceNum, mbType, fieldPicture)
 }
 
 func (m *macroblockTables) fillDecodeNeighborsFrameMBAFF(mbXY int, sliceNum uint16, mbType uint32) (macroblockDecodeNeighbors, error) {

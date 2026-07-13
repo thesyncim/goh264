@@ -175,16 +175,25 @@ func (m *macroblockTables) fillDecodeNeighborsFrame(mbXY int, sliceNum uint16, m
 
 func (m *macroblockTables) fillDecodeNeighborsFrameFields(mbXY int, sliceNum uint16, mbType uint32, fieldPicture bool) (macroblockDecodeNeighbors, error) {
 	var n macroblockDecodeNeighbors
+	err := m.fillDecodeNeighborsFrameFieldsInto(&n, mbXY, sliceNum, mbType, fieldPicture)
+	return n, err
+}
+
+func (m *macroblockTables) fillDecodeNeighborsFrameFieldsInto(n *macroblockDecodeNeighbors, mbXY int, sliceNum uint16, mbType uint32, fieldPicture bool) error {
+	if n == nil {
+		return ErrInvalidData
+	}
+	*n = macroblockDecodeNeighbors{}
 	if err := m.checkCodedMBXY(mbXY); err != nil {
-		return n, err
+		return err
 	}
 	if sliceNum == ^uint16(0) {
-		return n, ErrInvalidData
+		return ErrInvalidData
 	}
 
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
-	n = macroblockDecodeNeighbors{
+	*n = macroblockDecodeNeighbors{
 		MBXY:             mbXY,
 		MBX:              mbX,
 		MBY:              mbY,
@@ -235,39 +244,49 @@ func (m *macroblockTables) fillDecodeNeighborsFrameFields(mbXY int, sliceNum uin
 	if !m.sameSlice(n.TopRightXY, sliceNum) {
 		n.TopRightType = 0
 	}
-	return n, nil
+	return nil
 }
 
 func (m *macroblockTables) fillFrameMacroblockDecodeCaches(intraCache *[h264IntraPredModeCacheSize]int8, residual *cavlcResidualContext, motion *macroblockMotionCache, in frameMacroblockDecodeCacheInput) (frameMacroblockDecodeCacheResult, error) {
 	var result frameMacroblockDecodeCacheResult
-	neighbors, err := m.fillDecodeNeighborsFrameFields(in.MBXY, in.SliceNum, in.MBType, in.FieldPicture)
-	if err != nil {
-		return result, err
+	err := m.fillFrameMacroblockDecodeCachesInto(&result, intraCache, residual, motion, in)
+	return result, err
+}
+
+func (m *macroblockTables) fillFrameMacroblockDecodeCachesInto(result *frameMacroblockDecodeCacheResult, intraCache *[h264IntraPredModeCacheSize]int8, residual *cavlcResidualContext, motion *macroblockMotionCache, in frameMacroblockDecodeCacheInput) error {
+	if result == nil {
+		return ErrInvalidData
 	}
-	result.Neighbors = neighbors
+	*result = frameMacroblockDecodeCacheResult{}
+	if err := m.fillDecodeNeighborsFrameFieldsInto(&result.Neighbors, in.MBXY, in.SliceNum, in.MBType, in.FieldPicture); err != nil {
+		return err
+	}
+	neighbors := &result.Neighbors
 
 	if !isSkip(in.MBType) {
 		if isIntra(in.MBType) {
+			var err error
 			result.Intra, err = m.fillIntraPredModeCaches(intraCache, neighbors.intraPredNeighbors(in.MBType, in.ConstrainedIntraPred))
 			if err != nil {
-				return result, err
+				return err
 			}
 		}
+		var err error
 		result.Residual, err = m.fillResidualDecodeCaches(residual, neighbors.residualNeighbors(in.MBType, in.CABAC))
 		if err != nil {
-			return result, err
+			return err
 		}
 	}
 
 	if isInter(in.MBType) || (isDirect(in.MBType) && in.DirectSpatialMVPred) {
 		if err := m.fillMotionDecodeCaches(motion, neighbors.motionNeighbors(in.MBType, in.ListCount, in.SliceTypeNoS, in.CABAC, in.DirectSpatialMVPred)); err != nil {
-			return result, err
+			return err
 		}
 	}
-	return result, nil
+	return nil
 }
 
-func (n macroblockDecodeNeighbors) intraPredNeighbors(mbType uint32, constrained bool) intraPredDecodeNeighbors {
+func (n *macroblockDecodeNeighbors) intraPredNeighbors(mbType uint32, constrained bool) intraPredDecodeNeighbors {
 	return intraPredDecodeNeighbors{
 		MBType:               mbType,
 		TopType:              n.TopType,
@@ -281,7 +300,7 @@ func (n macroblockDecodeNeighbors) intraPredNeighbors(mbType uint32, constrained
 	}
 }
 
-func (n macroblockDecodeNeighbors) residualNeighbors(mbType uint32, cabac bool) residualDecodeNeighbors {
+func (n *macroblockDecodeNeighbors) residualNeighbors(mbType uint32, cabac bool) residualDecodeNeighbors {
 	return residualDecodeNeighbors{
 		MBType:    mbType,
 		TopType:   n.TopType,
@@ -293,7 +312,7 @@ func (n macroblockDecodeNeighbors) residualNeighbors(mbType uint32, cabac bool) 
 	}
 }
 
-func (n macroblockDecodeNeighbors) motionNeighbors(mbType uint32, listCount int, sliceTypeNoS int32, cabac bool, directSpatial bool) motionDecodeNeighbors {
+func (n *macroblockDecodeNeighbors) motionNeighbors(mbType uint32, listCount int, sliceTypeNoS int32, cabac bool, directSpatial bool) motionDecodeNeighbors {
 	return motionDecodeNeighbors{
 		MBType:              mbType,
 		TopType:             n.TopType,
