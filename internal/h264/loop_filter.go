@@ -155,7 +155,7 @@ func (p *h264LoopFilterSliceParams) fieldPicture() bool {
 		p.PictureStructure != PictureFrame
 }
 
-func h264LoopFilterFieldMBY(mbY int, p h264LoopFilterSliceParams) (int, error) {
+func h264LoopFilterFieldMBY(mbY int, p *h264LoopFilterSliceParams) (int, error) {
 	if !p.fieldPicture() {
 		return mbY, nil
 	}
@@ -260,7 +260,7 @@ func h264LoopFilterRefFrameID(frame *DecodedFrame, ids map[*DecodedFrame]int8) (
 	return id, nil
 }
 
-func (m *macroblockTables) loopFilterParamsForMB(params []h264LoopFilterSliceParams, mbXY int, fallback h264LoopFilterSliceParams) h264LoopFilterSliceParams {
+func (m *macroblockTables) loopFilterParamsForMB(params []h264LoopFilterSliceParams, mbXY int, fallback *h264LoopFilterSliceParams) *h264LoopFilterSliceParams {
 	if m == nil || mbXY < 0 || mbXY >= len(m.SliceTable) {
 		return fallback
 	}
@@ -268,7 +268,7 @@ func (m *macroblockTables) loopFilterParamsForMB(params []h264LoopFilterSlicePar
 	if sliceNum == ^uint16(0) || int(sliceNum) >= len(params) {
 		return fallback
 	}
-	return params[sliceNum]
+	return &params[sliceNum]
 }
 
 func (m *macroblockTables) filterFrame(dst *h264PicturePlanes, params []h264LoopFilterSliceParams) error {
@@ -304,8 +304,8 @@ func (m *macroblockTables) filterFrame(dst *h264PicturePlanes, params []h264Loop
 }
 
 func h264LoopFilterParamsUseFrameMBAFF(params []h264LoopFilterSliceParams) bool {
-	for _, p := range params {
-		if h264LoopFilterFrameMBAFF(p) {
+	for i := range params {
+		if h264LoopFilterFrameMBAFF(&params[i]) {
 			return true
 		}
 	}
@@ -318,7 +318,7 @@ func (m *macroblockTables) filterFrameMBAt(dst *h264PicturePlanes, params []h264
 	if sliceNum == ^uint16(0) || int(sliceNum) >= len(params) {
 		return ErrInvalidData
 	}
-	p := params[sliceNum]
+	p := &params[sliceNum]
 	if err := p.validate(); err != nil {
 		return err
 	}
@@ -370,7 +370,7 @@ func (m *macroblockTables) filterField(dst *h264PicturePlanes, params []h264Loop
 			if sliceNum == ^uint16(0) || int(sliceNum) >= len(params) {
 				return ErrInvalidData
 			}
-			p := params[sliceNum]
+			p := &params[sliceNum]
 			if p.PictureStructure != pictureStructure {
 				return ErrInvalidData
 			}
@@ -436,7 +436,7 @@ func (m *macroblockTables) filterFrameHighMBAt(dst *h264PicturePlanesHigh, param
 	if sliceNum == ^uint16(0) || int(sliceNum) >= len(params) {
 		return ErrInvalidData
 	}
-	p := params[sliceNum]
+	p := &params[sliceNum]
 	if err := p.validate(); err != nil {
 		return err
 	}
@@ -461,7 +461,7 @@ func (m *macroblockTables) filterFrameHighMBAt(dst *h264PicturePlanesHigh, param
 			return err
 		}
 	}
-	return m.filterFrameMacroblockHigh(&dstView, mbX, filterMBY, p, &ctx)
+	return m.filterFrameMacroblockHigh(&dstView, mbX, filterMBY, *p, &ctx)
 }
 
 func (m *macroblockTables) fillLoopFilterCachesFrame(mbXY int, sliceNum uint16, p h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) (h264LoopFilterContext, error) {
@@ -472,10 +472,10 @@ func (m *macroblockTables) fillLoopFilterCachesFrame(mbXY int, sliceNum uint16, 
 	if err := p.validate(); err != nil {
 		return ctx, err
 	}
-	return m.fillLoopFilterCachesFrameValidated(mbXY, sliceNum, p, params)
+	return m.fillLoopFilterCachesFrameValidated(mbXY, sliceNum, &p, params)
 }
 
-func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum uint16, p h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) (h264LoopFilterContext, error) {
+func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum uint16, p *h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) (h264LoopFilterContext, error) {
 	var ctx h264LoopFilterContext
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
@@ -546,11 +546,11 @@ func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum
 		return ctx, nil
 	}
 
-	if err := m.fillLoopFilterCachesInterFrame(&ctx, mbXY, topXY, leftXY[h264LeftTop], mbType, topType, leftType[h264LeftTop], 0, p, params); err != nil {
+	if err := m.fillLoopFilterCachesInterFramePtr(&ctx, mbXY, topXY, leftXY[h264LeftTop], mbType, topType, leftType[h264LeftTop], 0, p, params); err != nil {
 		return ctx, err
 	}
 	if p.ListCount == 2 {
-		if err := m.fillLoopFilterCachesInterFrame(&ctx, mbXY, topXY, leftXY[h264LeftTop], mbType, topType, leftType[h264LeftTop], 1, p, params); err != nil {
+		if err := m.fillLoopFilterCachesInterFramePtr(&ctx, mbXY, topXY, leftXY[h264LeftTop], mbType, topType, leftType[h264LeftTop], 1, p, params); err != nil {
 			return ctx, err
 		}
 	}
@@ -599,7 +599,7 @@ func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum
 	return ctx, nil
 }
 
-func h264LoopFilterFrameMBAFF(p h264LoopFilterSliceParams) bool {
+func h264LoopFilterFrameMBAFF(p *h264LoopFilterSliceParams) bool {
 	return p.PPS != nil && p.PPS.SPS != nil &&
 		p.PPS.SPS.MBAFF != 0 && p.PictureStructure == PictureFrame
 }
@@ -645,6 +645,10 @@ func h264SetLoopFilter8x8DCTNNZ(cache *[h264MotionCacheSize]uint8, base int, val
 }
 
 func (m *macroblockTables) fillLoopFilterCachesInterFrame(ctx *h264LoopFilterContext, mbXY int, topXY int, leftXY int, mbType uint32, topType uint32, leftType uint32, list int, p h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) error {
+	return m.fillLoopFilterCachesInterFramePtr(ctx, mbXY, topXY, leftXY, mbType, topType, leftType, list, &p, params)
+}
+
+func (m *macroblockTables) fillLoopFilterCachesInterFramePtr(ctx *h264LoopFilterContext, mbXY int, topXY int, leftXY int, mbType uint32, topType uint32, leftType uint32, list int, p *h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) error {
 	if ctx == nil || list < 0 || list > 1 {
 		return ErrInvalidData
 	}
@@ -687,7 +691,7 @@ func (m *macroblockTables) fillLoopFilterCachesInterFrame(ctx *h264LoopFilterCon
 	return nil
 }
 
-func (m *macroblockTables) copyTopMotionForLoopFilter(ctx *h264LoopFilterContext, topXY int, list int, base int, p h264LoopFilterSliceParams, currentMBType uint32) error {
+func (m *macroblockTables) copyTopMotionForLoopFilter(ctx *h264LoopFilterContext, topXY int, list int, base int, p *h264LoopFilterSliceParams, currentMBType uint32) error {
 	if err := m.checkCodedMBXY(topXY); err != nil {
 		return err
 	}
@@ -717,7 +721,7 @@ func (m *macroblockTables) copyTopMotionForLoopFilter(ctx *h264LoopFilterContext
 	return nil
 }
 
-func (m *macroblockTables) copyLeftMotionForLoopFilter(ctx *h264LoopFilterContext, leftXY int, list int, base int, p h264LoopFilterSliceParams, currentMBType uint32) error {
+func (m *macroblockTables) copyLeftMotionForLoopFilter(ctx *h264LoopFilterContext, leftXY int, list int, base int, p *h264LoopFilterSliceParams, currentMBType uint32) error {
 	if err := m.checkCodedMBXY(leftXY); err != nil {
 		return err
 	}
@@ -751,7 +755,7 @@ func (m *macroblockTables) copyLeftMotionForLoopFilter(ctx *h264LoopFilterContex
 	return nil
 }
 
-func (m *macroblockTables) copyCurrentMotionForLoopFilter(ctx *h264LoopFilterContext, mbXY int, list int, base int, p h264LoopFilterSliceParams, currentMBType uint32) error {
+func (m *macroblockTables) copyCurrentMotionForLoopFilter(ctx *h264LoopFilterContext, mbXY int, list int, base int, p *h264LoopFilterSliceParams, currentMBType uint32) error {
 	if err := m.checkCodedMBXY(mbXY); err != nil {
 		return err
 	}
@@ -799,7 +803,7 @@ func (m *macroblockTables) copyCurrentMotionForLoopFilter(ctx *h264LoopFilterCon
 	return nil
 }
 
-func (m *macroblockTables) filterFrameMacroblock(dst *h264PicturePlanes, mbX int, mbY int, p h264LoopFilterSliceParams, ctx *h264LoopFilterContext) error {
+func (m *macroblockTables) filterFrameMacroblock(dst *h264PicturePlanes, mbX int, mbY int, p *h264LoopFilterSliceParams, ctx *h264LoopFilterContext) error {
 	if ctx == nil || dst == nil {
 		return ErrInvalidData
 	}
@@ -827,7 +831,7 @@ func (m *macroblockTables) filterFrameMacroblockHigh(dst *h264PicturePlanesHigh,
 	return m.filterFrameMacroblockDirHigh(dst, dstY, dstCb, dstCr, p, ctx, 1)
 }
 
-func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, p h264LoopFilterSliceParams, ctx *h264LoopFilterContext, dir int) error {
+func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, p *h264LoopFilterSliceParams, ctx *h264LoopFilterContext, dir int) error {
 	if dir < 0 || dir > 1 {
 		return ErrInvalidData
 	}
@@ -854,7 +858,7 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 	firstVerticalEdgeDone := false
 
 	if dir == 0 && frameMBAFF && mbmType != 0 && mbType&MBTypeInterlaced != mbmType&MBTypeInterlaced {
-		if err := m.filterFrameMBAFFMixedVerticalEdge(dst, dstY, dstCb, dstCr, p, ctx, mbType); err != nil {
+		if err := m.filterFrameMBAFFMixedVerticalEdge(dst, dstY, dstCb, dstCr, *p, ctx, mbType); err != nil {
 			return err
 		}
 		firstVerticalEdgeDone = true
@@ -863,7 +867,7 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 	if mbmType != 0 && !firstVerticalEdgeDone {
 		mbY := ctx.MBXY / m.MBStride
 		if frameMBAFF && dir == 1 && mbY&1 == 0 && (mbmType&^mbType)&MBTypeInterlaced != 0 {
-			if err := m.filterFrameMBAFFTopHorizontalEdge(dst, dstY, dstCb, dstCr, p, ctx, mbType); err != nil {
+			if err := m.filterFrameMBAFFTopHorizontalEdge(dst, dstY, dstCb, dstCr, *p, ctx, mbType); err != nil {
 				return err
 			}
 		} else {
@@ -877,7 +881,7 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 					(int(p.PPS.ChromaQPTable[0][m.QScaleTable[ctx.MBXY]]) + int(p.PPS.ChromaQPTable[0][m.QScaleTable[mbmXY]]) + 1) >> 1,
 					(int(p.PPS.ChromaQPTable[1][m.QScaleTable[ctx.MBXY]]) + int(p.PPS.ChromaQPTable[1][m.QScaleTable[mbmXY]]) + 1) >> 1,
 				}
-				if err := h264ApplyLoopFilterEdge(dst, dstY, dstCb, dstCr, dir, 0, bS, qp, chromaQP, p, true, true, true); err != nil {
+				if err := h264ApplyLoopFilterEdgePtr(dst, dstY, dstCb, dstCr, dir, 0, bS, qp, chromaQP, p, true, true, true); err != nil {
 					return err
 				}
 			}
@@ -911,7 +915,7 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 		if dir == 1 && dst.ChromaFormatIDC == 1 && edge&1 != 0 {
 			filterChroma = false
 		}
-		if err := h264ApplyLoopFilterEdge(dst, dstY, dstCb, dstCr, dir, edge, bS, qp, chromaQP, p, false, filterLuma, filterChroma); err != nil {
+		if err := h264ApplyLoopFilterEdgePtr(dst, dstY, dstCb, dstCr, dir, edge, bS, qp, chromaQP, p, false, filterLuma, filterChroma); err != nil {
 			return err
 		}
 	}
@@ -1189,7 +1193,7 @@ func (m *macroblockTables) filterFrameMacroblockDirHigh(dst *h264PicturePlanesHi
 	}
 	maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> uint(dir)))
 	mvyLimit := h264LoopFilterMVYLimit(mbType)
-	frameMBAFF := h264LoopFilterFrameMBAFF(p)
+	frameMBAFF := h264LoopFilterFrameMBAFF(&p)
 	firstVerticalEdgeDone := false
 
 	if dir == 0 && frameMBAFF && mbmType != 0 && mbType&MBTypeInterlaced != mbmType&MBTypeInterlaced {
@@ -1552,6 +1556,10 @@ func h264LoopFilterBSSum(bS [4]int16) int16 {
 }
 
 func h264ApplyLoopFilterEdge(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, dir int, edge int, bS [4]int16, qp int, chromaQP [2]int, p h264LoopFilterSliceParams, intra bool, filterLuma bool, filterChroma bool) error {
+	return h264ApplyLoopFilterEdgePtr(dst, dstY, dstCb, dstCr, dir, edge, bS, qp, chromaQP, &p, intra, filterLuma, filterChroma)
+}
+
+func h264ApplyLoopFilterEdgePtr(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, dir int, edge int, bS [4]int16, qp int, chromaQP [2]int, p *h264LoopFilterSliceParams, intra bool, filterLuma bool, filterChroma bool) error {
 	if dst == nil || edge < 0 || edge > 3 {
 		return ErrInvalidData
 	}
