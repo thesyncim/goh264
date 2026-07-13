@@ -1424,9 +1424,7 @@ func (m *macroblockTables) loopFilterBoundaryStrength(ctx *h264LoopFilterContext
 
 	mvDone := false
 	if frameMBAFF && dir != 0 && (mbType^mbmType)&MBTypeInterlaced != 0 {
-		for i := range bS {
-			bS[i] = 1
-		}
+		bS = [4]int16{1, 1, 1, 1}
 		mvDone = true
 	} else if maskPar0 != 0 && mbmType&(MBType16x16|(MBType8x16>>uint(dir))) != 0 {
 		bIdx := int(h264Scan8[0])
@@ -1438,28 +1436,32 @@ func (m *macroblockTables) loopFilterBoundaryStrength(ctx *h264LoopFilterContext
 		if err != nil {
 			return bS, err
 		}
-		for i := range bS {
-			bS[i] = v
-		}
+		bS = [4]int16{v, v, v, v}
 		mvDone = true
 	}
 
+	bIdx := int(h264Scan8[0])
+	bStep := 8
+	bnDelta := 1
+	if dir != 0 {
+		bStep = 1
+		bnDelta = 8
+	}
+	if mvDone {
+		for i := 0; i < 4; i++ {
+			idx := bIdx + i*bStep
+			if ctx.NonZeroCountCache[idx]|ctx.NonZeroCountCache[idx-bnDelta] != 0 {
+				bS[i] = 2
+			}
+		}
+		return bS, nil
+	}
 	for i := 0; i < 4; i++ {
-		x := 0
-		y := i
-		if dir != 0 {
-			x = i
-			y = 0
-		}
-		bIdx := int(h264Scan8[0]) + x + 8*y
-		bnIdx := bIdx - 1
-		if dir != 0 {
-			bnIdx = bIdx - 8
-		}
-		if ctx.NonZeroCountCache[bIdx]|ctx.NonZeroCountCache[bnIdx] != 0 {
+		idx := bIdx + i*bStep
+		if ctx.NonZeroCountCache[idx]|ctx.NonZeroCountCache[idx-bnDelta] != 0 {
 			bS[i] = 2
-		} else if !mvDone {
-			v, err := h264LoopFilterCheckMV(ctx, bIdx, bnIdx, listCount, mvyLimit)
+		} else {
+			v, err := h264LoopFilterCheckMV(ctx, idx, idx-bnDelta, listCount, mvyLimit)
 			if err != nil {
 				return bS, err
 			}
@@ -1494,28 +1496,33 @@ func (m *macroblockTables) loopFilterInternalStrength(ctx *h264LoopFilterContext
 		if err != nil {
 			return bS, err
 		}
-		for i := range bS {
-			bS[i] = v
-		}
+		bS = [4]int16{v, v, v, v}
 		mvDone = true
 	}
 
+	bIdx := int(h264Scan8[0]) + edge
+	bStep := 8
+	bnDelta := 1
+	if dir != 0 {
+		bIdx = int(h264Scan8[0]) + edge*8
+		bStep = 1
+		bnDelta = 8
+	}
+	if mvDone {
+		for i := 0; i < 4; i++ {
+			idx := bIdx + i*bStep
+			if ctx.NonZeroCountCache[idx]|ctx.NonZeroCountCache[idx-bnDelta] != 0 {
+				bS[i] = 2
+			}
+		}
+		return bS, nil
+	}
 	for i := 0; i < 4; i++ {
-		x := edge
-		y := i
-		if dir != 0 {
-			x = i
-			y = edge
-		}
-		bIdx := int(h264Scan8[0]) + x + 8*y
-		bnIdx := bIdx - 1
-		if dir != 0 {
-			bnIdx = bIdx - 8
-		}
-		if ctx.NonZeroCountCache[bIdx]|ctx.NonZeroCountCache[bnIdx] != 0 {
+		idx := bIdx + i*bStep
+		if ctx.NonZeroCountCache[idx]|ctx.NonZeroCountCache[idx-bnDelta] != 0 {
 			bS[i] = 2
-		} else if !mvDone {
-			v, err := h264LoopFilterCheckMV(ctx, bIdx, bnIdx, listCount, mvyLimit)
+		} else {
+			v, err := h264LoopFilterCheckMV(ctx, idx, idx-bnDelta, listCount, mvyLimit)
 			if err != nil {
 				return bS, err
 			}
