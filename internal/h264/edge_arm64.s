@@ -27,6 +27,39 @@ TEXT ·h264EmulatedEdgeMCRowsASM(SB), NOSPLIT|NOFRAME, $0-80
 	MOVD R12, R13           // retained for top-row replication
 	SUB  R7, R9, R11        // valid source-row count
 	SUB  R6, R8, R10        // central copy width
+	CBNZ R6, edge_valid_row
+	CMP  R4, R8
+	BNE  edge_valid_row
+	CMP  $21, R4
+	BNE  edge_full_9_row
+
+edge_full_21_row:
+	MOVD  0(R2), R20
+	MOVD  8(R2), R21
+	MOVWU 16(R2), R22
+	MOVBU 20(R2), R23
+	MOVD  R20, 0(R12)
+	MOVD  R21, 8(R12)
+	MOVW  R22, 16(R12)
+	MOVB  R23, 20(R12)
+	ADD   R1, R12, R12
+	ADD   R3, R2, R2
+	SUB   $1, R11, R11
+	CBNZ  R11, edge_full_21_row
+	SUB   R1, R12, R17
+	B     edge_top_setup
+
+edge_full_9_row:
+	MOVD  0(R2), R20
+	MOVBU 8(R2), R21
+	MOVD  R20, 0(R12)
+	MOVB  R21, 8(R12)
+	ADD   R1, R12, R12
+	ADD   R3, R2, R2
+	SUB   $1, R11, R11
+	CBNZ  R11, edge_full_9_row
+	SUB   R1, R12, R17
+	B     edge_top_setup
 
 edge_valid_row:
 	ADD  R6, R12, R14
@@ -106,6 +139,7 @@ edge_valid_done:
 	SUB R1, R12, R17       // last completed valid row
 
 	// Replicate the first completed row above the valid rectangle.
+edge_top_setup:
 	MOVD R7, R16
 	CBZ  R16, edge_bottom_setup
 	MOVD R0, R19
