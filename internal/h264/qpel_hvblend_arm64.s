@@ -6,6 +6,19 @@
 
 // func h264QpelMCPutHVBlendASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32)
 TEXT ·h264QpelMCPutHVBlendASM(SB), NOSPLIT, $32-48
+	MOVW size+32(FP), R6
+	CMPW $8, R6
+	BLT  qpel_puthvblend_scalar
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW mx+36(FP), R4
+	MOVW $0, R5
+	MOVW my+40(FP), R7
+	BL   ·h264QpelHVBlendNEONInternal(SB)
+	RET
+qpel_puthvblend_scalar:
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -243,6 +256,19 @@ qpel_puthvblend_store:
 
 // func h264QpelMCAvgHVBlendASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32)
 TEXT ·h264QpelMCAvgHVBlendASM(SB), NOSPLIT, $32-48
+	MOVW size+32(FP), R6
+	CMPW $8, R6
+	BLT  qpel_avghvblend_scalar
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW mx+36(FP), R4
+	MOVW $1, R5
+	MOVW my+40(FP), R7
+	BL   ·h264QpelHVBlendNEONInternal(SB)
+	RET
+qpel_avghvblend_scalar:
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2

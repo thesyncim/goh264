@@ -14,6 +14,8 @@ type h264PicturePlanesHigh struct {
 	MBHeight         int
 	ChromaFormatIDC  int
 	PictureStructure int32
+	// trustedLayout has the same DPB-only invariant as h264PicturePlanes.
+	trustedLayout bool
 }
 
 type h264FrameMBReconstructInputHigh struct {
@@ -1013,7 +1015,13 @@ func h264MBDestPartOffsetsHigh(dst *h264PicturePlanesHigh, mbX int, mbY int, xOf
 }
 
 func (p *h264PicturePlanesHigh) validate() error {
-	if p == nil || p.MBWidth <= 0 || p.MBHeight <= 0 || p.LumaStride <= 0 || p.ChromaFormatIDC < 0 || p.ChromaFormatIDC > 3 {
+	if p == nil {
+		return ErrInvalidData
+	}
+	if p.trustedLayout {
+		return nil
+	}
+	if p.MBWidth <= 0 || p.MBHeight <= 0 || p.LumaStride <= 0 || p.ChromaFormatIDC < 0 || p.ChromaFormatIDC > 3 {
 		return ErrInvalidData
 	}
 	lumaWidth, err := checkedMulInt(p.MBWidth, 16)

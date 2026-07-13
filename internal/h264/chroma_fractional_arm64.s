@@ -5,6 +5,26 @@
 
 // func h264ChromaMCXYASM(dst *uint8, src *uint8, dstStride int, srcStride int, height int32, width int32, a int32, b int32, c int32, d int32, step int, avg int32)
 TEXT ·h264ChromaMCXYASM(SB), NOSPLIT, $0-72
+	MOVW width+36(FP), R5
+	CMPW $8, R5
+	BEQ  chroma_xy_width8
+	CMPW $4, R5
+	BEQ  chroma_xy_width4
+	CMPW $2, R5
+	BEQ  chroma_xy_width2
+	B    chroma_xy_scalar
+chroma_xy_width8:
+	MOVW height+32(FP), R4
+	CMPW $2, R4
+	BLT  chroma_xy_scalar
+	TSTW $1, R4
+	BNE  chroma_xy_scalar
+	JMP  ·h264ChromaMC8XYNEONASM(SB)
+chroma_xy_width4:
+	JMP  ·h264ChromaMC4XYNEONASM(SB)
+chroma_xy_width2:
+	JMP  ·h264ChromaMC2XYNEONASM(SB)
+chroma_xy_scalar:
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2

@@ -97,6 +97,14 @@ TEXT ·h264QpelMC16Put10ASM(SB), NOSPLIT, $0-32
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
 	MOVD srcStride+24(FP), R3
+	MOVW $1, R4
+	MOVW $0, R5
+	MOVW $16, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
 	MOVW $16, R4
 qpel16_put10_row:
 	MOVD R0, R10
@@ -145,6 +153,14 @@ qpel16_put10_clip_done:
 
 // func h264QpelMC16Avg10ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
 TEXT ·h264QpelMC16Avg10ASM(SB), NOSPLIT, $0-32
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW $1, R4
+	MOVW $1, R5
+	MOVW $16, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -205,6 +221,14 @@ TEXT ·h264QpelMC8Put10ASM(SB), NOSPLIT, $0-32
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
 	MOVD srcStride+24(FP), R3
+	MOVW $1, R4
+	MOVW $0, R5
+	MOVW $8, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
 	MOVW $8, R4
 qpel8_put10_row:
 	MOVD R0, R10
@@ -253,6 +277,14 @@ qpel8_put10_clip_done:
 
 // func h264QpelMC8Avg10ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
 TEXT ·h264QpelMC8Avg10ASM(SB), NOSPLIT, $0-32
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW $1, R4
+	MOVW $1, R5
+	MOVW $8, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -313,6 +345,14 @@ TEXT ·h264QpelMC16Put20ASM(SB), NOSPLIT, $0-32
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
 	MOVD srcStride+24(FP), R3
+	MOVW $2, R4
+	MOVW $0, R5
+	MOVW $16, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
 	MOVW $16, R4
 qpel16_put20_row:
 	MOVD R0, R10
@@ -357,6 +397,14 @@ qpel16_put20_store:
 
 // func h264QpelMC16Avg20ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
 TEXT ·h264QpelMC16Avg20ASM(SB), NOSPLIT, $0-32
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW $2, R4
+	MOVW $1, R5
+	MOVW $16, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -413,6 +461,14 @@ TEXT ·h264QpelMC8Put20ASM(SB), NOSPLIT, $0-32
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
 	MOVD srcStride+24(FP), R3
+	MOVW $2, R4
+	MOVW $0, R5
+	MOVW $8, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
 	MOVW $8, R4
 qpel8_put20_row:
 	MOVD R0, R10
@@ -457,6 +513,14 @@ qpel8_put20_store:
 
 // func h264QpelMC8Avg20ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
 TEXT ·h264QpelMC8Avg20ASM(SB), NOSPLIT, $0-32
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW $2, R4
+	MOVW $1, R5
+	MOVW $8, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -513,6 +577,14 @@ TEXT ·h264QpelMC16Put30ASM(SB), NOSPLIT, $0-32
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
 	MOVD srcStride+24(FP), R3
+	MOVW $3, R4
+	MOVW $0, R5
+	MOVW $16, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
 	MOVW $16, R4
 qpel16_put30_row:
 	MOVD R0, R10
@@ -561,6 +633,14 @@ qpel16_put30_clip_done:
 
 // func h264QpelMC16Avg30ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
 TEXT ·h264QpelMC16Avg30ASM(SB), NOSPLIT, $0-32
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW $3, R4
+	MOVW $1, R5
+	MOVW $16, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -621,6 +701,14 @@ TEXT ·h264QpelMC8Put30ASM(SB), NOSPLIT, $0-32
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
 	MOVD srcStride+24(FP), R3
+	MOVW $3, R4
+	MOVW $0, R5
+	MOVW $8, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
 	MOVW $8, R4
 qpel8_put30_row:
 	MOVD R0, R10
@@ -669,6 +757,14 @@ qpel8_put30_clip_done:
 
 // func h264QpelMC8Avg30ASM(dst *uint8, src *uint8, dstStride int, srcStride int)
 TEXT ·h264QpelMC8Avg30ASM(SB), NOSPLIT, $0-32
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW $3, R4
+	MOVW $1, R5
+	MOVW $8, R6
+	JMP  ·h264QpelHAxisNEONInternal(SB)
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -854,6 +950,11 @@ qpel_avgx0_pred_done:
 
 // func h264QpelMCPut0YASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, my int32)
 TEXT ·h264QpelMCPut0YASM(SB), NOSPLIT, $0-40
+	MOVW size+32(FP), R4
+	CMPW $8, R4
+	BLT  qpel_put0y_scalar
+	JMP  ·h264QpelMCPut0YNEONASM(SB)
+qpel_put0y_scalar:
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -926,6 +1027,11 @@ qpel_put0y_store:
 
 // func h264QpelMCAvg0YASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, my int32)
 TEXT ·h264QpelMCAvg0YASM(SB), NOSPLIT, $0-40
+	MOVW size+32(FP), R4
+	CMPW $8, R4
+	BLT  qpel_avg0y_scalar
+	JMP  ·h264QpelMCAvg0YNEONASM(SB)
+qpel_avg0y_scalar:
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -1002,6 +1108,17 @@ qpel_avg0y_pred_done:
 
 // func h264QpelMCPut22ASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32)
 TEXT ·h264QpelMCPut22ASM(SB), NOSPLIT, $32-40
+	MOVW size+32(FP), R6
+	CMPW $8, R6
+	BLT  qpel_put22_scalar
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW $0, R5
+	BL   ·h264Qpel22NEONInternal(SB)
+	RET
+qpel_put22_scalar:
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -1150,6 +1267,17 @@ qpel_put22_store:
 
 // func h264QpelMCAvg22ASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32)
 TEXT ·h264QpelMCAvg22ASM(SB), NOSPLIT, $32-40
+	MOVW size+32(FP), R6
+	CMPW $8, R6
+	BLT  qpel_avg22_scalar
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW $1, R5
+	BL   ·h264Qpel22NEONInternal(SB)
+	RET
+qpel_avg22_scalar:
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -1302,6 +1430,19 @@ qpel_avg22_clip_done:
 
 // func h264QpelMCPutHVXYASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32)
 TEXT ·h264QpelMCPutHVXYASM(SB), NOSPLIT, $16-48
+	MOVW size+32(FP), R6
+	CMPW $8, R6
+	BLT  qpel_puthvxy_scalar
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW mx+36(FP), R4
+	MOVW $0, R5
+	MOVW my+40(FP), R7
+	BL   ·h264QpelHVXYNEONInternal(SB)
+	RET
+qpel_puthvxy_scalar:
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2
@@ -1401,6 +1542,19 @@ qpel_puthvxy_v_done:
 
 // func h264QpelMCAvgHVXYASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32)
 TEXT ·h264QpelMCAvgHVXYASM(SB), NOSPLIT, $16-48
+	MOVW size+32(FP), R6
+	CMPW $8, R6
+	BLT  qpel_avghvxy_scalar
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW mx+36(FP), R4
+	MOVW $1, R5
+	MOVW my+40(FP), R7
+	BL   ·h264QpelHVXYNEONInternal(SB)
+	RET
+qpel_avghvxy_scalar:
 	MOVD dst+0(FP), R0
 	MOVD src+8(FP), R1
 	MOVD dstStride+16(FP), R2

@@ -591,7 +591,7 @@ func TestLoopFilterMBAFFMixedVerticalStrengthUsesBothLeftRows(t *testing.T) {
 	}
 
 	m.MacroblockTyp[current] |= MBTypeInterlaced
-	ctx.NonZeroCountCache = [h264NonZeroCountCacheSize]uint8{}
+	ctx.NonZeroCountCache = [h264MotionCacheSize]uint8{}
 	ctx.NonZeroCountCache[12+8*1] = 1
 	bS, err = m.loopFilterMBAFFMixedVerticalStrength(ctx, m.MacroblockTyp[current], h264LoopFilterSliceParams{PPS: pps, CABAC: true})
 	if err != nil {

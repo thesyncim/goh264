@@ -800,6 +800,7 @@ func simpleFrameEntryPlanesRefsInto(list []simpleRefEntry, planes []h264PictureP
 	for i, entry := range list {
 		planes[i] = entry.frame.picturePlanes()
 		applySimpleFieldRefPlane(&planes[i], entry.pictureStructure)
+		planes[i].trustedLayout = true
 		refs[i] = &planes[i]
 	}
 	return refs, planes
@@ -827,6 +828,7 @@ func simpleFrameEntryPlanesRefsHighInto(list []simpleRefEntry, planes []h264Pict
 	for i, entry := range list {
 		planes[i] = entry.frame.picturePlanesHigh()
 		applySimpleFieldRefPlaneHigh(&planes[i], entry.pictureStructure)
+		planes[i].trustedLayout = true
 		refs[i] = &planes[i]
 	}
 	return refs, planes

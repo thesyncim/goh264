@@ -100,6 +100,13 @@ func (c *cavlcResidualContext) decodeCABACResidualDC(src cabacSyntaxSource, bloc
 }
 
 func (c *cavlcResidualContext) decodeCABACResidualDCTyped(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma422 bool, narrowDCT bool) (cabacResidualResult, error) {
+	if dec, ok := src.(*cabacSyntaxDecoder); ok {
+		return decodeCABACResidualDCDecoder(c, dec, block, cat, n, scantable, maxCoeff, leftCBP, topCBP, mbField, chroma422, narrowDCT)
+	}
+	return decodeCABACResidualDCSource(c, src, block, cat, n, scantable, maxCoeff, leftCBP, topCBP, mbField, chroma422, narrowDCT)
+}
+
+func decodeCABACResidualDCDecoder(c *cavlcResidualContext, src *cabacSyntaxDecoder, block []int32, cat int, n int, scantable []uint8, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma422 bool, narrowDCT bool) (cabacResidualResult, error) {
 	var result cabacResidualResult
 	ctx, err := c.cabacCBFContext(cat, n, maxCoeff, true, leftCBP, topCBP)
 	if err != nil {
@@ -109,7 +116,20 @@ func (c *cavlcResidualContext) decodeCABACResidualDCTyped(src cabacSyntaxSource,
 		c.NonZeroCountCache[h264Scan8[n]] = 0
 		return result, nil
 	}
-	return c.decodeCABACResidualInternal(src, block, cat, n, scantable, nil, maxCoeff, true, mbField, chroma422, narrowDCT)
+	return decodeCABACResidualInternalDecoder(c, src, block, cat, n, scantable, nil, maxCoeff, true, mbField, chroma422, narrowDCT)
+}
+
+func decodeCABACResidualDCSource[S cabacSyntaxSource](c *cavlcResidualContext, src S, block []int32, cat int, n int, scantable []uint8, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma422 bool, narrowDCT bool) (cabacResidualResult, error) {
+	var result cabacResidualResult
+	ctx, err := c.cabacCBFContext(cat, n, maxCoeff, true, leftCBP, topCBP)
+	if err != nil {
+		return result, err
+	}
+	if src.get(ctx) == 0 {
+		c.NonZeroCountCache[h264Scan8[n]] = 0
+		return result, nil
+	}
+	return decodeCABACResidualInternalSource(c, src, block, cat, n, scantable, nil, maxCoeff, true, mbField, chroma422, narrowDCT)
 }
 
 func (c *cavlcResidualContext) decodeCABACResidualNonDC(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma444 bool) (cabacResidualResult, error) {
@@ -117,6 +137,13 @@ func (c *cavlcResidualContext) decodeCABACResidualNonDC(src cabacSyntaxSource, b
 }
 
 func (c *cavlcResidualContext) decodeCABACResidualNonDCTyped(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma444 bool, narrowDCT bool) (cabacResidualResult, error) {
+	if dec, ok := src.(*cabacSyntaxDecoder); ok {
+		return decodeCABACResidualNonDCDecoder(c, dec, block, cat, n, scantable, qmul, maxCoeff, leftCBP, topCBP, mbField, chroma444, narrowDCT)
+	}
+	return decodeCABACResidualNonDCSource(c, src, block, cat, n, scantable, qmul, maxCoeff, leftCBP, topCBP, mbField, chroma444, narrowDCT)
+}
+
+func decodeCABACResidualNonDCDecoder(c *cavlcResidualContext, src *cabacSyntaxDecoder, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma444 bool, narrowDCT bool) (cabacResidualResult, error) {
 	var result cabacResidualResult
 	if cat < 0 || cat >= len(cabacCBFBaseContext) {
 		return result, ErrInvalidData
@@ -135,10 +162,181 @@ func (c *cavlcResidualContext) decodeCABACResidualNonDCTyped(src cabacSyntaxSour
 			return result, nil
 		}
 	}
-	return c.decodeCABACResidualInternal(src, block, cat, n, scantable, qmul, maxCoeff, false, mbField, false, narrowDCT)
+	return decodeCABACResidualInternalDecoder(c, src, block, cat, n, scantable, qmul, maxCoeff, false, mbField, false, narrowDCT)
+}
+
+func decodeCABACResidualNonDCSource[S cabacSyntaxSource](c *cavlcResidualContext, src S, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, leftCBP int, topCBP int, mbField bool, chroma444 bool, narrowDCT bool) (cabacResidualResult, error) {
+	var result cabacResidualResult
+	if cat < 0 || cat >= len(cabacCBFBaseContext) {
+		return result, ErrInvalidData
+	}
+	if cat != 5 || chroma444 {
+		ctx, err := c.cabacCBFContext(cat, n, maxCoeff, false, leftCBP, topCBP)
+		if err != nil {
+			return result, err
+		}
+		if src.get(ctx) == 0 {
+			if maxCoeff == 64 {
+				fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[n]), 2, 2, 8, 0)
+			} else {
+				c.NonZeroCountCache[h264Scan8[n]] = 0
+			}
+			return result, nil
+		}
+	}
+	return decodeCABACResidualInternalSource(c, src, block, cat, n, scantable, qmul, maxCoeff, false, mbField, false, narrowDCT)
 }
 
 func (c *cavlcResidualContext) decodeCABACResidualInternal(src cabacSyntaxSource, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, isDC bool, mbField bool, chroma422 bool, narrowDCT bool) (cabacResidualResult, error) {
+	if dec, ok := src.(*cabacSyntaxDecoder); ok {
+		return decodeCABACResidualInternalDecoder(c, dec, block, cat, n, scantable, qmul, maxCoeff, isDC, mbField, chroma422, narrowDCT)
+	}
+	return decodeCABACResidualInternalSource(c, src, block, cat, n, scantable, qmul, maxCoeff, isDC, mbField, chroma422, narrowDCT)
+}
+
+func decodeCABACResidualInternalSource[S cabacSyntaxSource](c *cavlcResidualContext, src S, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, isDC bool, mbField bool, chroma422 bool, narrowDCT bool) (cabacResidualResult, error) {
+	var result cabacResidualResult
+	if cat < 0 || cat >= len(cabacCBFBaseContext) || n < 0 || n >= len(h264Scan8) || maxCoeff <= 0 || maxCoeff > 64 {
+		return result, ErrInvalidData
+	}
+	if len(scantable) < maxCoeff {
+		return result, ErrInvalidData
+	}
+	if !isDC && len(qmul) < maxCoeff {
+		return result, ErrInvalidData
+	}
+
+	fieldIdx := 0
+	if mbField {
+		fieldIdx = 1
+	}
+	sigCtxBase := cabacSignificantCoeffFlagOffset[fieldIdx][cat]
+	lastCtxBase := cabacLastCoeffFlagOffset[fieldIdx][cat]
+	absCtxBase := cabacCoeffAbsLevelM1Offset[cat]
+
+	var index [64]int
+	coeffCount := 0
+	last := 0
+
+	if !isDC && maxCoeff == 64 {
+		sigOff := cabacSignificantCoeffFlagOffset8x8[fieldIdx]
+		for last = 0; last < 63; last++ {
+			if src.get(sigCtxBase+int(sigOff[last])) != 0 {
+				index[coeffCount] = last
+				coeffCount++
+				lastOff := int(h264CABACTables[h264LastCoeffFlagOffset8x8Offset+last])
+				if src.get(lastCtxBase+lastOff) != 0 {
+					last = maxCoeff
+					break
+				}
+			}
+		}
+		if last == maxCoeff-1 {
+			index[coeffCount] = last
+			coeffCount++
+		}
+	} else {
+		coefs := maxCoeff - 1
+		for last = 0; last < coefs; last++ {
+			sigOff := last
+			lastOff := last
+			if isDC && chroma422 {
+				sigOff = int(cabacSigCoeffOffsetDC[last])
+				lastOff = sigOff
+			}
+			if src.get(sigCtxBase+sigOff) != 0 {
+				index[coeffCount] = last
+				coeffCount++
+				if src.get(lastCtxBase+lastOff) != 0 {
+					last = maxCoeff
+					break
+				}
+			}
+		}
+		if last == maxCoeff-1 {
+			index[coeffCount] = last
+			coeffCount++
+		}
+	}
+	if coeffCount <= 0 {
+		return result, ErrInvalidData
+	}
+
+	result.Coded = true
+	result.CoeffCount = coeffCount
+	if isDC {
+		if cat == 3 {
+			result.CBPTableBits = 0x40 << (n - chromaDCBlockIndex)
+		} else {
+			result.CBPTableBits = 0x100 << (n - lumaDCBlockIndex)
+		}
+		c.NonZeroCountCache[h264Scan8[n]] = uint8(coeffCount)
+	} else if maxCoeff == 64 {
+		fillCAVLCNonZero(&c.NonZeroCountCache, int(h264Scan8[n]), 2, 2, 8, uint8(coeffCount))
+	} else {
+		c.NonZeroCountCache[h264Scan8[n]] = uint8(coeffCount)
+	}
+
+	nodeCtx := 0
+	for coeffCount > 0 {
+		coeffCount--
+		scanPos := int(scantable[index[coeffCount]])
+		if scanPos < 0 || scanPos >= len(block) {
+			return result, ErrInvalidData
+		}
+		if !isDC && scanPos >= len(qmul) {
+			return result, ErrInvalidData
+		}
+
+		ctx := absCtxBase + int(cabacCoeffAbsLevel1Context[nodeCtx])
+		if src.get(ctx) == 0 {
+			nodeCtx = int(cabacCoeffAbsLevelTransition[0][nodeCtx])
+			if isDC {
+				storeCABACResidualCoeff(block, scanPos, src.bypassSign(-1), narrowDCT)
+			} else {
+				storeCABACResidualCoeff(block, scanPos, (src.bypassSign(-int32(qmul[scanPos]))+32)>>6, narrowDCT)
+			}
+			continue
+		}
+
+		coeffAbs := 2
+		gt1Index := 0
+		if isDC && chroma422 {
+			gt1Index = 1
+		}
+		ctx = absCtxBase + int(cabacCoeffAbsLevelGT1Context[gt1Index][nodeCtx])
+		nodeCtx = int(cabacCoeffAbsLevelTransition[1][nodeCtx])
+
+		for coeffAbs < 15 && src.get(ctx) != 0 {
+			coeffAbs++
+		}
+		if coeffAbs >= 15 {
+			j := 0
+			for src.bypass() != 0 && j < 16+7 {
+				j++
+			}
+			coeffAbs = 1
+			for j > 0 {
+				j--
+				coeffAbs += coeffAbs + src.bypass()
+			}
+			coeffAbs += 14
+		}
+
+		if isDC {
+			storeCABACResidualCoeff(block, scanPos, src.bypassSign(-int32(coeffAbs)), narrowDCT)
+		} else {
+			storeCABACResidualCoeff(block, scanPos, (src.bypassSign(-int32(coeffAbs))*int32(qmul[scanPos])+32)>>6, narrowDCT)
+		}
+	}
+	return result, nil
+}
+
+// decodeCABACResidualInternalDecoder is the production specialization. It is
+// deliberately concrete rather than generic: Go's shape instantiation still
+// dispatches interface-constrained method calls through a dictionary, while
+// the decoder's CABAC bins are hot enough for direct calls to matter.
+func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSyntaxDecoder, block []int32, cat int, n int, scantable []uint8, qmul []uint32, maxCoeff int, isDC bool, mbField bool, chroma422 bool, narrowDCT bool) (cabacResidualResult, error) {
 	var result cabacResidualResult
 	if cat < 0 || cat >= len(cabacCBFBaseContext) || n < 0 || n >= len(h264Scan8) || maxCoeff <= 0 || maxCoeff > 64 {
 		return result, ErrInvalidData

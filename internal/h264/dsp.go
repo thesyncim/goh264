@@ -81,6 +81,26 @@ func h264WeightPixels(dst []uint8, stride int, height int, log2Denom int, weight
 	if err := checkWeightedPixelsArgs(dst, nil, stride, height, width, log2Denom); err != nil {
 		return err
 	}
+	if h264WeightPixels16ASMEnabled && width == 16 && height > 0 && height&1 == 0 &&
+		h264WeightPixels16ASMUsable(log2Denom, weight, offset) && fitsH264CInt(height) {
+		h264WeightPixels16ASM(&dst[0], stride, int32(height), int32(log2Denom), int32(weight), int32(offset))
+		return nil
+	}
+	h264WeightPixelsScalar(dst, stride, height, log2Denom, weight, offset, width)
+	return nil
+}
+
+func h264WeightPixels16ASMUsable(log2Denom int, weight int, offset int) bool {
+	if log2Denom < 0 || log2Denom > 7 || weight < -128 || weight > 127 || offset < -128 || offset > 127 {
+		return false
+	}
+	// FFmpeg's NEON leaf uses a signed 16-bit subtract for this case. At the
+	// most-negative legal weight, sufficiently negative offsets can overflow
+	// that lane even though the scalar int expression remains in range.
+	return log2Denom != 1 || weight != -128 || offset >= -64
+}
+
+func h264WeightPixelsScalar(dst []uint8, stride int, height int, log2Denom int, weight int, offset int, width int) {
 	scaledOffset := int(int32(uint32(offset) << uint(log2Denom)))
 	if log2Denom != 0 {
 		scaledOffset += 1 << (log2Denom - 1)
@@ -92,7 +112,6 @@ func h264WeightPixels(dst []uint8, stride int, height int, log2Denom int, weight
 			dst[row+x] = clipUint8((int(dst[row+x])*weight + scaledOffset) >> uint(log2Denom))
 		}
 	}
-	return nil
 }
 
 func h264BiweightPixels(dst []uint8, src []uint8, stride int, height int, log2Denom int, weightd int, weights int, offset int, width int) error {
@@ -624,6 +643,14 @@ func checkWeightedPixelsHighArgs(dst []uint16, src []uint16, stride int, height 
 		return ErrInvalidData
 	}
 	return nil
+}
+
+func fitsH264CInt(v int) bool {
+	const (
+		minCInt = -1 << 31
+		maxCInt = 1<<31 - 1
+	)
+	return v >= minCInt && v <= maxCInt
 }
 
 func checkLoopFilterArgs(pix []uint8, offset int, xstride int, ystride int, innerIters int, groups int, before int, after int) error {

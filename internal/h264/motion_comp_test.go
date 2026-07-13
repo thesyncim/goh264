@@ -53,6 +53,54 @@ func TestH264EmulatedEdgeMCRejectsOverflowedGeometry(t *testing.T) {
 	}
 }
 
+func TestH264EmulatedEdgeMCMatchesClampedPixelOracle(t *testing.T) {
+	const (
+		width     = 32
+		height    = 27
+		srcStride = 40
+		bufStride = 37
+		bufOffset = 5
+	)
+	src := make([]uint8, srcStride*height)
+	fillH264MotionCompPlane(src, 29)
+	xs := []int{-40, -21, -20, -3, -2, -1, 0, 1, 15, 29, 30, 31, 32, 33, 50}
+	ys := []int{-40, -21, -20, -3, -2, -1, 0, 1, 13, 24, 25, 26, 27, 28, 45}
+	for _, shape := range []struct {
+		name           string
+		blockW, blockH int
+	}{
+		{name: "Luma21x21", blockW: 21, blockH: 21},
+		{name: "Chroma9x9", blockW: 9, blockH: 9},
+		{name: "Chroma422_9x17", blockW: 9, blockH: 17},
+	} {
+		for _, srcY := range ys {
+			for _, srcX := range xs {
+				name := fmt.Sprintf("%s/x%d/y%d", shape.name, srcX, srcY)
+				t.Run(name, func(t *testing.T) {
+					buf := make([]uint8, bufOffset+(shape.blockH-1)*bufStride+shape.blockW+7)
+					for i := range buf {
+						buf[i] = 0xcd
+					}
+					if err := h264EmulatedEdgeMC(buf, bufOffset, bufStride, src, srcStride, shape.blockW, shape.blockH, srcX, srcY, width, height); err != nil {
+						t.Fatal(err)
+					}
+					for y := 0; y < shape.blockH; y++ {
+						wantY := min(max(srcY+y, 0), height-1)
+						for x := 0; x < shape.blockW; x++ {
+							wantX := min(max(srcX+x, 0), width-1)
+							got := buf[bufOffset+y*bufStride+x]
+							want := src[wantY*srcStride+wantX]
+							if got != want {
+								t.Fatalf("pixel (%d,%d) = %d, want %d", x, y, got, want)
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestH264EmulatedEdgeMCHighRejectsOverflowedGeometry(t *testing.T) {
 	if err := h264EmulatedEdgeMCHigh(nil, maxInt-1, maxInt, []uint16{0, 1}, 1, 1, 2, 0, 0, 1, 2); err != ErrInvalidData {
 		t.Fatalf("overflowed high edge buffer geometry error = %v, want ErrInvalidData", err)

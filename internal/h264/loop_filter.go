@@ -97,8 +97,16 @@ type h264LoopFilterContext struct {
 	LeftType          uint32
 	LeftTypes         [2]uint32
 	CBP               int
-	NonZeroCountCache [h264NonZeroCountCacheSize]uint8
-	Motion            macroblockMotionCache
+	NonZeroCountCache [h264MotionCacheSize]uint8
+	Motion            h264LoopFilterMotionCache
+}
+
+// The deblock strength calculation consumes only motion vectors and reference
+// ids. Keeping its per-macroblock cache separate avoids zeroing the unrelated
+// MVD and direct-prediction arrays carried by the decode-time motion cache.
+type h264LoopFilterMotionCache struct {
+	MV  [2][h264MotionCacheSize][2]int16
+	Ref [2][h264MotionCacheSize]int8
 }
 
 func h264LoopFilterSliceParamsFromHeader(sh *SliceHeader) h264LoopFilterSliceParams {
@@ -180,8 +188,8 @@ func (p h264LoopFilterSliceParams) ref2Frame(list int, ref int8) int8 {
 	return refs[ref]
 }
 
-func (p h264LoopFilterSliceParams) ref2FrameForLoopFilter(list int, ref int8, currentMBType uint32) int8 {
-	if !h264LoopFilterFrameMBAFF(p) || currentMBType&MBTypeInterlaced == 0 || ref < 0 || list < 0 || list > 1 {
+func (p h264LoopFilterSliceParams) ref2FrameForInterlacedLoopFilter(list int, ref int8) int8 {
+	if ref < 0 || list < 0 || list > 1 {
 		return p.ref2Frame(list, ref)
 	}
 	refs := p.Ref2Frame[list]
@@ -317,7 +325,7 @@ func (m *macroblockTables) filterFrameMBAt(dst *h264PicturePlanes, params []h264
 	if p.DeblockingFilter == 0 {
 		return nil
 	}
-	ctx, err := m.fillLoopFilterCachesFrame(mbXY, sliceNum, p, params)
+	ctx, err := m.fillLoopFilterCachesFrameValidated(mbXY, sliceNum, p, params)
 	if err != nil {
 		return err
 	}
@@ -372,7 +380,7 @@ func (m *macroblockTables) filterField(dst *h264PicturePlanes, params []h264Loop
 			if p.DeblockingFilter == 0 {
 				continue
 			}
-			ctx, err := m.fillLoopFilterCachesFrame(mbXY, sliceNum, p, params)
+			ctx, err := m.fillLoopFilterCachesFrameValidated(mbXY, sliceNum, p, params)
 			if err != nil {
 				return err
 			}
@@ -435,7 +443,7 @@ func (m *macroblockTables) filterFrameHighMBAt(dst *h264PicturePlanesHigh, param
 	if p.DeblockingFilter == 0 {
 		return nil
 	}
-	ctx, err := m.fillLoopFilterCachesFrame(mbXY, sliceNum, p, params)
+	ctx, err := m.fillLoopFilterCachesFrameValidated(mbXY, sliceNum, p, params)
 	if err != nil {
 		return err
 	}
@@ -464,7 +472,11 @@ func (m *macroblockTables) fillLoopFilterCachesFrame(mbXY int, sliceNum uint16, 
 	if err := p.validate(); err != nil {
 		return ctx, err
 	}
+	return m.fillLoopFilterCachesFrameValidated(mbXY, sliceNum, p, params)
+}
 
+func (m *macroblockTables) fillLoopFilterCachesFrameValidated(mbXY int, sliceNum uint16, p h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) (h264LoopFilterContext, error) {
+	var ctx h264LoopFilterContext
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
 	mbType := m.MacroblockTyp[mbXY]
@@ -624,7 +636,7 @@ func h264FrameMBAFFLoopFilterViewHigh(dst *h264PicturePlanesHigh, mbY int, mbTyp
 	return view, mbY >> 1, nil
 }
 
-func h264SetLoopFilter8x8DCTNNZ(cache *[h264NonZeroCountCacheSize]uint8, base int, value int) {
+func h264SetLoopFilter8x8DCTNNZ(cache *[h264MotionCacheSize]uint8, base int, value int) {
 	v := uint8(value)
 	cache[h264Scan8[base+0]] = v
 	cache[h264Scan8[base+1]] = v
@@ -689,10 +701,19 @@ func (m *macroblockTables) copyTopMotionForLoopFilter(ctx *h264LoopFilterContext
 	if err := checkRange(len(m.RefIndex[list]), refBase, 2); err != nil {
 		return err
 	}
-	ctx.Motion.Ref[list][base+0-8] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+0], currentMBType)
-	ctx.Motion.Ref[list][base+1-8] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+0], currentMBType)
-	ctx.Motion.Ref[list][base+2-8] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+1], currentMBType)
-	ctx.Motion.Ref[list][base+3-8] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+1], currentMBType)
+	ref0 := int8(0)
+	ref1 := int8(0)
+	if currentMBType&MBTypeInterlaced != 0 && h264LoopFilterFrameMBAFF(p) {
+		ref0 = p.ref2FrameForInterlacedLoopFilter(list, m.RefIndex[list][refBase+0])
+		ref1 = p.ref2FrameForInterlacedLoopFilter(list, m.RefIndex[list][refBase+1])
+	} else {
+		ref0 = p.ref2Frame(list, m.RefIndex[list][refBase+0])
+		ref1 = p.ref2Frame(list, m.RefIndex[list][refBase+1])
+	}
+	ctx.Motion.Ref[list][base+0-8] = ref0
+	ctx.Motion.Ref[list][base+1-8] = ref0
+	ctx.Motion.Ref[list][base+2-8] = ref1
+	ctx.Motion.Ref[list][base+3-8] = ref1
 	return nil
 }
 
@@ -705,6 +726,15 @@ func (m *macroblockTables) copyLeftMotionForLoopFilter(ctx *h264LoopFilterContex
 	if err := checkRange(len(m.RefIndex[list]), refBase, 3); err != nil {
 		return err
 	}
+	refTop := int8(0)
+	refBottom := int8(0)
+	if currentMBType&MBTypeInterlaced != 0 && h264LoopFilterFrameMBAFF(p) {
+		refTop = p.ref2FrameForInterlacedLoopFilter(list, m.RefIndex[list][refBase])
+		refBottom = p.ref2FrameForInterlacedLoopFilter(list, m.RefIndex[list][refBase+2])
+	} else {
+		refTop = p.ref2Frame(list, m.RefIndex[list][refBase])
+		refBottom = p.ref2Frame(list, m.RefIndex[list][refBase+2])
+	}
 	for row := 0; row < 4; row++ {
 		mvIdx := bXY + row*m.BStride
 		if err := checkRange(len(m.MotionVal[list]), mvIdx, 1); err != nil {
@@ -712,7 +742,11 @@ func (m *macroblockTables) copyLeftMotionForLoopFilter(ctx *h264LoopFilterContex
 		}
 		cacheIdx := base - 1 + row*8
 		ctx.Motion.MV[list][cacheIdx] = m.MotionVal[list][mvIdx]
-		ctx.Motion.Ref[list][cacheIdx] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+2*(row>>1)], currentMBType)
+		if row < 2 {
+			ctx.Motion.Ref[list][cacheIdx] = refTop
+		} else {
+			ctx.Motion.Ref[list][cacheIdx] = refBottom
+		}
 	}
 	return nil
 }
@@ -735,17 +769,32 @@ func (m *macroblockTables) copyCurrentMotionForLoopFilter(ctx *h264LoopFilterCon
 	if err := checkRange(len(m.RefIndex[list]), refBase, 4); err != nil {
 		return err
 	}
+	ref0 := int8(0)
+	ref1 := int8(0)
+	ref2 := int8(0)
+	ref3 := int8(0)
+	if currentMBType&MBTypeInterlaced != 0 && h264LoopFilterFrameMBAFF(p) {
+		ref0 = p.ref2FrameForInterlacedLoopFilter(list, m.RefIndex[list][refBase+0])
+		ref1 = p.ref2FrameForInterlacedLoopFilter(list, m.RefIndex[list][refBase+1])
+		ref2 = p.ref2FrameForInterlacedLoopFilter(list, m.RefIndex[list][refBase+2])
+		ref3 = p.ref2FrameForInterlacedLoopFilter(list, m.RefIndex[list][refBase+3])
+	} else {
+		ref0 = p.ref2Frame(list, m.RefIndex[list][refBase+0])
+		ref1 = p.ref2Frame(list, m.RefIndex[list][refBase+1])
+		ref2 = p.ref2Frame(list, m.RefIndex[list][refBase+2])
+		ref3 = p.ref2Frame(list, m.RefIndex[list][refBase+3])
+	}
 	for row := 0; row < 2; row++ {
-		ctx.Motion.Ref[list][base+row*8+0] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+0], currentMBType)
-		ctx.Motion.Ref[list][base+row*8+1] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+0], currentMBType)
-		ctx.Motion.Ref[list][base+row*8+2] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+1], currentMBType)
-		ctx.Motion.Ref[list][base+row*8+3] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+1], currentMBType)
+		ctx.Motion.Ref[list][base+row*8+0] = ref0
+		ctx.Motion.Ref[list][base+row*8+1] = ref0
+		ctx.Motion.Ref[list][base+row*8+2] = ref1
+		ctx.Motion.Ref[list][base+row*8+3] = ref1
 	}
 	for row := 2; row < 4; row++ {
-		ctx.Motion.Ref[list][base+row*8+0] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+2], currentMBType)
-		ctx.Motion.Ref[list][base+row*8+1] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+2], currentMBType)
-		ctx.Motion.Ref[list][base+row*8+2] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+3], currentMBType)
-		ctx.Motion.Ref[list][base+row*8+3] = p.ref2FrameForLoopFilter(list, m.RefIndex[list][refBase+3], currentMBType)
+		ctx.Motion.Ref[list][base+row*8+0] = ref2
+		ctx.Motion.Ref[list][base+row*8+1] = ref2
+		ctx.Motion.Ref[list][base+row*8+2] = ref3
+		ctx.Motion.Ref[list][base+row*8+3] = ref3
 	}
 	return nil
 }
@@ -801,9 +850,10 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 	}
 	maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> uint(dir)))
 	mvyLimit := h264LoopFilterMVYLimit(mbType)
+	frameMBAFF := h264LoopFilterFrameMBAFF(p)
 	firstVerticalEdgeDone := false
 
-	if dir == 0 && h264LoopFilterFrameMBAFF(p) && mbmType != 0 && mbType&MBTypeInterlaced != mbmType&MBTypeInterlaced {
+	if dir == 0 && frameMBAFF && mbmType != 0 && mbType&MBTypeInterlaced != mbmType&MBTypeInterlaced {
 		if err := m.filterFrameMBAFFMixedVerticalEdge(dst, dstY, dstCb, dstCr, p, ctx, mbType); err != nil {
 			return err
 		}
@@ -812,12 +862,12 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 
 	if mbmType != 0 && !firstVerticalEdgeDone {
 		mbY := ctx.MBXY / m.MBStride
-		if h264LoopFilterFrameMBAFF(p) && dir == 1 && mbY&1 == 0 && (mbmType&^mbType)&MBTypeInterlaced != 0 {
+		if frameMBAFF && dir == 1 && mbY&1 == 0 && (mbmType&^mbType)&MBTypeInterlaced != 0 {
 			if err := m.filterFrameMBAFFTopHorizontalEdge(dst, dstY, dstCb, dstCr, p, ctx, mbType); err != nil {
 				return err
 			}
 		} else {
-			bS, err := m.loopFilterBoundaryStrength(ctx, mbType, mbmType, dir, maskPar0, p.ListCount, mvyLimit, h264LoopFilterFrameMBAFF(p))
+			bS, err := m.loopFilterBoundaryStrength(ctx, mbType, mbmType, dir, maskPar0, p.ListCount, mvyLimit, frameMBAFF)
 			if err != nil {
 				return err
 			}
@@ -1139,9 +1189,10 @@ func (m *macroblockTables) filterFrameMacroblockDirHigh(dst *h264PicturePlanesHi
 	}
 	maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> uint(dir)))
 	mvyLimit := h264LoopFilterMVYLimit(mbType)
+	frameMBAFF := h264LoopFilterFrameMBAFF(p)
 	firstVerticalEdgeDone := false
 
-	if dir == 0 && h264LoopFilterFrameMBAFF(p) && mbmType != 0 && mbType&MBTypeInterlaced != mbmType&MBTypeInterlaced {
+	if dir == 0 && frameMBAFF && mbmType != 0 && mbType&MBTypeInterlaced != mbmType&MBTypeInterlaced {
 		if err := m.filterFrameMBAFFMixedVerticalEdgeHigh(dst, dstY, dstCb, dstCr, p, ctx, mbType, bitDepth); err != nil {
 			return err
 		}
@@ -1150,12 +1201,12 @@ func (m *macroblockTables) filterFrameMacroblockDirHigh(dst *h264PicturePlanesHi
 
 	if mbmType != 0 && !firstVerticalEdgeDone {
 		mbY := ctx.MBXY / m.MBStride
-		if h264LoopFilterFrameMBAFF(p) && dir == 1 && mbY&1 == 0 && (mbmType&^mbType)&MBTypeInterlaced != 0 {
+		if frameMBAFF && dir == 1 && mbY&1 == 0 && (mbmType&^mbType)&MBTypeInterlaced != 0 {
 			if err := m.filterFrameMBAFFTopHorizontalEdgeHigh(dst, dstY, dstCb, dstCr, p, ctx, mbType, bitDepth); err != nil {
 				return err
 			}
 		} else {
-			bS, err := m.loopFilterBoundaryStrength(ctx, mbType, mbmType, dir, maskPar0, p.ListCount, mvyLimit, h264LoopFilterFrameMBAFF(p))
+			bS, err := m.loopFilterBoundaryStrength(ctx, mbType, mbmType, dir, maskPar0, p.ListCount, mvyLimit, frameMBAFF)
 			if err != nil {
 				return err
 			}

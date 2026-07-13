@@ -213,6 +213,45 @@ func TestDecodeCABACMBRefAndMVD(t *testing.T) {
 	wantIndexes(t, src, []int{42, 43, 44, 45})
 }
 
+func TestCABACSyntaxDecoderPrimitivesMatchContext(t *testing.T) {
+	buf := make([]byte, 512)
+	for i := range buf {
+		buf[i] = byte(i*73 + 19)
+	}
+	fastContext, err := initCABACDecoder(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oracleContext := fastContext
+	fastState, err := initH264CABACStates(PictureTypeP, 1, 27, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oracleState := fastState
+	fast := cabacSyntaxDecoder{cabac: &fastContext, state: &fastState}
+
+	for i := 0; i < 256; i++ {
+		idx := (i * 37) % 400
+		if got, want := fast.get(idx), oracleContext.getCABAC(&oracleState[idx]); got != want {
+			t.Fatalf("get step %d index %d = %d, want %d", i, idx, got, want)
+		}
+		if i%5 == 0 {
+			if got, want := fast.bypass(), oracleContext.getCABACBypass(); got != want {
+				t.Fatalf("bypass step %d = %d, want %d", i, got, want)
+			}
+		}
+		if i%7 == 0 {
+			val := int32(-1 - i%11)
+			if got, want := fast.bypassSign(val), oracleContext.getCABACBypassSign(val); got != want {
+				t.Fatalf("bypass sign step %d = %d, want %d", i, got, want)
+			}
+		}
+		if fastContext.low != oracleContext.low || fastContext.rng != oracleContext.rng || fastContext.bytestream != oracleContext.bytestream || fastState != oracleState {
+			t.Fatalf("state diverged at step %d", i)
+		}
+	}
+}
+
 func TestDecodeCABACQScaleDiff(t *testing.T) {
 	src := &scriptedCABACSource{bits: []int{0}}
 	qscale, diff, err := decodeCABACQScaleDiff(src, 26, 0, 51)

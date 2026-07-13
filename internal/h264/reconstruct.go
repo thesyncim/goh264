@@ -51,14 +51,26 @@ func h264X264BuildUsesUnfiltered8x8LAdd(x264Build int32, x264BuildSet bool) bool
 }
 
 func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstructInput) error {
+	return h264HLDecodeFrameMacroblockCore(dst, in, false)
+}
+
+// h264HLDecodeFrameMacroblockTrusted is restricted to slice decode, which
+// validates the destination picture before constructing per-macroblock views.
+func h264HLDecodeFrameMacroblockTrusted(dst *h264PicturePlanes, in h264FrameMBReconstructInput) error {
+	return h264HLDecodeFrameMacroblockCore(dst, in, true)
+}
+
+func h264HLDecodeFrameMacroblockCore(dst *h264PicturePlanes, in h264FrameMBReconstructInput, trustedDst bool) error {
 	if dst == nil || in.MBX < 0 || in.MBY < 0 || in.QScale < 0 || in.QScale > qpMaxNum {
 		return ErrInvalidData
 	}
 	if in.DeblockingFilter || in.ConstrainedIntra444 {
 		return ErrUnsupported
 	}
-	if err := dst.validate(); err != nil {
-		return err
+	if !trustedDst {
+		if err := dst.validate(); err != nil {
+			return err
+		}
 	}
 	if in.MBX >= dst.MBWidth || in.MBY >= dst.MBHeight {
 		return ErrInvalidData
@@ -99,11 +111,21 @@ func h264HLDecodeFrameMacroblock(dst *h264PicturePlanes, in h264FrameMBReconstru
 			if in.UseMotionWeightMBY {
 				weightMBY = in.MotionWeightMBY
 			}
-			if err := h264HLMotionFrameWeightedWithWeightY(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch); err != nil {
+			if trustedDst {
+				if err := h264HLMotionFrameWeightedWithWeightYTrusted(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch); err != nil {
+					return err
+				}
+			} else if err := h264HLMotionFrameWeightedWithWeightY(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, weightMBY, in.PredWeight, in.MotionScratch); err != nil {
 				return err
 			}
-		} else if err := h264HLMotionFrameWithScratch(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch); err != nil {
-			return err
+		} else {
+			if trustedDst {
+				if err := h264HLMotionFrameWithScratchTrusted(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch); err != nil {
+					return err
+				}
+			} else if err := h264HLMotionFrameWithScratch(dst, in.Refs, in.Motion, in.MBType, in.SubMBType, in.MBX, in.MBY, in.ListCount, in.MotionScratch); err != nil {
+				return err
+			}
 		}
 	}
 

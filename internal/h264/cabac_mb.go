@@ -7,6 +7,8 @@
 
 package h264
 
+import "unsafe"
+
 type cabacSyntaxSource interface {
 	get(idx int) int
 	bypass() int
@@ -24,23 +26,74 @@ type cabacSyntaxDecoder struct {
 	state *[1024]uint8
 }
 
-func (d cabacSyntaxDecoder) get(idx int) int {
-	return d.cabac.getCABAC(&d.state[idx])
+func (d *cabacSyntaxDecoder) get(idx int) int {
+	c := d.cabac
+	// Syntax-context indexes are fixed by the H.264 tables and stay within the
+	// 1024-byte state array. The primitive differential test covers this seam.
+	state := (*uint8)(unsafe.Add(unsafe.Pointer(d.state), uintptr(idx)))
+	s := int32(*state)
+	rangeLPS := int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(c.rng&0xc0) + int(s)))
+
+	c.rng -= rangeLPS
+	lpsMask := -int32(uint32((c.rng<<(cabacBits+1))-c.low) >> 31)
+	c.low -= (c.rng << (cabacBits + 1)) & lpsMask
+	c.rng += (rangeLPS - c.rng) & lpsMask
+
+	s ^= lpsMask
+	*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+	bit := s & 1
+
+	// The pinned norm-shift table is 0..9. Masking that invariant into the
+	// operand lets arm64 use its native register shift directly; an unconstrained
+	// Go shift otherwise grows two >=64 guards in this per-bin primitive.
+	shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(c.rng))) & 31
+	c.rng = int32(uint32(c.rng) << shift)
+	c.low = int32(uint32(c.low) << shift)
+	if c.low&cabacMask == 0 {
+		c.refill2()
+	}
+	return int(bit)
 }
 
-func (d cabacSyntaxDecoder) bypass() int {
-	return d.cabac.getCABACBypass()
+func h264CABACTableUnchecked(index int) uint8 {
+	return *(*uint8)(unsafe.Add(unsafe.Pointer(&h264CABACTables[0]), uintptr(index)))
 }
 
-func (d cabacSyntaxDecoder) bypassSign(val int32) int32 {
-	return d.cabac.getCABACBypassSign(val)
+func (d *cabacSyntaxDecoder) bypass() int {
+	// See TestCABACSyntaxDecoderPrimitivesMatchContext for differential coverage
+	// against the shared CABAC primitive.
+	c := d.cabac
+	c.low += c.low
+	if c.low&cabacMask == 0 {
+		c.refill()
+	}
+
+	rng := c.rng << (cabacBits + 1)
+	if c.low < rng {
+		return 0
+	}
+	c.low -= rng
+	return 1
 }
 
-func (d cabacSyntaxDecoder) terminate() int {
+func (d *cabacSyntaxDecoder) bypassSign(val int32) int32 {
+	c := d.cabac
+	c.low += c.low
+	if c.low&cabacMask == 0 {
+		c.refill()
+	}
+
+	rng := c.rng << (cabacBits + 1)
+	mask := (c.low - rng) >> 31
+	c.low -= rng & ^mask
+	return (val ^ mask) - mask
+}
+
+func (d *cabacSyntaxDecoder) terminate() int {
 	return d.cabac.getCABACTerminate()
 }
 
-func (d cabacSyntaxDecoder) intraPCMBytes(n int) ([]byte, error) {
+func (d *cabacSyntaxDecoder) intraPCMBytes(n int) ([]byte, error) {
 	if d.cabac == nil {
 		return nil, ErrInvalidData
 	}
@@ -115,6 +168,13 @@ func decodeCABACMBType[S cabacSyntaxSource](src S, sliceType int32, sliceTypeNoS
 	return cabacIntraMBTypeInfo(raw)
 }
 
+func decodeCABACMBTypeForSource(src cabacSyntaxSource, sliceType int32, sliceTypeNoS int32, leftType uint32, topType uint32) (cavlcMacroblockSyntax, error) {
+	if dec, ok := src.(*cabacSyntaxDecoder); ok {
+		return decodeCABACMBType(dec, sliceType, sliceTypeNoS, leftType, topType)
+	}
+	return decodeCABACMBType(src, sliceType, sliceTypeNoS, leftType, topType)
+}
+
 func decodeCABACIntraMBType[S cabacSyntaxSource](src S, ctxBase int, intraSlice bool, leftType uint32, topType uint32) int {
 	state := ctxBase
 	if intraSlice {
@@ -183,6 +243,13 @@ func decodeCABACMBIntra4x4PredMode[S cabacSyntaxSource](src S, predMode int) int
 	return mode
 }
 
+func decodeCABACMBIntra4x4PredModeForSource(src cabacSyntaxSource, predMode int) int {
+	if dec, ok := src.(*cabacSyntaxDecoder); ok {
+		return decodeCABACMBIntra4x4PredMode(dec, predMode)
+	}
+	return decodeCABACMBIntra4x4PredMode(src, predMode)
+}
+
 func decodeCABACMBCBPLuma[S cabacSyntaxSource](src S, leftCBP int, topCBP int) int {
 	cbp := 0
 
@@ -196,6 +263,13 @@ func decodeCABACMBCBPLuma[S cabacSyntaxSource](src S, leftCBP int, topCBP int) i
 	cbp += src.get(73+ctx) << 3
 
 	return cbp
+}
+
+func decodeCABACMBCBPLumaForSource(src cabacSyntaxSource, leftCBP int, topCBP int) int {
+	if dec, ok := src.(*cabacSyntaxDecoder); ok {
+		return decodeCABACMBCBPLuma(dec, leftCBP, topCBP)
+	}
+	return decodeCABACMBCBPLuma(src, leftCBP, topCBP)
 }
 
 func decodeCABACMBCBPChroma[S cabacSyntaxSource](src S, leftCBP int, topCBP int) int {
@@ -221,6 +295,13 @@ func decodeCABACMBCBPChroma[S cabacSyntaxSource](src S, leftCBP int, topCBP int)
 		ctx += 2
 	}
 	return 1 + src.get(77+ctx)
+}
+
+func decodeCABACMBCBPChromaForSource(src cabacSyntaxSource, leftCBP int, topCBP int) int {
+	if dec, ok := src.(*cabacSyntaxDecoder); ok {
+		return decodeCABACMBCBPChroma(dec, leftCBP, topCBP)
+	}
+	return decodeCABACMBCBPChroma(src, leftCBP, topCBP)
 }
 
 func decodeCABACPSubMBType[S cabacSyntaxSource](src S) (int, PMBInfo) {
@@ -285,6 +366,13 @@ func decodeCABACMBRef[S cabacSyntaxSource](src S, sliceTypeNoS int32, refA int32
 		}
 	}
 	return ref
+}
+
+func decodeCABACMBRefForSource(src cabacSyntaxSource, sliceTypeNoS int32, refA int32, refB int32, directA uint32, directB uint32) int32 {
+	if dec, ok := src.(*cabacSyntaxDecoder); ok {
+		return decodeCABACMBRef(dec, sliceTypeNoS, refA, refB, directA, directB)
+	}
+	return decodeCABACMBRef(src, sliceTypeNoS, refA, refB, directA, directB)
 }
 
 func decodeCABACMBMVD[S cabacSyntaxSource](src S, ctxBase int, amvd int) (int32, int, error) {
@@ -357,6 +445,13 @@ func decodeCABACQScaleDiff[S cabacSyntaxSource](src S, qscale int, lastQScaleDif
 		}
 	}
 	return qscale, diff, nil
+}
+
+func decodeCABACQScaleDiffForSource(src cabacSyntaxSource, qscale int, lastQScaleDiff int, maxQP int) (int, int, error) {
+	if dec, ok := src.(*cabacSyntaxDecoder); ok {
+		return decodeCABACQScaleDiff(dec, qscale, lastQScaleDiff, maxQP)
+	}
+	return decodeCABACQScaleDiff(src, qscale, lastQScaleDiff, maxQP)
 }
 
 func cabacMVDContext(ctxBase int, amvd int) int {
