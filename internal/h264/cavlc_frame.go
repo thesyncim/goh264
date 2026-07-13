@@ -179,7 +179,7 @@ func (m *macroblockTables) decodeCAVLCFrameMacroblockWithWork(gb *bitReader, in 
 		return result, ErrInvalidData
 	}
 	result.MBFieldDecodingFlag = in.MBFieldDecodingFlag
-	*work = frameMacroblockDecodeWork{}
+	work.resetForDecode()
 
 	base, err := decodeCAVLCMBType(gb, in.SliceType, in.SliceTypeNoS)
 	if err != nil {

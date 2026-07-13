@@ -591,6 +591,7 @@ func TestDecodeCAVLCIntra16x16MacroblockNoResidual(t *testing.T) {
 	pps := cavlcFlatQMulPPS()
 	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
 	var ctx cavlcResidualContext
+	ctx.MB[0] = 17
 	gb := newBitReader(cavlcBitString("010111"))
 
 	mb, err := ctx.decodeCAVLCIntraMacroblock(&gb, pps, sps, PictureTypeI, PictureTypeI, 26, false, [16]int8{})
@@ -605,6 +606,9 @@ func TestDecodeCAVLCIntra16x16MacroblockNoResidual(t *testing.T) {
 	}
 	if ctx.NonZeroCountCache[h264Scan8[lumaDCBlockIndex]] != 0 {
 		t.Fatalf("luma dc nnz = %d, want 0", ctx.NonZeroCountCache[h264Scan8[lumaDCBlockIndex]])
+	}
+	if ctx.MB[0] != 0 {
+		t.Fatalf("stale luma coefficient = %d, want 0", ctx.MB[0])
 	}
 	if gb.bitPos != 6 {
 		t.Fatalf("consumed %d bits, want 6", gb.bitPos)

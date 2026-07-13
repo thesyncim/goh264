@@ -25,14 +25,21 @@ type frameMacroblockDecodeWork struct {
 	Motion     macroblockMotionCache
 }
 
-// resetForSkip clears the caches used by skip/direct prediction without
-// touching coefficient storage. Skipped macroblocks have CBP zero, so
-// reconstruction cannot consume Residual.MB or Residual.MBLumaDC; the next
-// coded macroblock performs the full work reset before entropy decoding.
-func (w *frameMacroblockDecodeWork) resetForSkip() {
+// resetForDecode clears neighbor-derived caches while leaving coefficient
+// arrays to the residual payload, which knows whether the macroblock can use
+// them.
+func (w *frameMacroblockDecodeWork) resetForDecode() {
 	w.IntraCache = [h264IntraPredModeCacheSize]int8{}
 	w.Residual.NonZeroCountCache = [h264NonZeroCountCacheSize]uint8{}
 	w.Motion = macroblockMotionCache{}
+}
+
+// resetForSkip clears the caches used by skip/direct prediction without
+// touching coefficient storage. Skipped macroblocks have CBP zero, so
+// reconstruction cannot consume Residual.MB or Residual.MBLumaDC. Residual
+// decoding clears coefficient storage before any later macroblock can use it.
+func (w *frameMacroblockDecodeWork) resetForSkip() {
+	w.resetForDecode()
 }
 
 func newSliceMacroblockCursor(m *macroblockTables, sh *SliceHeader) (sliceMacroblockCursor, error) {

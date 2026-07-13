@@ -390,6 +390,9 @@ func (c *cavlcResidualContext) decodeCAVLCResidualPayload(gb *bitReader, pps *PP
 	if pps == nil || sps == nil || qscale < 0 {
 		return qscale, chromaQP, cbpTable, ErrInvalidData
 	}
+	if cbp != 0 || isIntra16x16(mbType) {
+		clear(c.MB[:])
+	}
 
 	if cbp != 0 || isIntra16x16(mbType) {
 		dquant, err := gb.readSEGolombLong()

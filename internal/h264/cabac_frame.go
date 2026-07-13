@@ -209,7 +209,7 @@ func (m *macroblockTables) decodeCABACFrameMacroblockWithWork(src cabacSyntaxSou
 func (m *macroblockTables) decodeCABACFrameMacroblockWithWorkValidated(src cabacSyntaxSource, in cabacFrameMacroblockInput, work *frameMacroblockDecodeWork) (cabacFrameMacroblockResult, error) {
 	var result cabacFrameMacroblockResult
 	result.MBFieldDecodingFlag = in.MBFieldDecodingFlag
-	*work = frameMacroblockDecodeWork{}
+	work.resetForDecode()
 
 	fieldPicture := in.FieldPicture || in.MBFieldDecodingFlag != 0
 	neighborMBType := uint32(0)
@@ -1054,6 +1054,9 @@ func (c *cavlcResidualContext) decodeCABACResidualPayload(src cabacSyntaxSource,
 	cbpTable := cbp
 	if src == nil || pps == nil || sps == nil || qscale < 0 {
 		return qscale, chromaQP, cbpTable, lastQScaleDiff, ErrInvalidData
+	}
+	if cbp != 0 || isIntra16x16(mbType) {
+		clear(c.MB[:])
 	}
 
 	if cbp != 0 || isIntra16x16(mbType) {

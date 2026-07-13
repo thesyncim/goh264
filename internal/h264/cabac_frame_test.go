@@ -473,6 +473,24 @@ func TestDecodeCABACResidualPayloadSelectsDCTElemWidth(t *testing.T) {
 	}
 }
 
+func TestDecodeCABACResidualPayloadClearsIntra16x16CoefficientsWithoutCBP(t *testing.T) {
+	pps := cavlcFlatQMulPPS()
+	sps := &SPS{BitDepthLuma: 8, ChromaFormatIDC: 1}
+	ctx := cavlcResidualContext{MB: [48 * 16]int32{17}}
+	src := &scriptedCABACSource{bits: []int{0, 0}}
+
+	qscale, _, cbpTable, lastDiff, err := ctx.decodeCABACResidualPayload(src, pps, sps, MBTypeIntra16x16, 0, 20, 0, residualDecodeCacheResult{})
+	if err != nil {
+		t.Fatalf("decode cabac residual payload failed: %v", err)
+	}
+	if qscale != 20 || cbpTable != 0 || lastDiff != 0 {
+		t.Fatalf("qscale/cbpTable/lastDiff = %d/%#x/%d, want 20/0/0", qscale, cbpTable, lastDiff)
+	}
+	if ctx.MB[0] != 0 {
+		t.Fatalf("stale luma coefficient = %d, want 0", ctx.MB[0])
+	}
+}
+
 func TestDecodeCABACResidualPayloadHigh444Luma8x8ReadsCBF(t *testing.T) {
 	pps := cavlcFlatQMulPPS()
 	sps := &SPS{BitDepthLuma: 10, BitDepthChroma: 10, ChromaFormatIDC: 3}
