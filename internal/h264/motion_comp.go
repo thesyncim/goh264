@@ -68,6 +68,16 @@ func h264HLMotionFrameCore(dst *h264PicturePlanes, refs *[2][]*h264PicturePlanes
 	}
 
 	if is16x16(mbType) {
+		if trustedDst && dst.ChromaFormatIDC == 1 && dst.PictureStructure == PictureFrame {
+			list0 := isDir(mbType, 0, 0)
+			list1 := isDir(mbType, 0, 1)
+			if !h264MCPartUsesWeighted(pwt, cache, mbType, 0, list0, list1, weightMBY) {
+				handled, err := h264MC16x16Progressive420StdTrusted(dst, refs, cache, mbX, mbY, listCount, list0, list1, scratch)
+				if handled {
+					return err
+				}
+			}
+		}
 		return h264MCPartFrameValidated(dst, refs, cache, mbX, mbY, mbType, 0, 0, true, 16, 0, 0, 0, 16, 8, 16, listCount, pwt, scratch, weightMBY)
 	}
 	if is16x8(mbType) {
@@ -126,6 +136,113 @@ func h264HLMotionFrameCore(dst *h264PicturePlanes, refs *[2][]*h264PicturePlanes
 		}
 	}
 	return nil
+}
+
+// h264MC16x16Progressive420StdTrusted fuses the dominant frame-picture
+// 16x16 standard prediction shape after the enclosing decoder has validated
+// the destination, DPB, macroblock geometry, and motion cache.
+func h264MC16x16Progressive420StdTrusted(dst *h264PicturePlanes, refs *[2][]*h264PicturePlanes, cache *macroblockMotionCache, mbX int, mbY int, listCount int, list0 bool, list1 bool, scratch *h264MotionCompScratch) (bool, error) {
+	if dst == nil || refs == nil || cache == nil || dst.ChromaFormatIDC != 1 || dst.PictureStructure != PictureFrame {
+		return false, nil
+	}
+	if (!list0 && !list1) || (list0 && listCount < 1) || (list1 && listCount < 2) {
+		if !list0 && !list1 {
+			return true, nil
+		}
+		return true, ErrInvalidData
+	}
+
+	var ref0 *h264PicturePlanes
+	var ref1 *h264PicturePlanes
+	if list0 {
+		var err error
+		ref0, err = h264MCReference(refs, cache, 0, 0)
+		if err != nil {
+			return true, err
+		}
+		if !h264MC16x16Progressive420RefMatches(dst, ref0) {
+			return false, nil
+		}
+		if !ref0.trustedLayout {
+			if err := ref0.validate(); err != nil {
+				return true, err
+			}
+		}
+	}
+	if list1 {
+		var err error
+		ref1, err = h264MCReference(refs, cache, 1, 0)
+		if err != nil {
+			return true, err
+		}
+		if !h264MC16x16Progressive420RefMatches(dst, ref1) {
+			return false, nil
+		}
+		if !ref1.trustedLayout {
+			if err := ref1.validate(); err != nil {
+				return true, err
+			}
+		}
+	}
+
+	dstY := mbY*16*dst.LumaStride + mbX*16
+	dstC := mbY*8*dst.ChromaStride + mbX*8
+	if list0 {
+		if err := h264MCDir16x16Progressive420StdTrusted(dst, ref0, cache, 0, mbX, mbY, dstY, dstC, false, scratch); err != nil {
+			return true, err
+		}
+	}
+	if list1 {
+		if err := h264MCDir16x16Progressive420StdTrusted(dst, ref1, cache, 1, mbX, mbY, dstY, dstC, list0, scratch); err != nil {
+			return true, err
+		}
+	}
+	return true, nil
+}
+
+func h264MC16x16Progressive420RefMatches(dst *h264PicturePlanes, ref *h264PicturePlanes) bool {
+	return ref != nil && ref.PictureStructure == PictureFrame && ref.ChromaFormatIDC == 1 && ref.LumaStride == dst.LumaStride && ref.ChromaStride == dst.ChromaStride && ref.MBWidth == dst.MBWidth && ref.MBHeight == dst.MBHeight
+}
+
+func h264MCDir16x16Progressive420StdTrusted(dst *h264PicturePlanes, ref *h264PicturePlanes, cache *macroblockMotionCache, list int, mbX int, mbY int, dstY int, dstC int, avg bool, scratch *h264MotionCompScratch) error {
+	mv := cache.MV[list][h264Scan8[0]]
+	mx := int(mv[0]) + 8*mbX*8
+	my := int(mv[1]) + 8*mbY*8
+	fullMx := mx >> 2
+	fullMy := my >> 2
+	extraWidth := 0
+	extraHeight := 0
+	if mx&7 != 0 {
+		extraWidth = -3
+	}
+	if my&7 != 0 {
+		extraHeight = -3
+	}
+	if fullMx < -extraWidth || fullMy < -extraHeight || fullMx+16 > ref.MBWidth*16+extraWidth || fullMy+16 > ref.MBHeight*16+extraHeight {
+		return h264MCDirPartFramePlanesCore(dst, ref, cache, 0, true, 16, 0, list, dstY, dstC, dstC, 8*mbX, 8*mbY, 16, 8, avg, scratch, true)
+	}
+
+	srcY := fullMx + fullMy*ref.LumaStride
+	h264QpelMCStridesKernel(dst.Y, dstY, dst.LumaStride, ref.Y, srcY, ref.LumaStride, 16, int32(mx&3), int32(my&3), avg)
+
+	chromaX := mx & 7
+	chromaY := my & 7
+	chromaBaseX := mx >> 3
+	chromaBaseY := my >> 3
+	extraChromaWidth := 0
+	extraChromaHeight := 0
+	if chromaX != 0 {
+		extraChromaWidth = -1
+	}
+	if chromaY != 0 {
+		extraChromaHeight = -1
+	}
+	if chromaBaseX >= 0 && chromaBaseY >= 0 && chromaBaseX+8 <= ref.MBWidth*8+extraChromaWidth && chromaBaseY+8 <= ref.MBHeight*8+extraChromaHeight {
+		srcC := chromaBaseX + chromaBaseY*ref.ChromaStride
+		h264ChromaMCDualStridesKernel(dst.Cb[dstC:], dst.Cr[dstC:], ref.Cb[srcC:], ref.Cr[srcC:], dst.ChromaStride, ref.ChromaStride, 8, int32(chromaX), int32(chromaY), 8, avg)
+		return nil
+	}
+	return h264MCDirPartFrameProgressive420ChromaCore(dst, ref, mx, my, 16, dstC, dstC, 8, avg, scratch, true)
 }
 
 func h264MCPartFrame(dst *h264PicturePlanes, refs [2][]*h264PicturePlanes, cache *macroblockMotionCache, mbX int, mbY int, mbType uint32, part int, n int, square bool, height int, delta int, xOffset int, yOffset int, qpelSize int, chromaWidth int, lumaWeightWidth int, listCount int, pwt *PredWeightTable, scratch *h264MotionCompScratch, weightMBY int) error {

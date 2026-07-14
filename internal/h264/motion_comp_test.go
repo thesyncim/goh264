@@ -5,6 +5,7 @@ package h264
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 )
 
@@ -41,6 +42,95 @@ func TestH264HLMotionFrameBipredUsesAvgForSecondList(t *testing.T) {
 	wantCr := uint8((int(ref0.Cr[cOff]) + int(ref1.Cr[cOff]) + 1) >> 1)
 	if dst.Cb[cOff] != wantCb || dst.Cr[cOff] != wantCr {
 		t.Fatalf("bipred chroma samples = %d/%d, want %d/%d", dst.Cb[cOff], dst.Cr[cOff], wantCb, wantCr)
+	}
+}
+
+func TestH264MC16x16Progressive420StdTrustedMatchesGeneralPath(t *testing.T) {
+	tests := []struct {
+		name      string
+		mbType    uint32
+		listCount int
+		mv0       [2]int16
+		mv1       [2]int16
+	}{
+		{name: "list0 integer", mbType: MBType16x16 | MBTypeP0L0, listCount: 1, mv0: [2]int16{8, -4}},
+		{name: "list1 fractional", mbType: MBType16x16 | MBTypeP0L1, listCount: 2, mv1: [2]int16{-3, 7}},
+		{name: "bipred fractional", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, listCount: 2, mv0: [2]int16{5, -3}, mv1: [2]int16{-7, 11}},
+		{name: "list0 top left edge", mbType: MBType16x16 | MBTypeP0L0, listCount: 1, mv0: [2]int16{-300, -300}},
+		{name: "bipred bottom right edge", mbType: MBType16x16 | MBTypeP0L0 | MBTypeP0L1, listCount: 2, mv0: [2]int16{300, 300}, mv1: [2]int16{319, 287}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := makeH264MotionCompPicture(1, 3)
+			want := cloneH264MotionCompPicture(got)
+			ref0 := makeH264MotionCompPicture(1, 41)
+			ref1 := makeH264MotionCompPicture(1, 83)
+			for _, p := range []*h264PicturePlanes{got, want, ref0, ref1} {
+				p.PictureStructure = PictureFrame
+				p.trustedLayout = true
+			}
+			refs := [2][]*h264PicturePlanes{{ref0}, {ref1}}
+			var cache macroblockMotionCache
+			cache.Ref[0][h264Scan8[0]] = 0
+			cache.Ref[1][h264Scan8[0]] = 0
+			cache.MV[0][h264Scan8[0]] = tc.mv0
+			cache.MV[1][h264Scan8[0]] = tc.mv1
+
+			const mbX = 1
+			const mbY = 1
+			list0 := isDir(tc.mbType, 0, 0)
+			list1 := isDir(tc.mbType, 0, 1)
+			handled, gotErr := h264MC16x16Progressive420StdTrusted(got, &refs, &cache, mbX, mbY, tc.listCount, list0, list1, makeH264MotionCompScratch(got))
+			wantErr := h264MCPartFrameStdCore(want, &refs, &cache, mbX, mbY, tc.mbType, 0, 0, true, 16, 0, 0, 0, 16, 8, tc.listCount, makeH264MotionCompScratch(want), true)
+			if !handled {
+				t.Fatal("trusted fast path did not handle supported input")
+			}
+			if !errors.Is(gotErr, wantErr) || !errors.Is(wantErr, gotErr) {
+				t.Fatalf("errors differ: fast = %v, general = %v", gotErr, wantErr)
+			}
+			if !slices.Equal(got.Y, want.Y) || !slices.Equal(got.Cb, want.Cb) || !slices.Equal(got.Cr, want.Cr) {
+				t.Fatal("trusted fast path output differs from general path")
+			}
+		})
+	}
+}
+
+func BenchmarkH264MC16x16Progressive420StdTrusted(b *testing.B) {
+	for _, benchmark := range []struct {
+		name string
+		fast bool
+	}{
+		{name: "General", fast: false},
+		{name: "Fused", fast: true},
+	} {
+		b.Run(benchmark.name, func(b *testing.B) {
+			dst := makeH264MotionCompPicture(1, 3)
+			ref0 := makeH264MotionCompPicture(1, 41)
+			ref1 := makeH264MotionCompPicture(1, 83)
+			for _, p := range []*h264PicturePlanes{dst, ref0, ref1} {
+				p.PictureStructure = PictureFrame
+				p.trustedLayout = true
+			}
+			refs := [2][]*h264PicturePlanes{{ref0}, {ref1}}
+			cache := makeH264MotionCompBipredCache(0, 0)
+			cache.MV[0][h264Scan8[0]] = [2]int16{5, -3}
+			cache.MV[1][h264Scan8[0]] = [2]int16{-7, 11}
+			scratch := makeH264MotionCompScratch(dst)
+			const mbType = MBType16x16 | MBTypeP0L0 | MBTypeP0L1
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if benchmark.fast {
+					handled, err := h264MC16x16Progressive420StdTrusted(dst, &refs, &cache, 1, 1, 2, true, true, scratch)
+					if err != nil || !handled {
+						b.Fatalf("fast path: handled=%v err=%v", handled, err)
+					}
+				} else if err := h264MCPartFrameStdCore(dst, &refs, &cache, 1, 1, mbType, 0, 0, true, 16, 0, 0, 0, 16, 8, 2, scratch, true); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
@@ -1197,6 +1287,14 @@ func makeH264MotionCompPicture(chromaFormatIDC int, seed int) *h264PicturePlanes
 		fillH264MotionCompPlane(p.Cr, seed+71)
 	}
 	return p
+}
+
+func cloneH264MotionCompPicture(src *h264PicturePlanes) *h264PicturePlanes {
+	dst := *src
+	dst.Y = slices.Clone(src.Y)
+	dst.Cb = slices.Clone(src.Cb)
+	dst.Cr = slices.Clone(src.Cr)
+	return &dst
 }
 
 func makeH264MotionCompPictureHigh(chromaFormatIDC int, bitDepth int, seed int) *h264PicturePlanesHigh {
