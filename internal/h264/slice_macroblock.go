@@ -183,7 +183,6 @@ func (m *macroblockTables) fillDecodeNeighborsFrameFieldsInto(n *macroblockDecod
 	if n == nil {
 		return ErrInvalidData
 	}
-	*n = macroblockDecodeNeighbors{}
 	if err := m.checkCodedMBXY(mbXY); err != nil {
 		return err
 	}
@@ -193,17 +192,16 @@ func (m *macroblockTables) fillDecodeNeighborsFrameFieldsInto(n *macroblockDecod
 
 	mbX := mbXY % m.MBStride
 	mbY := mbXY / m.MBStride
-	*n = macroblockDecodeNeighbors{
-		MBXY:             mbXY,
-		MBX:              mbX,
-		MBY:              mbY,
-		TopLeftXY:        -1,
-		TopXY:            -1,
-		TopRightXY:       -1,
-		LeftXY:           [2]int{-1, -1},
-		TopLeftPartition: -1,
-		LeftBlock:        &h264LeftBlockFrame,
-	}
+	n.MBXY = mbXY
+	n.MBX = mbX
+	n.MBY = mbY
+	n.TopLeftXY = -1
+	n.TopXY = -1
+	n.TopRightXY = -1
+	n.LeftXY[0] = -1
+	n.LeftXY[1] = -1
+	n.TopLeftPartition = -1
+	n.LeftBlock = &h264LeftBlockFrame
 
 	topStride := m.MBStride
 	topRows := 1

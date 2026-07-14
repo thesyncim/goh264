@@ -6,6 +6,24 @@
 
 package h264
 
+var h264Intra4x4TopUnavailable = [12]int8{
+	-1, 0, intraPredLeftDC, -1, -1, -1, -1, -1, 0,
+}
+
+var h264Intra4x4LeftUnavailable = [12]int8{
+	0, -1, intraPredTopDC, 0, -1, -1, -1, 0, -1, intraPredDC128,
+}
+
+var h264Intra4x4LeftSampleMasks = [4]uint16{0x8000, 0x2000, 0x0080, 0x0020}
+
+var h264IntraTopUnavailable = [4]int{
+	intraPred8x8LeftDC, intraPred8x8Horizontal, -1, -1,
+}
+
+var h264IntraLeftUnavailable = [5]int{
+	intraPred8x8TopDC, -1, intraPred8x8Vertical, -1, intraPredDC1288x8,
+}
+
 const (
 	intraPredVertical      int8 = 0
 	intraPredHorizontal    int8 = 1
@@ -68,21 +86,14 @@ func checkIntra4x4PredModeCache(cache *[h264IntraPredModeCacheSize]int8, topSamp
 	if cache == nil {
 		return ErrInvalidData
 	}
-	top := [12]int8{
-		-1, 0, intraPredLeftDC, -1, -1, -1, -1, -1, 0,
-	}
-	left := [12]int8{
-		0, -1, intraPredTopDC, 0, -1, -1, -1, 0, -1, intraPredDC128,
-	}
-
 	if topSamplesAvailable&0x8000 == 0 {
 		for i := 0; i < 4; i++ {
 			idx := int(h264Scan8[0]) + i
 			mode := cache[idx]
-			if mode < 0 || int(mode) >= len(top) {
+			if mode < 0 || int(mode) >= len(h264Intra4x4TopUnavailable) {
 				return ErrInvalidData
 			}
-			status := top[mode]
+			status := h264Intra4x4TopUnavailable[mode]
 			if status < 0 {
 				return ErrInvalidData
 			}
@@ -93,17 +104,16 @@ func checkIntra4x4PredModeCache(cache *[h264IntraPredModeCacheSize]int8, topSamp
 	}
 
 	if leftSamplesAvailable&0x8888 != 0x8888 {
-		mask := [4]uint16{0x8000, 0x2000, 0x0080, 0x0020}
 		for i := 0; i < 4; i++ {
-			if leftSamplesAvailable&mask[i] != 0 {
+			if leftSamplesAvailable&h264Intra4x4LeftSampleMasks[i] != 0 {
 				continue
 			}
 			idx := int(h264Scan8[0]) + 8*i
 			mode := cache[idx]
-			if mode < 0 || int(mode) >= len(left) {
+			if mode < 0 || int(mode) >= len(h264Intra4x4LeftUnavailable) {
 				return ErrInvalidData
 			}
-			status := left[mode]
+			status := h264Intra4x4LeftUnavailable[mode]
 			if status < 0 {
 				return ErrInvalidData
 			}
@@ -116,27 +126,20 @@ func checkIntra4x4PredModeCache(cache *[h264IntraPredModeCacheSize]int8, topSamp
 }
 
 func checkIntraPredMode(mode int, topSamplesAvailable uint16, leftSamplesAvailable uint16, isChroma bool) (int, error) {
-	top := [4]int{
-		intraPred8x8LeftDC, intraPred8x8Horizontal, -1, -1,
-	}
-	left := [5]int{
-		intraPred8x8TopDC, -1, intraPred8x8Vertical, -1, intraPredDC1288x8,
-	}
-
 	if mode < 0 || mode > 3 {
 		return 0, ErrInvalidData
 	}
 	if topSamplesAvailable&0x8000 == 0 {
-		mode = top[mode]
+		mode = h264IntraTopUnavailable[mode]
 		if mode < 0 {
 			return 0, ErrInvalidData
 		}
 	}
 	if leftSamplesAvailable&0x8080 != 0x8080 {
-		if mode < 0 || mode >= len(left) {
+		if mode < 0 || mode >= len(h264IntraLeftUnavailable) {
 			return 0, ErrInvalidData
 		}
-		mode = left[mode]
+		mode = h264IntraLeftUnavailable[mode]
 		if mode < 0 {
 			return 0, ErrInvalidData
 		}

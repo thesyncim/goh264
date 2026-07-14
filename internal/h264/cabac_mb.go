@@ -249,9 +249,62 @@ func decodeCABACMBIntra4x4PredMode[S cabacSyntaxSource](src S, predMode int) int
 
 func decodeCABACMBIntra4x4PredModeForSource(src cabacSyntaxSource, predMode int) int {
 	if dec, ok := src.(*cabacSyntaxDecoder); ok {
-		return decodeCABACMBIntra4x4PredMode(dec, predMode)
+		return decodeCABACMBIntra4x4PredModeDecoder(dec, predMode)
 	}
 	return decodeCABACMBIntra4x4PredMode(src, predMode)
+}
+
+// decodeCABACMBIntra4x4PredModeDecoder keeps range and low in registers across
+// the common four-bin production path. Scripted sources retain the generic
+// implementation above as the differential reference.
+func decodeCABACMBIntra4x4PredModeDecoder(src *cabacSyntaxDecoder, predMode int) int {
+	c := src.cabac
+	states := src.state
+	low := c.low
+	rng := c.rng
+	ctx := 68
+	mode := 0
+	for bit := 0; ; bit++ {
+		state := (*uint8)(unsafe.Add(unsafe.Pointer(states), uintptr(ctx)))
+		s := int32(*state)
+		rangeLPS := int32(h264CABACTableUnchecked(h264LPSRangeOffset + 2*int(rng&0xc0) + int(s)))
+		rng -= rangeLPS
+		lpsMask := -int32(uint32((rng<<(cabacBits+1))-low) >> 31)
+		low -= (rng << (cabacBits + 1)) & lpsMask
+		rng += (rangeLPS - rng) & lpsMask
+		s ^= lpsMask
+		*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
+		shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+		rng = int32(uint32(rng) << shift)
+		low = int32(uint32(low) << shift)
+		if low&cabacMask == 0 {
+			c.low = low
+			c.rng = rng
+			c.refill2()
+			low = c.low
+		}
+
+		bin := int(s & 1)
+		if bit == 0 {
+			if bin != 0 {
+				c.low = low
+				c.rng = rng
+				return predMode
+			}
+			ctx = 69
+			continue
+		}
+		mode += bin << (bit - 1)
+		if bit == 3 {
+			break
+		}
+	}
+	c.low = low
+	c.rng = rng
+	if mode >= predMode {
+		mode++
+	}
+	return mode
 }
 
 func decodeCABACMBCBPLuma[S cabacSyntaxSource](src S, leftCBP int, topCBP int) int {
