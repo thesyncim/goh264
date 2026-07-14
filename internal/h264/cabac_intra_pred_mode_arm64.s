@@ -12,36 +12,32 @@ TEXT ·h264CABACIntra4x4PredModeASM(SB), NOSPLIT|NOFRAME, $0-32
 	MOVD states+8(FP), R1
 	MOVD predMode+16(FP), R2
 	MOVD $68, R3
+	ADD R1, R3, R3
 	MOVWU 0(R0), R4
 	MOVWU 4(R0), R5
 	MOVD 16(R0), R6
 	MOVD 24(R0), R7
 	MOVD 32(R0), R8
 	MOVD $·h264CABACTables(SB), R9
+	ADD $512, R9, R9
 	MOVD ZR, R10
 	MOVD ZR, R11
 
 cabac_intra4x4_mode_loop:
-	ADD R3, R1, R17
-	MOVBU (R17), R12
+	MOVBU (R3), R12
 	AND $192, R5, R13
 	ADD R13<<1, R12, R13
-	ADD $512, R13, R13
 	MOVBU (R9)(R13), R13
-	SUB R13, R5, R14
+	SUBW R13, R5, R14
 	LSLW $17, R14, R15
-	SUBW R4, R15, R15
-	ASRW $31, R15, R15
-	ANDW R14<<17, R15, R16
+	CMPW R4, R15
+	CSEL CC, R15, ZR, R16
+	CSEL GT, R14, R13, R5
+	CINV CC, R12, R12
 	SUBW R16, R4, R4
-	ADDW R13, R13, R16
-	SUBW R5, R16, R16
-	ANDW R15, R16, R16
-	ADDW R14, R16, R5
-	EORW R12, R15, R12
-	ADDW $1152, R12, R13
+	ADDW $640, R12, R13
 	MOVBU (R9)(R13), R13
-	MOVB R13, (R17)
+	MOVB R13, (R3)
 	CLZW R5, R13
 	SUBW $23, R13, R13
 	LSLW R13, R5, R5
@@ -75,7 +71,7 @@ cabac_intra4x4_mode_bin_ready:
 	B cabac_intra4x4_mode_store
 
 cabac_intra4x4_mode_first_zero:
-	MOVD $69, R3
+	ADD $69, R1, R3
 	MOVD $1, R10
 	B cabac_intra4x4_mode_loop
 
