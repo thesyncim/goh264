@@ -360,7 +360,9 @@ func (m *macroblockTables) filterFrameProgressiveValidated(dst *h264PicturePlane
 				continue
 			}
 			ctx = h264LoopFilterContext{}
-			if err := m.fillLoopFilterCachesFrameValidatedInto(&ctx, mbXY, sliceNum, p, params); err != nil {
+			if dst.ChromaFormatIDC == 1 && p.CABAC {
+				m.fillLoopFilterCachesProgressive420CABACInto(&ctx, mbX, mbY, mbXY, sliceNum, p, params)
+			} else if err := m.fillLoopFilterCachesFrameValidatedInto(&ctx, mbXY, sliceNum, p, params); err != nil {
 				return err
 			}
 			y := dstY + mbX*16
@@ -388,6 +390,134 @@ func (m *macroblockTables) filterFrameProgressiveValidated(dst *h264PicturePlane
 		}
 	}
 	return nil
+}
+
+// fillLoopFilterCachesProgressive420CABACInto is the ordinary 8-bit CABAC
+// cache builder after filterFrame has validated every macroblock, slice, and
+// picture parameter and excluded field and MBAFF pictures. Keeping this path
+// separate from the general builder removes per-block geometry and range
+// checks without changing the public loop-filter contract.
+func (m *macroblockTables) fillLoopFilterCachesProgressive420CABACInto(ctx *h264LoopFilterContext, mbX int, mbY int, mbXY int, sliceNum uint16, p *h264LoopFilterSliceParams, params []h264LoopFilterSliceParams) {
+	topXY := -1
+	leftXY := -1
+	if mbY > 0 {
+		topXY = mbXY - m.MBStride
+	}
+	if mbX > 0 {
+		leftXY = mbXY - 1
+	}
+
+	mbType := m.MacroblockTyp[mbXY]
+	topType := m.macroblockTypeIfCoded(topXY)
+	leftType := m.macroblockTypeIfCoded(leftXY)
+	if p.DeblockingFilter == 2 {
+		if !m.sameSlice(topXY, sliceNum) {
+			topType = 0
+		}
+		if !m.sameSlice(leftXY, sliceNum) {
+			leftType = 0
+		}
+	}
+
+	ctx.MBXY = mbXY
+	ctx.TopMBXY = topXY
+	ctx.LeftMBXY = leftXY
+	ctx.LeftMBXYs = [2]int{leftXY, leftXY}
+	ctx.TopType = topType
+	ctx.LeftType = leftType
+	ctx.LeftTypes = [2]uint32{leftType, leftType}
+	ctx.CBP = m.CBPTable[mbXY]
+	if isIntra(mbType) {
+		return
+	}
+
+	base := int(h264Scan8[0])
+	for list := 0; list < p.ListCount; list++ {
+		if usesList(topType, list) {
+			topP := &params[m.SliceTable[topXY]]
+			src := int(m.MB2BXY[topXY]) + 3*m.BStride
+			copy(ctx.Motion.MV[list][base-8:base-4], m.MotionVal[list][src:src+4])
+			refBase := 4*topXY + 2
+			ref0 := topP.ref2Frame(list, m.RefIndex[list][refBase])
+			ref1 := topP.ref2Frame(list, m.RefIndex[list][refBase+1])
+			ctx.Motion.Ref[list][base-8] = ref0
+			ctx.Motion.Ref[list][base-7] = ref0
+			ctx.Motion.Ref[list][base-6] = ref1
+			ctx.Motion.Ref[list][base-5] = ref1
+		} else {
+			clearMotionRow(&ctx.Motion.MV[list], base-8, 4)
+			fillRefRow(&ctx.Motion.Ref[list], base-8, 4, h264ListNotUsed)
+		}
+
+		if usesList(leftType, list) {
+			leftP := &params[m.SliceTable[leftXY]]
+			bXY := int(m.MB2BXY[leftXY]) + 3
+			refBase := 4*leftXY + 1
+			refTop := leftP.ref2Frame(list, m.RefIndex[list][refBase])
+			refBottom := leftP.ref2Frame(list, m.RefIndex[list][refBase+2])
+			for row := 0; row < 4; row++ {
+				cacheIdx := base - 1 + row*8
+				ctx.Motion.MV[list][cacheIdx] = m.MotionVal[list][bXY+row*m.BStride]
+				if row < 2 {
+					ctx.Motion.Ref[list][cacheIdx] = refTop
+				} else {
+					ctx.Motion.Ref[list][cacheIdx] = refBottom
+				}
+			}
+		} else {
+			for row := 0; row < 4; row++ {
+				cacheIdx := base - 1 + row*8
+				ctx.Motion.MV[list][cacheIdx] = [2]int16{}
+				ctx.Motion.Ref[list][cacheIdx] = h264ListNotUsed
+			}
+		}
+
+		if !usesList(mbType, list) {
+			fillMotionRectangle(&ctx.Motion.MV[list], base, 4, 4, 8, [2]int16{})
+			fillRefRectangle(&ctx.Motion.Ref[list], base, 4, 4, 8, h264ListNotUsed)
+			continue
+		}
+
+		src := 4*mbX + 4*mbY*m.BStride
+		for row := 0; row < 4; row++ {
+			copy(ctx.Motion.MV[list][base+row*8:base+row*8+4], m.MotionVal[list][src+row*m.BStride:src+row*m.BStride+4])
+		}
+		refBase := 4 * mbXY
+		ref0 := p.ref2Frame(list, m.RefIndex[list][refBase])
+		ref1 := p.ref2Frame(list, m.RefIndex[list][refBase+1])
+		ref2 := p.ref2Frame(list, m.RefIndex[list][refBase+2])
+		ref3 := p.ref2Frame(list, m.RefIndex[list][refBase+3])
+		for row := 0; row < 2; row++ {
+			rowBase := base + row*8
+			ctx.Motion.Ref[list][rowBase] = ref0
+			ctx.Motion.Ref[list][rowBase+1] = ref0
+			ctx.Motion.Ref[list][rowBase+2] = ref1
+			ctx.Motion.Ref[list][rowBase+3] = ref1
+		}
+		for row := 2; row < 4; row++ {
+			rowBase := base + row*8
+			ctx.Motion.Ref[list][rowBase] = ref2
+			ctx.Motion.Ref[list][rowBase+1] = ref2
+			ctx.Motion.Ref[list][rowBase+2] = ref3
+			ctx.Motion.Ref[list][rowBase+3] = ref3
+		}
+	}
+
+	nnz := m.NonZeroCount[mbXY]
+	copy(ctx.NonZeroCountCache[4+8:4+8+4], nnz[0:4])
+	copy(ctx.NonZeroCountCache[4+16:4+16+4], nnz[4:8])
+	copy(ctx.NonZeroCountCache[4+24:4+24+4], nnz[8:12])
+	copy(ctx.NonZeroCountCache[4+32:4+32+4], nnz[12:16])
+	if topType != 0 {
+		copy(ctx.NonZeroCountCache[4:8], m.NonZeroCount[topXY][12:16])
+	}
+	if leftType != 0 {
+		leftNNZ := m.NonZeroCount[leftXY]
+		ctx.NonZeroCountCache[3+8] = leftNNZ[3]
+		ctx.NonZeroCountCache[3+16] = leftNNZ[7]
+		ctx.NonZeroCountCache[3+24] = leftNNZ[11]
+		ctx.NonZeroCountCache[3+32] = leftNNZ[15]
+	}
 }
 
 func (m *macroblockTables) filterFrameMacroblockDirProgressive420(dst *h264PicturePlanes, dstY int, dstCb int, dstCr int, p *h264LoopFilterSliceParams, ctx *h264LoopFilterContext, dir int) error {

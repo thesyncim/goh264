@@ -17,9 +17,9 @@ worker launch, file I/O, output materialization, and hashing are outside timing;
 wakeup, parsing, decoding, drain/reset work, and completion synchronization are
 inside timing on both sides. Against native libavcodec C+assembly, the default
 Go build is currently slower: the single-worker candidate-over-baseline paired
-geometric elapsed ratio is 1.6743 with a two-sided 95% confidence interval of
-[1.6554, 1.6935], and the 12-worker ratio is 1.6982 with a confidence interval
-of [1.6702, 1.7267]. Both lanes produce raw-video MD5
+geometric elapsed ratio is 1.6412 with a two-sided 95% confidence interval of
+[1.6298, 1.6526], and the 12-worker ratio is 1.6727 with a confidence interval
+of [1.6001, 1.7485]. Both lanes produce raw-video MD5
 `63a0f8fdcbb87b0dff330acdd10905c0`, and the Go zero-steady-state-allocation
 gate passes. The native C+assembly lane is the claim-eligible baseline for the
 assembly-enabled Go build; libavcodec pure C is retained only as a diagnostic

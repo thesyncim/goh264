@@ -7,6 +7,75 @@ import (
 	"testing"
 )
 
+func TestFillLoopFilterCachesProgressive420CABACMatchesGeneral(t *testing.T) {
+	const (
+		mbWidth  = 4
+		mbHeight = 3
+	)
+	m, err := newMacroblockTables(mbWidth, mbHeight, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pps := cavlcFlatQMulPPS()
+	pps.CABAC = 1
+	pps.SPS = &SPS{
+		BitDepthLuma:     8,
+		BitDepthChroma:   8,
+		ChromaFormatIDC:  1,
+		FrameMBSOnlyFlag: 1,
+	}
+	params := []h264LoopFilterSliceParams{
+		{PPS: pps, CABAC: true, ListCount: 2, PictureStructure: PictureFrame, DeblockingFilter: 2, Ref2Frame: [2][]int8{{4, 8, 12, 16}, {20, 24, 28, 32}}},
+		{PPS: pps, CABAC: true, ListCount: 2, PictureStructure: PictureFrame, DeblockingFilter: 2, Ref2Frame: [2][]int8{{36, 40, 44, 48}, {52, 56, 60, 64}}},
+	}
+	types := [...]uint32{
+		MBTypeIntra16x16,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L1,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+	}
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		for mbX := 0; mbX < mbWidth; mbX++ {
+			mbXY := mbX + mbY*m.MBStride
+			m.MacroblockTyp[mbXY] = types[(mbX+2*mbY)%len(types)]
+			m.CBPTable[mbXY] = (mbXY*13 + 7) & 0xffff
+			m.QScaleTable[mbXY] = uint8(20 + (mbXY % 20))
+			m.SliceTable[mbXY] = uint16((mbX + mbY) & 1)
+			for i := range m.NonZeroCount[mbXY] {
+				m.NonZeroCount[mbXY][i] = uint8((mbXY + i) % 3)
+			}
+			for list := 0; list < 2; list++ {
+				refBase := 4 * mbXY
+				for i := 0; i < 4; i++ {
+					m.RefIndex[list][refBase+i] = int8((mbXY + i + list) & 3)
+				}
+			}
+		}
+	}
+	for list := 0; list < 2; list++ {
+		for i := range m.MotionVal[list] {
+			m.MotionVal[list][i] = [2]int16{int16(i + 3*list), int16(2*i - list)}
+		}
+	}
+
+	for mbY := 0; mbY < mbHeight; mbY++ {
+		for mbX := 0; mbX < mbWidth; mbX++ {
+			mbXY := mbX + mbY*m.MBStride
+			sliceNum := m.SliceTable[mbXY]
+			p := &params[sliceNum]
+			var want h264LoopFilterContext
+			if err := m.fillLoopFilterCachesFrameValidatedInto(&want, mbXY, sliceNum, p, params); err != nil {
+				t.Fatalf("general cache mb=(%d,%d): %v", mbX, mbY, err)
+			}
+			var got h264LoopFilterContext
+			m.fillLoopFilterCachesProgressive420CABACInto(&got, mbX, mbY, mbXY, sliceNum, p, params)
+			if got != want {
+				t.Fatalf("specialized cache mb=(%d,%d) differs\ngot:  %+v\nwant: %+v", mbX, mbY, got, want)
+			}
+		}
+	}
+}
+
 func TestH264ApplyLoopFilterEdge444UsesLumaChromaPlanes(t *testing.T) {
 	const stride = 32
 	dst := &h264PicturePlanes{
