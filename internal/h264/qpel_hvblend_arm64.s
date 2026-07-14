@@ -7,6 +7,40 @@
 // func h264QpelMCPutHVBlendASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32)
 TEXT ·h264QpelMCPutHVBlendASM(SB), NOSPLIT, $32-48
 	MOVW size+32(FP), R6
+	CMPW $4, R6
+	BNE  qpel_puthvblend_check_width8
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW $0, R5
+	BL   ·h264Qpel4CenterNEONInternal(SB)
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW mx+36(FP), R4
+	CMPW $2, R4
+	BNE  qpel_puthvblend_width4_vertical
+	MOVW my+40(FP), R7
+	CMPW $3, R7
+	BNE  qpel_puthvblend_width4_horizontal_ready
+	ADD  R3, R1, R1
+qpel_puthvblend_width4_horizontal_ready:
+	MOVW $2, R4
+	MOVW $1, R5
+	BL   ·h264Qpel4HAxisNEONInternal(SB)
+	RET
+qpel_puthvblend_width4_vertical:
+	CMPW $3, R4
+	BNE  qpel_puthvblend_width4_vertical_ready
+	ADD  $1, R1, R1
+qpel_puthvblend_width4_vertical_ready:
+	MOVW $2, R4
+	MOVW $1, R5
+	BL   ·h264Qpel4VAxisNEONInternal(SB)
+	RET
+qpel_puthvblend_check_width8:
 	CMPW $8, R6
 	BLT  qpel_puthvblend_scalar
 	MOVD dst+0(FP), R0
@@ -257,6 +291,91 @@ qpel_puthvblend_store:
 // func h264QpelMCAvgHVBlendASM(dst *uint8, src *uint8, dstStride int, srcStride int, size int32, mx int32, my int32)
 TEXT ·h264QpelMCAvgHVBlendASM(SB), NOSPLIT, $32-48
 	MOVW size+32(FP), R6
+	CMPW $4, R6
+	BNE  qpel_avghvblend_check_width8
+	MOVD dst+0(FP), R0
+	MOVD dstStride+16(FP), R2
+	MOVWU (R0), R8
+	MOVW  R8, qpel4_avghvblend_orig0-32(SP)
+	ADD    R2, R0, R0
+	MOVWU (R0), R8
+	MOVW  R8, qpel4_avghvblend_orig1-28(SP)
+	ADD    R2, R0, R0
+	MOVWU (R0), R8
+	MOVW  R8, qpel4_avghvblend_orig2-24(SP)
+	ADD    R2, R0, R0
+	MOVWU (R0), R8
+	MOVW  R8, qpel4_avghvblend_orig3-20(SP)
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD srcStride+24(FP), R3
+	MOVW $0, R5
+	BL   ·h264Qpel4CenterNEONInternal(SB)
+	MOVD dst+0(FP), R0
+	MOVD src+8(FP), R1
+	MOVD dstStride+16(FP), R2
+	MOVD srcStride+24(FP), R3
+	MOVW mx+36(FP), R4
+	CMPW $2, R4
+	BNE  qpel_avghvblend_width4_vertical
+	MOVW my+40(FP), R7
+	CMPW $3, R7
+	BNE  qpel_avghvblend_width4_horizontal_ready
+	ADD  R3, R1, R1
+qpel_avghvblend_width4_horizontal_ready:
+	MOVW $2, R4
+	MOVW $1, R5
+	BL   ·h264Qpel4HAxisNEONInternal(SB)
+	B    qpel_avghvblend_width4_final
+qpel_avghvblend_width4_vertical:
+	CMPW $3, R4
+	BNE  qpel_avghvblend_width4_vertical_ready
+	ADD  $1, R1, R1
+qpel_avghvblend_width4_vertical_ready:
+	MOVW $2, R4
+	MOVW $1, R5
+	BL   ·h264Qpel4VAxisNEONInternal(SB)
+qpel_avghvblend_width4_final:
+	MOVD  dst+0(FP), R0
+	MOVD  dstStride+16(FP), R2
+	MOVW  $0xfefefefe, R12
+	MOVWU (R0), R8
+	MOVWU qpel4_avghvblend_orig0-32(SP), R9
+	ORR   R9, R8, R10
+	EOR   R9, R8, R8
+	AND   R12, R8, R8
+	LSR   $1, R8, R8
+	SUB   R8, R10, R10
+	MOVW  R10, (R0)
+	ADD   R2, R0, R0
+	MOVWU (R0), R8
+	MOVWU qpel4_avghvblend_orig1-28(SP), R9
+	ORR   R9, R8, R10
+	EOR   R9, R8, R8
+	AND   R12, R8, R8
+	LSR   $1, R8, R8
+	SUB   R8, R10, R10
+	MOVW  R10, (R0)
+	ADD   R2, R0, R0
+	MOVWU (R0), R8
+	MOVWU qpel4_avghvblend_orig2-24(SP), R9
+	ORR   R9, R8, R10
+	EOR   R9, R8, R8
+	AND   R12, R8, R8
+	LSR   $1, R8, R8
+	SUB   R8, R10, R10
+	MOVW  R10, (R0)
+	ADD   R2, R0, R0
+	MOVWU (R0), R8
+	MOVWU qpel4_avghvblend_orig3-20(SP), R9
+	ORR   R9, R8, R10
+	EOR   R9, R8, R8
+	AND   R12, R8, R8
+	LSR   $1, R8, R8
+	SUB   R8, R10, R10
+	MOVW  R10, (R0)
+	RET
+qpel_avghvblend_check_width8:
 	CMPW $8, R6
 	BLT  qpel_avghvblend_scalar
 	MOVD dst+0(FP), R0
