@@ -421,10 +421,10 @@ func decodeCABACResidualInternalDecoder(c *cavlcResidualContext, src *cabacSynta
 	return result, nil
 }
 
-// decodeCABACResidualSignificance4x4Decoder is the common luma/chroma AC and
+// decodeCABACResidualSignificance4x4DecoderScalar is the common luma/chroma AC and
 // luma-DC scan. Keeping its fixed 15-bin limit separate avoids carrying the
 // variable block-shape and 4:2:2-DC offset branches through every CABAC bin.
-func decodeCABACResidualSignificance4x4Decoder(src *cabacSyntaxDecoder, index *[64]uint8, sigCtxBase int, lastCtxBase int) (int, int) {
+func decodeCABACResidualSignificance4x4DecoderScalar(src *cabacSyntaxDecoder, index *[64]uint8, sigCtxBase int, lastCtxBase int) (int, int) {
 	c := src.cabac
 	states := src.state
 	low := c.low
@@ -509,7 +509,7 @@ func decodeCABACResidualSignificance4x4Decoder(src *cabacSyntaxDecoder, index *[
 // decodeCABACResidualSignificanceAC15Decoder handles AC scans whose separately
 // coded DC coefficient leaves 15 possible positions. Its fixed 14-bin loop
 // preserves the register-only code shape of the dominant 4x4 path.
-func decodeCABACResidualSignificanceAC15Decoder(src *cabacSyntaxDecoder, index *[64]uint8, sigCtxBase int, lastCtxBase int) (int, int) {
+func decodeCABACResidualSignificanceAC15DecoderScalar(src *cabacSyntaxDecoder, index *[64]uint8, sigCtxBase int, lastCtxBase int) (int, int) {
 	c := src.cabac
 	states := src.state
 	low := c.low

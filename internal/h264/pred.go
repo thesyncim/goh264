@@ -9,9 +9,7 @@ func h264Pred4x4Vertical(pix []uint8, offset int, stride int) error {
 	if err := checkPredictionArgs(pix, offset, stride, 4, 4, 0, 1); err != nil {
 		return err
 	}
-	for y := 0; y < 4; y++ {
-		copy(pix[offset+y*stride:offset+y*stride+4], pix[offset-stride:offset-stride+4])
-	}
+	h264Pred4x4SimpleKernel(pix, offset, stride, int(intraPredVertical))
 	return nil
 }
 
@@ -19,9 +17,7 @@ func h264Pred4x4Horizontal(pix []uint8, offset int, stride int) error {
 	if err := checkPredictionArgs(pix, offset, stride, 4, 4, 1, 0); err != nil {
 		return err
 	}
-	for y := 0; y < 4; y++ {
-		fillPredictionRow(pix, offset+y*stride, 4, pix[offset-1+y*stride])
-	}
+	h264Pred4x4SimpleKernel(pix, offset, stride, int(intraPredHorizontal))
 	return nil
 }
 
@@ -29,9 +25,7 @@ func h264Pred4x4DC(pix []uint8, offset int, stride int) error {
 	if err := checkPredictionArgs(pix, offset, stride, 4, 4, 1, 1); err != nil {
 		return err
 	}
-	dc := int(pix[offset-stride]) + int(pix[offset+1-stride]) + int(pix[offset+2-stride]) + int(pix[offset+3-stride]) +
-		int(pix[offset-1]) + int(pix[offset-1+stride]) + int(pix[offset-1+2*stride]) + int(pix[offset-1+3*stride])
-	fillPredictionBlock(pix, offset, stride, 4, 4, uint8((dc+4)>>3))
+	h264Pred4x4SimpleKernel(pix, offset, stride, int(intraPredDC))
 	return nil
 }
 
@@ -39,8 +33,7 @@ func h264Pred4x4LeftDC(pix []uint8, offset int, stride int) error {
 	if err := checkPredictionArgs(pix, offset, stride, 4, 4, 1, 0); err != nil {
 		return err
 	}
-	dc := int(pix[offset-1]) + int(pix[offset-1+stride]) + int(pix[offset-1+2*stride]) + int(pix[offset-1+3*stride])
-	fillPredictionBlock(pix, offset, stride, 4, 4, uint8((dc+2)>>2))
+	h264Pred4x4SimpleKernel(pix, offset, stride, int(intraPredLeftDC))
 	return nil
 }
 
@@ -48,13 +41,16 @@ func h264Pred4x4TopDC(pix []uint8, offset int, stride int) error {
 	if err := checkPredictionArgs(pix, offset, stride, 4, 4, 0, 1); err != nil {
 		return err
 	}
-	dc := int(pix[offset-stride]) + int(pix[offset+1-stride]) + int(pix[offset+2-stride]) + int(pix[offset+3-stride])
-	fillPredictionBlock(pix, offset, stride, 4, 4, uint8((dc+2)>>2))
+	h264Pred4x4SimpleKernel(pix, offset, stride, int(intraPredTopDC))
 	return nil
 }
 
 func h264Pred4x4DC128(pix []uint8, offset int, stride int) error {
-	return h264PredConstant(pix, offset, stride, 4, 4, 128)
+	if err := checkPredictionArgs(pix, offset, stride, 4, 4, 0, 0); err != nil {
+		return err
+	}
+	h264Pred4x4SimpleKernel(pix, offset, stride, int(intraPredDC128))
+	return nil
 }
 
 func h264Pred4x4DownRight(pix []uint8, offset int, stride int) error {

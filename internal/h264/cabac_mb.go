@@ -468,9 +468,9 @@ func decodeCABACMBMVD[S cabacSyntaxSource](src S, ctxBase int, amvd int) (int32,
 	return src.bypassSign(int32(-mvd)), mvda, nil
 }
 
-// decodeCABACMBMVDDecoder keeps range/low in registers across the complete
-// production MVD component. Scripted sources continue to use decodeCABACMBMVD.
-func decodeCABACMBMVDDecoder(src *cabacSyntaxDecoder, ctxBase int, amvd int) (int32, int, error) {
+// decodeCABACMBMVDDecoderScalar keeps range/low in registers across the complete
+// production MVD component. It is also the architecture differential oracle.
+func decodeCABACMBMVDDecoderScalar(src *cabacSyntaxDecoder, ctxBase int, amvd int) (int32, int, error) {
 	c := src.cabac
 	states := src.state
 	low := c.low
