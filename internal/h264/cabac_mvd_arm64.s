@@ -41,19 +41,16 @@ cabac_mvd_loop:
 	ADDW $1152, R12, R13
 	MOVBU (R9)(R13), R13
 	MOVB R13, (R11)
-	MOVBU (R9)(R5), R13
-	AND $31, R13, R13
+	CLZW R5, R13
+	SUBW $23, R13, R13
 	LSLW R13, R5, R5
 	LSLW R13, R4, R4
 	TSTW $65535, R4
 	BNE cabac_mvd_bin_ready
 
-	SUBW $1, R4, R13
-	EORW R4, R13, R13
-	LSRW $15, R13, R13
-	MOVBU (R9)(R13), R13
-	MOVW $7, R14
-	SUBW R13, R14, R13
+	RBITW R4, R13
+	CLZW R13, R13
+	SUBW $16, R13, R13
 	MOVW $-65535, R14
 	CMP R7, R6
 	BGE cabac_mvd_refill_shift

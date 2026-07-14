@@ -48,19 +48,16 @@ cabac_sig_loop:
 	ADDW $1152, R15, R16
 	MOVBU (R11)(R16), R16
 	MOVB R16, (R14)
-	MOVBU (R11)(R7), R16
-	AND $31, R16, R16
+	CLZW R7, R16
+	SUBW $23, R16, R16
 	LSLW R16, R7, R7
 	LSLW R16, R6, R6
 	TSTW $65535, R6
 	BNE cabac_sig_bin_ready
 
-	SUBW $1, R6, R16
-	EORW R6, R16, R16
-	LSRW $15, R16, R16
-	MOVBU (R11)(R16), R16
-	MOVW $7, R17
-	SUBW R16, R17, R16
+	RBITW R6, R16
+	CLZW R16, R16
+	SUBW $16, R16, R16
 	MOVW $-65535, R17
 	CMP R9, R8
 	BGE cabac_sig_refill_shift
@@ -103,19 +100,16 @@ cabac_sig_bin_ready:
 	ADDW $1152, R15, R16
 	MOVBU (R11)(R16), R16
 	MOVB R16, (R14)
-	MOVBU (R11)(R7), R16
-	AND $31, R16, R16
+	CLZW R7, R16
+	SUBW $23, R16, R16
 	LSLW R16, R7, R7
 	LSLW R16, R6, R6
 	TSTW $65535, R6
 	BNE cabac_last_bin_ready
 
-	SUBW $1, R6, R16
-	EORW R6, R16, R16
-	LSRW $15, R16, R16
-	MOVBU (R11)(R16), R16
-	MOVW $7, R17
-	SUBW R16, R17, R16
+	RBITW R6, R16
+	CLZW R16, R16
+	SUBW $16, R16, R16
 	MOVW $-65535, R17
 	CMP R9, R8
 	BGE cabac_last_refill_shift

@@ -7,7 +7,10 @@
 
 package h264
 
-import "unsafe"
+import (
+	"math/bits"
+	"unsafe"
+)
 
 var cabacCBFBaseContext = [14]int{
 	85, 89, 93, 97, 101, 1012, 460, 464, 468, 1016, 472, 476, 480, 1020,
@@ -668,6 +671,9 @@ func decodeCABACResidualLevelsDecoder(src *cabacSyntaxDecoder, block []int32, sc
 	states := src.state
 	low := c.low
 	rng := c.rng
+	bytestream := c.bytestream
+	bytestreamEnd := c.bytestreamEnd
+	buf := c.buf
 	nodeCtx := 0
 	for coeffCount > 0 {
 		coeffCount--
@@ -675,6 +681,7 @@ func decodeCABACResidualLevelsDecoder(src *cabacSyntaxDecoder, block []int32, sc
 		if scanPos < 0 || scanPos >= len(block) || (!isDC && scanPos >= len(qmul)) {
 			c.low = low
 			c.rng = rng
+			c.bytestream = bytestream
 			return ErrInvalidData
 		}
 
@@ -690,14 +697,22 @@ func decodeCABACResidualLevelsDecoder(src *cabacSyntaxDecoder, block []int32, sc
 			rng += (rangeLPS - rng) & lpsMask
 			s ^= lpsMask
 			*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
-			shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+			shift := uint32(bits.LeadingZeros32(uint32(rng))-23) & 31
 			rng = int32(uint32(rng) << shift)
 			low = int32(uint32(low) << shift)
 			if low&cabacMask == 0 {
-				c.low = low
-				c.rng = rng
-				c.refill2()
-				low = c.low
+				refillShift := uint32(bits.TrailingZeros32(uint32(low))-16) & 31
+				x := int32(-cabacMask)
+				if bytestream < bytestreamEnd {
+					x += int32(buf[bytestream]) << 9
+				}
+				if bytestream+1 < bytestreamEnd {
+					x += int32(buf[bytestream+1]) << 1
+				}
+				low += x << refillShift
+				if bytestream < bytestreamEnd {
+					bytestream += cabacBits / 8
+				}
 			}
 			if s&1 == 0 {
 				if coeffAbs == 1 {
@@ -718,6 +733,7 @@ func decodeCABACResidualLevelsDecoder(src *cabacSyntaxDecoder, block []int32, sc
 			if coeffAbs >= 15 {
 				c.low = low
 				c.rng = rng
+				c.bytestream = bytestream
 				j := 0
 				for src.bypass() != 0 && j < 16+7 {
 					j++
@@ -730,16 +746,24 @@ func decodeCABACResidualLevelsDecoder(src *cabacSyntaxDecoder, block []int32, sc
 				coeffAbs += 14
 				low = c.low
 				rng = c.rng
+				bytestream = c.bytestream
 				break
 			}
 		}
 
 		low += low
 		if low&cabacMask == 0 {
-			c.low = low
-			c.rng = rng
-			c.refill()
-			low = c.low
+			x := int32(0)
+			if bytestream < bytestreamEnd {
+				x += int32(buf[bytestream]) << 9
+			}
+			if bytestream+1 < bytestreamEnd {
+				x += int32(buf[bytestream+1]) << 1
+			}
+			low += x - cabacMask
+			if bytestream < bytestreamEnd {
+				bytestream += cabacBits / 8
+			}
 		}
 		rangeValue := rng << (cabacBits + 1)
 		mask := (low - rangeValue) >> 31
@@ -753,6 +777,7 @@ func decodeCABACResidualLevelsDecoder(src *cabacSyntaxDecoder, block []int32, sc
 	}
 	c.low = low
 	c.rng = rng
+	c.bytestream = bytestream
 	return nil
 }
 

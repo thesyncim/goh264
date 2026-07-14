@@ -7,7 +7,10 @@
 
 package h264
 
-import "unsafe"
+import (
+	"math/bits"
+	"unsafe"
+)
 
 type cabacSyntaxSource interface {
 	get(idx int) int
@@ -45,17 +48,25 @@ func (d *cabacSyntaxDecoder) get(idx int) int {
 	*state = h264CABACTableUnchecked(h264MLPSStateOffset + 128 + int(s))
 	bit := s & 1
 
-	// The pinned norm-shift table is 0..9. Masking that invariant into the
-	// operand lets arm64 use its native register shift directly; an unconstrained
-	// Go shift otherwise grows two >=64 guards in this per-bin primitive.
-	shift := uint32(h264CABACTableUnchecked(h264NormShiftOffset+int(rng))) & 31
+	shift := uint32(bits.LeadingZeros32(uint32(rng))-23) & 31
 	rng = int32(uint32(rng) << shift)
 	low = int32(uint32(low) << shift)
+	if low&cabacMask == 0 {
+		refillShift := uint32(bits.TrailingZeros32(uint32(low))-16) & 31
+		x := int32(-cabacMask)
+		if c.bytestream < c.bytestreamEnd {
+			x += int32(c.buf[c.bytestream]) << 9
+		}
+		if c.bytestream+1 < c.bytestreamEnd {
+			x += int32(c.buf[c.bytestream+1]) << 1
+		}
+		low += x << refillShift
+		if c.bytestream < c.bytestreamEnd {
+			c.bytestream += cabacBits / 8
+		}
+	}
 	c.rng = rng
 	c.low = low
-	if low&cabacMask == 0 {
-		c.refill2()
-	}
 	return int(bit)
 }
 

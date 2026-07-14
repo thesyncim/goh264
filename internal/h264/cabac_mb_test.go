@@ -252,6 +252,36 @@ func TestCABACSyntaxDecoderPrimitivesMatchContext(t *testing.T) {
 	}
 }
 
+var cabacSyntaxDecoderGetBenchmarkSink int
+
+func BenchmarkCABACSyntaxDecoderGet(b *testing.B) {
+	buf := make([]byte, 32768)
+	for i := range buf {
+		buf[i] = byte(i*73 + 19)
+	}
+	initialContext, err := initCABACDecoder(buf)
+	if err != nil {
+		b.Fatal(err)
+	}
+	initialState, err := initH264CABACStates(PictureTypeP, 1, 27, 8)
+	if err != nil {
+		b.Fatal(err)
+	}
+	const binsPerIteration = 1024
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		ctx := initialContext
+		state := initialState
+		decoder := cabacSyntaxDecoder{cabac: &ctx, state: &state}
+		total := 0
+		for i := range binsPerIteration {
+			total += decoder.get((i * 37) % 400)
+		}
+		cabacSyntaxDecoderGetBenchmarkSink = total
+	}
+}
+
 func TestDecodeCABACMBMVDDecoderMatchesGeneric(t *testing.T) {
 	buf := make([]byte, 4096)
 	for i := range buf {

@@ -199,6 +199,42 @@ func TestDecodeCABACResidualInternalDecoderMatchesGeneric(t *testing.T) {
 	}
 }
 
+func BenchmarkDecodeCABACResidualLevels4x4(b *testing.B) {
+	buf := make([]byte, 32768)
+	for i := range buf {
+		buf[i] = byte(i*97 + 31)
+	}
+	initialContext, err := initCABACDecoder(buf)
+	if err != nil {
+		b.Fatal(err)
+	}
+	initialState, err := initH264CABACStates(PictureTypeP, 1, 27, 8)
+	if err != nil {
+		b.Fatal(err)
+	}
+	var index [64]uint8
+	index[0], index[1], index[2], index[3] = 0, 3, 7, 12
+	scan := cabacIdentityScan(16)
+	qmul := make([]uint32, 16)
+	for i := range qmul {
+		qmul[i] = uint32(32 + i*7)
+	}
+	var block [16]int32
+	const blocksPerIteration = 256
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		ctx := initialContext
+		state := initialState
+		decoder := cabacSyntaxDecoder{cabac: &ctx, state: &state}
+		for range blocksPerIteration {
+			if err := decodeCABACResidualLevelsDecoder(&decoder, block[:], scan, qmul, &index, 4, 227, false, false, false); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
 func cabacIdentityScan(n int) []uint8 {
 	scan := make([]uint8, n)
 	for i := range scan {
