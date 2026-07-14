@@ -257,7 +257,7 @@ func decodeCABACMBIntra4x4PredModeForSource(src cabacSyntaxSource, predMode int)
 // decodeCABACMBIntra4x4PredModeDecoder keeps range and low in registers across
 // the common four-bin production path. Scripted sources retain the generic
 // implementation above as the differential reference.
-func decodeCABACMBIntra4x4PredModeDecoder(src *cabacSyntaxDecoder, predMode int) int {
+func decodeCABACMBIntra4x4PredModeDecoderScalar(src *cabacSyntaxDecoder, predMode int) int {
 	c := src.cabac
 	states := src.state
 	low := c.low
