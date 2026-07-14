@@ -37,6 +37,42 @@ func TestSampleStats(t *testing.T) {
 	}
 }
 
+func TestAnnotatePairedFairComparison(t *testing.T) {
+	candidate := benchResult{Name: "goh264", Samples: []benchSample{
+		{ElapsedMS: 9},
+		{ElapsedMS: 12},
+		{ElapsedMS: 15},
+	}}
+	baseline := benchResult{Name: "libavcodec-pure-c", Samples: []benchSample{
+		{ElapsedMS: 10},
+		{ElapsedMS: 10},
+		{ElapsedMS: 20},
+	}}
+	if err := annotatePairedFairComparison(&baseline, candidate); err != nil {
+		t.Fatal(err)
+	}
+	if baseline.PairedCandidate != "goh264" || baseline.PairedRepeats != 3 || baseline.PairedCandidateWins != 2 {
+		t.Fatalf("paired metadata = candidate %q repeats %d wins %d, want goh264/3/2",
+			baseline.PairedCandidate, baseline.PairedRepeats, baseline.PairedCandidateWins)
+	}
+	if baseline.PairedMedianRatio != 0.9 {
+		t.Fatalf("paired median ratio = %v, want 0.9", baseline.PairedMedianRatio)
+	}
+	if baseline.PairedGeomeanRatio < 0.932 || baseline.PairedGeomeanRatio > 0.933 {
+		t.Fatalf("paired geomean ratio = %v, want about 0.93217", baseline.PairedGeomeanRatio)
+	}
+	if len(baseline.Notes) == 0 || !strings.Contains(baseline.Notes[len(baseline.Notes)-1], "below 1") {
+		t.Fatalf("paired ratio direction note = %v", baseline.Notes)
+	}
+}
+
+func TestAnnotatePairedFairComparisonRejectsMismatchedSamples(t *testing.T) {
+	baseline := benchResult{Samples: []benchSample{{ElapsedMS: 1}}}
+	if err := annotatePairedFairComparison(&baseline, benchResult{}); err == nil {
+		t.Fatal("mismatched sample counts passed")
+	}
+}
+
 func TestBenchProfilesWriteCPUAndHeapProfiles(t *testing.T) {
 	dir := t.TempDir()
 	cpuPath := filepath.Join(dir, "cpu.pprof")

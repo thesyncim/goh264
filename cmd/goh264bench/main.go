@@ -96,6 +96,11 @@ type benchResult struct {
 	MaxElapsedMS         float64                `json:"max_elapsed_ms,omitempty"`
 	StddevElapsedMS      float64                `json:"stddev_elapsed_ms,omitempty"`
 	CVElapsed            float64                `json:"cv_elapsed,omitempty"`
+	PairedCandidate      string                 `json:"paired_candidate,omitempty"`
+	PairedRepeats        int                    `json:"paired_repeats,omitempty"`
+	PairedCandidateWins  int                    `json:"paired_candidate_wins,omitempty"`
+	PairedMedianRatio    float64                `json:"paired_candidate_over_baseline_median_elapsed_ratio,omitempty"`
+	PairedGeomeanRatio   float64                `json:"paired_candidate_over_baseline_geomean_elapsed_ratio,omitempty"`
 	FPS                  float64                `json:"fps,omitempty"`
 	MiBPerSec            float64                `json:"mib_per_sec,omitempty"`
 	NSPerFrame           float64                `json:"ns_per_frame,omitempty"`
@@ -761,7 +766,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		}
 	}
 	if opts.fairLibavcodecBin != "" {
-		meta.FairnessPolicy = fmt.Sprintf("Decode-ok corpus entries are timed only after Go and FFmpeg independently pass bitstream MD5, raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 checks against the manifest oracle. Matched compute samples exclude raw output materialization, hashing, process startup, file I/O, and CLI setup on both sides. Go and libavcodec receive the same preloaded Annex B bytes, perform the same number of complete independent decodes, use %d independent contexts, and use exactly one decoder thread per worker. Worker launch is outside the timed region; the timed region includes wakeup, parsing, decoding, drain/reset work, and completion synchronization on both sides. Measurement order rotates across repeats to limit thermal and frequency-order bias. Single-thread evidence uses -workers=1; multicore evidence uses the same -workers=N value for both implementations. Pure-C and native libavcodec CPU dispatch remain separate labeled lanes.", opts.workers)
+		meta.FairnessPolicy = fmt.Sprintf("Decode-ok corpus entries are timed only after Go and FFmpeg independently pass bitstream MD5, raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 checks against the manifest oracle. Matched compute samples exclude raw output materialization, hashing, process startup, file I/O, and CLI setup on both sides. Go and libavcodec receive the same preloaded Annex B bytes, perform the same number of complete independent decodes, use %d independent contexts, and use exactly one decoder thread per worker. Worker launch is outside the timed region; the timed region includes wakeup, parsing, decoding, drain/reset work, and completion synchronization on both sides. Measurement order rotates across repeats to limit thermal and frequency-order bias. Paired candidate-over-baseline elapsed ratios compare the same repeat index and are the primary cross-implementation statistic; ratios below 1 mean the candidate is faster. Single-thread evidence uses -workers=1; multicore evidence uses the same -workers=N value for both implementations. Pure-C and native libavcodec CPU dispatch remain separate labeled lanes.", opts.workers)
 	} else {
 		meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes label each FFmpeg CPU mode against the actual measured Go backend_kind instead of assuming a purego or assembly build. Primary quality_status is the manifest rawvideo oracle when available; peer_quality_status records each FFmpeg lane's rawvideo match or mismatch against the measured Go lane. Go result backend_kind remains explicit, so purego builds report go-pure and default builds with partial assembly report go-partial-asm until all decoder kernels are ported. FFmpeg timing defaults to one CLI process per repeat sample over a prebuilt repeated input file, amortizing process startup and CLI setup across timed iterations; raw-output amortized samples must also match the single-iteration raw output repeated for every timed iteration; -ffmpeg-process-per-iter restores the historical process-per-iteration baseline."
 	}
@@ -1881,10 +1886,54 @@ func benchOneInputFairCompute(input string, data []byte, opts benchOptions) ([]b
 	results := []benchResult{goResult}
 	for i := range lanes {
 		libResult := mergeFairComputeSamples(laneTemplates[i], laneSamples[i], opts.repeats)
+		if err := annotatePairedFairComparison(&libResult, goResult); err != nil {
+			return nil, fmt.Errorf("%s paired comparison: %w", lanes[i].name, err)
+		}
 		annotateFFmpegPeerQuality(&libResult, goResult)
 		results = append(results, libResult)
 	}
 	return results, nil
+}
+
+func annotatePairedFairComparison(baseline *benchResult, candidate benchResult) error {
+	if baseline == nil {
+		return errors.New("nil baseline")
+	}
+	if len(candidate.Samples) == 0 || len(candidate.Samples) != len(baseline.Samples) {
+		return fmt.Errorf("sample counts candidate=%d baseline=%d, want equal non-zero counts", len(candidate.Samples), len(baseline.Samples))
+	}
+
+	ratios := make([]float64, len(candidate.Samples))
+	logSum := 0.0
+	wins := 0
+	for i := range candidate.Samples {
+		candidateElapsed := candidate.Samples[i].ElapsedMS
+		baselineElapsed := baseline.Samples[i].ElapsedMS
+		if candidateElapsed <= 0 || baselineElapsed <= 0 {
+			return fmt.Errorf("sample %d elapsed candidate=%v baseline=%v, want positive", i, candidateElapsed, baselineElapsed)
+		}
+		ratio := candidateElapsed / baselineElapsed
+		ratios[i] = ratio
+		logSum += math.Log(ratio)
+		if ratio < 1 {
+			wins++
+		}
+	}
+	sort.Float64s(ratios)
+	median := ratios[len(ratios)/2]
+	if len(ratios)%2 == 0 {
+		median = (ratios[len(ratios)/2-1] + median) / 2
+	}
+
+	baseline.PairedCandidate = candidate.Name
+	baseline.PairedRepeats = len(ratios)
+	baseline.PairedCandidateWins = wins
+	baseline.PairedMedianRatio = median
+	baseline.PairedGeomeanRatio = math.Exp(logSum / float64(len(ratios)))
+	baseline.Notes = append(baseline.Notes,
+		"Paired elapsed ratios compare same-index alternating-order repeats; ratios below 1 mean the paired candidate is faster than this baseline.",
+	)
+	return nil
 }
 
 func verifyGoFairComputeAllocations(data []byte, expectedFrames int) error {
