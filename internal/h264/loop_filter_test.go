@@ -1164,6 +1164,294 @@ func TestH264LoopFilterMVYLimitMatchesFieldMacroblockShape(t *testing.T) {
 	}
 }
 
+func TestLoopFilterProgressiveStrengthMatchesGeneral(t *testing.T) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	types := [...]uint32{
+		MBTypeIntra4x4,
+		MBTypeIntra16x16,
+		MBType16x16 | MBTypeP0L0,
+		MBType16x16 | MBTypeP0L0 | MBTypeP0L1,
+		MBType8x16 | MBTypeP0L0,
+		MBType8x8 | MBTypeP0L0,
+	}
+	for seed := 0; seed < 64; seed++ {
+		var ctx h264LoopFilterContext
+		for list := 0; list < 2; list++ {
+			for i := 0; i < h264MotionCacheSize; i++ {
+				ctx.Motion.Ref[list][i] = int8((seed+i*3+list*5)%7 - 2)
+				ctx.Motion.MV[list][i] = [2]int16{
+					int16((seed*11+i*5+list*3)%33 - 16),
+					int16((seed*7+i*9+list*13)%33 - 16),
+				}
+			}
+		}
+		for i := range ctx.NonZeroCountCache {
+			ctx.NonZeroCountCache[i] = uint8((seed + i*7) % 5)
+		}
+		for _, mbType := range types {
+			for _, mbmType := range types {
+				for dir := 0; dir < 2; dir++ {
+					maskPar0 := mbType & (MBType16x16 | (MBType8x16 >> uint(dir)))
+					for listCount := 1; listCount <= 2; listCount++ {
+						mvyLimit := h264LoopFilterMVYLimit(mbType)
+						want, err := m.loopFilterBoundaryStrength(&ctx, mbType, mbmType, dir, maskPar0, listCount, mvyLimit, false)
+						if err != nil {
+							t.Fatal(err)
+						}
+						got := m.loopFilterBoundaryStrengthProgressive(&ctx, mbType, mbmType, dir, maskPar0, listCount, mvyLimit)
+						if got != want {
+							t.Fatalf("seed=%d mb=%#x neighbor=%#x dir=%d lists=%d boundary=%v, want %v", seed, mbType, mbmType, dir, listCount, got, want)
+						}
+
+						maskEdge := h264LoopFilterMaskEdgeTable[dir][(mbType>>3)&7]
+						for edge := 1; edge < 4; edge++ {
+							want, err := m.loopFilterInternalStrength(&ctx, mbType, dir, edge, maskEdge, maskPar0, listCount, mvyLimit)
+							if err != nil {
+								t.Fatal(err)
+							}
+							got := m.loopFilterInternalStrengthProgressive(&ctx, mbType, dir, edge, maskEdge, maskPar0, listCount, mvyLimit)
+							if got != want {
+								t.Fatalf("seed=%d mb=%#x dir=%d edge=%d lists=%d internal=%v, want %v", seed, mbType, dir, edge, listCount, got, want)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+var loopFilterStrengthBenchmarkSink [4]int16
+
+func BenchmarkLoopFilterProgressiveStrength(b *testing.B) {
+	m, err := newMacroblockTables(1, 1, 1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	var ctx h264LoopFilterContext
+	for list := 0; list < 2; list++ {
+		for i := 0; i < h264MotionCacheSize; i++ {
+			ctx.Motion.Ref[list][i] = int8((i + list) & 3)
+			ctx.Motion.MV[list][i] = [2]int16{int16(i*3 + list), int16(i*5 - list)}
+		}
+	}
+	mbType := uint32(MBType8x8 | MBTypeP0L0 | MBTypeP0L1)
+	mbmType := uint32(MBType8x16 | MBTypeP0L0 | MBTypeP0L1)
+	maskPar0 := mbType & (MBType16x16 | MBType8x16)
+	maskEdge := h264LoopFilterMaskEdgeTable[0][(mbType>>3)&7]
+
+	b.Run("BoundaryGeneral", func(b *testing.B) {
+		b.ReportAllocs()
+		var got [4]int16
+		for i := 0; i < b.N; i++ {
+			got, err = m.loopFilterBoundaryStrength(&ctx, mbType, mbmType, 0, maskPar0, 2, 4, false)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		loopFilterStrengthBenchmarkSink = got
+	})
+	b.Run("BoundaryProgressive", func(b *testing.B) {
+		b.ReportAllocs()
+		var got [4]int16
+		for i := 0; i < b.N; i++ {
+			got = m.loopFilterBoundaryStrengthProgressive(&ctx, mbType, mbmType, 0, maskPar0, 2, 4)
+		}
+		loopFilterStrengthBenchmarkSink = got
+	})
+	b.Run("InternalGeneral", func(b *testing.B) {
+		b.ReportAllocs()
+		var got [4]int16
+		for i := 0; i < b.N; i++ {
+			got, err = m.loopFilterInternalStrength(&ctx, mbType, 0, 1, maskEdge, maskPar0, 2, 4)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		loopFilterStrengthBenchmarkSink = got
+	})
+	b.Run("InternalProgressive", func(b *testing.B) {
+		b.ReportAllocs()
+		var got [4]int16
+		for i := 0; i < b.N; i++ {
+			got = m.loopFilterInternalStrengthProgressive(&ctx, mbType, 0, 1, maskEdge, maskPar0, 2, 4)
+		}
+		loopFilterStrengthBenchmarkSink = got
+	})
+}
+
+func TestLoopFilterProgressiveEdgeKernelsMatchGeneral(t *testing.T) {
+	const (
+		stride = 64
+		rows   = 64
+		offset = 24*stride + 24
+	)
+	type edgeCall func([]uint8, [4]int16, int, int, int, bool) error
+	checks := []struct {
+		name        string
+		general     edgeCall
+		progressive edgeCall
+	}{
+		{
+			name: "LumaVertical",
+			general: func(pix []uint8, bS [4]int16, qp, a, b int, intra bool) error {
+				return h264FilterMBEdgeVLuma(pix, offset, stride, bS, qp, a, b, intra)
+			},
+			progressive: func(pix []uint8, bS [4]int16, qp, a, b int, intra bool) error {
+				return h264FilterMBEdgeVLumaProgressive(pix, offset, stride, bS, qp, a, b, intra)
+			},
+		},
+		{
+			name: "LumaHorizontal",
+			general: func(pix []uint8, bS [4]int16, qp, a, b int, intra bool) error {
+				return h264FilterMBEdgeHLuma(pix, offset, stride, bS, qp, a, b, intra)
+			},
+			progressive: func(pix []uint8, bS [4]int16, qp, a, b int, intra bool) error {
+				return h264FilterMBEdgeHLumaProgressive(pix, offset, stride, bS, qp, a, b, intra)
+			},
+		},
+		{
+			name: "ChromaVertical",
+			general: func(pix []uint8, bS [4]int16, qp, a, b int, intra bool) error {
+				return h264FilterMBEdgeVChroma(pix, offset, stride, bS, qp, a, b, intra, 1)
+			},
+			progressive: func(pix []uint8, bS [4]int16, qp, a, b int, intra bool) error {
+				return h264FilterMBEdgeVChromaProgressive420(pix, offset, stride, bS, qp, a, b, intra)
+			},
+		},
+		{
+			name: "ChromaHorizontal",
+			general: func(pix []uint8, bS [4]int16, qp, a, b int, intra bool) error {
+				return h264FilterMBEdgeHChroma(pix, offset, stride, bS, qp, a, b, intra)
+			},
+			progressive: func(pix []uint8, bS [4]int16, qp, a, b int, intra bool) error {
+				return h264FilterMBEdgeHChromaProgressive420(pix, offset, stride, bS, qp, a, b, intra)
+			},
+		},
+	}
+	strengths := []struct {
+		bS    [4]int16
+		intra bool
+	}{
+		{bS: [4]int16{0, 1, 2, 3}},
+		{bS: [4]int16{3, 2, 1, 0}},
+		{bS: [4]int16{4, 4, 4, 4}, intra: true},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			for _, qp := range []int{0, 20, 37, 51} {
+				for _, alphaOffset := range []int{-12, 0, 12} {
+					for _, betaOffset := range []int{-12, 0, 12} {
+						for _, strength := range strengths {
+							want := makeLoopFilterUnitFixture(stride, rows)
+							got := append([]uint8(nil), want...)
+							if err := check.general(want, strength.bS, qp, alphaOffset, betaOffset, strength.intra); err != nil {
+								t.Fatalf("qp=%d a=%d b=%d bs=%v general: %v", qp, alphaOffset, betaOffset, strength.bS, err)
+							}
+							if err := check.progressive(got, strength.bS, qp, alphaOffset, betaOffset, strength.intra); err != nil {
+								t.Fatalf("qp=%d a=%d b=%d bs=%v progressive: %v", qp, alphaOffset, betaOffset, strength.bS, err)
+							}
+							assertUint8SlicesEqual(t, got, want)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestLoopFilterProgressiveChromaPairMatchesSeparateEdges(t *testing.T) {
+	const (
+		stride = 64
+		rows   = 64
+		offset = 24*stride + 24
+	)
+	strengths := []struct {
+		bS    [4]int16
+		intra bool
+	}{
+		{bS: [4]int16{0, 1, 2, 3}},
+		{bS: [4]int16{4, 4, 4, 4}, intra: true},
+	}
+	for _, horizontal := range []bool{false, true} {
+		for _, qp := range [][2]int{{37, 37}, {20, 37}} {
+			for _, strength := range strengths {
+				wantCb := makeLoopFilterUnitFixture(stride, rows)
+				wantCr := makeLoopFilterUnitFixture(stride, rows)
+				for i := range wantCr {
+					wantCr[i] ^= uint8((i*13 + 7) & 31)
+				}
+				gotCb := append([]uint8(nil), wantCb...)
+				gotCr := append([]uint8(nil), wantCr...)
+				var err error
+				if horizontal {
+					err = h264FilterMBEdgeHChroma(wantCb, offset, stride, strength.bS, qp[0], 0, 0, strength.intra)
+					if err == nil {
+						err = h264FilterMBEdgeHChroma(wantCr, offset, stride, strength.bS, qp[1], 0, 0, strength.intra)
+					}
+					if err == nil {
+						err = h264FilterMBEdgeHChromaPairProgressive420(gotCb, offset, gotCr, offset, stride, strength.bS, qp, 0, 0, strength.intra)
+					}
+				} else {
+					err = h264FilterMBEdgeVChroma(wantCb, offset, stride, strength.bS, qp[0], 0, 0, strength.intra, 1)
+					if err == nil {
+						err = h264FilterMBEdgeVChroma(wantCr, offset, stride, strength.bS, qp[1], 0, 0, strength.intra, 1)
+					}
+					if err == nil {
+						err = h264FilterMBEdgeVChromaPairProgressive420(gotCb, offset, gotCr, offset, stride, strength.bS, qp, 0, 0, strength.intra)
+					}
+				}
+				if err != nil {
+					t.Fatalf("horizontal=%v qp=%v bs=%v: %v", horizontal, qp, strength.bS, err)
+				}
+				assertUint8SlicesEqual(t, gotCb, wantCb)
+				assertUint8SlicesEqual(t, gotCr, wantCr)
+			}
+		}
+	}
+}
+
+func BenchmarkLoopFilterProgressiveEdgeKernels(b *testing.B) {
+	const (
+		stride = 64
+		rows   = 64
+		offset = 24*stride + 24
+	)
+	bS := [4]int16{1, 2, 3, 1}
+	b.Run("General", func(b *testing.B) {
+		pix := makeLoopFilterUnitFixture(stride, rows)
+		cr := makeLoopFilterUnitFixture(stride, rows)
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if err := h264FilterMBEdgeVLuma(pix, offset, stride, bS, 37, 0, 0, false); err != nil {
+				b.Fatal(err)
+			}
+			if err := h264FilterMBEdgeHChroma(pix, offset, stride, bS, 37, 0, 0, false); err != nil {
+				b.Fatal(err)
+			}
+			if err := h264FilterMBEdgeHChroma(cr, offset, stride, bS, 37, 0, 0, false); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("Progressive", func(b *testing.B) {
+		pix := makeLoopFilterUnitFixture(stride, rows)
+		cr := makeLoopFilterUnitFixture(stride, rows)
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if err := h264FilterMBEdgeVLumaProgressive(pix, offset, stride, bS, 37, 0, 0, false); err != nil {
+				b.Fatal(err)
+			}
+			if err := h264FilterMBEdgeHChromaPairProgressive420(pix, offset, cr, offset, stride, bS, [2]int{37, 37}, 0, 0, false); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
 func TestLoopFilterBoundaryStrengthFieldIntraHorizontalUsesBS3(t *testing.T) {
 	m, err := newMacroblockTables(1, 1, 1)
 	if err != nil {

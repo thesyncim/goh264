@@ -538,10 +538,7 @@ func (m *macroblockTables) filterFrameMacroblockDirProgressive420(dst *h264Pictu
 	mvyLimit := h264LoopFilterMVYLimit(mbType)
 
 	if mbmType != 0 {
-		bS, err := m.loopFilterBoundaryStrength(ctx, mbType, mbmType, dir, maskPar0, p.ListCount, mvyLimit, false)
-		if err != nil {
-			return err
-		}
+		bS := m.loopFilterBoundaryStrengthProgressive(ctx, mbType, mbmType, dir, maskPar0, p.ListCount, mvyLimit)
 		if h264LoopFilterBSSum(bS) != 0 {
 			qp := (int(m.QScaleTable[ctx.MBXY]) + int(m.QScaleTable[mbmXY]) + 1) >> 1
 			chromaQP := [2]int{
@@ -560,10 +557,7 @@ func (m *macroblockTables) filterFrameMacroblockDirProgressive420(dst *h264Pictu
 			continue
 		}
 
-		bS, err := m.loopFilterInternalStrength(ctx, mbType, dir, edge, maskEdge, maskPar0, p.ListCount, mvyLimit)
-		if err != nil {
-			return err
-		}
+		bS := m.loopFilterInternalStrengthProgressive(ctx, mbType, dir, edge, maskEdge, maskPar0, p.ListCount, mvyLimit)
 		if h264LoopFilterBSSum(bS) == 0 {
 			continue
 		}
@@ -586,10 +580,10 @@ func h264ApplyLoopFilterEdgeProgressive420(dst *h264PicturePlanes, dstY int, dst
 	betaOffset := int(p.SliceBetaOffset)
 	if filterLuma {
 		if dir == 0 {
-			if err := h264FilterMBEdgeVLuma(dst.Y, dstY+4*edge, dst.LumaStride, bS, qp, alphaOffset, betaOffset, intra); err != nil {
+			if err := h264FilterMBEdgeVLumaProgressive(dst.Y, dstY+4*edge, dst.LumaStride, bS, qp, alphaOffset, betaOffset, intra); err != nil {
 				return err
 			}
-		} else if err := h264FilterMBEdgeHLuma(dst.Y, dstY+4*edge*dst.LumaStride, dst.LumaStride, bS, qp, alphaOffset, betaOffset, intra); err != nil {
+		} else if err := h264FilterMBEdgeHLumaProgressive(dst.Y, dstY+4*edge*dst.LumaStride, dst.LumaStride, bS, qp, alphaOffset, betaOffset, intra); err != nil {
 			return err
 		}
 	}
@@ -597,15 +591,173 @@ func h264ApplyLoopFilterEdgeProgressive420(dst *h264PicturePlanes, dstY int, dst
 		return nil
 	}
 	if dir == 0 {
-		if err := h264FilterMBEdgeVChroma(dst.Cb, dstCb+2*edge, dst.ChromaStride, bS, chromaQP[0], alphaOffset, betaOffset, intra, 1); err != nil {
+		return h264FilterMBEdgeVChromaPairProgressive420(dst.Cb, dstCb+2*edge, dst.Cr, dstCr+2*edge, dst.ChromaStride, bS, chromaQP, alphaOffset, betaOffset, intra)
+	}
+	return h264FilterMBEdgeHChromaPairProgressive420(dst.Cb, dstCb+2*edge*dst.ChromaStride, dst.Cr, dstCr+2*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP, alphaOffset, betaOffset, intra)
+}
+
+func h264LoopFilterThresholdsProgressive(qp int, alphaOffset int, betaOffset int) (int32, int32, int) {
+	indexA := clipInt(qp+alphaOffset, 0, 51)
+	indexB := clipInt(qp+betaOffset, 0, 51)
+	return int32(h264LoopFilterAlphaTable[indexA]), int32(h264LoopFilterBetaTable[indexB]), indexA
+}
+
+func h264LoopFilterTCProgressive(indexA int, bS [4]int16, plus int8) [4]int8 {
+	row := h264LoopFilterTC0Table[indexA]
+	return [4]int8{
+		row[bS[0]] + plus,
+		row[bS[1]] + plus,
+		row[bS[2]] + plus,
+		row[bS[3]] + plus,
+	}
+}
+
+func h264FilterMBEdgeVLumaProgressive(pix []uint8, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool) error {
+	alpha, beta, indexA := h264LoopFilterThresholdsProgressive(qp, alphaOffset, betaOffset)
+	if alpha == 0 || beta == 0 {
+		return nil
+	}
+	if bS[0] < 4 || !intra {
+		tc := h264LoopFilterTCProgressive(indexA, bS, 0)
+		if h264LoopFilterLumaASMEnabled {
+			h264HLoopFilterLuma8ASM(&pix[offset], stride, alpha, beta, &tc[0])
+			return nil
+		}
+		return h264HLoopFilterLuma(pix, offset, stride, int(alpha), int(beta), &tc)
+	}
+	if h264LoopFilterLumaIntraH8ASMEnabled {
+		h264HLoopFilterLumaIntra8ASM(&pix[offset], stride, alpha, beta)
+		return nil
+	}
+	return h264HLoopFilterLumaIntra(pix, offset, stride, int(alpha), int(beta))
+}
+
+func h264FilterMBEdgeHLumaProgressive(pix []uint8, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool) error {
+	alpha, beta, indexA := h264LoopFilterThresholdsProgressive(qp, alphaOffset, betaOffset)
+	if alpha == 0 || beta == 0 {
+		return nil
+	}
+	if bS[0] < 4 || !intra {
+		tc := h264LoopFilterTCProgressive(indexA, bS, 0)
+		if h264LoopFilterLumaASMEnabled {
+			h264VLoopFilterLuma8ASM(&pix[offset], stride, alpha, beta, &tc[0])
+			return nil
+		}
+		return h264VLoopFilterLuma(pix, offset, stride, int(alpha), int(beta), &tc)
+	}
+	if h264LoopFilterLumaIntraV8ASMEnabled {
+		h264VLoopFilterLumaIntra8ASM(&pix[offset], stride, alpha, beta)
+		return nil
+	}
+	return h264VLoopFilterLumaIntra(pix, offset, stride, int(alpha), int(beta))
+}
+
+func h264FilterMBEdgeVChromaProgressive420(pix []uint8, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool) error {
+	alpha, beta, indexA := h264LoopFilterThresholdsProgressive(qp, alphaOffset, betaOffset)
+	if alpha == 0 || beta == 0 {
+		return nil
+	}
+	if bS[0] < 4 || !intra {
+		tc := h264LoopFilterTCProgressive(indexA, bS, 1)
+		if h264LoopFilterChromaH8ASMEnabled {
+			h264HLoopFilterChroma8ASM(&pix[offset], stride, alpha, beta, &tc[0])
+			return nil
+		}
+		return h264HLoopFilterChroma(pix, offset, stride, int(alpha), int(beta), &tc)
+	}
+	if h264LoopFilterChromaIntraH8ASMEnabled {
+		h264HLoopFilterChromaIntra8ASM(&pix[offset], stride, alpha, beta)
+		return nil
+	}
+	return h264HLoopFilterChromaIntra(pix, offset, stride, int(alpha), int(beta))
+}
+
+func h264FilterMBEdgeHChromaProgressive420(pix []uint8, offset int, stride int, bS [4]int16, qp int, alphaOffset int, betaOffset int, intra bool) error {
+	alpha, beta, indexA := h264LoopFilterThresholdsProgressive(qp, alphaOffset, betaOffset)
+	if alpha == 0 || beta == 0 {
+		return nil
+	}
+	if bS[0] < 4 || !intra {
+		tc := h264LoopFilterTCProgressive(indexA, bS, 1)
+		if h264LoopFilterChromaV8ASMEnabled {
+			h264VLoopFilterChroma8ASM(&pix[offset], stride, alpha, beta, &tc[0])
+			return nil
+		}
+		return h264VLoopFilterChroma(pix, offset, stride, int(alpha), int(beta), &tc)
+	}
+	if h264LoopFilterChromaIntraV8ASMEnabled {
+		h264VLoopFilterChromaIntra8ASM(&pix[offset], stride, alpha, beta)
+		return nil
+	}
+	return h264VLoopFilterChromaIntra(pix, offset, stride, int(alpha), int(beta))
+}
+
+func h264FilterMBEdgeVChromaPairProgressive420(cb []uint8, cbOffset int, cr []uint8, crOffset int, stride int, bS [4]int16, qp [2]int, alphaOffset int, betaOffset int, intra bool) error {
+	if qp[0] != qp[1] {
+		if err := h264FilterMBEdgeVChromaProgressive420(cb, cbOffset, stride, bS, qp[0], alphaOffset, betaOffset, intra); err != nil {
 			return err
 		}
-		return h264FilterMBEdgeVChroma(dst.Cr, dstCr+2*edge, dst.ChromaStride, bS, chromaQP[1], alphaOffset, betaOffset, intra, 1)
+		return h264FilterMBEdgeVChromaProgressive420(cr, crOffset, stride, bS, qp[1], alphaOffset, betaOffset, intra)
 	}
-	if err := h264FilterMBEdgeHChroma(dst.Cb, dstCb+2*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[0], alphaOffset, betaOffset, intra); err != nil {
+	alpha, beta, indexA := h264LoopFilterThresholdsProgressive(qp[0], alphaOffset, betaOffset)
+	if alpha == 0 || beta == 0 {
+		return nil
+	}
+	if bS[0] < 4 || !intra {
+		tc := h264LoopFilterTCProgressive(indexA, bS, 1)
+		if h264LoopFilterChromaH8ASMEnabled {
+			h264HLoopFilterChroma8ASM(&cb[cbOffset], stride, alpha, beta, &tc[0])
+			h264HLoopFilterChroma8ASM(&cr[crOffset], stride, alpha, beta, &tc[0])
+			return nil
+		}
+		if err := h264HLoopFilterChroma(cb, cbOffset, stride, int(alpha), int(beta), &tc); err != nil {
+			return err
+		}
+		return h264HLoopFilterChroma(cr, crOffset, stride, int(alpha), int(beta), &tc)
+	}
+	if h264LoopFilterChromaIntraH8ASMEnabled {
+		h264HLoopFilterChromaIntra8ASM(&cb[cbOffset], stride, alpha, beta)
+		h264HLoopFilterChromaIntra8ASM(&cr[crOffset], stride, alpha, beta)
+		return nil
+	}
+	if err := h264HLoopFilterChromaIntra(cb, cbOffset, stride, int(alpha), int(beta)); err != nil {
 		return err
 	}
-	return h264FilterMBEdgeHChroma(dst.Cr, dstCr+2*edge*dst.ChromaStride, dst.ChromaStride, bS, chromaQP[1], alphaOffset, betaOffset, intra)
+	return h264HLoopFilterChromaIntra(cr, crOffset, stride, int(alpha), int(beta))
+}
+
+func h264FilterMBEdgeHChromaPairProgressive420(cb []uint8, cbOffset int, cr []uint8, crOffset int, stride int, bS [4]int16, qp [2]int, alphaOffset int, betaOffset int, intra bool) error {
+	if qp[0] != qp[1] {
+		if err := h264FilterMBEdgeHChromaProgressive420(cb, cbOffset, stride, bS, qp[0], alphaOffset, betaOffset, intra); err != nil {
+			return err
+		}
+		return h264FilterMBEdgeHChromaProgressive420(cr, crOffset, stride, bS, qp[1], alphaOffset, betaOffset, intra)
+	}
+	alpha, beta, indexA := h264LoopFilterThresholdsProgressive(qp[0], alphaOffset, betaOffset)
+	if alpha == 0 || beta == 0 {
+		return nil
+	}
+	if bS[0] < 4 || !intra {
+		tc := h264LoopFilterTCProgressive(indexA, bS, 1)
+		if h264LoopFilterChromaV8ASMEnabled {
+			h264VLoopFilterChroma8ASM(&cb[cbOffset], stride, alpha, beta, &tc[0])
+			h264VLoopFilterChroma8ASM(&cr[crOffset], stride, alpha, beta, &tc[0])
+			return nil
+		}
+		if err := h264VLoopFilterChroma(cb, cbOffset, stride, int(alpha), int(beta), &tc); err != nil {
+			return err
+		}
+		return h264VLoopFilterChroma(cr, crOffset, stride, int(alpha), int(beta), &tc)
+	}
+	if h264LoopFilterChromaIntraV8ASMEnabled {
+		h264VLoopFilterChromaIntra8ASM(&cb[cbOffset], stride, alpha, beta)
+		h264VLoopFilterChromaIntra8ASM(&cr[crOffset], stride, alpha, beta)
+		return nil
+	}
+	if err := h264VLoopFilterChromaIntra(cb, cbOffset, stride, int(alpha), int(beta)); err != nil {
+		return err
+	}
+	return h264VLoopFilterChromaIntra(cr, crOffset, stride, int(alpha), int(beta))
 }
 
 func h264LoopFilterParamsUseFrameMBAFF(params []h264LoopFilterSliceParams) bool {
@@ -1704,6 +1856,113 @@ func h264LoopFilterMVYLimit(mbType uint32) int {
 		return 2
 	}
 	return 4
+}
+
+// loopFilterBoundaryStrengthProgressive is the validated frame-picture form of
+// loopFilterBoundaryStrength. The progressive frame path has already excluded
+// field and MBAFF macroblocks and built every referenced motion-cache slot, so
+// it can omit the general path's mixed-interlace and range-error handling.
+func (m *macroblockTables) loopFilterBoundaryStrengthProgressive(ctx *h264LoopFilterContext, mbType uint32, mbmType uint32, dir int, maskPar0 uint32, listCount int, mvyLimit int) [4]int16 {
+	if isIntra(mbType | mbmType) {
+		return [4]int16{4, 4, 4, 4}
+	}
+
+	var bS [4]int16
+	mvDone := false
+	if maskPar0 != 0 && mbmType&(MBType16x16|(MBType8x16>>uint(dir))) != 0 {
+		bIdx := int(h264Scan8[0])
+		bnIdx := bIdx - 1
+		if dir != 0 {
+			bnIdx = bIdx - 8
+		}
+		v := h264LoopFilterCheckMVProgressive(ctx, bIdx, bnIdx, listCount, mvyLimit)
+		bS = [4]int16{v, v, v, v}
+		mvDone = true
+	}
+
+	bIdx := int(h264Scan8[0])
+	bStep := 8
+	bnDelta := 1
+	if dir != 0 {
+		bStep = 1
+		bnDelta = 8
+	}
+	for i := 0; i < 4; i++ {
+		idx := bIdx + i*bStep
+		if ctx.NonZeroCountCache[idx]|ctx.NonZeroCountCache[idx-bnDelta] != 0 {
+			bS[i] = 2
+		} else if !mvDone {
+			bS[i] = h264LoopFilterCheckMVProgressive(ctx, idx, idx-bnDelta, listCount, mvyLimit)
+		}
+	}
+	return bS
+}
+
+// loopFilterInternalStrengthProgressive is the validated frame-picture form of
+// loopFilterInternalStrength. Its edge geometry guarantees that all cache
+// indices passed to h264LoopFilterCheckMVProgressive are in range.
+func (m *macroblockTables) loopFilterInternalStrengthProgressive(ctx *h264LoopFilterContext, mbType uint32, dir int, edge int, maskEdge int, maskPar0 uint32, listCount int, mvyLimit int) [4]int16 {
+	if isIntra(mbType) {
+		return [4]int16{3, 3, 3, 3}
+	}
+
+	var bS [4]int16
+	mvDone := edge&maskEdge != 0
+	if !mvDone && maskPar0 != 0 {
+		bIdx := int(h264Scan8[0]) + edge
+		if dir != 0 {
+			bIdx = int(h264Scan8[0]) + edge*8
+		}
+		bnIdx := bIdx - 1
+		if dir != 0 {
+			bnIdx = bIdx - 8
+		}
+		v := h264LoopFilterCheckMVProgressive(ctx, bIdx, bnIdx, listCount, mvyLimit)
+		bS = [4]int16{v, v, v, v}
+		mvDone = true
+	}
+
+	bIdx := int(h264Scan8[0]) + edge
+	bStep := 8
+	bnDelta := 1
+	if dir != 0 {
+		bIdx = int(h264Scan8[0]) + edge*8
+		bStep = 1
+		bnDelta = 8
+	}
+	for i := 0; i < 4; i++ {
+		idx := bIdx + i*bStep
+		if ctx.NonZeroCountCache[idx]|ctx.NonZeroCountCache[idx-bnDelta] != 0 {
+			bS[i] = 2
+		} else if !mvDone {
+			bS[i] = h264LoopFilterCheckMVProgressive(ctx, idx, idx-bnDelta, listCount, mvyLimit)
+		}
+	}
+	return bS
+}
+
+func h264LoopFilterCheckMVProgressive(ctx *h264LoopFilterContext, bIdx int, bnIdx int, listCount int, mvyLimit int) int16 {
+	v := ctx.Motion.Ref[0][bIdx] != ctx.Motion.Ref[0][bnIdx]
+	if !v && ctx.Motion.Ref[0][bIdx] != h264ListNotUsed {
+		v = h264LoopFilterMVDiff(ctx.Motion.MV[0][bIdx], ctx.Motion.MV[0][bnIdx], mvyLimit)
+	}
+	if listCount == 2 {
+		if !v {
+			v = ctx.Motion.Ref[1][bIdx] != ctx.Motion.Ref[1][bnIdx] ||
+				h264LoopFilterMVDiff(ctx.Motion.MV[1][bIdx], ctx.Motion.MV[1][bnIdx], mvyLimit)
+		}
+		if v {
+			if ctx.Motion.Ref[0][bIdx] != ctx.Motion.Ref[1][bnIdx] || ctx.Motion.Ref[1][bIdx] != ctx.Motion.Ref[0][bnIdx] {
+				return 1
+			}
+			v = h264LoopFilterMVDiff(ctx.Motion.MV[0][bIdx], ctx.Motion.MV[1][bnIdx], mvyLimit) ||
+				h264LoopFilterMVDiff(ctx.Motion.MV[1][bIdx], ctx.Motion.MV[0][bnIdx], mvyLimit)
+		}
+	}
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func (m *macroblockTables) loopFilterBoundaryStrength(ctx *h264LoopFilterContext, mbType uint32, mbmType uint32, dir int, maskPar0 uint32, listCount int, mvyLimit int, frameMBAFF bool) ([4]int16, error) {
