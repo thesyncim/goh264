@@ -16,6 +16,12 @@
 #include <libavutil/error.h>
 #include <libavutil/log.h>
 
+#if defined(__OPTIMIZE__)
+#define GOH264_HELPER_OPTIMIZED "true"
+#else
+#define GOH264_HELPER_OPTIMIZED "false"
+#endif
+
 typedef struct Input {
     uint8_t *data;
     size_t size;
@@ -462,11 +468,13 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("{\"version\":1,\"backend\":\"libavcodec\",\"libavcodec_version\":%u,"
-           "\"cpu_flags\":\"%s\","
+    printf("{\"version\":2,\"backend\":\"libavcodec\",\"codec\":\"%s\","
+           "\"libavcodec_version\":%u,\"cpu_flags\":\"%s\","
+           "\"cpu_flags_mask\":%d,\"compiler\":\"%s\",\"optimized\":" GOH264_HELPER_OPTIMIZED ","
            "\"workers\":%d,\"decoder_threads_per_worker\":1,"
            "\"iterations_per_worker\":%d,\"repeats\":%d,\"samples\":[",
-           avcodec_version(), options.pure_c ? "0" : "native", options.workers,
+           codec->name, avcodec_version(), options.pure_c ? "0" : "native",
+           av_get_cpu_flags(), __VERSION__, options.workers,
            options.iterations, options.repeats);
     int status = 0;
     for (int repeat = 0; repeat < options.repeats; repeat++) {

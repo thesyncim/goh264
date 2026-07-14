@@ -6,23 +6,25 @@ is not complete until the Go entrypoint has an oracle test, architecture
 dispatch, `purego` scalar fallback, and real-vector benchmark coverage.
 
 Current profile evidence on Apple arm64 is dominated by CABAC, loop filtering,
-and motion-comp orchestration rather than a single missing leaf. The default
-`goh264bench` build consumes `cmd/goh264bench/default.pgo`; that profile was
-trained only on the distinct green `camp-mot-frm0-full` and `caba1-sony-d`
-vectors, with the `caba3-sva-b` evaluation vector excluded from training.
+and motion-comp orchestration rather than a single missing leaf. Benchmark
+commands build with PGO disabled unless an explicitly labeled profile is
+provided, so the default lane represents ordinary library consumers.
 
-The decisive `caba3-sva-b` gate uses 200 complete decodes per worker, 11 paired
-alternating-order repeats, preloaded identical Annex B bytes, one decoder thread
-per worker, and no timed file I/O, output materialization, or hashing. Against
-libavcodec pure C (`-cpuflags 0`), the single-worker candidate-over-baseline
-paired median elapsed ratio is 0.990158 (0.98% faster), the geometric ratio is
-0.988464, and Go wins 11/11 repeats. With 12 independent workers on both sides,
-the paired median ratio is 0.995609 (0.44% faster), the geometric ratio is
-0.991875, and Go wins 7/11 repeats. Both lanes produce raw-video MD5
+The corrected `caba3-sva-b` baseline uses 100 complete decodes per worker, 12
+paired balanced-order repeats, fresh decoder contexts per repeat, preloaded
+identical Annex B bytes, and one decoder thread per worker. Context construction,
+worker launch, file I/O, output materialization, and hashing are outside timing;
+wakeup, parsing, decoding, drain/reset work, and completion synchronization are
+inside timing on both sides. Against native libavcodec C+assembly, the default
+Go build is currently slower: the single-worker candidate-over-baseline paired
+geometric elapsed ratio is 1.6874 with a two-sided 95% confidence interval of
+[1.6689, 1.7061], and the 12-worker ratio is 1.7326 with a confidence interval
+of [1.6961, 1.7700]. Both lanes produce raw-video MD5
 `63a0f8fdcbb87b0dff330acdd10905c0`, and the Go zero-steady-state-allocation
-gate passes. Standalone implementation medians remain descriptive; the paired
-ratios are the primary cross-implementation statistic because they compare the
-same repeat index under thermal drift.
+gate passes. The native C+assembly lane is the claim-eligible baseline for the
+assembly-enabled Go build; libavcodec pure C is retained only as a diagnostic
+lane. A performance win is not recorded until the paired confidence interval is
+entirely below 1 in both the one-worker and multicore gates.
 The arm64 chroma deblock port keeps focused chroma vertical/horizontal
 microbenchmarks at 0 allocs/op and moves their medians from about 16.5/16.2
 ns/op in `purego` to about 9.2/13.9 ns/op in default builds. The follow-up
@@ -125,7 +127,7 @@ prediction, IDCT/add-pixels, intra prediction, and only then CABAC experiments.
 | IDCT and add-pixels | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/h264_idct.asm`, `h264_idct_10bit.asm`, `h264dsp_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/h264idct_neon.S`, `h264dsp_init_aarch64.c` | `internal/h264/idct.go`, `internal/h264/dsp.go`, reconstruction call sites in `internal/h264/reconstruct.go` and `internal/h264/reconstruct_high.go` | mapped | Includes 4x4, 8x8, DC-only, chroma DC, and add-pixels clear variants. Needs exact block clearing semantics. |
 | Loop/deblock filter | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/h264_deblock.asm`, `h264_deblock_10bit.asm`, `h264dsp_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/h264dsp_neon.S`, `h264dsp_init_aarch64.c` | wrappers in `internal/h264/dsp.go`, seam in `internal/h264/deblock_dispatch.go`, asm in `internal/h264/deblock_amd64.s` and `internal/h264/deblock_arm64.s`, integration in `internal/h264/loop_filter.go` | partial | Visible on deblocked `caba3`. The Go dispatch seam narrows FFmpeg C `int` thresholds to checked `int32` values and keeps strides as native signed `int`. Normal 8-bit luma and chroma vertical/horizontal, horizontal chroma 4:2:2, luma intra vertical/horizontal, 4:2:0 chroma intra vertical/horizontal, 4:2:2 chroma intra horizontal, High10 chroma vertical/horizontal/4:2:2, and High10 chroma intra vertical/horizontal/4:2:2 now use real FFmpeg-shaped arm64 NEON leaves; the 8-bit 4:2:0 chroma intra MBAFF NEON leaf is mapped and directly parity-tested but deliberately undispatched because it did not beat scalar. Amd64 normal 8-bit luma vertical/horizontal/MBAFF, luma intra vertical/horizontal, and the enabled amd64 8-bit chroma vertical, chroma 4:2:2 horizontal, chroma intra vertical, and chroma intra 4:2:2 horizontal leaves now use real FFmpeg-shaped SSE2 math. Amd64 4:2:0 chroma horizontal and intra horizontal wrappers are implemented but not dispatched because they did not beat scalar on the local lane. Chroma assembly is enabled only for non-negative `tc0` lanes; mixed negative lanes keep the scalar/oracle path. High10 assembly keeps FFmpeg's `uint8_t *` byte-pointer ABI at the assembly boundary and is gated to `bitDepth == 10`; 12/14-bit, High10 4:2:0 chroma intra MBAFF, arm64 luma MBAFF, luma high-bit, and high-bit luma intra variants still fall back to scalar. |
 | Intra prediction | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/h264_intrapred.asm`, `h264_intrapred_10bit.asm`, `h264_intrapred_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/h264pred_neon.S`, `h264pred_init.c` | `internal/h264/pred.go`, `internal/h264/pred_high.go`, dispatch by mode in `internal/h264/intra_prediction.go` and reconstruction files | mapped | Many small mode-specific kernels. Port after motion-comp and deblock unless profiles show intra-heavy workloads dominating. |
-| CABAC helper optimizations | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/cabac.h`, `h264_cabac.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/cabac.h` | `internal/h264/cabac.go`, `internal/h264/cabac_mb.go`, `internal/h264/cabac_residual.go`, `internal/h264/cabac_frame.go` | partial | The concrete slice decoder hand-inlines get/bypass/sign arithmetic, specializes MVD, residual, and intra-prediction bins without changing the scripted interface seam, and masks the pinned 0..9 normalization shift so arm64 emits native register shifts without redundant guards. A 256-step differential state test covers the primitive. Fresh profiles put CABAC get plus residual work around 15%; the held-out default PGO profile is part of the paired single- and multicore pure-C wins recorded above. |
+| CABAC helper optimizations | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/cabac.h`, `h264_cabac.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/cabac.h` | `internal/h264/cabac.go`, `internal/h264/cabac_mb.go`, `internal/h264/cabac_residual.go`, `internal/h264/cabac_frame.go` | partial | The concrete slice decoder hand-inlines get/bypass/sign arithmetic, specializes MVD, residual, and intra-prediction bins without changing the scripted interface seam, and masks the pinned 0..9 normalization shift so arm64 emits native register shifts without redundant guards. A 256-step differential state test covers the primitive. The corrected no-PGO profile attributes about 70% of samples to CABAC slice decoding, including about 13% to residual decoding and about 10% directly to unchecked table access. Native libavcodec uses an inlined arm64 CABAC arithmetic/refill block, so the next experiments must batch enough CABAC work to amortize a Go-to-assembly call. |
 | VideoDSP support | `.upstream/ffmpeg-n8.0.1/libavcodec/x86/videodsp.asm`, `videodsp_init.c` | `.upstream/ffmpeg-n8.0.1/libavcodec/aarch64/videodsp.S`, `videodsp_init.c` | `internal/h264/edge_arm64.s`, `internal/h264/motion_comp.go`, and high-bit fallback in `internal/h264/motion_comp_high.go` | partial | The arm64 8-bit H.264 21- and 9-pixel scratch shapes have an exact fixed-width assembly row kernel; exhaustive clamped-pixel coverage includes 21x21, 9x9, and 9x17 shapes. Focused 21x21 rows move from roughly 58-82 ns/op to 31-42 ns/op, with 0 allocs/op. High-bit-depth and non-arm64 lanes retain the FFmpeg-shaped scalar rectangle-copy fallback. |
 
 ## Implementation Order
@@ -144,8 +146,9 @@ prediction, IDCT/add-pixels, intra prediction, and only then CABAC experiments.
 6. Add IDCT/add-pixels 4x4, 8x8, DC-only, and clear variants after choosing the
    local block ABI.
 7. Add intra prediction mode batches for intra-heavy workloads.
-8. Treat CABAC helper asm as an evidence-gated later lane because it is tightly
-   coupled to decoder context layout and refill behavior.
+8. Prototype batched CABAC assembly only behind differential state and
+   real-vector parity tests; a per-bin assembly call is unlikely to amortize its
+   boundary cost.
 
 ## Porting Rules
 

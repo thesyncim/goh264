@@ -61,6 +61,7 @@ type benchMetadata struct {
 	GOMAXPROCS             int     `json:"gomaxprocs"`
 	ModulePath             string  `json:"module_path,omitempty"`
 	ModuleVersion          string  `json:"module_version,omitempty"`
+	BuildPGO               string  `json:"build_pgo"`
 	VCSRevision            string  `json:"vcs_revision,omitempty"`
 	VCSDirty               bool    `json:"vcs_dirty"`
 	FFmpegVersion          string  `json:"ffmpeg_version,omitempty"`
@@ -72,78 +73,84 @@ type benchMetadata struct {
 }
 
 type benchResult struct {
-	Name                 string                 `json:"name"`
-	EntryID              string                 `json:"entry_id,omitempty"`
-	Input                string                 `json:"input"`
-	Iterations           int                    `json:"iterations"`
-	Repeats              int                    `json:"repeats"`
-	Warmup               int                    `json:"warmup"`
-	Workers              int                    `json:"workers,omitempty"`
-	DecoderThreads       int                    `json:"decoder_threads_per_worker,omitempty"`
-	RawOutput            bool                   `json:"raw_output"`
-	RawOutputTimed       bool                   `json:"raw_output_timed"`
-	RawPixelFormat       string                 `json:"raw_pixel_format,omitempty"`
-	FFmpegPixelFmt       string                 `json:"ffmpeg_pixel_format,omitempty"`
-	FramesPerIter        int                    `json:"frames_per_iter,omitempty"`
-	InputBytesPerIter    int64                  `json:"input_bytes_per_iter,omitempty"`
-	BytesPerIter         int64                  `json:"bytes_per_iter,omitempty"`
-	TotalFrames          int                    `json:"total_frames,omitempty"`
-	TotalBytes           int64                  `json:"total_bytes,omitempty"`
-	ElapsedMS            float64                `json:"elapsed_ms"`
-	MeanElapsedMS        float64                `json:"mean_elapsed_ms,omitempty"`
-	MedianElapsedMS      float64                `json:"median_elapsed_ms,omitempty"`
-	MinElapsedMS         float64                `json:"min_elapsed_ms,omitempty"`
-	MaxElapsedMS         float64                `json:"max_elapsed_ms,omitempty"`
-	StddevElapsedMS      float64                `json:"stddev_elapsed_ms,omitempty"`
-	CVElapsed            float64                `json:"cv_elapsed,omitempty"`
-	PairedCandidate      string                 `json:"paired_candidate,omitempty"`
-	PairedRepeats        int                    `json:"paired_repeats,omitempty"`
-	PairedCandidateWins  int                    `json:"paired_candidate_wins,omitempty"`
-	PairedMedianRatio    float64                `json:"paired_candidate_over_baseline_median_elapsed_ratio,omitempty"`
-	PairedGeomeanRatio   float64                `json:"paired_candidate_over_baseline_geomean_elapsed_ratio,omitempty"`
-	FPS                  float64                `json:"fps,omitempty"`
-	MiBPerSec            float64                `json:"mib_per_sec,omitempty"`
-	NSPerFrame           float64                `json:"ns_per_frame,omitempty"`
-	NSPerInputByte       float64                `json:"ns_per_input_byte,omitempty"`
-	NSPerRawByte         float64                `json:"ns_per_raw_byte,omitempty"`
-	AllocBytes           uint64                 `json:"alloc_bytes,omitempty"`
-	Allocs               uint64                 `json:"allocs,omitempty"`
-	AllocBytesPerIter    float64                `json:"alloc_bytes_per_iter,omitempty"`
-	AllocsPerIter        float64                `json:"allocs_per_iter,omitempty"`
-	AllocBytesPerFrame   float64                `json:"alloc_bytes_per_frame,omitempty"`
-	AllocsPerFrame       float64                `json:"allocs_per_frame,omitempty"`
-	RawMD5               string                 `json:"raw_md5,omitempty"`
-	ExpectedRawMD5       string                 `json:"expected_raw_md5,omitempty"`
-	ExpectedPixFmt       string                 `json:"expected_raw_pixel_format,omitempty"`
-	ExpectedFrames       int                    `json:"expected_frames_per_iter,omitempty"`
-	ExpectedBytes        int64                  `json:"expected_bytes_per_iter,omitempty"`
-	ParityStatus         string                 `json:"parity_status,omitempty"`
-	QualityStatus        string                 `json:"quality_status,omitempty"`
-	QualityMetric        string                 `json:"quality_metric,omitempty"`
-	QualityReference     string                 `json:"quality_reference,omitempty"`
-	PeerQualityStatus    string                 `json:"peer_quality_status,omitempty"`
-	PeerQualityMetric    string                 `json:"peer_quality_metric,omitempty"`
-	PeerQualityReference string                 `json:"peer_quality_reference,omitempty"`
-	ErrorClass           string                 `json:"error_class,omitempty"`
-	Surfaces             []string               `json:"surfaces,omitempty"`
-	FeatureTags          []string               `json:"feature_tags,omitempty"`
-	Source               string                 `json:"source,omitempty"`
-	Command              string                 `json:"command,omitempty"`
-	ProcessPerIter       bool                   `json:"process_per_iter"`
-	InputReadTimed       bool                   `json:"input_read_timed"`
-	StdoutPipeTimed      bool                   `json:"stdout_pipe_timed"`
-	BaselineKind         string                 `json:"baseline_kind"`
-	BackendKind          string                 `json:"backend_kind,omitempty"`
-	CPUFlags             string                 `json:"cpu_flags,omitempty"`
-	ComparisonLane       string                 `json:"comparison_lane,omitempty"`
-	Skipped              bool                   `json:"skipped,omitempty"`
-	Error                string                 `json:"error,omitempty"`
-	Notes                []string               `json:"notes,omitempty"`
-	Samples              []benchSample          `json:"samples,omitempty"`
-	FrameDiagnostics     []benchFrameDiagnostic `json:"frame_diagnostics,omitempty"`
+	Name                  string                 `json:"name"`
+	EntryID               string                 `json:"entry_id,omitempty"`
+	Input                 string                 `json:"input"`
+	Iterations            int                    `json:"iterations"`
+	Repeats               int                    `json:"repeats"`
+	Warmup                int                    `json:"warmup"`
+	Workers               int                    `json:"workers,omitempty"`
+	DecoderThreads        int                    `json:"decoder_threads_per_worker,omitempty"`
+	RawOutput             bool                   `json:"raw_output"`
+	RawOutputTimed        bool                   `json:"raw_output_timed"`
+	RawPixelFormat        string                 `json:"raw_pixel_format,omitempty"`
+	FFmpegPixelFmt        string                 `json:"ffmpeg_pixel_format,omitempty"`
+	FramesPerIter         int                    `json:"frames_per_iter,omitempty"`
+	InputBytesPerIter     int64                  `json:"input_bytes_per_iter,omitempty"`
+	BytesPerIter          int64                  `json:"bytes_per_iter,omitempty"`
+	TotalFrames           int                    `json:"total_frames,omitempty"`
+	TotalBytes            int64                  `json:"total_bytes,omitempty"`
+	ElapsedMS             float64                `json:"elapsed_ms"`
+	MeanElapsedMS         float64                `json:"mean_elapsed_ms,omitempty"`
+	MedianElapsedMS       float64                `json:"median_elapsed_ms,omitempty"`
+	MinElapsedMS          float64                `json:"min_elapsed_ms,omitempty"`
+	MaxElapsedMS          float64                `json:"max_elapsed_ms,omitempty"`
+	StddevElapsedMS       float64                `json:"stddev_elapsed_ms,omitempty"`
+	CVElapsed             float64                `json:"cv_elapsed,omitempty"`
+	PairedCandidate       string                 `json:"paired_candidate,omitempty"`
+	PairedRepeats         int                    `json:"paired_repeats,omitempty"`
+	PairedCandidateWins   int                    `json:"paired_candidate_wins,omitempty"`
+	PairedMedianRatio     float64                `json:"paired_candidate_over_baseline_median_elapsed_ratio,omitempty"`
+	PairedGeomeanRatio    float64                `json:"paired_candidate_over_baseline_geomean_elapsed_ratio,omitempty"`
+	PairedGeomeanCI95Low  float64                `json:"paired_candidate_over_baseline_geomean_elapsed_ratio_ci95_low,omitempty"`
+	PairedGeomeanCI95High float64                `json:"paired_candidate_over_baseline_geomean_elapsed_ratio_ci95_high,omitempty"`
+	PairedResult          string                 `json:"paired_result,omitempty"`
+	FPS                   float64                `json:"fps,omitempty"`
+	MiBPerSec             float64                `json:"mib_per_sec,omitempty"`
+	NSPerFrame            float64                `json:"ns_per_frame,omitempty"`
+	NSPerInputByte        float64                `json:"ns_per_input_byte,omitempty"`
+	NSPerRawByte          float64                `json:"ns_per_raw_byte,omitempty"`
+	AllocBytes            uint64                 `json:"alloc_bytes,omitempty"`
+	Allocs                uint64                 `json:"allocs,omitempty"`
+	AllocBytesPerIter     float64                `json:"alloc_bytes_per_iter,omitempty"`
+	AllocsPerIter         float64                `json:"allocs_per_iter,omitempty"`
+	AllocBytesPerFrame    float64                `json:"alloc_bytes_per_frame,omitempty"`
+	AllocsPerFrame        float64                `json:"allocs_per_frame,omitempty"`
+	RawMD5                string                 `json:"raw_md5,omitempty"`
+	ExpectedRawMD5        string                 `json:"expected_raw_md5,omitempty"`
+	ExpectedPixFmt        string                 `json:"expected_raw_pixel_format,omitempty"`
+	ExpectedFrames        int                    `json:"expected_frames_per_iter,omitempty"`
+	ExpectedBytes         int64                  `json:"expected_bytes_per_iter,omitempty"`
+	ParityStatus          string                 `json:"parity_status,omitempty"`
+	QualityStatus         string                 `json:"quality_status,omitempty"`
+	QualityMetric         string                 `json:"quality_metric,omitempty"`
+	QualityReference      string                 `json:"quality_reference,omitempty"`
+	PeerQualityStatus     string                 `json:"peer_quality_status,omitempty"`
+	PeerQualityMetric     string                 `json:"peer_quality_metric,omitempty"`
+	PeerQualityReference  string                 `json:"peer_quality_reference,omitempty"`
+	ErrorClass            string                 `json:"error_class,omitempty"`
+	Surfaces              []string               `json:"surfaces,omitempty"`
+	FeatureTags           []string               `json:"feature_tags,omitempty"`
+	Source                string                 `json:"source,omitempty"`
+	Command               string                 `json:"command,omitempty"`
+	ProcessPerIter        bool                   `json:"process_per_iter"`
+	InputReadTimed        bool                   `json:"input_read_timed"`
+	StdoutPipeTimed       bool                   `json:"stdout_pipe_timed"`
+	BaselineKind          string                 `json:"baseline_kind"`
+	BackendKind           string                 `json:"backend_kind,omitempty"`
+	CPUFlags              string                 `json:"cpu_flags,omitempty"`
+	ComparisonLane        string                 `json:"comparison_lane,omitempty"`
+	ClaimRole             string                 `json:"claim_role,omitempty"`
+	Skipped               bool                   `json:"skipped,omitempty"`
+	Error                 string                 `json:"error,omitempty"`
+	Notes                 []string               `json:"notes,omitempty"`
+	Samples               []benchSample          `json:"samples,omitempty"`
+	FrameDiagnostics      []benchFrameDiagnostic `json:"frame_diagnostics,omitempty"`
 }
 
 type benchSample struct {
+	RepeatIndex       int     `json:"repeat_index,omitempty"`
+	MeasurementOrder  int     `json:"measurement_order_position,omitempty"`
 	ElapsedMS         float64 `json:"elapsed_ms"`
 	TotalFrames       int     `json:"total_frames,omitempty"`
 	TotalBytes        int64   `json:"total_bytes,omitempty"`
@@ -196,6 +203,7 @@ type ffmpegBenchLane struct {
 	backendKind    string
 	cpuFlags       string
 	comparisonLane string
+	claimRole      string
 }
 
 type benchCorpusEntry struct {
@@ -241,7 +249,7 @@ func main() {
 	ffmpegThreads := flag.String("ffmpeg-threads", "1", "FFmpeg -threads value")
 	ffmpegCPUFlags := flag.String("ffmpeg-cpuflags", "", "FFmpeg -cpuflags value; empty uses the binary default native C+asm CPU dispatch, 0 forces pure C")
 	ffmpegPureC := flag.Bool("ffmpeg-pure-c", false, "shorthand for -ffmpeg-cpuflags 0")
-	fairCPULanes := flag.Bool("fair-cpu-lanes", false, "with -ffmpeg, emit explicit pure-C-vs-pure-Go and native-C+asm-vs-Go+asm backend lanes")
+	fairCPULanes := flag.Bool("fair-cpu-lanes", false, "with -ffmpeg, emit separate pure-C and native C+asm baselines against the measured Go backend")
 	ffmpegProcessPerIter := flag.Bool("ffmpeg-process-per-iter", false, "with -ffmpeg, run one FFmpeg process per timed iteration; default amortizes one FFmpeg process per repeat sample over a prebuilt repeated input")
 	fairLibavcodecBin := flag.String("fair-libavcodec-bin", "", "libavcodec benchmark helper for matched in-memory compute lanes; requires -manifest, -ffmpeg, -raw=true, and -ffmpeg-threads=1")
 	workers := flag.Int("workers", 1, "independent single-thread decoder workers in matched libavcodec compute lanes")
@@ -766,7 +774,7 @@ func benchManifest(path string, maxEntries int, opts benchOptions) (benchReport,
 		}
 	}
 	if opts.fairLibavcodecBin != "" {
-		meta.FairnessPolicy = fmt.Sprintf("Decode-ok corpus entries are timed only after Go and FFmpeg independently pass bitstream MD5, raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 checks against the manifest oracle. Matched compute samples exclude raw output materialization, hashing, process startup, file I/O, and CLI setup on both sides. Go and libavcodec receive the same preloaded Annex B bytes, perform the same number of complete independent decodes, use %d independent contexts, and use exactly one decoder thread per worker. Worker launch is outside the timed region; the timed region includes wakeup, parsing, decoding, drain/reset work, and completion synchronization on both sides. Measurement order rotates across repeats to limit thermal and frequency-order bias. Paired candidate-over-baseline elapsed ratios compare the same repeat index and are the primary cross-implementation statistic; ratios below 1 mean the candidate is faster. Single-thread evidence uses -workers=1; multicore evidence uses the same -workers=N value for both implementations. Pure-C and native libavcodec CPU dispatch remain separate labeled lanes.", opts.workers)
+		meta.FairnessPolicy = fmt.Sprintf("Decode-ok corpus entries are timed only after Go and each libavcodec backend independently pass bitstream MD5, raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 checks against the manifest oracle. Each backend preflight runs once before all timing repeats. Matched compute samples exclude raw output materialization, hashing, process startup, file I/O, CLI setup, context construction, and worker launch on both sides. Go and libavcodec receive the same preloaded Annex B bytes, perform the same number of complete independent decodes, create fresh contexts for every repeat, use %d independent contexts, and use exactly one decoder thread per worker. The timed region includes wakeup, parsing, decoding, drain/reset work, and completion synchronization on both sides. Measurement uses balanced orders and records the one-based repeat and order position on every sample. The primary statistic is the paired candidate-over-baseline geometric elapsed ratio with a two-sided 95%% Student-t confidence interval over log ratios; paired_result is a winner only when that interval excludes 1. Median ratio and win count are descriptive. Only the backend-symmetric claim_role=primary lane supports a headline claim: native C+assembly for an assembly-enabled Go build, pure C for a pure-Go build. build_pgo=off is required for a default consumer-performance claim; explicitly profiled builds must be labeled separately. Single-thread evidence uses -workers=1; multicore evidence uses the same -workers=N value on both sides.", opts.workers)
 	} else {
 		meta.FairnessPolicy = "Decode-ok corpus entries are benchmarked only after bitstream MD5, Go raw pixel format, frame count, raw byte count, and concatenated rawvideo MD5 pass a preflight against the manifest oracle; manifest rows use their declared input format for the Go decoder path. Known-red ledger rows and stale known-red rows are emitted as skipped results with the exact error or stale-ledger note and are not timing samples. -max-entries limits timed green rows only; selected rows beyond that limit remain visible as rawvideo-md5-ok-not-timed skips. Optional FFmpeg CLI rawvideo output must pass the same rawvideo MD5 preflight before measured FFmpeg samples run; fair CPU lanes label each FFmpeg CPU mode against the actual measured Go backend_kind instead of assuming a purego or assembly build. Primary quality_status is the manifest rawvideo oracle when available; peer_quality_status records each FFmpeg lane's rawvideo match or mismatch against the measured Go lane. Go result backend_kind remains explicit, so purego builds report go-pure and default builds with partial assembly report go-partial-asm until all decoder kernels are ported. FFmpeg timing defaults to one CLI process per repeat sample over a prebuilt repeated input file, amortizing process startup and CLI setup across timed iterations; raw-output amortized samples must also match the single-iteration raw output repeated for every timed iteration; -ffmpeg-process-per-iter restores the historical process-per-iteration baseline."
 	}
@@ -1661,6 +1669,7 @@ func preflightBenchFFmpegOracle(input string, entry benchCorpusEntry, opts bench
 		BackendKind:    lane.backendKind,
 		CPUFlags:       lane.cpuFlags,
 		ComparisonLane: lane.comparisonLane,
+		ClaimRole:      lane.claimRole,
 	}
 	return annotateBenchResultWithOracle(&result, entry)
 }
@@ -1677,12 +1686,14 @@ func ffmpegBenchLanes(opts benchOptions) []ffmpegBenchLane {
 				backendKind:    "ffmpeg-pure-c",
 				cpuFlags:       "0",
 				comparisonLane: ffmpegComparisonLaneForGoBackend("0", goBackend),
+				claimRole:      ffmpegComparisonClaimRole("0", goBackend),
 			},
 			{
 				name:           "ffmpeg-native",
 				backendKind:    "ffmpeg-native-c+asm",
 				cpuFlags:       strings.TrimSpace(opts.ffmpegCPUFlags),
 				comparisonLane: ffmpegComparisonLaneForGoBackend(strings.TrimSpace(opts.ffmpegCPUFlags), goBackend),
+				claimRole:      ffmpegComparisonClaimRole(strings.TrimSpace(opts.ffmpegCPUFlags), goBackend),
 			},
 		}
 	}
@@ -1692,6 +1703,7 @@ func ffmpegBenchLanes(opts benchOptions) []ffmpegBenchLane {
 		backendKind:    ffmpegBackendKind(flags),
 		cpuFlags:       flags,
 		comparisonLane: ffmpegComparisonLaneForGoBackend(flags, goBackend),
+		claimRole:      ffmpegComparisonClaimRole(flags, goBackend),
 	}}
 }
 
@@ -1726,6 +1738,16 @@ func ffmpegComparisonLaneForGoBackend(cpuFlags string, goBackend string) string 
 		return "ffmpeg-native-c+asm-vs-" + goBackend
 	}
 	return "ffmpeg-cpuflags-" + cpuFlags + "-vs-" + goBackend
+}
+
+func ffmpegComparisonClaimRole(cpuFlags string, goBackend string) string {
+	if cpuFlags == "" && strings.Contains(goBackend, "asm") {
+		return "primary"
+	}
+	if cpuFlags == "0" && goBackend == "go-pure" {
+		return "primary"
+	}
+	return "diagnostic"
 }
 
 func annotateFFmpegPeerQuality(result *benchResult, goResult benchResult) {
@@ -1802,8 +1824,12 @@ type fairGoWorker struct {
 type libavcodecBenchReport struct {
 	Version                 int                     `json:"version"`
 	Backend                 string                  `json:"backend"`
+	Codec                   string                  `json:"codec"`
 	LibavcodecVersion       uint                    `json:"libavcodec_version"`
 	CPUFlags                string                  `json:"cpu_flags"`
+	CPUFlagsMask            int                     `json:"cpu_flags_mask"`
+	Compiler                string                  `json:"compiler"`
+	Optimized               bool                    `json:"optimized"`
 	Workers                 int                     `json:"workers"`
 	DecoderThreadsPerWorker int                     `json:"decoder_threads_per_worker"`
 	IterationsPerWorker     int                     `json:"iterations_per_worker"`
@@ -1814,6 +1840,11 @@ type libavcodecBenchReport struct {
 type libavcodecBenchSample struct {
 	ElapsedMS   float64 `json:"elapsed_ms"`
 	TotalFrames int64   `json:"total_frames"`
+}
+
+type fairLibavcodecPreflight struct {
+	run    ffmpegRun
+	pixFmt string
 }
 
 func benchOneInputFairCompute(input string, data []byte, opts benchOptions) ([]benchResult, error) {
@@ -1830,20 +1861,16 @@ func benchOneInputFairCompute(input string, data []byte, opts benchOptions) ([]b
 	if err := verifyGoFairComputeAllocations(data, quality.frames); err != nil {
 		return nil, err
 	}
-	states := make([]fairGoWorker, opts.workers)
-	for i := range states {
-		states[i].dec = goh264.NewDecoder()
-		states[i].frames = make([]goh264.Frame, 0, quality.frames)
-		states[i].frames, err = states[i].dec.DecodeAnnexBBorrowedFrames(states[i].frames, data)
-		if err != nil {
-			return nil, fmt.Errorf("initialize Go worker %d: %w", i, err)
-		}
-		if len(states[i].frames) != quality.frames {
-			return nil, fmt.Errorf("initialize Go worker %d frames = %d, want %d", i, len(states[i].frames), quality.frames)
-		}
-	}
 
 	lanes := ffmpegBenchLanes(opts)
+	preflights := make([]fairLibavcodecPreflight, len(lanes))
+	for i := range lanes {
+		preflight, err := preflightLibavcodecFairCompute(input, opts, quality, lanes[i])
+		if err != nil {
+			return nil, fmt.Errorf("%s preflight: %w", lanes[i].name, err)
+		}
+		preflights[i] = preflight
+	}
 	goSamples := make([]benchSample, 0, opts.repeats)
 	laneSamples := make([][]benchSample, len(lanes))
 	laneTemplates := make([]benchResult, len(lanes))
@@ -1851,13 +1878,15 @@ func benchOneInputFairCompute(input string, data []byte, opts benchOptions) ([]b
 	defer runtime.GOMAXPROCS(restoreGOMAXPROCS)
 	for repeat := 0; repeat < opts.repeats; repeat++ {
 		participantCount := len(lanes) + 1
-		for offset := 0; offset < participantCount; offset++ {
-			participant := (repeat + offset) % participantCount
+		for orderPosition, participant := range fairParticipantOrder(participantCount, repeat) {
 			if participant == 0 {
+				states := newFairGoWorkers(opts.workers, quality.frames)
 				sample, err := measureGoFairComputeSample(states, data, opts.iters, opts.warmup, quality.frames, quality.bytes, quality.md5)
 				if err != nil {
 					return nil, fmt.Errorf("goh264 repeat %d: %w", repeat, err)
 				}
+				sample.RepeatIndex = repeat + 1
+				sample.MeasurementOrder = orderPosition + 1
 				goSamples = append(goSamples, sample)
 				continue
 			}
@@ -1870,7 +1899,7 @@ func benchOneInputFairCompute(input string, data []byte, opts benchOptions) ([]b
 				RawMD5:         quality.md5,
 				RawPixelFormat: quality.pixFmt,
 			}
-			libResult, err := benchLibavcodecFairCompute(input, int64(len(data)), oneSampleOpts, qualityResult, lanes[laneIndex])
+			libResult, err := benchLibavcodecFairCompute(input, int64(len(data)), oneSampleOpts, qualityResult, lanes[laneIndex], preflights[laneIndex])
 			if err != nil {
 				return nil, fmt.Errorf("%s repeat %d: %w", lanes[laneIndex].name, repeat, err)
 			}
@@ -1878,7 +1907,10 @@ func benchOneInputFairCompute(input string, data []byte, opts benchOptions) ([]b
 				return nil, fmt.Errorf("%s repeat %d returned %d samples, want 1", lanes[laneIndex].name, repeat, len(libResult.Samples))
 			}
 			laneTemplates[laneIndex] = libResult
-			laneSamples[laneIndex] = append(laneSamples[laneIndex], libResult.Samples[0])
+			sample := libResult.Samples[0]
+			sample.RepeatIndex = repeat + 1
+			sample.MeasurementOrder = orderPosition + 1
+			laneSamples[laneIndex] = append(laneSamples[laneIndex], sample)
 		}
 	}
 
@@ -1895,6 +1927,67 @@ func benchOneInputFairCompute(input string, data []byte, opts benchOptions) ([]b
 	return results, nil
 }
 
+func newFairGoWorkers(workers int, expectedFrames int) []fairGoWorker {
+	states := make([]fairGoWorker, workers)
+	for i := range states {
+		states[i].dec = goh264.NewDecoder()
+		states[i].frames = make([]goh264.Frame, 0, expectedFrames)
+	}
+	return states
+}
+
+// fairParticipantOrder returns balanced orders for the one-candidate/one- or
+// two-baseline layouts supported by the harness. The three-participant cycle
+// contains every permutation, balancing both position and pairwise precedence.
+func fairParticipantOrder(participants int, repeat int) []int {
+	if participants == 2 {
+		orders := [2][2]int{{0, 1}, {1, 0}}
+		order := orders[repeat%len(orders)]
+		return order[:]
+	}
+	if participants == 3 {
+		orders := [6][3]int{
+			{0, 1, 2},
+			{1, 2, 0},
+			{2, 0, 1},
+			{2, 1, 0},
+			{1, 0, 2},
+			{0, 2, 1},
+		}
+		order := orders[repeat%len(orders)]
+		return order[:]
+	}
+
+	order := make([]int, participants)
+	start := repeat % participants
+	forward := (repeat/participants)%2 == 0
+	for i := range order {
+		if forward {
+			order[i] = (start + i) % participants
+		} else {
+			order[i] = (start - i + participants) % participants
+		}
+	}
+	return order
+}
+
+func preflightLibavcodecFairCompute(input string, opts benchOptions, goQuality decodeGoRun, lane ffmpegBenchLane) (fairLibavcodecPreflight, error) {
+	cpuFlags := strings.TrimSpace(lane.cpuFlags)
+	pixFmt := opts.ffmpegPixFmt
+	if pixFmt == "" {
+		pixFmt = goQuality.pixFmt
+	}
+	run, err := runFFmpegOnce(opts.ffmpegBin, ffmpegArgs(input, true, "1", pixFmt, cpuFlags), true)
+	if err != nil {
+		return fairLibavcodecPreflight{}, fmt.Errorf("rawvideo oracle: %w", err)
+	}
+	if run.bytes != goQuality.bytes || run.md5 != goQuality.md5 {
+		return fairLibavcodecPreflight{}, fmt.Errorf("rawvideo mismatch: libavcodec bytes=%d md5=%s, go bytes=%d md5=%s",
+			run.bytes, run.md5, goQuality.bytes, goQuality.md5)
+	}
+	return fairLibavcodecPreflight{run: run, pixFmt: pixFmt}, nil
+}
+
 func annotatePairedFairComparison(baseline *benchResult, candidate benchResult) error {
 	if baseline == nil {
 		return errors.New("nil baseline")
@@ -1904,6 +1997,7 @@ func annotatePairedFairComparison(baseline *benchResult, candidate benchResult) 
 	}
 
 	ratios := make([]float64, len(candidate.Samples))
+	logRatios := make([]float64, len(candidate.Samples))
 	logSum := 0.0
 	wins := 0
 	for i := range candidate.Samples {
@@ -1914,7 +2008,8 @@ func annotatePairedFairComparison(baseline *benchResult, candidate benchResult) 
 		}
 		ratio := candidateElapsed / baselineElapsed
 		ratios[i] = ratio
-		logSum += math.Log(ratio)
+		logRatios[i] = math.Log(ratio)
+		logSum += logRatios[i]
 		if ratio < 1 {
 			wins++
 		}
@@ -1929,11 +2024,61 @@ func annotatePairedFairComparison(baseline *benchResult, candidate benchResult) 
 	baseline.PairedRepeats = len(ratios)
 	baseline.PairedCandidateWins = wins
 	baseline.PairedMedianRatio = median
-	baseline.PairedGeomeanRatio = math.Exp(logSum / float64(len(ratios)))
+	meanLogRatio := logSum / float64(len(ratios))
+	baseline.PairedGeomeanRatio = math.Exp(meanLogRatio)
+	baseline.PairedResult = "insufficient-samples"
+	if len(logRatios) >= 2 {
+		variance := 0.0
+		for _, value := range logRatios {
+			delta := value - meanLogRatio
+			variance += delta * delta
+		}
+		variance /= float64(len(logRatios) - 1)
+		halfWidth := studentTCritical95(len(logRatios)-1) * math.Sqrt(variance/float64(len(logRatios)))
+		baseline.PairedGeomeanCI95Low = math.Exp(meanLogRatio - halfWidth)
+		baseline.PairedGeomeanCI95High = math.Exp(meanLogRatio + halfWidth)
+		switch {
+		case baseline.PairedGeomeanCI95High < 1:
+			baseline.PairedResult = "candidate-faster"
+		case baseline.PairedGeomeanCI95Low > 1:
+			baseline.PairedResult = "baseline-faster"
+		default:
+			baseline.PairedResult = "inconclusive"
+		}
+	}
 	baseline.Notes = append(baseline.Notes,
-		"Paired elapsed ratios compare same-index alternating-order repeats; ratios below 1 mean the paired candidate is faster than this baseline.",
+		"Paired elapsed ratios compare same-index balanced-order repeats; ratios below 1 mean the paired candidate is faster than this baseline.",
+		"The paired_result claim gate uses the two-sided 95% Student-t confidence interval of log elapsed ratios; the median ratio and win count are descriptive.",
 	)
 	return nil
+}
+
+func studentTCritical95(degreesOfFreedom int) float64 {
+	critical := [...]float64{
+		0,
+		12.706204736, 4.302652730, 3.182446305, 2.776445105, 2.570581836,
+		2.446911851, 2.364624252, 2.306004135, 2.262157163, 2.228138852,
+		2.200985160, 2.178812830, 2.160368656, 2.144786688, 2.131449546,
+		2.119905299, 2.109815578, 2.100922040, 2.093024054, 2.085963447,
+		2.079613845, 2.073873068, 2.068657610, 2.063898562, 2.059538553,
+		2.055529439, 2.051830516, 2.048407142, 2.045229642, 2.042272456,
+	}
+	if degreesOfFreedom < 1 {
+		return math.Inf(1)
+	}
+	if degreesOfFreedom < len(critical) {
+		return critical[degreesOfFreedom]
+	}
+	if degreesOfFreedom <= 40 {
+		return 2.021075
+	}
+	if degreesOfFreedom <= 60 {
+		return 2.000298
+	}
+	if degreesOfFreedom <= 120 {
+		return 1.979930
+	}
+	return 1.959964
 }
 
 func verifyGoFairComputeAllocations(data []byte, expectedFrames int) error {
@@ -1973,9 +2118,9 @@ func fairGoResultFromSamples(input string, data []byte, opts benchOptions, quali
 	result.ParityStatus = "rawvideo-md5-observed"
 	result.Notes = append(result.Notes,
 		"Raw pixel format, frame count, byte count, and rawvideo MD5 are checked before timing; raw output materialization and hashing are excluded from every matched compute sample.",
-		fmt.Sprintf("The timed lane uses %d independent decoder context(s), one decoder thread per worker, preloaded input bytes, warmed reusable state, and no process startup or file I/O.", opts.workers),
+		fmt.Sprintf("Each repeat uses %d fresh independent decoder context(s), one decoder thread per worker, preloaded input bytes, and matched warmup; context construction is outside timing.", opts.workers),
 		"Go allocation metrics come from a separate 32-iteration steady-state decoder canary; worker coordination runtime bookkeeping is excluded from decoder allocation accounting.",
-		"Go and libavcodec measurement order rotates on every repeat to limit thermal and frequency-order bias.",
+		"Go and libavcodec use balanced measurement orders; every sample records its repeat and one-based order position.",
 	)
 	if note := h264internal.DecoderBackendNote(); note != "" {
 		result.Notes = append(result.Notes, note)
@@ -1997,11 +2142,12 @@ func mergeFairComputeSamples(template benchResult, samples []benchSample, repeat
 	result.BackendKind = template.BackendKind
 	result.CPUFlags = template.CPUFlags
 	result.ComparisonLane = template.ComparisonLane
+	result.ClaimRole = template.ClaimRole
 	result.ProcessPerIter = template.ProcessPerIter
 	result.InputReadTimed = template.InputReadTimed
 	result.StdoutPipeTimed = template.StdoutPipeTimed
 	result.Notes = append(result.Notes, template.Notes...)
-	result.Notes = append(result.Notes, "Go and libavcodec measurement order rotates on every repeat to limit thermal and frequency-order bias.")
+	result.Notes = append(result.Notes, "Go and libavcodec use balanced measurement orders; every sample records its repeat and one-based order position.")
 	annotateBenchRates(&result)
 	return result
 }
@@ -2014,29 +2160,17 @@ func benchGoFairCompute(input string, data []byte, iters int, repeats int, warmu
 	if err := verifyGoFairComputeAllocations(data, quality.frames); err != nil {
 		return benchResult{}, err
 	}
-	states := make([]fairGoWorker, workers)
-	for i := range states {
-		states[i].dec = goh264.NewDecoder()
-		states[i].frames = make([]goh264.Frame, 0, quality.frames)
-		for n := 0; n < warmup+1; n++ {
-			states[i].frames, err = states[i].dec.DecodeAnnexBBorrowedFrames(states[i].frames[:0], data)
-			if err != nil {
-				return benchResult{}, fmt.Errorf("warm worker %d: %w", i, err)
-			}
-			if len(states[i].frames) != quality.frames {
-				return benchResult{}, fmt.Errorf("warm worker %d frames = %d, want %d", i, len(states[i].frames), quality.frames)
-			}
-		}
-	}
-
 	restoreGOMAXPROCS := runtime.GOMAXPROCS(workers)
 	defer runtime.GOMAXPROCS(restoreGOMAXPROCS)
 	samples := make([]benchSample, 0, repeats)
 	for repeat := 0; repeat < repeats; repeat++ {
+		states := newFairGoWorkers(workers, quality.frames)
 		sample, err := measureGoFairComputeSample(states, data, iters, warmup, quality.frames, quality.bytes, quality.md5)
 		if err != nil {
 			return benchResult{}, fmt.Errorf("repeat %d: %w", repeat, err)
 		}
+		sample.RepeatIndex = repeat + 1
+		sample.MeasurementOrder = 1
 		samples = append(samples, sample)
 	}
 
@@ -2055,7 +2189,7 @@ func benchGoFairCompute(input string, data []byte, iters int, repeats int, warmu
 	result.ParityStatus = "rawvideo-md5-observed"
 	result.Notes = append(result.Notes,
 		"Raw pixel format, frame count, byte count, and rawvideo MD5 are checked before timing; raw output materialization and hashing are excluded from every matched compute sample.",
-		fmt.Sprintf("The timed lane uses %d independent decoder context(s), one decoder thread per worker, preloaded input bytes, warmed reusable state, and no process startup or file I/O.", workers),
+		fmt.Sprintf("Each repeat uses %d fresh independent decoder context(s), one decoder thread per worker, preloaded input bytes, and matched warmup; context construction is outside timing.", workers),
 		"Go allocation metrics come from a separate 32-iteration steady-state decoder canary; worker coordination runtime bookkeeping is excluded from decoder allocation accounting.",
 	)
 	if note := h264internal.DecoderBackendNote(); note != "" {
@@ -2136,21 +2270,13 @@ func measureGoFairComputeSample(states []fairGoWorker, data []byte, iters int, w
 	return sampleFromTotals(totalIters, framesPerIter, bytesPerIter, elapsed, 0, 0, rawMD5), nil
 }
 
-func benchLibavcodecFairCompute(input string, inputBytes int64, opts benchOptions, goResult benchResult, lane ffmpegBenchLane) (benchResult, error) {
+func benchLibavcodecFairCompute(input string, inputBytes int64, opts benchOptions, goResult benchResult, lane ffmpegBenchLane, preflight fairLibavcodecPreflight) (benchResult, error) {
 	cpuFlags := strings.TrimSpace(lane.cpuFlags)
 	helperCPUFlags := "native"
 	if cpuFlags == "0" {
 		helperCPUFlags = "0"
 	} else if cpuFlags != "" {
 		return benchResult{}, fmt.Errorf("helper supports only native CPU dispatch or -cpuflags 0, got %q", cpuFlags)
-	}
-	pixFmt := opts.ffmpegPixFmt
-	if pixFmt == "" {
-		pixFmt = goResult.RawPixelFormat
-	}
-	qualityRun, err := runFFmpegOnce(opts.ffmpegBin, ffmpegArgs(input, true, "1", pixFmt, cpuFlags), true)
-	if err != nil {
-		return benchResult{}, fmt.Errorf("rawvideo preflight: %w", err)
 	}
 	args := []string{
 		"--input", input,
@@ -2171,10 +2297,14 @@ func benchLibavcodecFairCompute(input string, inputBytes int64, opts benchOption
 	if err := json.Unmarshal(out, &report); err != nil {
 		return benchResult{}, fmt.Errorf("decode helper JSON: %w", err)
 	}
-	if report.Version != 1 || report.Backend != "libavcodec" || report.LibavcodecVersion == 0 || report.CPUFlags != helperCPUFlags ||
+	if report.Version != 2 || report.Backend != "libavcodec" || report.Codec != "h264" || report.LibavcodecVersion == 0 ||
+		report.CPUFlags != helperCPUFlags || report.Compiler == "" || !report.Optimized ||
 		report.Workers != opts.workers || report.DecoderThreadsPerWorker != 1 ||
 		report.IterationsPerWorker != opts.iters || report.Repeats != opts.repeats || len(report.Samples) != opts.repeats {
 		return benchResult{}, fmt.Errorf("unexpected helper report metadata: %+v", report)
+	}
+	if helperCPUFlags == "0" && report.CPUFlagsMask != 0 {
+		return benchResult{}, fmt.Errorf("pure-C helper reported cpu_flags_mask=%d, want 0", report.CPUFlagsMask)
 	}
 	totalIters := opts.iters * opts.workers
 	wantFrames := int64(goResult.FramesPerIter * totalIters)
@@ -2187,29 +2317,31 @@ func benchLibavcodecFairCompute(input string, inputBytes int64, opts benchOption
 			return benchResult{}, fmt.Errorf("sample %d total_frames = %d, want %d", i, helperSample.TotalFrames, wantFrames)
 		}
 		samples = append(samples, sampleFromTotals(totalIters, goResult.FramesPerIter, goResult.BytesPerIter,
-			time.Duration(helperSample.ElapsedMS*float64(time.Millisecond)), 0, 0, qualityRun.md5))
+			time.Duration(helperSample.ElapsedMS*float64(time.Millisecond)), 0, 0, preflight.run.md5))
 	}
 	name := strings.Replace(lane.name, "ffmpeg", "libavcodec", 1)
 	result := resultFromSamples(name, input, opts.iters, opts.repeats, opts.warmup, true,
-		goResult.FramesPerIter, qualityRun.bytes, samples, qualityRun.md5, opts.fairLibavcodecBin+" "+joinArgs(args))
+		goResult.FramesPerIter, preflight.run.bytes, samples, preflight.run.md5, opts.fairLibavcodecBin+" "+joinArgs(args))
 	result.Workers = opts.workers
 	result.DecoderThreads = 1
 	result.RawOutputTimed = false
-	result.RawPixelFormat = pixFmt
-	result.FFmpegPixelFmt = pixFmt
+	result.RawPixelFormat = preflight.pixFmt
+	result.FFmpegPixelFmt = preflight.pixFmt
 	result.InputBytesPerIter = inputBytes
 	result.BaselineKind = "libavcodec-in-process-compute"
 	result.BackendKind = lane.backendKind
 	result.CPUFlags = lane.cpuFlags
 	result.ComparisonLane = fmt.Sprintf("%s-%d-worker-throughput", lane.comparisonLane, opts.workers)
+	result.ClaimRole = lane.claimRole
 	result.ProcessPerIter = false
 	result.InputReadTimed = false
 	result.StdoutPipeTimed = false
 	result.Notes = append(result.Notes,
-		"FFmpeg CLI rawvideo is checked before timing; raw output materialization and hashing are excluded from every matched compute sample.",
-		fmt.Sprintf("The helper reports only its internal timed region: %d independent libavcodec context(s), thread_count=1 per worker, preloaded input bytes, warmed reusable state, and no process startup or file I/O.", opts.workers),
+		"FFmpeg CLI rawvideo is checked once per backend before all timing repeats; raw output materialization and hashing are excluded from every matched compute sample.",
+		fmt.Sprintf("The helper reports only its internal timed region: %d fresh independent libavcodec context(s), thread_count=1 per worker, preloaded input bytes, and matched warmup; process startup, context construction, and file I/O are outside timing.", opts.workers),
 		"Each timed work item parses and drains one complete Annex B stream, then resets its decoder and parser for the next independent decode.",
 		fmt.Sprintf("libavcodec runtime version integer: %d.", report.LibavcodecVersion),
+		fmt.Sprintf("helper compiler: %s; optimized=%t; runtime CPU flags mask=%d.", report.Compiler, report.Optimized, report.CPUFlagsMask),
 	)
 	annotateBenchRates(&result)
 	return result, nil
@@ -2570,6 +2702,7 @@ func benchFFmpeg(input string, inputBytes int64, iters int, repeats int, warmup 
 	result.BackendKind = lane.backendKind
 	result.CPUFlags = lane.cpuFlags
 	result.ComparisonLane = lane.comparisonLane
+	result.ClaimRole = lane.claimRole
 	result.ProcessPerIter = processPerIter
 	result.InputReadTimed = true
 	result.StdoutPipeTimed = rawOutput
@@ -2910,7 +3043,7 @@ func sampleStats(samples []benchSample) benchStats {
 func benchmarkMetadata(input string, data []byte, opts benchOptions) benchMetadata {
 	sum := md5.Sum(data)
 	revision, dirty := gitMetadata()
-	modulePath, moduleVersion := moduleMetadata()
+	modulePath, moduleVersion, buildPGO := moduleMetadata()
 	meta := benchMetadata{
 		Input:                  input,
 		InputBytes:             int64(len(data)),
@@ -2922,6 +3055,7 @@ func benchmarkMetadata(input string, data []byte, opts benchOptions) benchMetada
 		GOMAXPROCS:             runtime.GOMAXPROCS(0),
 		ModulePath:             modulePath,
 		ModuleVersion:          moduleVersion,
+		BuildPGO:               buildPGO,
 		VCSRevision:            revision,
 		VCSDirty:               dirty,
 		ComparisonKind:         "goh264-in-process",
@@ -2942,7 +3076,7 @@ func benchmarkMetadata(input string, data []byte, opts benchOptions) benchMetada
 		meta.FFmpegVersion = ffmpegVersion(opts.ffmpegBin)
 		meta.FFmpegCPUFlags = ffmpegMetadataCPUFlags(opts)
 		if opts.fairLibavcodecBin != "" {
-			meta.FairnessPolicy = fmt.Sprintf("Matched compute samples use %d independent preloaded decoder contexts and one decoder thread per worker on both sides; process startup, file I/O, CLI setup, raw materialization, and hashing are excluded from timing. Use manifest mode for external rawvideo oracle quality status.", opts.workers)
+			meta.FairnessPolicy = fmt.Sprintf("Matched compute samples use %d fresh independent preloaded decoder contexts per repeat and one decoder thread per worker on both sides; process startup, file I/O, CLI setup, raw materialization, hashing, context construction, and worker launch are excluded from timing. Samples record balanced measurement order. paired_result requires the two-sided 95%% confidence interval of paired log elapsed ratios to exclude 1. Only the backend-symmetric claim_role=primary lane is claim-eligible, and build_pgo must be off for a default consumer-performance claim. Use manifest mode for external rawvideo oracle quality status.", opts.workers)
 		} else {
 			meta.FairnessPolicy = "Single-input mode reports Go and FFmpeg timing samples with explicit backend_kind/cpu_flags fields. Fair CPU lanes label each FFmpeg CPU mode against the actual measured Go backend_kind; run default and purego builds separately when both Go backend comparisons are needed. FFmpeg peer_quality_status is compared against the Go rawvideo byte count and raw-MD5 when -raw=true; manifest mode is required for an external rawvideo oracle quality_status. FFmpeg timing defaults to one CLI process per repeat sample over a prebuilt repeated input file, amortizing process startup and CLI setup across timed iterations; raw-output amortized samples must also match the single-iteration raw output repeated for every timed iteration; -ffmpeg-process-per-iter restores the historical process-per-iteration baseline."
 		}
@@ -2967,16 +3101,23 @@ func ffmpegMetadataCPUFlags(opts benchOptions) string {
 	return strings.TrimSpace(opts.ffmpegCPUFlags)
 }
 
-func moduleMetadata() (string, string) {
+func moduleMetadata() (string, string, string) {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return "", ""
+		return "", "", "unknown"
 	}
 	version := info.Main.Version
 	if version == "(devel)" {
 		version = ""
 	}
-	return info.Main.Path, version
+	pgo := "off"
+	for _, setting := range info.Settings {
+		if setting.Key == "-pgo" {
+			pgo = setting.Value
+			break
+		}
+	}
+	return info.Main.Path, version, pgo
 }
 
 func gitMetadata() (string, bool) {

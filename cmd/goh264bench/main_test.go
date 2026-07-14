@@ -61,8 +61,60 @@ func TestAnnotatePairedFairComparison(t *testing.T) {
 	if baseline.PairedGeomeanRatio < 0.932 || baseline.PairedGeomeanRatio > 0.933 {
 		t.Fatalf("paired geomean ratio = %v, want about 0.93217", baseline.PairedGeomeanRatio)
 	}
-	if len(baseline.Notes) == 0 || !strings.Contains(baseline.Notes[len(baseline.Notes)-1], "below 1") {
+	if baseline.PairedResult != "inconclusive" || baseline.PairedGeomeanCI95Low >= 1 || baseline.PairedGeomeanCI95High <= 1 {
+		t.Fatalf("paired confidence = result %q interval [%v,%v], want inconclusive interval crossing 1",
+			baseline.PairedResult, baseline.PairedGeomeanCI95Low, baseline.PairedGeomeanCI95High)
+	}
+	if len(baseline.Notes) == 0 || !strings.Contains(strings.Join(baseline.Notes, " "), "below 1") {
 		t.Fatalf("paired ratio direction note = %v", baseline.Notes)
+	}
+}
+
+func TestAnnotatePairedFairComparisonRequiresConfidenceBeforeClaim(t *testing.T) {
+	candidate := benchResult{Name: "goh264"}
+	baseline := benchResult{Name: "libavcodec-native"}
+	for range 5 {
+		candidate.Samples = append(candidate.Samples, benchSample{ElapsedMS: 9})
+		baseline.Samples = append(baseline.Samples, benchSample{ElapsedMS: 10})
+	}
+	if err := annotatePairedFairComparison(&baseline, candidate); err != nil {
+		t.Fatal(err)
+	}
+	if baseline.PairedResult != "candidate-faster" || baseline.PairedGeomeanCI95Low != 0.9 || baseline.PairedGeomeanCI95High != 0.9 {
+		t.Fatalf("paired confidence = result %q interval [%v,%v], want candidate-faster [0.9,0.9]",
+			baseline.PairedResult, baseline.PairedGeomeanCI95Low, baseline.PairedGeomeanCI95High)
+	}
+}
+
+func TestFairParticipantOrderBalancesThreeParticipants(t *testing.T) {
+	seen := make(map[[3]int]bool)
+	var positions [3][3]int
+	var precedes [3][3]int
+	for repeat := range 6 {
+		order := fairParticipantOrder(3, repeat)
+		key := [3]int{order[0], order[1], order[2]}
+		seen[key] = true
+		for position, participant := range order {
+			positions[participant][position]++
+			for later := position + 1; later < len(order); later++ {
+				precedes[participant][order[later]]++
+			}
+		}
+	}
+	if len(seen) != 6 {
+		t.Fatalf("unique orders = %d, want all 6 permutations", len(seen))
+	}
+	for participant := range 3 {
+		for position := range 3 {
+			if positions[participant][position] != 2 {
+				t.Fatalf("participant %d position %d count = %d, want 2", participant, position, positions[participant][position])
+			}
+		}
+		for other := range 3 {
+			if participant != other && precedes[participant][other] != 3 {
+				t.Fatalf("participant %d precedes %d count = %d, want 3", participant, other, precedes[participant][other])
+			}
+		}
 	}
 }
 
@@ -294,6 +346,13 @@ func TestFFmpegBenchLanesExposeFairCPUComparisons(t *testing.T) {
 	}
 	if lanes[1].name != "ffmpeg-native" || lanes[1].cpuFlags != "" || lanes[1].comparisonLane != "ffmpeg-native-c+asm-vs-"+goBackend {
 		t.Fatalf("native lane = %+v, want native C+asm vs Go+asm lane", lanes[1])
+	}
+	wantPureRole, wantNativeRole := "diagnostic", "primary"
+	if goBackend == "go-pure" {
+		wantPureRole, wantNativeRole = "primary", "diagnostic"
+	}
+	if lanes[0].claimRole != wantPureRole || lanes[1].claimRole != wantNativeRole {
+		t.Fatalf("claim roles = %q/%q, want %q/%q for %s", lanes[0].claimRole, lanes[1].claimRole, wantPureRole, wantNativeRole, goBackend)
 	}
 
 	lanes = ffmpegBenchLanes(benchOptions{runFFmpeg: true, ffmpegCPUFlags: "0"})

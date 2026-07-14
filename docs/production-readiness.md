@@ -53,10 +53,16 @@ budget gates through their documented environment variables.
 For claim-grade FFmpeg comparisons, build the in-process libavcodec helper with
 `scripts/build-libavcodec-bench.sh`, then set
 `GOH264_BENCH_FAIR_LIBAVCODEC=1`. The matched compute lane checks Go and FFmpeg
-rawvideo against the manifest oracle before timing, then excludes process
-startup, file I/O, CLI setup, raw materialization, and hashing on both sides.
-It uses preloaded Annex B input, one decoder thread per independent context,
-equal work counts, and rotating measurement order across repeats. Run
-`GOH264_BENCH_WORKERS=1` for the single-thread lane and the same explicit
-worker count on both sides for multicore throughput. `-fair-cpu-lanes` keeps
-libavcodec pure-C and native C+assembly results separate.
+rawvideo against the manifest oracle once per backend before timing. Each repeat
+uses fresh decoder contexts, preloaded Annex B input, equal work counts, and one
+decoder thread per independent worker. Process startup, context construction,
+worker launch, file I/O, CLI setup, raw materialization, and hashing are excluded
+on both sides; wakeup, parse, decode, drain/reset, and completion synchronization
+are included. Measurement orders are balanced and recorded. Run
+`GOH264_BENCH_WORKERS=1` for the single-thread lane and the same explicit worker
+count on both sides for multicore throughput. `-fair-cpu-lanes` keeps libavcodec
+pure-C and native C+assembly results separate. The native lane is claim-eligible
+for the default assembly-enabled Go build; pure C is diagnostic. A win requires
+the two-sided 95% confidence interval of the paired geometric elapsed ratio to
+be entirely below 1, exact rawvideo parity, and `build_pgo=off` for a default
+consumer-performance claim.
