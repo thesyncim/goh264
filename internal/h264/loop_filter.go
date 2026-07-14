@@ -20,6 +20,11 @@ var h264LoopFilterBetaTable = [52]uint8{
 	17, 17, 18, 18,
 }
 
+var h264LoopFilterMaskEdgeTable = [2][8]int{
+	{0, 3, 3, 3, 1, 1, 1, 1},
+	{0, 3, 1, 1, 3, 3, 3, 3},
+}
+
 var h264LoopFilterTC0Table = [52][4]int8{
 	{-1, 0, 0, 0},
 	{-1, 0, 0, 0},
@@ -848,11 +853,7 @@ func (m *macroblockTables) filterFrameMacroblockDir(dst *h264PicturePlanes, dstY
 		mbmType = ctx.TopType
 	}
 
-	maskEdgeTab := [2][8]int{
-		{0, 3, 3, 3, 1, 1, 1, 1},
-		{0, 3, 1, 1, 3, 3, 3, 3},
-	}
-	maskEdge := maskEdgeTab[dir][(mbType>>3)&7]
+	maskEdge := h264LoopFilterMaskEdgeTable[dir][(mbType>>3)&7]
 	edges := 4
 	if maskEdge == 3 && ctx.CBP&15 == 0 {
 		edges = 1
@@ -1187,11 +1188,7 @@ func (m *macroblockTables) filterFrameMacroblockDirHigh(dst *h264PicturePlanesHi
 		mbmType = ctx.TopType
 	}
 
-	maskEdgeTab := [2][8]int{
-		{0, 3, 3, 3, 1, 1, 1, 1},
-		{0, 3, 1, 1, 3, 3, 3, 3},
-	}
-	maskEdge := maskEdgeTab[dir][(mbType>>3)&7]
+	maskEdge := h264LoopFilterMaskEdgeTable[dir][(mbType>>3)&7]
 	edges := 4
 	if maskEdge == 3 && ctx.CBP&15 == 0 {
 		edges = 1
