@@ -13,6 +13,8 @@ TEXT ·h264CABACResidualSignificanceFixedASM(SB), NOSPLIT|NOFRAME, $0-64
 	MOVD index+16(FP), R2
 	MOVD sigCtxBase+24(FP), R3
 	MOVD lastCtxBase+32(FP), R4
+	ADD R1, R3, R3
+	ADD R1, R4, R4
 	MOVD maxCoeff+40(FP), R21
 	SUB $1, R21, R22
 	MOVWU 0(R0), R6
@@ -21,6 +23,7 @@ TEXT ·h264CABACResidualSignificanceFixedASM(SB), NOSPLIT|NOFRAME, $0-64
 	MOVD 24(R0), R9
 	MOVD 32(R0), R10
 	MOVD $·h264CABACTables(SB), R11
+	ADD $512, R11, R11
 	MOVD ZR, R12 // last
 	MOVD ZR, R13 // coefficient count
 
@@ -28,11 +31,9 @@ cabac_sig_loop:
 	CMP R22, R12
 	BGE cabac_sig_done
 	ADD R12, R3, R14
-	ADD R14, R1, R14
 	MOVBU (R14), R15
 	AND $192, R7, R16
 	ADD R16<<1, R15, R16
-	ADD $512, R16, R16
 	MOVBU (R11)(R16), R16
 	SUB R16, R7, R17
 	LSLW $17, R17, R19
@@ -45,7 +46,7 @@ cabac_sig_loop:
 	ANDW R19, R20, R20
 	ADDW R17, R20, R7
 	EORW R15, R19, R15
-	ADDW $1152, R15, R16
+	ADDW $640, R15, R16
 	MOVBU (R11)(R16), R16
 	MOVB R16, (R14)
 	CLZW R7, R16
@@ -80,11 +81,9 @@ cabac_sig_bin_ready:
 	ADD $1, R13, R13
 
 	ADD R12, R4, R14
-	ADD R14, R1, R14
 	MOVBU (R14), R15
 	AND $192, R7, R16
 	ADD R16<<1, R15, R16
-	ADD $512, R16, R16
 	MOVBU (R11)(R16), R16
 	SUB R16, R7, R17
 	LSLW $17, R17, R19
@@ -97,7 +96,7 @@ cabac_sig_bin_ready:
 	ANDW R19, R20, R20
 	ADDW R17, R20, R7
 	EORW R15, R19, R15
-	ADDW $1152, R15, R16
+	ADDW $640, R15, R16
 	MOVBU (R11)(R16), R16
 	MOVB R16, (R14)
 	CLZW R7, R16
