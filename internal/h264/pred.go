@@ -57,6 +57,11 @@ func h264Pred4x4DownRight(pix []uint8, offset int, stride int) error {
 	if err := checkPredictionArgs(pix, offset, stride, 4, 4, 1, 1); err != nil {
 		return err
 	}
+	h264Pred4x4DownRightKernel(pix, offset, stride)
+	return nil
+}
+
+func h264Pred4x4DownRightScalar(pix []uint8, offset int, stride int) {
 	lt, t0, t1, t2, t3 := int(pix[offset-1-stride]), int(pix[offset-stride]), int(pix[offset+1-stride]), int(pix[offset+2-stride]), int(pix[offset+3-stride])
 	l0, l1, l2, l3 := int(pix[offset-1]), int(pix[offset-1+stride]), int(pix[offset-1+2*stride]), int(pix[offset-1+3*stride])
 
@@ -72,7 +77,6 @@ func h264Pred4x4DownRight(pix []uint8, offset int, stride int) error {
 	v = uint8((t0 + 2*t1 + t2 + 2) >> 2)
 	pix[offset+2], pix[offset+3+stride] = v, v
 	pix[offset+3] = uint8((t1 + 2*t2 + t3 + 2) >> 2)
-	return nil
 }
 
 func h264Pred4x4DownLeft(pix []uint8, offset int, stride int, topRight []uint8) error {
@@ -159,6 +163,11 @@ func h264Pred4x4HorizontalUp(pix []uint8, offset int, stride int) error {
 	if err := checkPredictionArgs(pix, offset, stride, 4, 4, 1, 0); err != nil {
 		return err
 	}
+	h264Pred4x4HorizontalUpKernel(pix, offset, stride)
+	return nil
+}
+
+func h264Pred4x4HorizontalUpScalar(pix []uint8, offset int, stride int) {
 	l0, l1, l2, l3 := int(pix[offset-1]), int(pix[offset-1+stride]), int(pix[offset-1+2*stride]), int(pix[offset-1+3*stride])
 
 	pix[offset] = uint8((l0 + l1 + 1) >> 1)
@@ -173,7 +182,6 @@ func h264Pred4x4HorizontalUp(pix []uint8, offset int, stride int) error {
 	pix[offset+3+stride], pix[offset+1+2*stride] = v, v
 	pix[offset+3+2*stride], pix[offset+1+3*stride], pix[offset+3*stride], pix[offset+2+2*stride], pix[offset+2+3*stride], pix[offset+3+3*stride] =
 		uint8(l3), uint8(l3), uint8(l3), uint8(l3), uint8(l3), uint8(l3)
-	return nil
 }
 
 func h264Pred4x4HorizontalDown(pix []uint8, offset int, stride int) error {

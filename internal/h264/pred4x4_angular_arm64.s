@@ -1,0 +1,145 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//go:build !purego && arm64
+
+#include "textflag.h"
+
+// func h264Pred4x4DownRightASM(dst *uint8, stride int)
+TEXT ·h264Pred4x4DownRightASM(SB), NOSPLIT|NOFRAME, $0-16
+	MOVD dst+0(FP), R0
+	MOVD stride+8(FP), R1
+
+	SUB R1, R0, R2
+	MOVBU -1(R2), R8
+	MOVBU (R2), R9
+	MOVBU 1(R2), R10
+	MOVBU 2(R2), R11
+	MOVBU 3(R2), R12
+
+	MOVD R0, R2
+	MOVBU -1(R2), R4
+	ADD R1, R2, R2
+	MOVBU -1(R2), R5
+	ADD R1, R2, R2
+	MOVBU -1(R2), R6
+	ADD R1, R2, R2
+	MOVBU -1(R2), R7
+
+	ADD R6<<1, R7, R13
+	ADD R5, R13, R13
+	ADD $2, R13, R13
+	LSR $2, R13, R13
+
+	ADD R5<<1, R6, R14
+	ADD R4, R14, R14
+	ADD $2, R14, R14
+	LSR $2, R14, R14
+
+	ADD R4<<1, R5, R15
+	ADD R8, R15, R15
+	ADD $2, R15, R15
+	LSR $2, R15, R15
+
+	ADD R8<<1, R4, R16
+	ADD R9, R16, R16
+	ADD $2, R16, R16
+	LSR $2, R16, R16
+
+	ADD R9<<1, R8, R7
+	ADD R10, R7, R7
+	ADD $2, R7, R7
+	LSR $2, R7, R7
+
+	ADD R10<<1, R9, R6
+	ADD R11, R6, R6
+	ADD $2, R6, R6
+	LSR $2, R6, R6
+
+	ADD R11<<1, R10, R5
+	ADD R12, R5, R5
+	ADD $2, R5, R5
+	LSR $2, R5, R5
+
+	ORR R14<<8, R13, R13
+	ORR R15<<16, R13, R13
+	ORR R16<<24, R13, R13
+	ORR R7<<32, R13, R13
+	ORR R6<<40, R13, R13
+	ORR R5<<48, R13, R13
+
+	MOVD R0, R2
+	ADD R1, R2, R2
+	ADD R1, R2, R3
+	ADD R1, R3, R4
+	MOVW R13, (R4)
+	LSR $8, R13, R13
+	MOVW R13, (R3)
+	LSR $8, R13, R13
+	MOVW R13, (R2)
+	LSR $8, R13, R13
+	MOVW R13, (R0)
+	RET
+
+// func h264Pred4x4HorizontalUpASM(dst *uint8, stride int)
+TEXT ·h264Pred4x4HorizontalUpASM(SB), NOSPLIT|NOFRAME, $0-16
+	MOVD dst+0(FP), R0
+	MOVD stride+8(FP), R1
+
+	MOVD R0, R2
+	MOVBU -1(R2), R4
+	ADD R1, R2, R2
+	MOVBU -1(R2), R5
+	ADD R1, R2, R2
+	MOVBU -1(R2), R6
+	ADD R1, R2, R2
+	MOVBU -1(R2), R7
+
+	ADD R5, R4, R8
+	ADD $1, R8, R8
+	LSR $1, R8, R8
+
+	ADD R5<<1, R4, R9
+	ADD R6, R9, R9
+	ADD $2, R9, R9
+	LSR $2, R9, R9
+
+	ADD R6, R5, R10
+	ADD $1, R10, R10
+	LSR $1, R10, R10
+
+	ADD R6<<1, R5, R11
+	ADD R7, R11, R11
+	ADD $2, R11, R11
+	LSR $2, R11, R11
+
+	ADD R7, R6, R12
+	ADD $1, R12, R12
+	LSR $1, R12, R12
+
+	ADD R7<<1, R7, R13
+	ADD R6, R13, R13
+	ADD $2, R13, R13
+	LSR $2, R13, R13
+
+	ORR R9<<8, R8, R8
+	ORR R10<<16, R8, R8
+	ORR R11<<24, R8, R8
+
+	ORR R11<<8, R10, R10
+	ORR R12<<16, R10, R10
+	ORR R13<<24, R10, R10
+
+	ORR R13<<8, R12, R12
+	ORR R7<<16, R12, R12
+	ORR R7<<24, R12, R12
+
+	MOVD $0x01010101, R14
+	MULW R14, R7, R7
+
+	MOVW R8, (R0)
+	ADD R1, R0, R2
+	MOVW R10, (R2)
+	ADD R1, R2, R2
+	MOVW R12, (R2)
+	ADD R1, R2, R2
+	MOVW R7, (R2)
+	RET
