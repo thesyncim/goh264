@@ -193,20 +193,25 @@ func (c *cabacContext) renormCABACDecoderOnce() {
 	}
 }
 
-func initH264CABACStates(sliceTypeNoS int32, cabacInitIDC uint32, qscale int32, bitDepthLuma int32) ([1024]uint8, error) {
-	var states [1024]uint8
-	sliceQP := clipInt32(qscale-6*(bitDepthLuma-8), 0, 51)
-	var tab [][2]int8
-	if sliceTypeNoS == PictureTypeI {
-		tab = h264CABACContextInitI[:]
-	} else {
-		if cabacInitIDC >= 3 {
-			return states, ErrInvalidData
-		}
-		tab = h264CABACContextInitPB[cabacInitIDC][:]
-	}
+type h264CABACStateTemplateSet struct {
+	I  [52][1024]uint8
+	PB [3][52][1024]uint8
+}
 
-	for i := 0; i < 1024; i++ {
+var h264CABACStateTemplates = func() h264CABACStateTemplateSet {
+	var templates h264CABACStateTemplateSet
+	for qp := int32(0); qp <= 51; qp++ {
+		templates.I[qp] = h264CABACStateTemplate(&h264CABACContextInitI, qp)
+		for initIDC := range templates.PB {
+			templates.PB[initIDC][qp] = h264CABACStateTemplate(&h264CABACContextInitPB[initIDC], qp)
+		}
+	}
+	return templates
+}()
+
+func h264CABACStateTemplate(tab *[1024][2]int8, sliceQP int32) [1024]uint8 {
+	var states [1024]uint8
+	for i := range states {
 		pre := 2*(((int32(tab[i][0])*sliceQP)>>4)+int32(tab[i][1])) - 127
 		pre ^= pre >> 31
 		if pre > 124 {
@@ -214,5 +219,16 @@ func initH264CABACStates(sliceTypeNoS int32, cabacInitIDC uint32, qscale int32, 
 		}
 		states[i] = uint8(pre)
 	}
-	return states, nil
+	return states
+}
+
+func initH264CABACStates(sliceTypeNoS int32, cabacInitIDC uint32, qscale int32, bitDepthLuma int32) ([1024]uint8, error) {
+	sliceQP := clipInt32(qscale-6*(bitDepthLuma-8), 0, 51)
+	if sliceTypeNoS == PictureTypeI {
+		return h264CABACStateTemplates.I[sliceQP], nil
+	}
+	if cabacInitIDC >= 3 {
+		return [1024]uint8{}, ErrInvalidData
+	}
+	return h264CABACStateTemplates.PB[cabacInitIDC][sliceQP], nil
 }

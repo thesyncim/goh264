@@ -108,4 +108,50 @@ func TestInitH264CABACStates(t *testing.T) {
 	if pbStates[0] != 110 || pbStates[11] != 26 || pbStates[60] != 44 || pbStates[399] != 12 {
 		t.Fatalf("PB state spots = %d %d %d %d", pbStates[0], pbStates[11], pbStates[60], pbStates[399])
 	}
+
+	for qp := int32(0); qp <= 51; qp++ {
+		got, err := initH264CABACStates(PictureTypeI, 0, qp, 8)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := h264CABACStatesFormula(&h264CABACContextInitI, qp); got != want {
+			t.Fatalf("I states differ at QP %d", qp)
+		}
+		for initIDC := uint32(0); initIDC < 3; initIDC++ {
+			got, err = initH264CABACStates(PictureTypeP, initIDC, qp, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := h264CABACStatesFormula(&h264CABACContextInitPB[initIDC], qp); got != want {
+				t.Fatalf("PB states differ at init %d QP %d", initIDC, qp)
+			}
+		}
+	}
+}
+
+func h264CABACStatesFormula(tab *[1024][2]int8, sliceQP int32) [1024]uint8 {
+	var states [1024]uint8
+	for i := range states {
+		pre := 2*(((int32(tab[i][0])*sliceQP)>>4)+int32(tab[i][1])) - 127
+		pre ^= pre >> 31
+		if pre > 124 {
+			pre = 124 + (pre & 1)
+		}
+		states[i] = uint8(pre)
+	}
+	return states
+}
+
+var h264CABACInitBenchmarkSink [1024]uint8
+
+func BenchmarkInitH264CABACStates(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		states, err := initH264CABACStates(PictureTypeP, uint32(i%3), int32(i%52), 8)
+		if err != nil {
+			b.Fatal(err)
+		}
+		h264CABACInitBenchmarkSink = states
+	}
 }
